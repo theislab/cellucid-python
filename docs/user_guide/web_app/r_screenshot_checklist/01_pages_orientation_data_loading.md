@@ -123,7 +123,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   `#remote-disconnect-container` / `#data-link-disconnect-container`);
   `#session-state-controls` ("Session file": `#save-state-btn` "Save",
   `#load-state-btn` "Load"); `#data-mapping-controls` ("Data mapping").
-- Other: `#welcome-modal` / `#welcome-demo-btn` ("Choose a dataset"), `#sidebar`,
+- Other: `#welcome-modal` (`#welcome-sample-list` samples, `#welcome-open-file-btn` "Open a file…", `#welcome-paste-link-btn` "Paste a link"), `#sidebar`,
   `#legend`, `#split-keep-view-btn` ("Keep view"),
   `.highlight-mode-btn[data-mode="lasso"]` ("Lasso"), `#navigation-controls`
   (inside Compare Views), `#web-build-version` (footer build span).
@@ -214,7 +214,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
      but not supported in this browser.` (line 18) and a reader who is *seeing*
      that string needs to confirm they are on the right page in one glance.
      Cursor: not useful. Filename `_static/screenshots/web_app/webgl2-required-overlay.png`.
-  2. **The "WebGL context lost. Reload required" overlay** (section at line 177).
+  2. **The "Graphics reset by the browser" dialog** (section at line 177).
      Same harness; the app shows a distinct overlay for this. Crop to the overlay.
      Filename `_static/screenshots/web_app/webgl-context-lost-overlay.png`.
      Without it, a reader cannot tell symptom 1 from symptom 3, which is the
@@ -279,7 +279,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   2. **SEQUENCE: one capture per numbered step**, because the page is a
      click-by-click tour and currently illustrates none of the six steps. All on
      `suo` unless noted, full window 1440x900 at 2x, cropped as stated:
-     - Step 1 (line 56): after clicking `#welcome-demo-btn` "Choose a dataset",
+     - Step 1 (line 56): after clicking `#welcome-paste-link-btn` "Paste a link",
        crop to `#session-section`, cursor on `#dataset-select`.
        `_static/screenshots/web_app/tour-01-choose-dataset.png`.
      - Step 2 (line 76): open **Compare Views**, crop to `#navigation-controls`

@@ -35,7 +35,10 @@ If you haven’t read the mental model yet, start with {doc}`01_performance_ment
 - initial dataset load (embeddings + metadata),
 - loading gene expression chunks on demand (for a dense `X` read directly from
   Zarr or a chunked `.h5ad`, decoded chunks are kept in a cache of up to
-  256 MiB, so genes in the same chunk column strip reuse them; a matrix chunked
+  a 32nd of what the drawn cells leave of the memory allowance (up to
+  256 MiB on a 16 GB machine), so genes in the same chunk column strip reuse
+  them, also after a pause; they are let go when memory runs short or the
+  page is hidden; a matrix chunked
   by rows, one strip spanning every gene, is still the slow case, since the
   first gene decodes the whole strip),
 - remote server latency (each request has overhead even if data is small).
@@ -123,8 +126,11 @@ Three things that are commonly assumed to cost per frame, and do not:
 High-leverage knobs:
 - **Make the window smaller** while exploring (fewer pixels) — *usually the biggest immediate win*.
 - **Filter down to what you are actually looking at** — hidden points stop costing anything to draw.
-- **Enable Level of detail (LOD)** (points mode) — reduces draw cost when zoomed
-  out, at every dataset size. A reduced level draws a uniform random sample of
+- **Level of detail (LOD)** (points mode) — reduces draw cost when zoomed
+  out, at every dataset size. It and frustum culling turn on by themselves
+  when a frame of every cell is measured slower than 33 ms on this device,
+  and stay on only where frames drawn with them are measured faster
+  (`rendering/full-detail-frame-cost.js`); otherwise tick them yourself. A reduced level draws a uniform random sample of
   the open cells (their priority order, the order subsamples are taken in), so
   it shows the same density and the same mix of colours as all cells do, up to
   sampling noise; full detail draws every cell. `Auto` has a floor, and the floor is the coarsest

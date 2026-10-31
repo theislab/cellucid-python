@@ -43,7 +43,9 @@ Include:
 - and the three render settings a reader cannot guess: `Point size`,
   whether `Antialiasing` is ticked, and whether
   `Level of detail (LOD)` is on. The first two are chosen from the dataset's
-  cell count when it opens, so they differ between datasets on their own.
+  cell count when it opens, and the third (with frustum culling) from a frame
+  measured on your device, so they differ between datasets and devices on
+  their own.
 
 See {doc}`05_benchmark_tools` and {doc}`04_benchmarking_methodology_and_metrics`.
 

@@ -42,8 +42,7 @@ The Cellucid server includes a small origin allowlist.
 
 As implemented in `cellucid-python/src/cellucid/_server_base.py` (`CORSMixin._get_allowed_origin`), the server may allow:
 - `http(s)://localhost:<port>` and `http(s)://127.0.0.1:<port>`
-- the canonical hosted viewer origin `https://www.cellucid.com`
-- `https://cellucid.com` and `https://*.cellucid.com`
+- `https://www.cellucid.com` and `https://cellucid.com` (the hosted app's origins, exactly)
 
 Everything else is rejected (no `Access-Control-Allow-Origin`).
 

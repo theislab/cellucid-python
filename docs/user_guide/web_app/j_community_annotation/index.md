@@ -29,7 +29,9 @@ Community annotation is “offline-first” after you connect a repo:
   or by fork + Pull Request only when the repository allows forking. If neither
   route is available, Publish is disabled. Cellucid selects one route before
   mutation; a failure is terminal and does not switch to the other route.
-- GitHub OAuth tokens are stored only in `sessionStorage` (cleared when the tab closes).
+- Your GitHub sign-in token expires after 8 hours. It is stored only in this
+  tab's `sessionStorage` (a reload keeps it until it expires; closing the tab
+  ends it), and **Sign out** revokes it at GitHub.
 
 Practical implication after a repository has been connected and its state is
 available locally:
@@ -222,7 +224,7 @@ bundle. The Community Annotation subtree is intentionally excluded because it
 is network/auth-driven. Session Save/Load does not carry votes, suggestions,
 comments, repository connection, or GitHub authentication.
 
-- GitHub tokens live in `sessionStorage`.
+- GitHub tokens live in `sessionStorage` and expire after 8 hours.
 - Votes/suggestions/comments and the repo connection use annotation-specific
   local storage.
 - Raw pulled GitHub file bodies use IndexedDB, while the cache's SHA index uses

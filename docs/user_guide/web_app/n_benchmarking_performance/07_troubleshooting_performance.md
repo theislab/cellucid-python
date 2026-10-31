@@ -177,7 +177,9 @@ Related docs:
 - Check `chrome://gpu` / `about:support` to confirm hardware acceleration and WebGL2.
 
 ### Fix (safe → aggressive)
-1) Reload the page (context loss requires reload).
+1) Wait: Cellucid restores the graphics when the browser gives the context
+   back, keeping filters, selections, kept views and analyses. If its dialog
+   says they could not be restored, keep the session it saved and reload.
 2) After reload, reduce GPU load:
    - points mode (avoid smoke),
    - fewer views,

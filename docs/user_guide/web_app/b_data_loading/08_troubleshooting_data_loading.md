@@ -160,8 +160,25 @@ progress notice shows how far that is.
 
 No request waits for ever: a request the host answers as busy or failing
 (HTTP 429, 503, ...), whose connection fails, or that stops receiving bytes is
-asked again a few times, each repeat logged in the console as a
-`[cellucid:transfer]` warning naming its URL, and then reported. When a
+asked again, with waits that double from the link's own timeout, each repeat
+logged in the console as a `[cellucid:transfer]` warning naming its URL, and
+then reported. A host that answers with errors before it has delivered
+anything (a sample catalog, a provider's details, the first reads of a file
+or folder) is asked again three times, a few seconds in all, and then the
+error is shown with **Try again**; a read the host has already delivered to
+is asked again for at least 100 seconds before it is reported.
+
+A wait the host names is not a failure. A host that says how many requests
+it answers (Zenodo: 133 a minute; GitHub's API: 60 an hour) is asked no
+faster than that, and when its budget is spent the opening says **Waiting
+for the host** and when the next requests go. A server preparing what was
+asked for (`cellucid serve` counting a large cell-major matrix of a file,
+the first part of laying it out for the viewer; once counted, a gene is
+answered at once) answers "not yet, ask again in N s" with how far it is;
+the gene's notification shows that line ("Reading gene CD3E: X is being laid
+out gene-major for the viewer (37% done, about 12 s left).") and the gene
+appears once it is ready. Neither is retried as an error or taken for a
+stall; **Cancel** stops either. When a
 dataset opens at startup and nothing at all arrives for 60 s, Cellucid stops
 waiting and starts without it: the panel over the empty viewer says the data
 could not be opened, and its **Details** read `Startup stalled while opening
@@ -213,8 +230,8 @@ waits for answers. Include that console line when you report a hang.
 
 An `.h5ad` or Zarr store without a UMAP — selected in the browser, opened from
 a link, or served from Python — is not refused: it opens on a best guess (see
-{doc}`13_data_mapping`). Only a file with no drawable `obsm` array at all is
-refused, with this message:
+{doc}`13_data_mapping`). A file whose `obsm` holds dense numeric arrays of which
+none can be drawn is refused, with this message:
 
 ```text
 Cellucid found nothing to plot. It needs an obsm array with one row per cell
@@ -225,13 +242,16 @@ data again.
 
 The list names every `obsm` entry with its shape and, for a dense array, why it
 was not used: `X_df (table)`, `X_sparse (sparse 10,000 × 5)`,
-`spatial (10,000 × 2, NaN at cell 17)`. A file with an empty `obsm` reads
-`obsm holds: nothing.`
+`spatial (10,000 × 2, not representable as float32 at cell 17)`. A file whose
+`obsm` holds no dense numeric array at all (an empty `obsm`, or only tables and
+sparse arrays) is refused sooner, before any cell is read, as having no cell
+embedding ({ref}`no-cell-embedding`).
 
 **Likely causes**
-- AnnData has no dense numeric `obsm` array with one row per cell, or every
-  such array holds a NaN, an infinity, a value too large for 32-bit floats, or
-  the same coordinates for every cell.
+- Every dense numeric `obsm` array has another row count than the cells,
+  places no cell (every row holds NaN or an infinity), holds a value too large
+  for 32-bit floats, or gives every cell the same coordinates. (A NaN row only
+  leaves that cell unplaced in that view.)
 
 **How to confirm**
 - AnnData (Python):
@@ -253,19 +273,31 @@ was not used: `X_df (table)`, `X_sparse (sparse 10,000 × 5)`,
 ### Symptom: “… has no cell embedding, and Cellucid draws cells at embedding coordinates”
 
 A count matrix with nothing to draw it with: a 10x Cell Ranger `.h5` opened
-alone, or a Loom file without embedding attributes (a velocyto output). The
-message names the file and what to do:
+alone, a Loom file without embedding attributes (a velocyto output), an `.rds`
+object without a reduction, or an AnnData or MuData file (`.h5ad`, Zarr,
+`.h5mu`) whose `obsm` holds no dense numeric array -- an empty `obsm`, or only
+tables and sparse arrays (refused from its metadata, before any cell is read;
+the message then names what `obsm` holds). The message names the file and what
+to do:
 
 ```text
 filtered_feature_bc_matrix.h5 is a 10x Cell Ranger count matrix that has no
-cell embedding, and Cellucid draws cells at embedding coordinates. Cell Ranger
-writes UMAP and t-SNE projections beside it: open the whole outs/ folder
-(Open… › Folder…), which holds this file and analysis/. Or compute one and open
-the result: in Python, sc.pp.normalize_total(adata); sc.pp.log1p(adata);
-sc.pp.pca(adata); sc.pp.neighbors(adata); sc.tl.umap(adata), then
-adata.write_h5ad(path); in R, Seurat::NormalizeData(), FindVariableFeatures(),
-ScaleData(), RunPCA() and RunUMAP(), then cellucid::cellucid_prepare(path, data = obj).
+cell embedding, and Cellucid draws cells at embedding coordinates (it does not
+compute them). Cell Ranger writes UMAP and t-SNE projections beside it: open
+the whole outs/ folder (Open… › Folder…), which holds this file and analysis/.
+Or compute one and open the result: in Python, sc.pp.normalize_total(adata);
+sc.pp.log1p(adata); sc.pp.pca(adata); sc.pp.neighbors(adata); sc.tl.umap(adata),
+then adata.write_h5ad(path) or cellucid.prepare(path, format="h5ad", data=adata);
+in R, Seurat::NormalizeData(), FindVariableFeatures(), ScaleData(), RunPCA() and
+RunUMAP() (or scater::runUMAP()), then cellucid::cellucid_prepare(path, data = obj).
+Coordinates you already have (a UMAP table) go in as they are:
+prepare(…, embeddings={'X_umap': coordinates}) or
+cellucid_prepare(…, embeddings = list(X_umap = coordinates)).
 ```
+
+Neither `prepare()` nor `cellucid_prepare()` computes an embedding: each
+writes the one the data holds (or the one passed as `embeddings`), and refuses
+data without one.
 
 Opened from a link, the middle sentence says what a link allows instead: the
 `outs/` folder "a link to one file cannot bring along: download the whole
@@ -326,7 +358,11 @@ The message names the object or file and the R line that fixes it
   the browser's storage first, and the files kept from earlier openings that
   no tab has open were already removed to make room (least recently opened
   first). In a private window the storage is small: open it in a normal
-  window. Otherwise close other tabs that have a file read whole open, free
+  window. Chromium's private windows keep only part of what a page writes
+  once their share is spent, while they still report gigabytes free: every
+  write is checked against what the file holds, so a large object (a
+  10-million-cell Seurat object) is refused here with this message instead of
+  being read back short. Otherwise close other tabs that have a file read whole open, free
   space on the disk, or write the object once as a Cellucid-ready AnnData with
   `cellucid_prepare()` (R) or `cellucid.prepare()` (Python), which is read in
   place.
@@ -348,23 +384,27 @@ The message names the object or file and the R line that fixes it
 
 **Likely causes (ordered)**
 1) WebGL/GPU issue (context lost, unsupported browser/GPU).
-2) Embedding contains NaN/Inf or extreme values.
+2) Every row of the embedding holds NaN/Inf (no cell has a position), or it holds extreme values.
 3) All points are filtered/hidden (rare on first load, but possible with a saved session).
 
 **How to confirm**
 - Try a demo dataset.
 - Open browser console and look for WebGL/context errors.
-- For data sanity, check embeddings for NaN/Inf (Python):
+- For data sanity, count the cells the embedding places (Python):
 
   ```python
   import numpy as np
   X = adata.obsm["X_umap_2d"]
-  print(np.isfinite(X).all(), X.min(), X.max())
+  placed = np.isfinite(X).all(axis=1)
+  print(placed.sum(), "of", len(X), "cells placed;", X[placed].min(), X[placed].max())
   ```
+
+  A cell whose row holds NaN is not drawn in that embedding (a notice counts
+  such cells when it opens); every other view keeps it.
 
 **Fix**
 - WebGL issues → see {doc}`../a_orientation/02_system_requirements`
-- NaN/Inf → clean/recompute embeddings and write the file again.
+- No placed cell → recompute the embedding over the cells and write the file again.
 
 ---
 

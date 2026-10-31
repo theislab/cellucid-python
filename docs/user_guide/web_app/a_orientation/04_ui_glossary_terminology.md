@@ -35,8 +35,9 @@ how many of the dataset's cells are currently drawn.
 
 - **Welcome overlay**: the modal shown on every ordinary bundled or catalog
   startup. Its dismissal is not remembered for the next ordinary load.
-  **Choose a dataset** opens the data controls; {kbd}`Escape` dismisses it for
-  the current load. A startup whose address already names its data (a Python
+  It lists the sample datasets (the default one says it is opening, with its
+  progress; choosing one opens it), **Open a file…** and **Paste a link**;
+  {kbd}`Escape` dismisses it for the current load. A startup whose address already names its data (a Python
   or R viewer, a `cellucid serve` server, or a `?data=` link) skips it.
 - **Suo**: the sample catalog default. It may finish loading behind the welcome
   overlay before you choose another source, and opens in 3D on its default

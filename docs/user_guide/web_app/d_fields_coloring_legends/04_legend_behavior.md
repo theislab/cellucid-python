@@ -107,6 +107,14 @@ This is why hiding categories is a powerful workflow tool (not just cosmetic).
 
 ---
 
+### Cells without a category (Missing)
+When some cells have no category (an unlabelled cell, a classifier that gave
+none), a **Missing** row under the categories counts them (`visible /
+available`) and shows or hides them with its checkbox. They are drawn in the
+neutral “None” grey. Hiding them is a filter like hiding a category: listed
+under **Filters**, applied whatever is coloured, saved in sessions. The row is
+absent when every cell has a category.
+
 ## Editing category labels (rename, merge, delete)
 
 These operations are designed for “clean up labels for interpretation/figures”.
@@ -178,6 +186,13 @@ At the top, you’ll see:
 
 Click the gradient bar to open the **colormap menu**, then click a palette to apply it.
 
+The numbers under the bar are the scale's ends, written as every measured
+value in the app is: three significant figures, in scientific notation below
+0.01 and from 10,000 (`0.0123`, `1230`, `1.23e4`), the notation chosen after
+rounding (`9999.6` is `1e4`, never `10.0e3`). Exported figures write their
+colour bars and axis ticks by the same rule (ticks with as many figures as
+tell them apart).
+
 ```{figure} ../../../_static/screenshots/web_app/legend-colormap-menu-open.png
 :alt: The colormap list open under the S_score colour bar: seven named gradients, Viridis, Plasma, Inferno, Magma, Cividis, Turbo and Twilight, with Viridis marked as the active one.
 :width: 488px
@@ -190,6 +205,13 @@ palette without opening the menu.
 Practical guidance:
 - Prefer **Viridis** / **Cividis** for scientific readability (especially colorblind-friendly workflows).
 - Use diverging palettes (e.g., **RdBu**) only when your values have a meaningful “center” (like 0).
+  A diverging palette (Coolwarm, Blue-Red, Spectral, RdYlBu, RdBu, PiYG,
+  PRGn, BrBG, Seismic) on a linear scale whose range spans 0 is **centred at
+  0**: the scale runs from −m to m, m the larger of |minimum| and |maximum|,
+  so 0 is drawn in its neutral middle (z-scores, scores, fold changes). The
+  legend says *Centred at 0* under the bar, and exported figures note it
+  under theirs. Over data of one sign, or with a sequential palette, the scale
+  spans the data's own range.
 
 ### Log scale toggle
 
@@ -215,14 +237,17 @@ On is best for bringing out contrast in a filtered subset; Off is best for consi
 
 Under **Visible range** you’ll see:
 - **Live filtering** toggle
-- **Minimum** slider and **Maximum** slider
-- **Filter** and **Reset** buttons
+- **Minimum** and **Maximum**, each a slider and a number box: type an exact
+  bound, or drag (thousandths of the range; log-spaced on a log colour
+  scale). Only the bound you change moves, and the box always holds the
+  exact bound applied.
+- **Reset**, and **Filter** beside it while Live filtering is off
 
 Behavior summary:
-- With Live filtering on, visibility updates as you drag sliders — and **Filter
-  is greyed out and unclickable**, with the tooltip
-  `Turn off Live filtering to use Filter`. There is nothing for it to do.
-- With Live filtering off, you drag first, then click Filter to apply.
+- With Live filtering on, visibility updates as you drag sliders, and there is
+  no **Filter** button: there would be nothing for it to do.
+- With Live filtering off, **Filter** appears: you drag first, then click
+  Filter to apply.
 - Reset works in both states and restores the full numeric range for that field.
 
 Filtering notes:

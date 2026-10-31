@@ -36,12 +36,18 @@ it, through the widget instead of a socket
   requests are answered exactly (`206 Partial Content`, `Content-Range`,
   `HEAD`, `ETag`, `Accept-Ranges`). The route is named by the dataset id, so
   the local file name is never published
-- an in-memory `AnnData`, and an AnnData file whose cells are not in priority
-  order, are served as a Zarr store folder in priority order
+- an in-memory `AnnData` or `MuData`, and a file whose cells are not in
+  priority order, are served as a Zarr store folder in priority order
   (`_cellucid/anndata/<id>.zarr/<key>`), each chunk made when it is asked for
   and answered with the same ranges and validators (`cellucid._served_store`);
-  a `MuData` object is written to a temporary Cellucid-ready `.h5mu` and served
-  as a file, removed when the server stops
+  an expression matrix held in memory, and a cell-major `X` of a file, are
+  laid out gene-major by the store's background worker; a chunk of one not
+  laid out yet is made at once, exactly as it will be laid out: what the
+  worker has placed is copied, and the rest found by one scan of the object's
+  or the file's column indices, so the viewer waits for the layout only when
+  it ends sooner than that (only a file's matrix
+  not counted yet is answered `503` with `Retry-After`, the seconds left at its
+  pace, and a line saying how far it is)
 - threaded, with HTTP/1.1 keep-alive, because a browser reads a file with many
   range requests; bytes are sent by the kernel (`sendfile`), and a reload of an
   unchanged file revalidates what the browser kept (`ETag`, `304`) instead of
@@ -185,8 +191,8 @@ The server returns:
 `format` is the input format id of the store the browser reads: `zarr` for an
 in-memory `AnnData` and for an AnnData, Loom or 10x file served in priority
 order (a store made as the browser reads it), `mudata-zarr` for a MuData file
-served so and for a 10x matrix of several feature types, `h5mu` for an
-in-memory `MuData` (written once to a temporary `.h5mu`), and a file's own id
+served so, for an in-memory `MuData` and for a 10x matrix of several feature
+types, and a file's own id
 (`h5ad`, `zarr`, `h5mu`, `mudata-zarr`) when it is served as it is (one
 `prepare()` wrote), or `rds`, `rda`, `mtx`. `n_cells` and `n_genes` are `null`
 only for a format the browser alone reads (an R object, a MatrixMarket folder).

@@ -126,14 +126,16 @@ observation field and gene it uses, so a dataset missing one is refused before
 anything changes, naming every missing key.
 
 The first three say *which* dataset. The cell-order record says *which ordering
-of its cells*, which the first three cannot: a session stores your selections as
-row numbers, and a dataset republished under the same name with the same number
-of cells and genes but its rows in a different order matches all three scalars
-while every row number now points at a different cell. The record is a short
-digest of the coordinates the session was saved against, plus the embedding
-(and its dimension) the digest was taken over — every embedding is a separate
-payload, so a digest only means anything within one of them. Cellucid checks
-the digest on that embedding whichever one is on screen when you load.
+of its cells*, which the first three cannot: a session stores your selections by
+each cell's position in the dataset's own order, and a dataset republished under
+the same name with the same number of cells and genes but its rows in a
+different order matches all three scalars while every position now points at a
+different cell. The record is a short digest of the stored coordinates the
+session was saved against, each cell named by its position, plus the embedding
+(and its dimension) the digest was taken over — a digest only means anything
+within one embedding. Cellucid checks the digest on that embedding whichever
+one is on screen when you load; how the cells were opened (all of them, a
+share, grown step by step) does not change it.
 
 If any part of the fingerprint does not match the currently loaded dataset:
 - Cellucid rejects the complete restore;
@@ -147,12 +149,13 @@ You will see one of these messages, each naming what actually happened:
 | The session was saved on a different dataset (with both cell and gene counts named) | it is not this dataset | open the dataset the session was saved on |
 | The session was saved on a different copy of this dataset (with both identities named) | the sizes agree exactly and the publication identity does not — one dataset reached two ways, such as a locally served copy of a published export | open the dataset the session was saved on |
 | The session uses an embedding (or neighbour graph, modality, gene names, expression matrix, expression transform, highly variable genes, latent space, or vector field) this dataset does not have or cannot use, naming it | it was saved on another version of the dataset (a saved choice this dataset does have is restored, not refused) | open the dataset version the session was saved on |
-| The dataset has the same name and counts but its cell coordinates differ | either the cells are stored in a different order, or the same cells were exported again from a re-computed embedding — a one-way digest cannot say which | load the version the session was saved on, or re-create the selections here |
+| The dataset has the same name and counts but its cell coordinates differ | either the cells are listed in a different order, or the same cells were exported again from a re-computed embedding — a one-way digest cannot say which | load the version the session was saved on, or re-create the selections here |
 | The session uses observation fields or genes the dataset does not have, naming every one | it was saved on another version of the dataset | open the dataset version the session was saved on |
-| The file is not a Cellucid session file of format 2 | it does not start with the format-2 signature `CELLUCID_SESSION/2` | check that you picked a session file saved by this release |
+| The session was saved by an earlier version of Cellucid (session format 2) | its check that it marks the same cells was taken over coordinates as they were drawn, which this version cannot recompute | re-create the session in this version and save it again |
+| The file is not a Cellucid session file of format 3 | it does not start with the format-3 signature `CELLUCID_SESSION/3` | check that you picked a session file saved by this release |
 
 The format version is part of every session file's signature, and this
-release reads format 2 only.
+release reads format 3 only.
 
 See {doc}`07_versioning_compatibility_and_dataset_identity` for the exact
 matching rules and safe collaboration recipes.

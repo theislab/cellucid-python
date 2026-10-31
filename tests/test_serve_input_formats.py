@@ -221,8 +221,15 @@ def test_the_folder_rule_is_the_web_apps(tmp_path: Path) -> None:
     assert folder_format_of_paths(["f/matrix.mtx"]) == "mtx"
     assert folder_format_of_paths(["f/GSM1_matrix.mtx.gz", "f/GSM1_barcodes.tsv.gz"]) == "mtx"
     assert folder_format_of_paths(["f/GSM1-matrix.mtx.gz", "f/GSM1-features.tsv.gz"]) == "mtx"
-    # A prefixed marker alone, with nothing else sharing its prefix, is not a folder.
-    assert folder_format_of_paths(["f/GSM1_matrix.mtx.gz", "f/GSM2_barcodes.tsv.gz"]) is None
+    # Any .mtx file, whatever its producer named it, compared without case.
+    assert folder_format_of_paths(["f/GSE158055_covid19_counts.mtx.gz", "f/GSE158055_covid19_features.tsv.gz"]) == "mtx"
+    assert folder_format_of_paths(["f/cells_x_genes.MTX"]) == "mtx"
+    assert folder_format_of_paths(["f/notes.mtx.txt", "f/.mtx"]) is None
+    # A sci-RNA-seq3 matrix under a .txt name (GEO GSE119945), as the web app
+    # tells it on this computer and from a link; any other .txt is no matrix.
+    assert folder_format_of_paths(["f/GSE119945_gene_count.txt.gz", "f/GSE119945_cell_annotate.csv.gz"]) == "mtx"
+    assert folder_format_of_paths(["f/GSE1_gene_count.run_13.TXT"]) == "mtx"
+    assert folder_format_of_paths(["f/GSE131907_Lung_Cancer_raw_UMI_matrix.txt.gz"]) is None
     assert folder_format_of_paths(["f/notes.txt"]) is None
 
 
@@ -326,9 +333,12 @@ def test_a_mudata_names_itself_and_is_served_with_its_counts(tmp_path: Path) -> 
     server.stop()
 
 
-def test_a_format_python_cannot_read_must_be_named(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="dataset_name and dataset_id are required"):
-        AnnDataServer(_rds(tmp_path / "pbmc.rds"), host="127.0.0.1", port=0, quiet=True, serve_web_ui=False)
+def test_a_format_python_cannot_read_is_named_after_its_file(tmp_path: Path) -> None:
+    server = AnnDataServer(_rds(tmp_path / "pbmc.rds"), host="127.0.0.1", port=0, quiet=True, serve_web_ui=False)
+    try:
+        assert (server.dataset_id, server.dataset_name) == ("pbmc", "pbmc.rds")
+    finally:
+        server.stop()
 
 
 def test_a_zipped_mudata_zarr_is_named_by_its_root(tmp_path: Path) -> None:
@@ -340,7 +350,11 @@ def test_a_zipped_mudata_zarr_is_named_by_its_root(tmp_path: Path) -> None:
     assert (store.kind, store.layout, store.zip_root) == ("mudata-zarr", "zip", "cite.zarr")
 
 
-def test_an_in_memory_mudata_is_served_from_a_temporary_cellucid_ready_h5mu() -> None:
+def test_an_in_memory_mudata_is_served_from_a_snapshot_in_priority_order() -> None:
+    """A MuData object is served as its file would be (a MuData Zarr store in
+    priority order), from a snapshot, as an AnnData object is: nothing
+    written to disk but the layouts in the store's scratch folder, removed
+    with the server."""
     import mudata
     rng = np.random.default_rng(5)
     names = pd.Index([f"c{i}" for i in range(8)], dtype=object)
@@ -361,13 +375,16 @@ def test_an_in_memory_mudata_is_served_from_a_temporary_cellucid_ready_h5mu() ->
         modality="prot",
     )
     try:
-        assert server._served.store is not None
-        temporary = server._served.store.path
-        assert (server._served.kind, temporary.suffix) == ("h5mu", ".h5mu")
-        assert (server.server_info["n_cells"], server.server_info["format"]) == (8, "h5mu")
+        store = server._served.priority
+        assert store is not None and store.layout == "mudata"
+        assert (server._served.kind, server._served.layout) == ("mudata-zarr", "folder")
+        assert (server.server_info["n_cells"], server.server_info["format"]) == (8, "mudata-zarr")
         assert server.defaults["modality"] == "prot"
-        contents = read_anndata_contents(server._served.store)
+        contents = store.contents()
         assert contents is not None and set(contents.modalities or {}) == {"rna", "prot"}
+        store.laid_out()
+        folder = store._folder.folder
+        assert folder is not None and folder.exists()
     finally:
         server.stop()
-    assert not temporary.exists()
+    assert not folder.exists()

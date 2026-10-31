@@ -92,11 +92,20 @@ The selection reached Python while the kernel was idle, so the next cell sees
 it at once.
 
 ```{important}
-Cell indices are **0-based row indices** in the dataset that Cellucid is currently serving.
+Cell indices are the cells' **original positions** (0-based): a cell's row in
+the object or file as it was shown, in its original order.
 
-- For a viewer constructed directly from `adata`, indices refer to that
-  object's current row order.
-- If you reorder/subset `adata` after creating the viewer, indices will no longer match what you expect.
+- For an object shown in its own order, that is its row as it was when shown;
+  `selection.obs_names` are the names it had then, whatever is done to it
+  after.
+- An object read from a Cellucid-ready file in priority order (`anndata.read_zarr`
+  of `prepare()`'s output) holds its rows in another order: the viewer still
+  names cells by original position, `selection.obs_names` name the right
+  cells, and `viewer.pull(adata)` / `viewer.subset(adata)` refuse that object
+  until `cellucid.restore_original_order(adata)` puts its cells back.
+- To take the cells themselves, use `viewer.subset(adata)` or
+  `adata[selection.obs_names]`; an object reordered or subset after it was
+  shown is refused by `pull` and `subset` rather than written in the wrong rows.
 ```
 
 ## Step 5 — Highlight the same cells back in the viewer

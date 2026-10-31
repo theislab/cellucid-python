@@ -43,8 +43,8 @@ Defined in `cellucid-python/src/cellucid/_server_base.py`:
 For remote access, explicitly bind:
 - `--host 0.0.0.0` (and use SSH tunneling or a firewall)
 
-A notebook viewer (`show_anndata`, `AnnDataViewer` with `port=None`) binds
-`127.0.0.1:8765` — the one local port Google sign-in accepts — or, when another
+A browser-tab viewer (`AnnDataViewer` with `port=None`) binds
+`127.0.0.1:8765` — the one local port Google Drive sign-in accepts — or, when another
 viewer holds it, the next free port, and prints a note saying so. A port given
 explicitly is used or refused, never replaced. `serve_anndata`,
 `AnnDataServer` and `cellucid serve` always bind exactly the port given.
@@ -124,8 +124,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 Servers add CORS headers that allow:
 - `localhost` / `127.0.0.1`
-- the canonical hosted viewer origin (`https://www.cellucid.com`)
-- `https://cellucid.com` and `https://*.cellucid.com`
+- `https://www.cellucid.com` and `https://cellucid.com` (the hosted app's origins, exactly)
 
 This is implemented in:
 - `cellucid-python/src/cellucid/_server_base.py` (`CORSMixin._get_allowed_origin`)

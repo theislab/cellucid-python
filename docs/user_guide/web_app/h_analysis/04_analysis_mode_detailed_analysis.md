@@ -88,9 +88,10 @@ The summary table is meant to be “readable truth” even when plots are ambigu
 If you select at least 2 pages, Detailed shows statistical tests appropriate to the variable kind:
 
 #### If the variable is categorical
-- **Pearson chi-squared test** for a general difference in distributions when every expected cell count is at least 5 (effect size: **Cramér’s V**)
+- **Pearson chi-squared test** for a general difference in distributions when every expected cell count is at least 5, with **Yates’s continuity correction on a 2×2 table** (the card says so), as SciPy’s `chi2_contingency` and R’s `chisq.test` apply it by default (effect size: **Cramér’s V**, from the uncorrected statistic)
 - **Fisher’s exact test** is selected automatically for a 2×2 table when any expected cell count is below 5
-  - Fisher reports a two-sided exact p-value and a sample odds ratio whose group/category contrast is shown on the result card
+  - Fisher reports a two-sided exact p-value (tables no more probable than the observed one, within R `fisher.test`’s relative 1e-7) and a sample odds ratio whose group/category contrast is shown on the result card
+- Both come from the one kernel Composition uses, so one table gets one answer in both views
 - A larger sparse table is shown as **N/A** rather than given a potentially misleading Pearson p-value; combine scientifically compatible sparse categories or use an appropriate exact test outside Cellucid
 
 #### If the variable is continuous (including genes)
@@ -210,7 +211,12 @@ which is the single authority for every analysis CSV schema.
 - **Constant values** (no variance) → tests can return degenerate statistics.
 - **Many categories** → tables may truncate; use bar plot + export.
 - **Missing gene expression** → gene variables unavailable or error on load.
-- **Overlapping pages** → comparisons are not independent; interpret cautiously.
+- **Overlapping pages** → pages that share cells are not independent samples,
+  so the tests (Welch's t, Mann-Whitney, ANOVA, Kruskal-Wallis, χ², Fisher)
+  are not run: the statistics panel says how many cells the pages share, as
+  Differential expression refuses such groups. The summaries and plots stay.
+- **On a subsample** → the result says how the open cells were chosen
+  ({doc}`../b_data_loading/21_subsampled_loading`).
 
 ---
 
@@ -269,7 +275,7 @@ The full view is where the numbers are:
 
 Expanded Detailed. **Summary statistics** is a per-page table — category counts
 and percentages for a categorical variable, or Count / Mean / Median / Min / Max
-/ Std Dev for a continuous one, and it names every category whether or not the
+/ SD (population) for a continuous one, and it names every category whether or not the
 axis had room to. **Statistical analysis** runs the tests below it.
 ```
 

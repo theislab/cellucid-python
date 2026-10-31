@@ -31,7 +31,9 @@ from typing import Any, Literal
 import numpy as np
 from scipy import sparse
 
+from .._console import console_print
 from .._plural import plural
+from ..data_mapping import default_graph
 from ._inputs import (
     cell_matrix,
     require_distinct_element_keys,
@@ -40,9 +42,10 @@ from ._inputs import (
     resolve_expression,
     resolve_genes,
     resolve_obs,
+    storable_columns,
     stored_expression,
 )
-from ._priority import without_positions
+from ._priority import ORIGINAL_POSITION_COLUMN, _require_positions, without_positions
 from ._store import (
     WHOLE_CHUNK_ELEMENTS,
     Elements,
@@ -76,12 +79,37 @@ class Modality:
     obsp: dict[str, sparse.csr_matrix]
     obsmap: np.ndarray
     varmap: np.ndarray
-    #: The stored X, converted when called (CSC float32, or float64 for
-    #: integer counts above 2^24; dense stays dense), None without X.
-    matrix: Callable[[], sparse.csc_matrix | np.ndarray] | None
+    #: The modality's X, checked when called (:func:`._inputs.resolve_expression`)
+    #: and laid out as it is written (:meth:`stored_matrix`), None without X.
+    matrix: Callable[[], Any] | None
+    #: Each row's original row in the modality, for a MuData in a verified
+    #: stored order (its own ``obs['cellucid_original_position']``); None:
+    #: each row its own.
+    given: np.ndarray | None = None
+    #: The modality row each written row holds, and the written row of each
+    #: modality row (``_priority.CellPriority.modality``); None: as given.
+    order: np.ndarray | None = None
+    new_row: np.ndarray | None = None
     #: In priority order, the modality's rows of cells below each global
     #: prefix level (``_priority.CellPriority.modality``); None as given.
     prefix_levels: np.ndarray | None = None
+
+    def stored_matrix(self) -> Any:
+        """The modality's X as it is written: gene-major in its written row
+        order with its prefix counts (sparse), or its rows in that order (dense)."""
+        if self.matrix is None:
+            return None
+        try:
+            return stored_expression(
+                self.matrix(),
+                genes=None,
+                order=self.order,
+                new_row=self.new_row,
+                levels=self.prefix_levels,
+                label=f"Modality {self.name!r} X",
+            )
+        except (TypeError, ValueError) as error:
+            raise _modality_error(self.name, error) from error
 
 
 def _unique_names(names: Any, *, what: str, fix: str) -> list[str]:
@@ -172,22 +200,32 @@ def modality_cell_arrays(modality: Any, name: str) -> dict[str, np.ndarray]:
     return arrays
 
 
-def resolve_modality(mdata: Any, name: str) -> Modality:
-    """Everything of one modality but its matrix, checked; the matrix is converted when written."""
+def resolve_modality(mdata: Any, name: str, *, stored: bool = False) -> Modality:
+    """Everything of one modality but its matrix, checked; the matrix is laid out when written.
+
+    ``stored``: the MuData is in a verified stored order, so the modality's own
+    ``obs['cellucid_original_position']`` is each row's original row in it
+    (``Modality.given``), composed with the written order.
+    """
     modality = mdata.mod[name]
     update = "rebuild them with mdata.update()"
     try:
-        obs_index, obs = resolve_obs(modality.obs, modality.n_obs)
-        obs = without_positions(obs, f"mdata.mod[{name!r}].obs")
-        _, var_index, var = resolve_genes(
-            sparse.csc_matrix((modality.n_obs, modality.n_vars), dtype=np.float32),
-            modality.var,
-            None,
-            None,
-        )
+        frame, note = storable_columns(modality.obs, f"mdata.mod[{name!r}].obs")
+        if note is not None:
+            console_print(note)
+        obs_index, obs = resolve_obs(frame, modality.n_obs)
+        given = None
+        if stored and ORIGINAL_POSITION_COLUMN in obs:
+            given = _require_positions(modality.obs[ORIGINAL_POSITION_COLUMN].to_numpy(), modality.n_obs)
+        obs = without_positions(obs, f"mdata.mod[{name!r}].obs", verified=given is not None)
+        frame, note = storable_columns(modality.var, f"mdata.mod[{name!r}].var")
+        if note is not None:
+            console_print(note)
+        _, var_index, var = resolve_genes(modality.n_vars, frame, None, None)
         obsp = {}
-        if "connectivities" in modality.obsp:
-            obsp["connectivities"] = resolve_connectivities(modality.obsp["connectivities"], modality.n_obs)
+        graph = default_graph(modality.obsp.keys(), modality=name)
+        if graph is not None:
+            obsp["connectivities"] = resolve_connectivities(modality.obsp[graph], modality.n_obs)
     except (TypeError, ValueError) as error:
         raise _modality_error(name, error) from error
     obsmap = _placement(
@@ -205,9 +243,9 @@ def resolve_modality(mdata: Any, name: str) -> Modality:
         fix=update,
     )
 
-    def matrix() -> sparse.csc_matrix | np.ndarray:
+    def matrix() -> Any:
         try:
-            return stored_expression(resolve_expression(modality.X, modality.n_obs))
+            return resolve_expression(modality.X, modality.n_obs)
         except (TypeError, ValueError) as error:
             raise _modality_error(name, error) from error
 
@@ -222,6 +260,7 @@ def resolve_modality(mdata: Any, name: str) -> Modality:
         obsmap=obsmap,
         varmap=varmap,
         matrix=matrix,
+        given=given,
     )
 
 
@@ -269,7 +308,7 @@ class MuDataLayout:
         writer.flush()
         groups = {modality.name: mod.create_group(modality.name) for modality in self.modalities}
         for modality in self.modalities:
-            x = modality.matrix() if modality.matrix is not None else None
+            x = modality.stored_matrix()
             _Writer(groups[modality.name], kind, zarr_format).write(
                 Elements(
                     x=x,
@@ -280,7 +319,6 @@ class MuDataLayout:
                     obsm=modality.obsm,
                     obsp=modality.obsp,
                     uns={},
-                    prefix_levels=modality.prefix_levels,
                 )
             )
             del x

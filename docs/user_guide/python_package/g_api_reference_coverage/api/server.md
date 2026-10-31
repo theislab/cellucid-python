@@ -13,7 +13,7 @@ You have two equivalent entry points:
 Both take any file or folder Cellucid reads — an `.h5ad` file, an AnnData
 Zarr store (folder or zipped), an `.h5mu` or MuData Zarr store, a `.loom`
 file, a 10x `.h5` file or Cell Ranger `outs/` folder, a MatrixMarket folder
-(also GEO's `GSM…_matrix.mtx.gz` naming), an `.rds`/`.rda`/`.RData` (gzipped
+(a `.mtx[.gz]` of any name, such as GEO's `GSM…_matrix.mtx.gz`), an `.rds`/`.rda`/`.RData` (gzipped
 or not) — or, in Python, an in-memory `AnnData` or `MuData`.
 
 ---
@@ -67,7 +67,7 @@ serve_anndata("my_study.h5ad")  # a prepared file names itself; blocks until Ctr
   in-memory AnnData, and an AnnData file in any other order, are served as a
   Zarr store in priority order whose chunks are made as they are asked for
   (`cellucid._served_store`), so a subsample transfers only its cells; a
-  MuData object is first written once to a temporary Cellucid-ready `.h5mu`.
+  MuData object is served the same way, as a MuData store.
 - Python reads the identity (`uns['cellucid']`) only of an AnnData or MuData,
   so an R object, a Loom, 10x or MatrixMarket dataset always needs
   `--dataset-name` and `--dataset-id`.

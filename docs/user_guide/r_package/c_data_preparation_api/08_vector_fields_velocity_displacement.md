@@ -25,8 +25,8 @@ cellucid_prepare(
 ```
 
 Each array has **one row per cell** and **exactly as many columns as its
-embedding** (any number: 50 for a 50-column `X_pca`), and must be finite and
-within the float32 range. Pass
+embedding** (any number: 50 for a 50-column `X_pca`), within the float32 range;
+a row of `NA` is a cell without a vector, drawn without an arrow. Pass
 the vectors in the same coordinates as the embedding itself; the viewer scales
 them together with the embedding.
 

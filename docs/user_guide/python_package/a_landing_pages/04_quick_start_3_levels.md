@@ -114,7 +114,7 @@ viewer.highlight_cells([0, 2], color="#00cc66")
 - hands the data to the viewer through the notebook's own connection; the
   viewer reads it itself, with range requests (an in-memory AnnData as a
   store in priority order made as the viewer reads it, so a subsample reads
-  only its cells; a MuData written once to a temporary `.h5mu`),
+  only its cells; a MuData the same way),
 - carries commands to the viewer and UI events back to Python on the same
   connection. No port is opened and no server is started.
 
@@ -363,10 +363,13 @@ cleanup_all()
   you will share or host, write it once with `prepare()` so every gene is one
   small read.
 - **Missing embeddings**: no embedding → no viewer; compute one first.
-- **NaN/Inf values**: `prepare(...)` refuses an embedding, expression matrix,
-  graph or vector field holding NaN or an infinity before writing anything,
-  with a count of what it found and the first affected positions (`obs` columns
-  may hold NaN, as a missing value, but not infinities). The viewer reads the
+- **NaN/Inf values**: `prepare(...)` refuses an expression matrix or graph
+  holding NaN or an infinity before writing anything, with a count of what it
+  found and the first affected positions (`obs` columns may hold NaN, as a
+  missing value, but not infinities). A row of NaN in an embedding or vector
+  field is a cell that array does not place: written as given, left out of
+  that embedding's views (counted and named in a short notice), kept
+  everywhere else. The viewer reads the
   values itself and refuses one field at a time instead: a gene or continuous
   column holding an infinity is refused with a counted diagnosis, and the rest
   of the session keeps working. In the viewer `NaN` and infinity are not alike

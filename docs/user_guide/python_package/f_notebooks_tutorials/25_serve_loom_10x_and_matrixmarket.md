@@ -48,9 +48,10 @@ for the cells open, as you show it. A matrix of several feature types (Gene
 Expression with Antibody Capture) is served as a MuData store, one modality
 per type, as the viewer shows the folder itself.
 
-A dataset that is not a Cellucid-ready AnnData does not name itself, so
-`--dataset-name` and `--dataset-id` are required; the id is what sessions are
-kept under.
+A dataset that is not a Cellucid-ready AnnData does not name itself, so it
+is named after its file (its id the file's name without the extension,
+printed when the server starts); `--dataset-name` and `--dataset-id` name it
+otherwise. The id is what sessions are kept under.
 
 ## A MatrixMarket folder
 

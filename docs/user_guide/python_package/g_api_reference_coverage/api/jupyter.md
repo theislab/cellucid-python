@@ -144,7 +144,8 @@ See {doc}`sessions` for what a session bundle contains and how to apply it back 
 
 1. The dataset and the launch choices are checked; an in-memory AnnData is
    planned as a store in priority order, made as the viewer reads it (a MuData
-   is written once to a temporary `.h5mu`). Nothing binds a port.
+   as a MuData store), its expression matrices laid out gene-major in the
+   background. Nothing binds a port.
 2. A {class}`~cellucid.jupyter.Widget` is shown. Its output frames the
    Cellucid app, which your browser loads from `web_source_url`
    (`https://www.cellucid.com` by default).

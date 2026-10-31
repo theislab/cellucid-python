@@ -113,6 +113,11 @@ Restored early so you see the correct view quickly:
   - many checkboxes/selects/sliders are captured “by id”, including the
     background, point and lighting settings, and the app theme (light/dark),
     which a restore applies exactly as a choice made by hand
+  - the connectivity **Max edges** slider records the number of edges you
+    asked for (250,000 until you move it), not the count it shows: its range
+    is the graph's visible edges, read only once edges are shown, so a
+    restore keeps your number and the slider shows as much of it as the
+    graph allows
   - accordion open/closed state for many sections
 - **Centroids**
   - whether each view shows centroid points and centroid labels
@@ -275,7 +280,10 @@ categories by name, numeric columns as their raw values), so they come back
 without being run again. A restored result naming a gene or category the open
 dataset lacks is refused. Both reopen only after the highlight pages they refer
 to have been restored, so an analysis comparing saved pages opens on those
-pages even in a fresh tab.
+pages even in a fresh tab. A restored result is the analysis's own as soon as
+it is loaded; its plot is drawn when its panel is shown (a closed analysis,
+a closed window or a tab in the background draws nothing until then), and
+the load never waits for that.
 
 The per-cell gene values analyses read are not stored: they are re-read from
 the dataset when needed.

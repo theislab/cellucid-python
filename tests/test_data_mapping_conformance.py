@@ -14,8 +14,9 @@ The Python package runs the sections whose rules it implements: making names
 unique and the note that reports it, the embedding-column check, the
 vector-field key rule (``prepare()``, the launch defaults and the transition
 drift helper name and read vector fields with it), DataMapping validation, the
-modality a multimodal dataset opens with, and the check of a mapping's
-modality against the dataset's.
+modality a multimodal dataset opens with, the check of a mapping's modality
+against the dataset's, and the neighbour graph a dataset opens with
+(``prepare()`` writes the one it chooses).
 The other sections are rules of the web app.
 """
 
@@ -34,7 +35,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "data_mapping_conformance.json"
 
 #: The same digest is pinned in cellucid-r (tests/testthat/test-data-mapping-
 #: conformance.R) and in the web app. Update all three together.
-FIXTURE_SHA256 = "cfc84c8c332f54824c6d8a438ee0c8ae014852674d7ae6bdc19dff1a8c84089e"
+FIXTURE_SHA256 = "6f7b7ff0e4392ea00c7e21c7a868ec68d3ec83a63558227f9f7d2c300a666c32"
 
 
 def _fixture() -> dict[str, Any]:
@@ -48,7 +49,7 @@ def _cases(section: str) -> list[dict[str, Any]]:
 def test_the_fixture_is_the_pinned_shared_copy() -> None:
     assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == FIXTURE_SHA256
     fixture = _fixture()
-    assert fixture["version"] == 6
+    assert fixture["version"] == 7
     assert list(fixture) == [
         "_about",
         "version",
@@ -66,6 +67,7 @@ def test_the_fixture_is_the_pinned_shared_copy() -> None:
         "dataMapping",
         "defaultModality",
         "mappingModality",
+        "defaultGraph",
     ]
     assert all(fixture[section] for section in list(fixture)[2:])
 
@@ -141,7 +143,8 @@ def test_embedding_columns(case: dict[str, Any]) -> None:
 def test_vector_field_keys(case: dict[str, Any]) -> None:
     found = dm.vector_field_keys(case["keys"])
     assert [
-        {"key": key, "field": parsed.field, "basis": parsed.basis} for key, parsed in found.items()
+        {"key": key, "field": parsed.field, "basis": parsed.basis, "embeddingKey": parsed.embedding_key}
+        for key, parsed in found.items()
     ] == case["expected"]
     keys = set(case["keys"])
     for key in case["keys"]:
@@ -150,7 +153,8 @@ def test_vector_field_keys(case: dict[str, Any]) -> None:
             assert parsed == found[key]
             assert parsed is not None
             assert f"{parsed.field}_{parsed.basis}" == key
-            assert parsed.embedding_key == "X_" + parsed.basis
+            # The embedding is in the field's own namespace (a modality's ``rna:``).
+            assert parsed.embedding_key == dm.obsm_namespace(parsed.field)[0] + "X_" + parsed.basis
         else:
             assert parsed is None
 
@@ -180,6 +184,11 @@ def test_data_mapping_validation(case: dict[str, Any]) -> None:
     # The canonical form is a fixed point and is serialized key-for-key.
     assert dm.validate_data_mapping(canonical) == canonical
     assert list(canonical) == list(expected)
+
+
+@pytest.mark.parametrize("case", _cases("defaultGraph"), ids=lambda case: case["name"])
+def test_default_graph(case: dict[str, Any]) -> None:
+    assert dm.default_graph(case["keys"], modality=case["modality"]) == case["expected"]
 
 
 @pytest.mark.parametrize("case", _cases("defaultModality"))

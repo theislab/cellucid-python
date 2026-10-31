@@ -122,7 +122,8 @@ metadata load at any size. What remains are the limits of
 the browser itself, and each is reported by name rather than as a crash:
 
 - **An array the browser cannot allocate** is refused as too large, naming the
-  bytes it needed. Close other tabs, or use
+  bytes it needed; Cellucid then keeps less in its caches until memory allows
+  more ({ref}`memory-budgets`). Close other tabs, or use
   {doc}`../b_data_loading/04_server_tutorial`, where Python holds the data and
   the browser receives only what it asks for.
 - **A metadata document longer than the browser's longest text** (about half a
@@ -157,7 +158,7 @@ hit; turning off level of detail makes every cell hittable.
 
 | The message | Meaning | Go to |
 |---|---|---|
-| **“WebGL Context Lost”** dialog, “WebGL context lost. Reload required to continue.”, with a **Reload** button | The GPU dropped the context, usually from memory pressure. A reload is genuinely required — the viewer does not resume from a restored context | {doc}`../n_benchmarking_performance/07_troubleshooting_performance` |
+| **“Graphics reset by the browser”** dialog, restoring, with **Save session** (and **Reload** only if restoring failed) | The GPU dropped the context, usually from memory pressure or a driver reset. The viewer rebuilds every GPU object from the page when the browser gives it back, keeping filters, selections, kept views and analyses; the session was saved in the page first | {doc}`../n_benchmarking_performance/07_troubleshooting_performance` |
 | “WebGL context restored, but Cellucid requires a reload…” | Your browser handed the context back; Cellucid still needs a reload | Reload |
 | “Volumetric smoke isn't available on this device: …” (titled **Volumetric smoke unavailable**) | This browser's graphics driver lacks something the smoke cloud needs, most often float blending (iPhone/iPad Safari, many Android browsers); the view stays in Points | {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` |
 | “Volumetric smoke could not be built. Points rendering works as usual.” / “Volumetric smoke stopped rendering, so the view is back in Points.” | A smoke build or frame failed; the view is in Points and the technical detail is in the browser console | {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` |
@@ -198,7 +199,7 @@ dataset publishes no gene expression fields…”*.
 | “Export failed: …” | Figure export could not complete | {doc}`../k_figure_export/07_troubleshooting_figure_export` |
 | “Exact point export requires WebGL2…” / “…requires camera matrices…” | A capability the exact-point renderer needs is missing right now | {doc}`../k_figure_export/03_export_formats_and_renderers` |
 | A notification titled **Analysis error** (“… failed: &lt;reason&gt;”), or a failed run in the analysis window's status | An analysis could not run; the reason is the rest of the line | {doc}`../h_analysis/10_troubleshooting_analysis` |
-| “High memory usage detected. Some cached data may need to be reloaded.” / “Memory optimization in progress…” | The analysis layer is shedding cached work | {doc}`../h_analysis/10_troubleshooting_analysis` |
+| “Memory was running short, so Cellucid let go of …. They are read again when needed.” | The browser refused an allocation: Cellucid lowered what it lets itself keep, and the caches named gave memory back (cached copies, field data and layouts no view shows, decoded chunks, page values of analyses). Nothing open was stopped or closed; what went is read again when needed, and the limit comes back as memory allows | {ref}`memory-budgets` |
 
 ---
 
@@ -244,9 +245,11 @@ readers announce this, and each control is described by that line.
 So:
 
 - **Greyed out for a moment on a slow start** — expected. Wait. They open as
-  soon as the dataset catalog has been read; they do not wait for the first
-  dataset to load, and anything you choose while it loads replaces it (see
-  {ref}`changing-dataset-while-loading`).
+  soon as the interface is built, before the sample catalog has answered
+  (only a data server or a link the address names is read first); they do
+  not wait for the first dataset to load. A file, link or sample you choose
+  while the catalog answers is what opens, and anything you choose while the
+  default sample loads replaces it (see {ref}`changing-dataset-while-loading`).
 - **A click that did nothing at all** — this should no longer be reproducible.
   If it happens, it is a bug worth reporting.
 - **Never becomes ready** — that is a startup failure. Look for the full-screen
@@ -352,8 +355,8 @@ Cellucid does **not** use the File System Access API's file pickers or
 `SharedArrayBuffer`, so a browser or policy that blocks those is not the cause
 of your problem. Where the browser offers the origin-private file system
 (OPFS), Cellucid keeps a large gene index, the converted copy of an R object
-or MatrixMarket folder (across visits, until **Clear** under Session › Open
-data) and a file downloaded whole there; without it they stay in memory for
+or MatrixMarket folder (across visits, until removed under Session › Open
+data › Stored › Manage…) and a file downloaded whole there; without it they stay in memory for
 the tab. Figure export (PNG and Hybrid SVG) draws
 its points on an `OffscreenCanvas`.
 

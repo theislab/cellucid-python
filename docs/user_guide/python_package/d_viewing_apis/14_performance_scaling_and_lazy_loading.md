@@ -118,10 +118,19 @@ and over HTTP on localhost:
 | `X`, dense file | 126 MB/s | 143 MB/s | 128 MB/s |
 | `obsm` (UMAP, 30-column PCA), 1M cells | 0.5 MB/s | 148 MB/s | 124 MB/s |
 | `obs` | 2,300 MB/s | 2,300 MB/s | 880 MB/s |
-| `X` of an in-memory object | — | 1,970 MB/s | 263 MB/s |
+| `X` of an in-memory object | — | 1,970 MB/s | 590 MB/s |
 
 The first pass includes decoding the file's gzip chunks; the served bytes are
-the same as before.
+the same as before. An expression matrix's entries are served in chunks of
+2^18 values (1 MiB), where they were 2^14 (64 KiB, 263 MB/s over HTTP): over
+localhost a request costs a fixed time at both ends -- Python's server answers
+at most about 4,700 a second, and a browser's `fetch` moves 46-79 MB/s in
+requests of 64 KiB in Chromium, Firefox and WebKit, 300-510 MB/s in requests of
+1 MiB -- so larger requests are what makes a pass over a matrix (an analysis,
+many genes) fast; a gene, or a subsample's first values of one, is a `Range`
+of its chunk and reads no more than before. Measured in Chromium on a
+1,000,000-cell object (100 values a cell): a differential expression read of
+50 genes over 133,334 cells 395 ms → 178 ms.
 
 An in-memory `AnnData` is served as a store with its cells in priority order,
 each chunk made from the object when the viewer asks for it, so a subsample
@@ -144,11 +153,15 @@ served before:
 Opening every cell costs 4 MB more: the cells' original positions, which the
 viewer reads to name every cell by its row in your object. The server starts
 in 0.4 s (before: 1.9 s to write the temporary file) and lays the cell-major
-`X` out gene-major in about 2 s (measured when the layout ran in the
-background; it now runs before the call returns, the object's snapshot:
-{doc}`08_anndata_mode_show_anndata_and_serve_anndata`), after which a gene
+`X` out gene-major in about 2 s in the background, the object's snapshot
+({doc}`08_anndata_mode_show_anndata_and_serve_anndata`), after which a gene
 takes a few milliseconds; the notebook widget answers the same requests with
-the same bytes through the kernel.
+the same bytes through the kernel. Measured on 200,000 cells x 200 stored
+values (40M), the store is made in 0.43 s and `X` laid out 1.11 s after the
+call (before: 1.44 s before anything showed); with a layer and `raw` as well,
+0.81 s and 3.76 s (before: 4.18 s). At 1M cells x 2,000 stored values that is
+about 2 s to the first view, and the layout about 70 s per matrix behind it,
+where the first view waited about 3.5 minutes.
 
 Your numbers depend on the machine, the disk, and the network between browser
 and server.
@@ -169,12 +182,14 @@ choices you set against them, and binds. The transcript is in
 
 Inputs that add work:
 
-- an in-memory `AnnData`, or an AnnData file not in priority order: its `obs`,
-  `var`, `uns` and the other small elements are written once in memory, in
-  priority order, before the bind; an object's arrays are copied once, before
-  the bind too (its snapshot: sparse expression matrices laid out gene-major,
-  stored as `prepare()` stores them);
-- an in-memory `MuData`, written once to a temporary `.h5mu` by `prepare()`;
+- an in-memory `AnnData` or `MuData`, or a file not in priority order: its
+  `obs`, `var`, `uns` and the other small elements are written once in memory,
+  in priority order, before the bind; an object's expression matrices are
+  counted before the bind (a value `prepare()` refuses is refused then) and
+  laid out gene-major in the background after it, `X` first (its snapshot,
+  stored as `prepare()` stores them; the arrays it reads are read-only until
+  then), so the viewer opens at once and a gene waits only for its matrix; a
+  cell-major (CSR) `X` of a file is laid out the same way, its values as stored;
 - a store holding an array stored with a codec the browser cannot decode (an
   HDF5 filter such as Blosc or Zstandard, a Zarr codec such as bz2): each chunk
   is decoded on the kernel when it is asked for. Step 1 names those arrays.
@@ -197,7 +212,7 @@ Exact cutoffs depend on your machine, browser, and GPU. These are starting point
 - **Medium and large (100k–millions):**
   - prefer a path (`show_anndata("data.h5ad", dataset_name="My dataset", dataset_id="my-dataset")`)
     over an in-memory object, so nothing is written first.
-  - a column-major (CSC) matrix avoids the first-gene index build.
+  - every expression matrix is served gene-major: a gene is one range.
   - `prepare()` once pays off if you share the dataset or view it often.
 
 ## Browser/GPU considerations (web app side)
@@ -217,10 +232,15 @@ For web-app-specific performance tuning (render modes, LOD, etc.), see:
 If performance is unexpectedly bad:
 
 - check which route opened it ({doc}`02_loading_routes`)
-- the first gene of a large row-major (CSR) matrix builds the gene index once;
-  later genes are fast
-- read the numbered startup steps: a long `[1/4]` is an in-memory MuData being
-  written to its temporary `.h5mu`
+- a gene asked for before its matrix is laid out is made at once from the
+  layout's progress (what is placed copied, the rest from the object or the
+  file; slower than after the layout, which is waited for only when it ends
+  sooner, as when a hundred genes are asked at once); only a
+  gene of a file's cell-major matrix asked for before the server has counted
+  it waits (the viewer is answered `503` with the seconds left, and asks
+  again)
+- read the numbered startup steps: a long `[1/4]` is an object's expression
+  matrices being counted
 - over an SSH tunnel, run the server on the machine that holds the file
 - consider writing a Cellucid-ready AnnData once (`prepare`) and opening that
 

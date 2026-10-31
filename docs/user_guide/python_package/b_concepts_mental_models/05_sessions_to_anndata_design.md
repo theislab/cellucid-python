@@ -117,7 +117,7 @@ Guardrails:
 
 A `.cellucid-session` file is:
 
-1) MAGIC header: `CELLUCID_SESSION/2\n` (session format 2; any other signature is refused)  
+1) MAGIC header: `CELLUCID_SESSION/3\n` (session format 3; a session of another format is refused naming it, any other signature as not a session)  
 2) `manifestByteLength` (u32 LE)  
 3) `manifest` JSON bytes (UTF‑8)  
 4) repeated chunks:
@@ -173,8 +173,8 @@ This prevents the worst failure mode:
 
 The manifest fingerprint carries two records beside those three scalars, and both
 are required. `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
-16-character lowercase hexadecimal `digest` of the coordinates of that
-embedding. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
+16-character lowercase hexadecimal `digest` of that embedding's stored
+coordinates, each cell named by its original position. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
 columns that were read, one per dimension. It exists because the three scalars
 all survive a rewrite of the same dataset from re-sorted input, and index-based
 selections would then silently denote different cells.
@@ -193,11 +193,12 @@ The two readers check them differently:
 | `cellOrder` and `dataMapping` present | required | required |
 | record shapes | validated | validated |
 | `dataMapping` keys exist on the dataset | checked | checked against the `AnnData` |
-| `cellOrder` digest value | compared against the loaded embedding | never checked |
+| `cellOrder` digest value | compared against the stored embedding of the cells it opens | never checked |
 
-Python cannot check the digest. It is taken over the normalized coordinates the
-viewer drew, while this API applies a session to an `AnnData` whose row order
-the caller controls. Enforcing cell-order identity is the viewer's job.
+Python does not check the digest. It is the viewer's check, taken on the cells
+it opens, while this API applies a session to an `AnnData` whose rows and
+embeddings the caller controls. Enforcing cell-order identity is the viewer's
+job.
 
 So a bundle this reader accepts may still be refused by the web app. That
 direction is expected.
@@ -213,7 +214,7 @@ Meaning:
 Fix:
 - request a new bundle again from the *current* viewer instance.
 
-### Symptom: “This file is not a Cellucid session file of format 2 …”
+### Symptom: “This file is not a Cellucid session file of format 3 …”
 
 Meaning:
 - the bytes the viewer sent on its channel for a `requestSessionBundle` are

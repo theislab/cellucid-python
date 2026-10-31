@@ -92,8 +92,11 @@ Every per-cell pass and every encode runs in the export worker
 
 Each rendered file opens a worker session: a typed array is copied to the
 worker once per session, and closing the session releases it. An export that is
-cancelled rejects its pending requests at once; the worker's late answers are
-discarded.
+cancelled (**Cancel export**, the button's label while an export runs; or
+closing the panel) rejects its pending requests at once. The worker hears the
+session's `cancel` ahead of its queue and skips every request of that session
+still queued. The pass already running ends (one synchronous draw) and its late
+answer is discarded.
 
 ### Where the point pass is drawn
 

@@ -111,8 +111,8 @@ folder, a MatrixMarket folder, an `.rds`/`.rda`).
    metadata and checks the launch choices you named against it; it answers
    reads with the bytes as they are on disk, or -- for an in-memory AnnData,
    and an AnnData file not in priority order -- with the chunks of a store in
-   priority order made as they are asked for (a MuData object is written once
-   to a temporary `.h5mu`). No server is started.
+   priority order made as they are asked for (a MuData object as a MuData
+   store, the same way). No server is started.
 2) The widget shows the app (loaded by the browser from
    `https://www.cellucid.com`); the app's own reader reads the data itself
    through the widget: in place with range requests where the format allows

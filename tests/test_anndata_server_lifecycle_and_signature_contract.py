@@ -102,10 +102,11 @@ def test_public_anndata_entry_points_have_complete_closed_signatures() -> None:
         "web_source_url",
         "web_cache_dir",
         "allowed_hosts",
+        "cache_bytes",
     ]
     assert list(inspect.signature(AnnDataServer).parameters) == server_parameters
     assert list(inspect.signature(serve_anndata).parameters) == server_parameters
-    notebook_tail = ["client_server_url", "web_source_url", "web_cache_dir", "allowed_hosts"]
+    notebook_tail = ["client_server_url", "web_source_url", "web_cache_dir", "allowed_hosts", "cache_bytes"]
     assert list(inspect.signature(AnnDataViewer).parameters) == [
         "data",
         "port",
@@ -114,9 +115,34 @@ def test_public_anndata_entry_points_have_complete_closed_signatures() -> None:
         *notebook_tail,
     ]
     # The notebook widget runs no server: the browser loads the app from web_source_url.
-    widget_parameters = ["data", "height", *LAUNCH_CHOICES, "web_source_url"]
+    widget_parameters = ["data", "height", *LAUNCH_CHOICES, "web_source_url", "cache_bytes"]
     assert list(inspect.signature(show_anndata).parameters) == widget_parameters
     assert list(inspect.signature(Widget).parameters) == widget_parameters
+
+
+def test_cache_bytes_bounds_what_a_served_store_keeps_as_cellucid_r_does() -> None:
+    from cellucid._served_store import default_cache_bytes, require_cache_bytes
+
+    # None keeps a 64th of the machine's memory (cellucid-r's
+    # .default_cache_bytes() follows the same rule); 0 keeps nothing.
+    assert require_cache_bytes(None) == default_cache_bytes()
+    assert require_cache_bytes(0) == 0
+    assert require_cache_bytes(np.int64(4096)) == 4096
+    for refused in (-1, 1.5, True, "1"):
+        with pytest.raises(ValueError, match="cache_bytes must be None or one non-negative whole number of bytes"):
+            require_cache_bytes(refused)
+    for budget in (None, 0, 12_345):
+        server = _server(cache_bytes=budget)
+        try:
+            expected = default_cache_bytes() if budget is None else budget
+            assert server.cache_bytes == expected
+            store = server._served.priority
+            assert store is not None and store._lines._budget == expected
+        finally:
+            server.stop()
+    # A refused budget is refused before anything is served.
+    with pytest.raises(ValueError, match="cache_bytes"):
+        _server(cache_bytes=-1)
 
 
 def test_show_anndata_rejects_identity_before_viewer_setup() -> None:
@@ -138,14 +164,16 @@ def test_a_file_on_disk_is_read_where_it_is_and_its_decoded_arrays_go_with_the_s
     server = _server(source)
     store = server._served.priority
     assert store is not None
-    # A cell-major X on disk is served cell-major, read from the file: an array
-    # stored in chunks (anndata's sparse arrays) is decoded once into the
-    # scratch folder as its rows are read, an array in one piece read where it
-    # lies; nothing else is written, and the folder goes with the server.
+    # A cell-major X on disk is laid out gene-major by the store's worker, read
+    # from the file: an array stored in chunks (anndata's sparse arrays) is
+    # decoded once into the scratch folder as its rows are read, an array in
+    # one piece read where it lies; the layout is written beside them, and the
+    # folder goes with the server.
+    store.laid_out()
     assert store.get("X/indptr/0") is not None and store.get("X/data/0") is not None
     folder = store._folder.folder
     assert folder is not None
-    assert {path.name.split("-")[0] for path in folder.iterdir()} <= {"owner", "source"}
+    assert {path.name.split("-")[0] for path in folder.iterdir()} <= {"owner", "source", "X", "layers", "raw"}
     server.stop()
     assert mapped_files(folder) == [] and mapped_files(source) == []
     assert not folder.exists()
@@ -187,12 +215,16 @@ def test_a_constructor_that_fails_releases_the_store_it_made() -> None:
     from cellucid._served_store import PriorityStore
 
     made: list[PriorityStore] = []
+    folders: list[Path] = []
     real_of_anndata = PriorityStore.of_anndata
 
-    def tracking(adata: AnnData) -> PriorityStore:
-        store = real_of_anndata(adata)
+    def tracking(adata: AnnData, *, cache_bytes: int | None = None) -> PriorityStore:
+        store = real_of_anndata(adata, cache_bytes=cache_bytes)
         made.append(store)
+        store.laid_out()
         assert store.get("X/indptr/0") is not None
+        assert store._folder.folder is not None
+        folders.append(store._folder.folder)
         return store
 
     with (
@@ -201,8 +233,8 @@ def test_a_constructor_that_fails_releases_the_store_it_made() -> None:
     ):
         _server(knn_key="connectivities")
     assert len(made) == 1
-    assert made[0]._folder.folder is not None and mapped_files(made[0]._folder.folder) == []
-    assert not made[0]._folder.folder.exists()
+    assert mapped_files(folders[0]) == []
+    assert not folders[0].exists()
     assert not made[0]._finalizer.alive
 
 

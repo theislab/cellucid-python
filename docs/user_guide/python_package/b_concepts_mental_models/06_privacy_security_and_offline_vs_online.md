@@ -26,7 +26,10 @@ viewer source.
 - the browser loads the app's code from `https://www.cellucid.com` (or the
   copy you name with `web_source_url=`) into the widget's output,
 - the app reads your dataset from the kernel through the notebook's own
-  connection; no port is opened and no server is started.
+  connection; no port is opened and no server is started,
+- the widget's page is a viewer page (`?viewer=embedded`): it sends **no usage
+  analytics**, although its code comes from www.cellucid.com (the hosted app
+  reports usage only on its own pages).
 
 ### Server modes (`cellucid serve`, `serve_anndata`, `AnnDataViewer`)
 
@@ -53,8 +56,19 @@ Start here: {doc}`../../web_app/b_data_loading/index`
 `AnnDataServer` (`cellucid serve`, `serve_anndata`) and browser-tab viewers (`AnnDataViewer`) bind to `127.0.0.1` by default. A notebook widget binds nothing.
 
 That means:
-- only the same machine can reach the server,
+- only programs on the same machine can reach the server — and on a machine
+  several people use at once (an HPC login or compute node, a single-host
+  JupyterHub, a multi-user RStudio Server or Posit Workbench), that is **every
+  user of that machine**: anyone with a shell there reads the served dataset
+  with one `curl` while the server runs (see below),
 - people on your network cannot access it unless you deliberately bind to a public interface or tunnel it.
+
+There is no secret in the data routes: the browser reads them with plain range
+requests. The viewer channel (commands and events) does need the per-viewer
+token, so another user can read the data but cannot drive your notebook. When
+the data must not be readable by the other users of the machine, use the
+notebook widget (`show_anndata()`: no port is opened), or run the server on a
+machine only you use.
 
 ### If you bind to a non-localhost host (be careful)
 
@@ -88,8 +102,9 @@ project. Schedulers place other users’ jobs beside yours as a matter of course
 so this is the ordinary case, not a rare one.
 
 Reads are unauthenticated on a loopback bind too. The difference is only who is
-able to perform them: on `127.0.0.1`, your own machine; on `0.0.0.0`, everyone
-who can route to the port.
+able to perform them: on `127.0.0.1`, every user of the same machine (only you
+on a personal computer, everyone logged in to a shared node); on `0.0.0.0`,
+everyone who can route to the port.
 
 ### When a wildcard bind is still the right trade
 
@@ -255,8 +270,11 @@ Before binding its HTTP server, Cellucid:
 
 ### Where the cache lives
 
-The default cache is a process-independent temporary directory
-(platform-dependent). Select another location explicitly with
+The default cache is this user's own cache folder: `~/.cache/cellucid/web`
+on Linux (`$XDG_CACHE_HOME` when set), `~/Library/Caches/cellucid/web` on
+macOS and `%LOCALAPPDATA%\cellucid\web` on Windows. Each user of a shared
+machine has their own, as with the R package
+(`tools::R_user_dir("cellucid", "cache")/web`). Select another location explicitly with
 `--web-cache-dir PATH` or the `web_cache_dir=` Python argument.
 
 In Python:

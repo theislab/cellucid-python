@@ -93,7 +93,8 @@ Each filter row includes:
   - unchecked = filter disabled (does not affect visibility)
   - its tooltip reads `Turn this filter off` / `Turn this filter on`
 - a **text summary** (human-readable):
-  - continuous range: `Field: min – max`, both bounds to two decimal places
+  - continuous range: `Field: min – max`, each bound to six significant
+    figures, so a typed or slider bound reads exactly as applied
   - categorical hides: `Field: hiding A, B, C, D` — at most four names, then
     ` +N more`
   - outlier filter: `Field: outlier ≤ 95%`

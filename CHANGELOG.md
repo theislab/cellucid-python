@@ -129,10 +129,11 @@ this release. The main changes are:
   kept cell, each fetched once. Opening 1 % of CELLxGENE's 2.3M-cell Human
   Lung Cell Atlas: first view 3.8 MB in 143 requests at 8.2 s (was 20.3 MB in
   2,645 requests), at the floor computed from the file's layout.
-- **The first view never waits for gene names.** The gene list is read right
-  after it; meanwhile the gene search, **Gene names**, gene-based analyses
-  and their pickers say *Reading gene names…*, and sessions, exports with
-  genes and data-mapping changes wait.
+- **The first view never waits for gene names.** The gene list (the var
+  index, or the column Data mapping names) is read right after it, and no
+  other var column; meanwhile the gene search, gene-based analyses and their
+  pickers say *Reading gene names…*, and sessions, exports with genes and
+  data-mapping changes wait.
 - **Faster reads over a network**: HDF5 chunk-index nodes no longer read
   before a gene (the lung atlas read 12,382 of them first); index nodes of
   one task are read as one burst (all HDF5 formats; 100 Loom genes 11.1 →
@@ -153,11 +154,11 @@ this release. The main changes are:
 
 #### Genes on every path
 
-- **Genes by symbol.** A file whose var index holds database identifiers
-  (Ensembl, FlyBase, WormBase, RefSeq, UniProt, Entrez) beside a column of
-  symbols (CELLxGENE's `feature_name`) names its genes by the symbols, marked
-  *Guessed* in Data mapping; the gene search finds both. Genes leave the
-  viewer by identifier (the var index), with the symbol alongside.
+- **Genes leave the viewer by identifier** (the var index) everywhere: gene
+  sets, the gene coloured by, GMT files, DE and marker CSVs, `.h5ad`
+  exports. When Data mapping names the genes by a var column (a CELLxGENE
+  file's `feature_name`), the name shown goes alongside; named by the var
+  index, nothing does.
 - **The first gene of a cell-major matrix says what it costs** before it is
   read (bytes and time at the measured speed), with **Cancel**; on a share,
   its colours fill in as cells are indexed, each step a sample of the open
@@ -246,8 +247,8 @@ this release. The main changes are:
   or an `.h5ad` subset (written in the browser; anndata, h5py and Cellucid
   read it), any obs field as a CSV (**Export** beside **Duplicate**), gene
   sets as GMT. Exports list cells in the dataset's own order; genes by
-  identifier with symbols beside; DE and marker CSVs name genes by
-  identifier.
+  identifier, with the names shown beside when a var column names them; DE
+  and marker CSVs name genes by identifier.
 - **From a notebook**: pushed columns and gene sets show as fields and under
   **From notebook** in Gene signature and Dot plot, and are saved with the
   session.

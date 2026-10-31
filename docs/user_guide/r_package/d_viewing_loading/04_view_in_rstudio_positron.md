@@ -37,7 +37,8 @@ see {doc}`08_view_in_jupyter_notebooks`):
    ({doc}`../e_integrations_recipes/01_seurat_recipe`), into the same
    Cellucid-ready AnnData, held in memory. No chunk is made yet.
 2. A small web server starts in the background (port 8765, the one local
-   address Google sign-in accepts; the next free port when it is taken).
+   address Google accepts for opening Google Drive files; the next free port
+   when it is taken).
 3. The first time, the Cellucid web app is downloaded from www.cellucid.com
    (about 17 MB) into `file.path(tools::R_user_dir("cellucid", "cache"), "web")`, every file
    checked against the build's SHA-256 inventory. Later viewers reuse it, and
@@ -46,14 +47,23 @@ see {doc}`08_view_in_jupyter_notebooks`):
    is asked for, uncompressed (the store declares no compressor: the browser
    reads it over loopback, where deflating on R's one thread cost far more than
    the bytes it saved; `cellucid_prepare()` files stay compressed). An object's
-   genes x cells matrix is never transposed whole: reading a gene makes the
-   block of genes around it, one binary search a cell. A 100,000-cell object
-   opens in under a second; on a 1,000,000-cell object (150 values a cell) the
-   first gene takes about 0.3 s and 100 more genes about 0.13 s.
+   expression matrix is laid out gene-major once, in the background from the
+   moment the viewer starts, on every core and into memory-mapped scratch
+   files (never a copy in R's memory); a gene read before the layout ends is
+   made from the layout's progress: the values already laid out are copied and
+   those of the cells not reached yet are found by one scan of the matrix's
+   values in its own order (on every core, the layout standing meanwhile), so
+   the viewer never waits for it unless the layout ends sooner. Measured in
+   Chromium on a 1,000,000-cell object (100 values a cell): first picture
+   1.7 s, first gene 48 ms, 100 more genes 0.63 s and a differential
+   expression read of 50 genes over 133,334 cells 0.17 s (where blocks of
+   genes made within `cache_bytes` took 2.6 s, 38.8 s and 30.5 s).
 
 The console stays usable while the viewer is open: the server answers the
 viewer whenever R is idle. Run `cellucid_stop(viewer)` when you are done, or
-`cellucid_stop_all()`.
+`cellucid_stop_all()`. Viewing the same dataset again (the same dataset id)
+stops the viewer shown before and says so: a re-run after `NormalizeData()`
+does not keep the earlier object's matrices and chunk cache in memory.
 
 ```{note}
 The object is read when the viewer starts. Changing it afterwards does not

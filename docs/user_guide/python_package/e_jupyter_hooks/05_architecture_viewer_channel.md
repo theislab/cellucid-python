@@ -31,8 +31,9 @@ only want something that works, start with {doc}`02_quickstart_minimal_roundtrip
 │       WebSocket runs (serve_viewer_channel / .on_ws_open)                     │
 └───────────────────────────────────────────▲──────────────────────────────────┘
                                             │ the notebook's connection (comm
-                                            │ messages, binary buffers; base64
-                                            │ in IRkernel), between cells
+                                            │ messages, binary buffers; the
+                                            │ page's frames to IRkernel as
+                                            │ base64), between cells
 ┌───────────────────────────────────────────▼──────────────────────────────────┐
 │  Widget front end (widget.js, in the cell's output)                          │
 │    <iframe src="https://www.cellucid.com/?viewer=embedded">                  │
@@ -51,9 +52,30 @@ only want something that works, start with {doc}`02_quickstart_minimal_roundtrip
 The widget's messages name the output they belong to, so one widget shown in
 two outputs is two connections; as with a reloaded page, the newer one takes
 the viewer over and the older one is told so (4409). Requests that arrive
-together go to the kernel as one message, and bodies travel as binary
-buffers. The kernel handles them between cells: see
-{doc}`03_supported_environments_matrix` for what that means while a cell runs.
+together go to the kernel as one message, at once (the page's reader bounds
+how many it has under way, as with a web host); the Python kernel answers
+each on a thread of its own, as its HTTP server does, so a request that takes
+long to make (a chunk of a matrix the layout has not reached yet, made from
+its progress and the object) holds back no other, and R answers them in turn. An R kernel has at
+most two such messages at once (the widget's `_fetch_messages` trait): the
+requests asked while they are answered gather into the next message, since
+IRkernel spends about 1.7 ms of its own on every message it reads. Bodies travel as
+binary buffers, from Python and R alike (IRkernel's own send writes none, so
+the R package makes those messages with the kernel's reply and wire
+functions);
+the page's binary frames to an R kernel travel as base64, because IRkernel's
+reader drops the buffers of a message it receives. The kernel handles them
+between cells: see {doc}`03_supported_environments_matrix` for what that
+means while a cell runs.
+
+One limit of the notebook server shapes the answers: Jupyter Server stops
+forwarding a kernel's messages to the browser (it drops them, it does not
+delay them) while they exceed 1,000 a second over a 3-second window
+(`ServerApp.iopub_msg_rate_limit`, `rate_limit_window`; comm messages
+count, their bytes do not). So answers ready together share a message (at
+most 8 MiB of bodies each), and the Python kernel sends at most one message
+of answers every 2 ms, half that rate; R sends one message (or a few, by
+size) for each message of requests.
 
 ## System diagram: a browser tab
 

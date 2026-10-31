@@ -184,8 +184,11 @@ python -c "from cellucid.web_cache import ensure_web_ui_cached; print(ensure_web
 
 3) (Optional) Select an explicit cache directory
 
-The default cache is the process-independent temporary directory reported by
-`get_web_cache_dir()`. For a different location, pass
+The default cache is this user's own cache folder, reported by
+`get_web_cache_dir()`: `~/.cache/cellucid/web` on Linux (`$XDG_CACHE_HOME`
+when set), `~/Library/Caches/cellucid/web` on macOS and
+`%LOCALAPPDATA%\cellucid\web` on Windows, so every user of a shared machine
+has their own. For a different location, pass
 `--web-cache-dir PATH` to `cellucid serve`, or pass `web_cache_dir=PATH` to the
 Python viewing API. The selected path must be a real directory or a missing
 path; symbolic links and Windows reparse points are rejected.

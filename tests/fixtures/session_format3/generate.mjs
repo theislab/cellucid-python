@@ -2,7 +2,7 @@
 // the web app's own session encoders (`cellucid/assets/js/app/session/**`), so
 // the Python reader is tested against bytes the viewer writes.
 //
-//   node tests/fixtures/session_format2/generate.mjs   (from cellucid-python;
+//   node tests/fixtures/session_format3/generate.mjs   (from cellucid-python;
 //   the cellucid repository must be a sibling checkout)
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -114,7 +114,7 @@ for (const c of ordered) {
 const manifest = {
   createdAt: '2026-10-22T00:00:00.000Z',
   datasetFingerprint: {
-    datasetId: 'format2', name: 'Format 2 fixture', cellCount: N, varCount: 1,
+    datasetId: 'format3', name: 'Format 3 fixture', cellCount: N, varCount: 1,
     cellOrder: { embedding: { key: 'X_umap', columns: [0, 1] }, dimension: 2, digest: '0123456789abcdef' },
     // Checked by the app's own validator, so the record is in its current shape.
     dataMapping: validateDataMapping({
@@ -123,7 +123,7 @@ const manifest = {
       knn: null, geneNames: 'index', expression: 'X', log1p: {}, highlyVariable: null, latent: null, vectorFields: [],
     }),
   },
-  source: { kind: 'file', name: 'format2.h5ad', dataset: 'format2' },
+  source: { kind: 'file', name: 'format3.h5ad', dataset: 'format3' },
   requires: { obs: ['ctype'], var: [] },
   chunks: manifestChunks,
 };

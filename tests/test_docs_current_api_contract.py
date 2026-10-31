@@ -353,83 +353,16 @@ def test_runnable_python_examples_match_current_public_signatures() -> None:
 
 _FENCE = re.compile(r"^(?P<ticks>`{3,})(?P<info>.*)$")
 
-# A transcript that documents the *missing-identity failure* has to show the
-# command without its identity flags -- that incomplete command is the whole
-# subject of the example. The exemption is the failure the CLI itself prints for
-# exactly that mistake, so it cannot be spelled over a command that is being
-# recommended rather than diagnosed.
-_MISSING_IDENTITY_REPORT = re.compile(
-    r"^Error: (?:dataset_name and dataset_id are|dataset_(?:name|id) is) required\b"
-)
-
-
-def _fenced_block_of_each_line(text: str) -> list[int | None]:
-    """Return, per line, the index of the fenced block it belongs to."""
-    membership: list[int | None] = []
-    open_ticks: str | None = None
-    block_index = -1
-    for line in text.splitlines():
-        fence = _FENCE.match(line)
-        if open_ticks is None:
-            if fence is not None:
-                open_ticks = fence["ticks"]
-                block_index += 1
-            membership.append(None)
-            continue
-        if fence is not None and len(fence["ticks"]) >= len(open_ticks) and not fence["info"].strip():
-            open_ticks = None
-            membership.append(None)
-            continue
-        membership.append(block_index)
-    return membership
-
-
 def test_cli_examples_use_only_the_exact_current_contract() -> None:
+    # A store that declares no identity is named after its file, as
+    # cellucid-r names it, so a command needs no identity flags; a removed
+    # option is never documented.
     failures: list[str] = []
     for path in [*_markdown_files(), *_notebook_files()]:
         text = path.read_text(encoding="utf-8")
         relative = path.relative_to(REPOSITORY_ROOT)
         if "--no-backed" in text or "--backed" in text:
             failures.append(f"{relative}: documents a removed backed-mode CLI option")
-
-        logical_text = re.sub(r"\\\s*\n\s*", " ", text)
-        lines = logical_text.splitlines()
-        membership = _fenced_block_of_each_line(logical_text)
-        diagnostic_blocks = {
-            block
-            for block, line in zip(membership, lines, strict=True)
-            if block is not None and _MISSING_IDENTITY_REPORT.match(line.strip())
-        }
-        # A file written by ``cellucid.prepare()`` declares its own identity in
-        # ``uns['cellucid']``, so a block that says it serves one may omit the
-        # flags; it has to say so, in the block, where the reader copies from.
-        prepared_blocks = {
-            block
-            for block, line in zip(membership, lines, strict=True)
-            if block is not None and "cellucid.prepare()" in line
-        }
-        for line_number, line in enumerate(lines, start=1):
-            # A command names its store after the subcommand; a line that only
-            # mentions `cellucid serve` (a quoted message listing where a file
-            # goes) is not a command.
-            if "cellucid serve" not in line or not re.search(
-                r"\.(?:h5ad|zarr)\b", line.split("cellucid serve", 1)[1]
-            ):
-                continue
-            # The identity flags are optional for a store that declares
-            # uns['cellucid']['id'] and ['name'], so prose may name the bare
-            # command. A command in a code block is one a reader copies onto
-            # their own file, which usually declares no identity, so it names
-            # the dataset.
-            if membership[line_number - 1] is None:
-                continue
-            if membership[line_number - 1] in diagnostic_blocks | prepared_blocks:
-                continue
-            if "--dataset-name" not in line or "--dataset-id" not in line:
-                failures.append(
-                    f"{relative}:{line_number}: direct AnnData CLI example lacks exact identity"
-                )
-
     assert not failures, "\n".join(failures)
 
 
@@ -491,19 +424,6 @@ def test_docs_do_not_reintroduce_removed_or_invented_runtime_contracts() -> None
     ]
     for claim in retired_web_claims:
         assert claim not in all_docs_text
-
-    incomplete_identity_calls = [
-        "show_anndata(adata)",
-        'show_anndata("data.h5ad")',
-        'show_anndata("data.zarr")',
-        "show_anndata(<data.h5ad>)",
-        "show_anndata(<data.zarr or AnnData>)",
-        "serve_anndata(adata)",
-        "serve_anndata(<data.h5ad>)",
-        "serve_anndata(<data.zarr>)",
-    ]
-    for call in incomplete_identity_calls:
-        assert call not in python_guide_text
 
     assert not re.search(
         r"serve_anndata\s*\([^)]*\bbacked\s*=\s*True",

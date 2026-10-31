@@ -54,9 +54,12 @@ The var index comes from `rownames(var)` (when set), else
 ## Numbers
 
 Every matrix -- embeddings, expression, vector fields, the graph -- is stored as
-**float32**. Values must be finite (no `NA`, `NaN`, or `Inf`) and within the
-float32 range (magnitude up to about 3.4e38); a larger value would become an
-infinity and is refused. `obs` and `var` columns keep their own types
+**float32**. Values must be within the float32 range (magnitude up to about
+3.4e38); a larger value would become an infinity and is refused. Expression and
+the graph must be finite (no `NA`, `NaN`, or `Inf`). An embedding or a vector
+field may hold rows of `NA`/`NaN`: a cell that array has no value for, written
+as given and not drawn in that embedding (or drawn without an arrow); at least
+one of its cells must be finite. `obs` and `var` columns keep their own types
 ({doc}`04_obs_cell_metadata`).
 
 A data frame is accepted in place of a matrix when every column is a plain

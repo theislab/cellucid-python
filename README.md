@@ -69,22 +69,22 @@ Or visualize an AnnData from Python/Jupyter:
 ```python
 from cellucid import show_anndata
 
-show_anndata(
-    adata,
-    dataset_name="My dataset",
-    dataset_id="my-dataset",
-)
+show_anndata(adata)
 ```
 
-An `adata` straight out of Scanpy works as written, and so does a `MuData`.
+An `adata` straight out of Scanpy works as written, and so does a `MuData`;
+pass `dataset_name=` and `dataset_id=` to name it (otherwise it is named
+`AnnData (<n> cells)`, its ID printed in one line).
 The viewer reads the data itself, as each view needs it: `cellucid serve`
 hands it any file or folder in place (`.h5ad`, a Zarr store, `.h5mu`, `.loom`,
 a 10x `.h5` or `outs/` folder, a MatrixMarket folder, an `.rds`/`.rda`). An
-in-memory `AnnData`, and an AnnData, MuData, Loom or 10x file `prepare()` did
-not write, are served with their cells in priority order, each chunk made from
-the source as the viewer asks for it, so a subsample opened in the viewer
-transfers only its cells, whatever the source's layout (a `MuData` object is
-written once to a temporary `.h5mu`).
+in-memory `AnnData` or `MuData`, and an AnnData, MuData, Loom or 10x file
+`prepare()` did not write, are served with their cells in priority order, each
+chunk made from the source as the viewer asks for it, so a subsample opened in
+the viewer transfers only its cells, whatever the source's layout; expression
+matrices are laid out gene-major in the background, so the viewer opens at
+once, and a gene asked before the layout ends is made from what it has
+laid out so far and the source for the rest.
 In a notebook the viewer is a widget (`cellucid.Widget`, an anywidget) that
 reaches the kernel through the notebook's own connection, so hooks, commands
 and the data need no port or proxy: JupyterLab (tested end to end), Notebook

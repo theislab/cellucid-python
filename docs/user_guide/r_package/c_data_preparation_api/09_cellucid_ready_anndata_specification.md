@@ -171,8 +171,10 @@ and its `zarr.json` (Zarr format 3):
   counts, `normalize_total` + `log1p`, and proportions alike). Strings and
   one-byte values (`|b1`, `|i1`) are not shuffled either; the `.zarray` of
   such an array declares `"filters": null`.
-- **Compressor:** every chunk is then DEFLATE level 6, made by base R's
-  `memCompress(type = "gzip")`: a zlib stream (RFC 1950) in format 2, what
+- **Compressor:** every chunk is then DEFLATE level 6, made in C by the zlib
+  the package links, a batch of chunks at a time on every core (each chunk
+  alone, so its bytes never depend on the number of cores; what base R's
+  `memCompress(type = "gzip")` writes): a zlib stream (RFC 1950) in format 2, what
   numcodecs' `Zlib` codec reads and writes; in format 3 the same deflate data
   in gzip framing (RFC 1952), or, for a shuffled array, one zlib stream per
   byte plane of each Blosc block. Browsers inflate all of them natively.
@@ -201,6 +203,14 @@ empty array has chunks of 1. For
 example, a 300,000-cell store holds `obsm/X_umap` in chunks of
 `[32768, 2]`, `obsm/X_pca` (50 columns) in chunks of `[1310, 50]`, and a
 `string-array` obs index of 300,000 names in five chunks of 65,536.
+
+A store a server presents for data it holds (`serve_anndata`, `show_anndata`,
+`cellucid_serve`, `cellucid_view`) is not a file: it holds the same arrays,
+uncompressed, chunked alike except an expression matrix's `data` and `indices`,
+which it serves in chunks of 262,144 values (2^18): over loopback a request
+costs more than a chunk of 2^14 values moves, and a viewer reads an
+uncompressed chunk in part (a `Range`), so a gene or a subsample's first
+entries of one read no more than with smaller chunks.
 
 ## Consolidated metadata
 

@@ -106,11 +106,10 @@ invalidates already-published schema references and makes figures exported by
 two builds disagree about their own origin. Adding a `www` prefix to them is a
 bug, and so is using the bare apex for a link a reader is meant to click.
 
-Separately, `https://cellucid.com` and `https://*.cellucid.com` appear in the
-Python server’s CORS documentation as **origin patterns**. Those describe what
-`CORSMixin._get_allowed_origin` matches (it accepts the apex and any
-`.cellucid.com` subdomain over HTTPS), so they are neither links nor
-identifiers and stay as written.
+Separately, `https://cellucid.com` appears in the Python server’s CORS
+documentation as an **origin**: `CORSMixin._get_allowed_origin` accepts the
+hosted app's two origins exactly (`HOSTED_APP_ORIGINS`: the `www` form and the
+apex), so that line is neither a link nor an identifier and stays as written.
 
 Enforcement: `cellucid-python/tests/test_canonical_url_contract.py` sweeps the
 documentation site and the Python sources, requires every navigational URL to

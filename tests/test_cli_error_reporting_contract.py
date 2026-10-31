@@ -74,43 +74,6 @@ def _assert_operator_report(stderr: str) -> str:
     return errors[0]
 
 
-def test_a_missing_dataset_identity_names_every_missing_flag_at_once(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    from cellucid.cli import main
-
-    status = main(["serve", str(_zarr_store(tmp_path / "fixture.zarr")), "--quiet"])
-
-    assert status == 1
-    message = _assert_operator_report(capsys.readouterr().err)
-    assert message.startswith("Error: dataset_name and dataset_id are required")
-    assert "uns['cellucid']" in message
-    assert "--dataset-name/--dataset-id on the command line" in message
-
-
-def test_a_single_missing_identity_flag_names_only_that_flag(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    from cellucid.cli import main
-
-    status = main(
-        [
-            "serve",
-            str(_zarr_store(tmp_path / "fixture.zarr")),
-            "--quiet",
-            "--dataset-name",
-            "My study",
-        ]
-    )
-
-    assert status == 1
-    message = _assert_operator_report(capsys.readouterr().err)
-    assert message.startswith("Error: dataset_id is required")
-    assert "dataset_name and" not in message
-
-
 def test_a_taken_port_is_reported_as_a_port_the_operator_can_change(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -405,7 +368,7 @@ def test_the_tutorial_quotes_the_line_the_cli_actually_prints(
     printing this machine's home directory into a committed image. A quoted
     transcript only stays honest while something compares it to the command.
     """
-    from cellucid.cli import _operating_system_message, main
+    from cellucid.cli import _operating_system_message
 
     tutorial = SERVER_TUTORIAL.read_text(encoding="utf-8")
 
@@ -414,9 +377,14 @@ def test_the_tutorial_quotes_the_line_the_cli_actually_prints(
 
     h5ad = tmp_path / "lung_atlas.h5ad"
     ad.AnnData(X=np.zeros((2, 1), dtype=np.float32)).write_h5ad(h5ad)
-    assert main(["serve", str(h5ad), "--no-browser"]) == 1
-    missing_identity = _error_lines(capsys.readouterr().err)[0]
-    assert missing_identity in tutorial
+    # A store that declares no identity is named after its file, and the id
+    # it was given is said in the line the tutorial quotes.
+    from cellucid.anndata_server import AnnDataServer
+
+    server = AnnDataServer(h5ad, port=0, serve_web_ui=False)
+    server.stop()
+    named = next(line for line in capsys.readouterr().out.splitlines() if "Dataset id:" in line)
+    assert named in tutorial
 
     taken_port = _operating_system_message(
         OSError(errno.EADDRINUSE, "Address already in use"),

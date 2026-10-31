@@ -208,7 +208,7 @@ When nothing in `obsm` can be drawn, the file is refused with a list of what
 ```text
 Cellucid found nothing to plot. It needs an obsm array with one row per cell
 (10,000) and at least one numeric column. obsm holds: X_df (table),
-spatial (10,000 × 2, NaN at cell 17). Add a 2-D embedding to obsm (for example
+spatial (10,000 × 2, not representable as float32 at cell 17). Add a 2-D embedding to obsm (for example
 with sc.tl.umap in Scanpy), then open the data again.
 ```
 
@@ -231,8 +231,7 @@ in this order:
    options that were set.
 2. The file's own `uns['cellucid']['defaults']`, when it declares them.
 3. The rule this page describes for that choice (the UMAP, else the best guess;
-   `obsp['connectivities']`; `X`; the var index, or its column of symbols
-   when the index holds identifiers; no latent space; each
+   the default neighbour graph; `raw` or `X`; the var index; no latent space; each
    `<field>_<basis>` vector field bound to its `X_<basis>`; every obs column).
 
 Every choice can still be changed under **Data mapping** once the file is open.
@@ -278,11 +277,23 @@ gene-expression modality. A cell the modality did not measure has no value
 
 **Expression** lists `X`, every layer as `layers['counts']`, and `raw.X` with
 its gene count, as `raw.X · 30,000 genes`, because `raw` has its own, often
-longer, gene list. **None** shows no genes. A file opens on `X`. Without `X`
-it opens on `raw.X`; without either, on its only layer, or, among several, on
-one whose name contains `norm` or `log`, then any other, with `counts` and
-`raw_counts` last (alphabetically within each). The line under the menus then
-says "Guessed: expression (no X)." A served file opens on
+longer, gene list. A matrix that holds counts is listed with `· counts`: an
+integer one, or one whose first stored values are all whole and non-negative
+(raw counts written as floats, as a 10x or CELLxGENE conversion writes them);
+an analysis on it names it `· counts, not normalised`, since its fold changes
+are not corrected for each cell's sequencing depth. **None** shows no genes. A file opens where Scanpy reads
+genes for the files that convention is for: on `raw.X` when the file has one
+and either `raw` holds more genes than `X` (`X` was cut to the highly variable
+genes) or `X` holds scaled values (`sc.pp.scale`: its first chunk has negative
+values); otherwise on `X`. A CELLxGENE file keeps raw counts in `raw.X` over
+the same genes as its normalised `X`, and opens on `X`. When it opens on
+`raw.X`, the line under the menus says why, as
+"Expression: raw, as Scanpy reads genes: it holds more genes than X." or
+"… X holds scaled values."; `X` is one choice away. Without `X` it opens on
+`raw.X`; without either, on its only layer, or, among several, on one whose
+name contains `norm` or `log`, then any other, with `counts` and `raw_counts`
+last (alphabetically within each). The line under the menus then says
+"Guessed: expression (no X)." A served file opens on
 `cellucid serve --expression` (`show_anndata(..., expression_source=...)`)
 when it names one (see [Launch defaults](#launch-defaults)).
 
@@ -300,58 +311,38 @@ becomes `MATR3-1`. The line under the menus says what that changed:
 1 duplicate name was made unique, e.g. 'LYZ' → 'LYZ-1'.
 ```
 
-A file opens named by its var index, unless the index holds database
-identifiers while a var column holds their symbols, as every CELLxGENE file
-does (Ensembl ids in the index, symbols in the categorical `feature_name`).
-Then that column names the genes, marked **Guessed**, and each gene keeps its
-id: the gene search finds `SFTPC` and `ENSG00000168484` alike, and lists the
-id beside the symbol. The choice is made by content, not by name alone, for
-each matrix's genes on their own (`X` and its layers, `raw.X`, each
-modality):
-
-- the index holds identifiers when at least 90% of an even sample of its
-  names look like one: letters then at least five digits, optionally
-  versioned (`ENSG00000168484`, `ENSMUSG00000064370.1`, `FBgn0000008`,
-  `WBGene00000001`), a RefSeq (`NM_000546`) or UniProt (`P04637`) accession,
-  `HGNC:5`, or a bare number (an Entrez id). A few symbols look like one too
-  (`LINC01128`, `Gm12345`), which is why it takes 90%;
-- only then are var columns read, one at a time: `feature_name`,
-  `gene_symbols`, `gene_symbol`, `symbols`, `symbol`, `gene_name`,
-  `gene_names`, `gene_short_name`, `feature_names`, `genes`, `gene`, `names`,
-  `name` (any letter case) first, the first that holds symbols chosen; else
-  every other text column, the one most like symbols chosen;
-- a column holds symbols when at least half of the genes have a value, at
-  least half of those are distinct (a biotype or a species column is not), at
-  most half look like identifiers, at least 90% are one word starting with a
-  letter and not a genomic interval (`chr1:1000-1050`), and it is not the
-  index again. Integer columns are never symbols;
-- a column that cannot be read is passed over (choosing it says why).
+A file opens named by its var index, whatever it holds: nothing else is read
+to name the genes. A CELLxGENE file's index holds Ensembl ids and its
+symbols are in the categorical `feature_name`; choose `feature_name` under
+**Gene names** and Apply to name the genes by their symbols. Only the column
+chosen is read, when it is applied.
 
 The first view never waits for gene names. A dataset is drawn first, and the
-gene names of the matrix it opens with are read right after: its var index
-and, when that holds identifiers, the columns above. Only that matrix's axis
-is guessed then; another axis (`raw.X`, another modality) is guessed when you
-first choose it under **Expression** or **Modality**. While names are read,
-**Gene names** says **Reading gene names…**, the gene search says the same
-and cannot be typed in, and analyses that need genes open once they are
-read; a session, an export with genes and a change of the data mapping wait
-for them. The var index is never used in their place meanwhile. A var index
-that cannot be read leaves the genes unnamed and says why, in the gene search
-and in **Gene names**, where another name source can still be chosen.
+var index of the matrix it opens with is read right after. While it is read,
+the gene search says **Reading gene names…** and cannot be typed in, and
+analyses that need genes open once it is read; a session, an export with
+genes and a change of the data mapping wait for it. A var index that cannot
+be read leaves the genes unnamed and says why, in the gene search, and
+another name source can still be chosen under **Gene names**.
 
-Whatever names them in the viewer, genes leave it by their identifier (the
-var index name, as in `adata.var_names`): the gene the viewer colours by and
-the gene sets a notebook receives, and gene-set GMT files. A gene set pushed
-from a notebook may name genes by identifier or by the name shown
-(identifiers first; a name two genes answer is reported, not guessed).
+Genes leave the viewer by their identifier, the var index name (as in
+`adata.var_names`): the gene the viewer colours by, the gene sets a notebook
+receives, gene-set GMT files, and the DE and marker tables. When a var column
+names the genes, the name shown goes beside each identifier (a `symbols`
+column, `var['symbol']` in an `.h5ad` export); named by the var index, the
+identifier is the name, and nothing goes beside it. A gene set pushed from a
+notebook may name genes by identifier or, when a var column names them, by
+the name shown (identifiers first; a name two genes answer is reported, not
+guessed).
 
 A file that names its genes itself (`uns['cellucid']['defaults']['geneIdColumn']`,
-`--gene-id-column`) opens on that column for the matrix it opens with; the
-other matrices and modalities keep their own default. Switching **Expression**
-to a matrix on another var axis (to or from `raw.X`) takes that axis's
-default. When you choose the var index and it holds identifiers while the
-dataset found a column of symbols, the line says so:
-"Gene names are identifiers; 'gene_symbols' holds symbols."
+`--gene-id-column`) opens on that column for the matrix it opens with.
+Switching **Expression** to a matrix on another var axis (to or from `raw.X`)
+keeps the column when that axis has one of the same name, else takes its var
+index; switching **Modality** takes the var index of the new modality.
+Nothing guesses which column holds symbols. A gene search that finds nothing
+says which list it searched ("Searched the 33,538 genes of this dataset, named
+by its var index.") and offers **Choose gene names…**, which opens this menu.
 
 **Values** says how the expression matrix chosen above is stored: **As stored
 (not log-transformed)**, **log1p (base e)**, **log1p (base 2)**, **log1p
@@ -365,11 +356,25 @@ does. The default follows Scanpy, which records `sc.pp.log1p` in
 - with `uns['log1p']`, `X` and every layer are `log1p`, in the base it
   records (`base`; none, as Scanpy writes `base=None`, is e). That is how
   Scanpy reads the record: `rank_genes_groups` applies it to whichever matrix
-  it is given. A `counts` layer is guessed `log1p` too; set it to **As stored**;
+  it is given. A matrix stored as integers holds counts, which `log1p` never
+  writes, and stays as stored (a `counts` layer of an integer dtype, a raw
+  `X`); a `counts` layer stored as floats is guessed `log1p` too: set it to
+  **As stored**;
 - `raw.X` is what `adata.raw = adata` saved, conventionally the
   log-normalised matrix before scaling: it is `log1p` too, unless it is stored
   as integers (counts);
-- without `uns['log1p']`, every matrix is as stored.
+- without `uns['log1p']`, every matrix is as stored;
+- a matrix whose stored values could not be `log1p` stays as stored, whatever
+  `uns['log1p']` says. Once the first view is drawn, Cellucid reads each
+  matrix's first stored values (one small read, the same one that tells
+  whether it holds counts) and undoes the `log1p` on them: when that gives one
+  cell a total larger than the matrix's own number type can hold (float32
+  ends at 3.4 × 10³⁸), the values were never `log1p`. EBI's E-ANND-5 records
+  an empty `uns['log1p']` over per-million values of 252 to 1,118, and
+  `expm1(252)` is already 10¹⁰⁹. Such a matrix is read as stored, and the
+  line under the menus says so ("Values: as stored — X not log1p (holds
+  1,119)."; the reason in its tooltip). A choice you made, or a session's,
+  is never changed by it.
 
 A default read from `uns['log1p']` is marked guessed (the line under the
 menus says "Guessed: log1p values.") until you change it.
@@ -459,6 +464,11 @@ the file holds, the longest basis wins: with both `X_umap_3d` and `X_3d`,
 `velocity_umap_3d` is `velocity` over `X_umap_3d`. Matching is exact and
 case-sensitive.
 
+A MuData presents each modality's arrays as `obsm['<modality>:<key>']`, and
+the rule reads each key within its own modality: `rna:velocity_umap` is the
+field `rna:velocity` over `rna:X_umap`, never over the dataset's own
+`X_umap`, and a modality's `rna:X_umap` is an embedding, never a vector.
+
 A file starts with the default rule: each `<field>_<basis>` is bound to every
 enabled view of `X_<basis>` when both are usable arrays with the same number of
 columns, read at that view's columns (`velocity_pca`, 50 columns, over
@@ -499,15 +509,22 @@ from `sc.pp.neighbors(key_added=…)`, and any other square matrix with one row
 per cell. A matrix that is not square, or not as large as the dataset, is
 listed disabled with the reason.
 
-A file starts with `obsp['connectivities']` when it has one; a served file
-starts with the graph `cellucid serve --knn KEY` (or
-`show_anndata(..., knn_key=...)`) names instead. Either way the graph is read
-only when edges are drawn or the KNN drag tool is used.
+A file starts with `obsp['connectivities']` when it has one; else with
+Seurat's shared-nearest-neighbour graph of the modality (assay) it opens
+with, `<modality>_snn` (`RNA_snn`), else the first other one (`<assay>_snn`,
+or `SNN`, in any case); else with none. A served file starts with the graph
+`cellucid serve --knn KEY` (or `show_anndata(..., knn_key=...)`) names
+instead. Either way the graph is read only when edges are drawn or the KNN
+drag tool is used. `prepare()` and `cellucid_prepare()` choose the graph they
+write by the same rule.
 
 Apply reads the graph and checks it before anything changes. It must be
-symmetric, with a zero diagonal and no negative, infinite or missing weight.
-A graph that is not, such as the `distances` that `sc.pp.neighbors()` also
-writes, is refused, never repaired:
+symmetric, with no negative, infinite or missing weight. Its diagonal is left
+out: a cell joined to itself is no edge anyone can draw (Seurat's
+`FindNeighbors` counts each cell among its own neighbours, so `RNA_snn` has 1
+on its diagonal). A graph that is not symmetric, such as Seurat's directed
+`RNA_nn` or the `distances` that `sc.pp.neighbors()` also writes, is refused,
+never repaired:
 
 ```text
 obsp['distances'] is not symmetric — choose a connectivities matrix.
@@ -526,11 +543,11 @@ opens:
 
 | Group | File read in the browser | Served file |
 |---|---|---|
-| Neighbour graph | `connectivities` | `--knn`, else as in the browser |
+| Neighbour graph | `connectivities`, else `<modality>_snn`, else the first other `*_snn` | `--knn`, else as in the browser |
 | Modality (several only) | the first gene-expression modality (`rna`, `gex`, `gene expression`, `gene_expression`, `sct`), else the first | as in the browser |
-| Gene names | the var index, or the var column of symbols when the index holds identifiers (guessed) | `--gene-id-column`, else as in the browser |
-| Expression | `X` | `--expression`, else as in the browser |
-| Values (log1p) | `X`, every layer and a non-integer `raw.X` are `log1p` when `uns['log1p']` exists (its `base`, e when none); else as stored | as in the browser |
+| Gene names | the var index | `--gene-id-column`, else as in the browser |
+| Expression | `raw.X` when it holds more genes than `X` or `X` is scaled, else `X` | `--expression`, else as in the browser |
+| Values (log1p) | every matrix not stored as integers (`X`, `raw.X`, each layer) is `log1p` when `uns['log1p']` exists (its `base`, e when none); else as stored | as in the browser |
 | Highly variable genes | `var['highly_variable']` (`raw.var` for `raw.X`) when it is true/false, else None | as in the browser |
 | Latent space | the file's `latentKey`, else None | `--latent-key`, else as in the browser |
 | Vector fields | each `<field>_<basis>` bound to `X_<basis>` when both have the same number of columns | the same rule |
@@ -570,16 +587,19 @@ See {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 ## When an embedding is refused
 
 Apply, a view's choice and a session all check an embedding's values before it
-is drawn. Every value must be a finite number that fits in 32-bit floating
-point, and the columns must not all be constant. A refusal names the first
-offending cell:
+is drawn. A cell whose row holds NaN or an infinity has no position in that
+embedding: it is not drawn, picked or selected in its views, a short notice
+counts such cells and names the first, and every other view, filter and
+analysis keeps them (in a latent space it gets no outlier quantile; in a
+vector field, no arrow). Every other value must fit in 32-bit floating point,
+at least one cell must be placed, and the placed cells must not all have the
+same coordinates. A refusal names the first offending cell:
 
 | Message | Cause |
 |---|---|
-| `NaN at cell 17` | a missing value in row 17 |
-| `Infinity at cell 3` / `-Infinity at cell 3` | an infinite value |
 | `not representable as float32 at cell 5` | a value too large (or too small, but not zero) for 32-bit floats |
-| `no coordinate variation` | every cell has the same coordinates |
+| `every cell's coordinates are missing (NaN or infinite)` | no cell has a position |
+| `no coordinate variation` | every placed cell has the same coordinates |
 
 The previous mapping stays in place, the status line shows the reason, and the
 array is listed with that reason, and cannot be turned on, until the dataset is
@@ -591,10 +611,12 @@ file cannot be opened, and a subsample opens at least two cells
 
 An embedding that is on but shown by no view costs nothing until a view shows
 it. Once shown, its coordinates stay in memory while a view shows it, and
-afterwards in a cache bounded by a sixteenth of the device memory (1 GiB on a
-16 GiB machine; see {ref}`memory-budgets`), so switching back is immediate. The least recently shown is released
-first, and everything no view shows is released when memory runs short or the
-page has been hidden for ten minutes; it is read again when a view shows it.
+afterwards in a cache bounded by an eighth of what the drawn cells leave of
+the memory allowance (up to 1 GiB on a 16 GiB machine; see
+{ref}`memory-budgets`), so switching back is immediate. The least recently
+shown is released first, and everything no view shows is released when
+memory runs short or the page is hidden; it is read again when a view shows
+it.
 
 ---
 

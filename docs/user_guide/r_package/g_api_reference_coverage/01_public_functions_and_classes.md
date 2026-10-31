@@ -170,8 +170,11 @@ cellucid_subsample_cells(x, n_cells = NULL, fraction = NULL, method = "uniform",
 | `block_size` | `"blocks"`: cells per block (the web app shows the one it used) |
 | `basis`, `columns`, `grid_size` | `"spatial"`: a reduction name or a coordinate matrix; one to three columns; boxes per axis |
 
-It returns the kept cells' 1-based positions, ascending (`object[, kept]`
-takes them). The web app, Python and R follow one specification,
+It returns the kept cells' 1-based original positions, ascending
+(`object[, kept]` takes them). An object read from a Cellucid-ready file holds
+its cells in priority order, not their original one: it is refused until
+`cellucid_restore_original_order()` puts them back, as `cellucid_pull()`,
+`cellucid_subset()` and `cellucid_apply_session()` refuse it. The web app, Python and R follow one specification,
 {doc}`../../web_app/p_developer_docs/19_subsampling_specification`, held to one
 shared conformance fixture; the computation is native code, so the cells are
 the same bit for bit. See also
@@ -183,10 +186,10 @@ the same bit for bit. See also
 cellucid_view(data, ..., pane = c("auto", "viewer", "browser", "notebook", "none"), port = 8765L,
               host = "127.0.0.1", allowed_hosts = NULL, serve_web_ui = TRUE,
               web_cache_dir = NULL, web_source_url = "https://www.cellucid.com",
-              cache_bytes = 268435456, quiet = FALSE)
+              cache_bytes = NULL, quiet = FALSE)
 cellucid_serve(data, ..., port = 8765L, host = "127.0.0.1", allowed_hosts = NULL,
                serve_web_ui = TRUE, web_cache_dir = NULL,
-               web_source_url = "https://www.cellucid.com", cache_bytes = 268435456,
+               web_source_url = "https://www.cellucid.com", cache_bytes = NULL,
                quiet = FALSE)
 ```
 

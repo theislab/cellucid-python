@@ -49,13 +49,13 @@ def _a_scratch_folder_is_removed_with_nothing_mapped(monkeypatch: pytest.MonkeyP
 
     from _mapped_files import mapped_files
 
-    from cellucid._served_store import _SCRATCH_PREFIX
+    from cellucid._scratch import SCRATCH_PREFIX
 
     remove = shutil.rmtree
     still_mapped: list[Path] = []
 
     def checked(path, *args, **kwargs):  # type: ignore[no-untyped-def]
-        if Path(path).name.startswith(_SCRATCH_PREFIX):
+        if Path(path).name.startswith(SCRATCH_PREFIX):
             still_mapped.extend(mapped_files(Path(path)))
         return remove(path, *args, **kwargs)
 

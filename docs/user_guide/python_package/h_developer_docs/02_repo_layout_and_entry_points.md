@@ -47,12 +47,15 @@ cellucid-python/
         _prepare.py
         _data.py
         _inputs.py
+        _gene_major.py
         _mudata.py
         _outliers.py
         _priority.py
         _store.py
       input_formats.json
       _anndata_files.py
+      _scratch.py
+      _source_arrays.py
       _served_store.py
       _served_formats.py
       anndata_server.py
@@ -157,10 +160,11 @@ See: {doc}`10_jupyter_embedding_architecture`
 | What `prepare()` accepts and how it converts inputs | `src/cellucid/prepare_data/_inputs.py` | Keep the rules equal to cellucid-r's; see {doc}`07_prepare_writer_architecture` |
 | Chunks, codecs, encodings of a prepared file | `src/cellucid/prepare_data/_store.py` | Change only with measurements; the web reader and cellucid-r must agree |
 | Launch defaults (`uns['cellucid']['defaults']`, `/_cellucid/datasets`) | `src/cellucid/_launch_defaults.py` | Key names are the web app's `requireAnnDataLaunchDefaults` |
-| Accepted input formats (by `input_formats.json`), temporary `.h5mu`, undecodable codecs | `src/cellucid/_anndata_files.py` | Metadata only, never an array; the browser's decodable codec sets must match the web app's HDF5/Zarr reader |
+| Accepted input formats (by `input_formats.json`), undecodable codecs | `src/cellucid/_anndata_files.py` | Metadata only, never an array; the browser's decodable codec sets must match the web app's HDF5/Zarr reader |
 | Priority order of a prepared file (`priority_seed`, the record, original positions, prefix counts, `restore_original_order()`, `stored_order()`) | `src/cellucid/prepare_data/_priority.py` | Rule for rule cellucid-r's `R/priority.R`; the web app's `data/anndata/priority-layout.js` verifies what it writes |
 | Which cells a subsample keeps (`subsample_cells()`) | `src/cellucid/subsample.py` | The subsampling specification; the shared conformance fixture pins it in all three repositories |
-| The store in priority order served for an object or a file not in priority order | `src/cellucid/_served_store.py` | Chunks made on request from the source; the arrays `prepare()` writes, chunk for chunk; uncompressed |
+| The store in priority order served for an object or a file not in priority order | `src/cellucid/_served_store.py` | Chunks made on request from the source (a `Range` makes only its bytes); the arrays `prepare()` writes, value for value, chunked alike but for an expression matrix's entries (2^18 values a chunk: a request on this machine, at the server and in the browser, costs more than 2^14 values move); uncompressed; expression matrices laid out gene-major by a background worker, a chunk asked for before made from the source at once (`503` + `Retry-After` only for a file's matrix not counted yet) |
+| The gene-major layout of an expression matrix (`prepare()`, the backed path, the served store) | `src/cellucid/prepare_data/_gene_major.py` | One pass for every source; values as `prepare()` stores them; bytes pinned against the earlier writer |
 | MuData, Loom and 10x files served in priority order by path | `src/cellucid/_served_formats.py` | Mirrors the web app's layout views (`views/loom.js`, `views/tenx-*.js`) |
 | The notebook widget (`Widget`, `show_anndata()`) | `src/cellucid/jupyter/_widget.py`, `jupyter/static/widget.js` | The page's reads and the viewer channel over the widget's comm; `widget.js` is byte for byte cellucid-r's `inst/widget/widget.js` |
 | HTTP routes for the served data | `src/cellucid/anndata_server.py` | Exact `Range`/`206`/`HEAD`/`ETag` answers; the web app's reader depends on them |

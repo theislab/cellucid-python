@@ -249,9 +249,9 @@ whereas `0` is a real measurement and will be coloured as one.
 
 1) The gene is published under a different name than the one you typed. When
    the genes are named by database identifiers (an Ensembl var index such as
-   `ENSG00000168484`) and Cellucid found no var column of symbols beside them,
-   a symbol finds nothing; the empty state then says the names are
-   identifiers, not that the gene is absent.
+   `ENSG00000168484`), a symbol finds nothing: choose the var column that
+   holds the symbols (CELLxGENE's `feature_name`) under **Session › Data
+   mapping › Gene names** and Apply.
 2) The gene is not in this dataset at all — the file holds only some of the
    source’s genes.
 3) The search matches anywhere in a name; a short query matches many genes.
@@ -266,13 +266,15 @@ whereas `0` is a real measurement and will be coloured as one.
   `gata3` finds `GATA3`.
 - If the list keeps growing as you scroll (every match is listed, 100 at a time), you’re matching too many.
 - Open the field selector and read a few gene names directly. Search matches
-  the gene names the dataset lists and, when they come from a var column of
-  symbols, each gene's var index name too (its Ensembl id, shown beside the
-  symbol): `SFTPC` and `ENSG00000168484` find the same gene. There is no
-  other alias mapping.
-- Compare the count in the empty-state message (“This dataset publishes *N* gene
-  names…”) against the gene count you expect from the source. A large gap means
-  preparation published a subset.
+  the gene names the dataset lists, as **Session › Data mapping › Gene
+  names** names them (the var index, or the var column chosen there), and no
+  other alias.
+- Compare the count in the empty-state message (“Searched the *N* genes of
+  this dataset, named by …”) against the gene count you expect from the
+  source. A large gap means preparation published a subset. When it names the
+  var index and your file keeps symbols in another column (a CELLxGENE file's
+  `feature_name`), **Choose gene names…** opens **Session › Data mapping ›
+  Gene names**, where that column names the genes.
 
 ### If you are using a built-in sample
 

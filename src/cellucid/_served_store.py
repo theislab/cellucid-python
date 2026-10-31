@@ -14,92 +14,106 @@ lowest ``uniform`` rank under :data:`SERVED_PRIORITY_SEED`,
 ``obs['cellucid_original_position']`` names each row's original position --
 the one ``prepare()`` gives the cell, by the one rule for a stored order
 (:func:`~cellucid.prepare_data._priority.stored_order`): an object in a
-verified stored order is put back in its original order first, and any
-other source's rows are each their own original position (a position
-column with no record that describes the cells names nothing, and is
-replaced, with the warning ``prepare()`` gives) -- ``uns['cellucid']['priority']``
-records the seed, and a sparse gene-major ``X`` comes with
+verified stored order is taken from its stored rows by the original position
+each one records (one permutation, never a copy back first), and any other
+source's rows are each their own original position (a position column with
+no record that describes the cells names nothing, and is replaced, with the
+warning ``prepare()`` gives) -- ``uns['cellucid']['priority']`` records the
+seed, and a sparse gene-major ``X`` comes with
 ``varm['cellucid_prefix_counts']``. A subsample the viewer opens with that
 seed is then the first ``k`` rows of every per-cell array, and the first
 entries of every gene: the server is asked for, and sends, bytes in
-proportion to ``k`` whatever the source's own layout.
+proportion to ``k`` whatever the source's own layout. :attr:`PriorityStore.obs_names`
+are the cells' names in their original order, taken with the rest, which
+the viewer's Python side names cells by.
 
 Nothing of a file is copied that a read can take from it in place (an
 uncompressed array stored in one piece); an array stored in chunks is decoded
-once into the store's scratch folder as its rows are first read; an object
-held in memory is copied once, as the store is made (its snapshot):
+once into the store's scratch folder (:mod:`cellucid._scratch`) as its rows
+are first read (:mod:`cellucid._source_arrays`):
 
 - ``obs``, ``var``, ``uns``, ``varm``, ``varp`` (and ``raw``'s ``var`` and
   ``varm``) are written once, uncompressed, by anndata into a store in memory
   (``obs`` in priority order, the stored outlier quantiles with it);
-- every array with one row per cell -- ``X``, ``layers``, ``raw/X``,
-  ``obsm``, ``obsp`` -- is a plan, and each of its chunks is made when it is
-  asked for, from the source (h5py or Zarr arrays on disk: an uncompressed
-  HDF5 array stored in one piece mapped where it lies, any other decoded once,
-  source chunk by source chunk as served chunks first need them, into a
-  memory-mapped file beside the store, so rows in any order are one fancy
-  index at memory speed; an object's arrays from their snapshot):
+- every array with one row per cell -- ``obsm``, ``obsp``, a dense matrix of
+  a file -- is a plan, and each of its chunks is made when it is asked for,
+  from the source:
 
   ======================  ==================================================
   source                  presented as
   ======================  ==================================================
   dense rows              the same array, rows in priority order
-  CSR (cell-major)        CSR, rows in priority order (entries move, never
-                          re-sorted: a row keeps its own entries)
   CSC (gene-major)        CSC, each gene's row positions renumbered and
                           sorted, so its first entries are its prefix
   ``obsp`` graphs         both axes in priority order
   ======================  ==================================================
 
-- an object held in memory is served from a snapshot taken as the store is
-  made, into memory-mapped files beside the store (removed with it, and by a
-  later store when the process that made them was killed): its sparse
-  expression matrices (``X``, layers, ``raw/X``; CSR, the usual scanpy
-  object, or CSC) laid out gene-major in priority order -- the browser reads
-  a gene of a cell-major matrix only after indexing every stored value -- with
-  their values stored as ``prepare()`` stores them, by the same functions
-  (duplicates summed, stored zeros dropped, float32 unless integer counts need
-  float64, a non-finite value refused: :class:`_GeneMajor`); its dense arrays
-  copied in priority order (an expression matrix in ``prepare()``'s type);
-  its sparse ``obsm``/``obsp`` matrices copied with duplicates summed and
-  stored zeros dropped. The snapshot costs a pass over each array (about two
-  seconds per 100 million stored values) and the disk space of the arrays,
-  never a second copy in memory.
+- every expression matrix (``X``, layers, ``raw/X``) that is cell-major (a
+  CSR file or backed object, the usual scanpy object) or held in memory is
+  **laid out gene-major** in priority order, so the browser reads a gene as
+  one range (it would read a cell-major matrix's every stored value before
+  its first gene), by the one layout pass ``prepare()`` writes with
+  (:mod:`cellucid.prepare_data._gene_major`), into memory-mapped files beside
+  the store. The layout runs in the store's **background worker**, one matrix
+  after another (``X`` first): the store, its metadata and every other
+  element are made at once, so the viewer opens and draws without waiting,
+  and a chunk of a matrix not laid out yet is made at once from the source --
+  the object's snapshot, or the file -- exactly as it will be laid out (a
+  pass over a cell-major source's lines, the values of the genes it covers
+  of a gene-major one): the viewer never waits for a layout. Only a file's
+  matrix the worker has not counted yet (where each gene's values go is
+  known once counted) is answered :class:`NotReady` -- ``503`` with
+  ``Retry-After``, the time left at the pace so far. ``X`` of an object or a
+  file, and every matrix of an object, are laid out from the start; a file's
+  layers and ``raw/X`` when first asked for. The layout costs a pass over
+  each matrix (about two seconds per 100 million stored values) and its disk
+  space, never a second copy in memory.
+
+An object held in memory is served from a **snapshot**: its expression
+matrices laid out (values stored as ``prepare()`` stores them, by the same
+functions: duplicates summed, stored zeros dropped, float32 unless integer
+counts need float64, a non-finite value refused at once), its dense arrays
+(``obsm``) copied in priority order by the same worker, its sparse
+``obsm``/``obsp`` matrices copied with duplicates summed and stored zeros
+dropped. While the worker lays out or copies an array of the object, that
+array is **read-only** (``writeable`` off, put back when it ends): an in-place
+change (``np.log1p(adata.X.data, out=adata.X.data)``) is refused by numpy
+instead of mixing into what is served, and a chunk asked for meanwhile is
+taken from it at once. A file's matrix is
+laid out as it is stored (its values and type kept). The viewer shows the
+object as it was when the store was made: replacing an element afterwards
+(``adata.X = ...``) does not show. View the object again to show a change.
 
 Chunks are uncompressed -- the viewer reads them over loopback or a notebook's
 comm, where compressing on the kernel would cost more than the bytes saved --
 and cut as ``prepare()`` cuts them, by the constants of
 :mod:`cellucid.prepare_data._store` (per-cell arrays -- ``obs``, ``obsm``
 rows, the stored outlier quantiles, MuData's cell maps -- by
-``CELL_CHUNK_ELEMENTS``, an expression matrix's entries by
-``SLICED_CHUNK_ELEMENTS``, anything read whole by ``WHOLE_CHUNK_ELEMENTS``;
-what anndata writes in memory is re-cut to them): the store a server presents
-holds the arrays ``prepare()`` writes, chunk for chunk, as cellucid-r's
-served store holds ``cellucid_prepare()``'s.
-
-The viewer shows the object as it was when the store was made: replacing an
-element afterwards (``adata.X = ...``) or changing an array in place
-(``np.log1p(adata.X.data, out=adata.X.data)``) does not show, and never mixes
-into what is served. View the object again to show a change.
+``CELL_CHUNK_ELEMENTS``, anything read whole by ``WHOLE_CHUNK_ELEMENTS``;
+``obs`` is cut in them straight from its columns in served order, and what
+else anndata writes in memory is re-cut to them), but for an expression
+matrix's entries, cut by :data:`SERVED_ENTRY_CHUNK_ELEMENTS` (a request on
+this machine costs more than ``prepare()``'s chunk of them moves): the store a
+server presents holds the arrays ``prepare()`` writes, value for value, as
+cellucid-r's served store holds ``cellucid_prepare()``'s, chunk for chunk.
+A server answers a ``Range`` of a chunk with only those bytes made
+(:meth:`PriorityStore.body`).
 """
 
 from __future__ import annotations
 
 import contextlib
-import itertools
 import json
-import os
+import logging
+import math
+import numbers
 import secrets
-import shutil
-import sys
-import tempfile
 import threading
 import traceback
 import warnings
 import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -108,13 +122,31 @@ import pandas as pd
 from scipy import sparse
 
 from ._plural import plural
+from ._scratch import Scratch, machine_memory_bytes
+from ._source_arrays import (
+    Rows,
+    SparseSource,
+    Vector,
+    encoding_of,
+    is_group,
+    is_lazy_sparse,
+    is_sparse_group,
+    sparse_source,
+)
+from .prepare_data._gene_major import (
+    PASS_ENTRIES,
+    GeneMajorLayout,
+    counts_below,
+    line_order,
+    position_dtype,
+)
 from .prepare_data._priority import (
     ORIGINAL_POSITION_COLUMN,
     PREFIX_COUNTS_KEY,
     CellPriority,
-    in_original_order,
     prefix_levels,
     stored_order,
+    stored_order_of,
     without_positions,
 )
 from .prepare_data._store import (
@@ -132,28 +164,60 @@ if TYPE_CHECKING:
     from ._anndata_files import AnnDataContents, AnnDataStore
     from ._served_formats import Presented, PresentedModalities
 
-__all__ = ["SERVED_PRIORITY_SEED", "PriorityStore", "file_order"]
+__all__ = ["SERVED_ENTRY_CHUNK_ELEMENTS", "SERVED_PRIORITY_SEED", "NotReady", "PriorityStore", "StoreBody", "file_order"]
+
+logger = logging.getLogger(__name__)
 
 #: The seed of a served store's priority order: the subsampling
 #: specification's default seed, so the viewer's default subsample of a
 #: served dataset is a prefix.
 SERVED_PRIORITY_SEED = 0
 
-#: The genes (or rows) whose renumbered, sorted entries one served store
-#: keeps (bytes): a long gene spans several chunks of the served store, and
-#: is sorted once for all of them while it is kept.
-LINE_CACHE_BYTES = 128 * 2**20
+#: Values one chunk of a served expression matrix's ``indices`` and ``data``
+#: holds (``X``, layers, ``raw/X``; 1 MiB of float32). A request on this
+#: machine costs a fixed time whatever its length, at both ends -- measured on
+#: an Apple M1 Pro over loopback, six connections: Python's ``http.server``
+#: answers at most about 4,700 requests a second (0.21 ms of the interpreter
+#: each), cellucid-r's handlers on R's thread about 1,600 (0.6 ms), and a
+#: browser's ``fetch`` from a worker moves 46-79 MB/s in requests of 64 KiB
+#: (Chromium, Firefox, WebKit), 300-510 MB/s in requests of 1 MiB, and no more
+#: in larger ones (4 MiB: 169-590 MB/s) -- so at ``prepare()``'s 2^14 values a
+#: chunk a pass over a matrix (an analysis, many genes) was bound by requests.
+#: 2^18 values is the least at which every engine's loopback rate has reached
+#: its plateau. A viewer reads a served chunk in
+#: part (its chunks are stored uncompressed: a ``Range`` of one is only those
+#: bytes, made alone, :meth:`_Planned.chunk_bytes`), so a gene, or a
+#: subsample's first entries of a gene, reads no more than with smaller
+#: chunks. A scheduling choice, measured; cellucid-r's served stores use the
+#: same (``.chunk_elements_served``). A file ``prepare()`` writes keeps
+#: :data:`~cellucid.prepare_data._store.SLICED_CHUNK_ELEMENTS`: its chunks are
+#: compressed, and a chunk is the least a reader of it decodes.
+SERVED_ENTRY_CHUNK_ELEMENTS = 2**18
 
-#: Stored values one step of a pass over a matrix holds at a time.
-_PASS_ENTRIES = 2**23
+def default_cache_bytes() -> int:
+    """What one served store keeps of what it makes (bytes): a 64th of the
+    machine's memory: at most the share the web app gives its decoded chunks
+    (a 32nd of what its working set leaves of half the device;
+    ``data/memory-budget.js``). cellucid-r's served
+    stores follow the same rule (``cache_bytes``)."""
+    return machine_memory_bytes() // 64
+
+
+def require_cache_bytes(value: object) -> int:
+    """``cache_bytes`` as a served store takes it: None for
+    :func:`default_cache_bytes`, else a non-negative whole number of bytes
+    (0 keeps nothing). cellucid-r's ``cache_bytes`` is checked the same way."""
+    if value is None:
+        return default_cache_bytes()
+    if isinstance(value, bool) or not isinstance(value, numbers.Integral) or value < 0:
+        raise ValueError(f"cache_bytes must be None or one non-negative whole number of bytes, got {value!r}.")
+    return int(value)
 
 _ENCODING = "encoding-type"
 
 
 def _encoding(kind: str, version: str) -> dict[str, str]:
     return {_ENCODING: kind, "encoding-version": version}
-
-
 # =============================================================================
 # Reading a source
 # =============================================================================
@@ -193,148 +257,237 @@ class _Cache:
             self._bytes = 0
 
 
-def _range_index(starts: np.ndarray, ends: np.ndarray) -> np.ndarray:
-    """The positions of ranges ``[starts[i], ends[i])``, one after another."""
-    lengths = ends - starts
-    total = int(lengths.sum())
-    if total == 0:
-        return np.zeros(0, dtype=np.int64)
-    offsets = np.repeat(starts - np.concatenate([[0], np.cumsum(lengths)[:-1]]), lengths)
-    return offsets + np.arange(total, dtype=np.int64)
 
 
-class _Rows:
-    """One 1-D or 2-D array of a source, read by rows in any order.
+# =============================================================================
+# The background worker: matrices laid out one after another
+# =============================================================================
 
-    Rows in priority order are spread over the whole source, so a served
-    chunk asks for thousands of rows (or short ranges, a cell-major matrix's
-    rows) from every part of it. They are taken with one fancy index
-    (``np.take``) from a view of the whole array that answers any row at
-    memory speed: the array itself in memory; an uncompressed HDF5 dataset
-    stored in one piece mapped where it is in its file (nothing copied); any
-    other (chunked, compressed: h5py, zarr) decoded into a memory-mapped file
-    in the store's scratch folder, each source chunk once, when a served
-    chunk first needs it (the chunks a served chunk needs found with numpy,
-    under one lock), never a step per row or range. The decoded copy costs
-    the disk space of the array as decoded, and is removed with the store.
-    A mapped view (in place, or the decoded copy) is let go when the store
-    closes (:meth:`release`): Windows neither removes nor lets another
-    program replace a file that is mapped.
-    """
 
-    def __init__(self, array: Any, scratch: _Scratch | None) -> None:
-        self.array = array
-        self.shape = tuple(int(extent) for extent in array.shape)
-        self.length = self.shape[0]
-        self.dtype = np.dtype(array.dtype)
-        chunks = getattr(array, "chunks", None)
-        self._scratch = scratch
+class NotReady(Exception):
+    """A key of a file's matrix the worker has not counted yet: the server answers ``503``
+    with ``Retry-After`` :attr:`seconds` (None: no pace measured yet, and the
+    server asks again in one second, the header's resolution) and the
+    message, which says how far it is."""
+
+    def __init__(self, message: str, seconds: float | None) -> None:
+        super().__init__(message)
+        self.seconds = seconds
+
+
+class StoreBody:
+    """One key of a served store as a server answers it: its length, and its
+    bytes ``[start, end)`` made when asked (``read``), so a ``Range`` of a
+    chunk makes only those bytes. A key held as bytes reads slices of them."""
+
+    __slots__ = ("read", "size")
+
+    def __init__(self, size: int, read: Callable[[int, int], bytes]) -> None:
+        self.size = size
+        self.read = read
+
+    @classmethod
+    def of(cls, data: bytes) -> StoreBody:
+        """Bytes held whole."""
+        view = memoryview(data)
+        return cls(len(data), lambda start, end: data if start == 0 and end == len(data) else bytes(view[start:end]))
+
+
+class _ReadOnly:
+    """The arrays of an object the worker reads, read-only while it reads them.
+
+    Counted per array: one two matrices share (a layer that is ``X``) is
+    writeable again once both are laid out; one that was read-only already is
+    left alone. An in-place change meanwhile is refused by numpy ("assignment
+    destination is read-only") rather than mixed into the snapshot."""
+
+    def __init__(self) -> None:
         self._lock = threading.Lock()
-        #: Every row at memory speed, once there (None until a chunked source is first read).
-        self._view: np.ndarray | None = array if isinstance(array, np.ndarray) else _mapped_in_place(array)
-        #: The rows one source chunk holds, and which chunks are decoded into the view.
-        self.chunk = int(chunks[0]) if self._view is None and chunks else self.length
-        self._ready: np.ndarray | None = None
-        #: Every source chunk decoded: rows are taken with no check.
-        self._complete = False
-        if scratch is not None and isinstance(self._view, np.memmap):
-            scratch.keep(self)
+        self._held: dict[int, tuple[np.ndarray, int]] = {}
 
-    def _whole(self, rows: np.ndarray) -> np.ndarray:
-        """The view of the whole array, every source chunk ``rows`` lie in decoded into it."""
-        if self._view is not None and (self._ready is None or self._complete):
-            return self._view
-        needed = np.unique(rows // self.chunk)
+    def hold(self, arrays: list[Any]) -> list[np.ndarray]:
+        held = []
         with self._lock:
-            if self._view is None:
-                if self.array is None:
-                    raise RuntimeError("The served store is closed.")
-                if self._scratch is None:
-                    raise RuntimeError("A chunked source array is read without the store's scratch folder.")
-                self._view = np.lib.format.open_memmap(
-                    self._scratch.path() / f"source-{next(_SOURCE_NAMES)}.npy", mode="w+", dtype=self.dtype, shape=self.shape
-                )
-                self._ready = np.zeros(-(-self.length // self.chunk), dtype=bool)
-                self._scratch.keep(self)
-            assert self._ready is not None
-            for index in needed[~self._ready[needed]].tolist():
-                start, end = index * self.chunk, min(self.length, (index + 1) * self.chunk)
-                self._view[start:end] = self.array[start:end]
-                self._ready[index] = True
-            self._complete = bool(self._ready.all())
-            return self._view
+            for array in arrays:
+                if not isinstance(array, np.ndarray) or isinstance(array, np.memmap):
+                    continue
+                entry = self._held.get(id(array))
+                if entry is not None:
+                    self._held[id(array)] = (entry[0], entry[1] + 1)
+                elif array.flags.writeable:
+                    array.flags.writeable = False
+                    self._held[id(array)] = (array, 1)
+                else:
+                    continue
+                held.append(array)
+        return held
 
-    def release(self) -> None:
-        """Let the mapped view go, the file it maps closed (the store is closing;
-        its folder is removed next). A row asked after is refused."""
+    def release(self, arrays: list[np.ndarray]) -> None:
         with self._lock:
-            self.array = None
-            self._view = None
-            self._ready = None
-            self._complete = False
+            for array in arrays:
+                entry = self._held.get(id(array))
+                if entry is None:
+                    continue
+                if entry[1] > 1:
+                    self._held[id(array)] = (entry[0], entry[1] - 1)
+                    continue
+                del self._held[id(array)]
+                with contextlib.suppress(ValueError):
+                    array.flags.writeable = True
 
-    def take(self, rows: np.ndarray, columns: slice = slice(None)) -> np.ndarray:
-        """Rows ``rows`` (any order, repeats allowed), and ``columns`` of a 2-D array."""
-        rows = np.asarray(rows, dtype=np.int64)
-        if len(rows) == 0:
-            empty = np.zeros((0, *self.shape[1:]), dtype=self.dtype)
-            return empty if len(self.shape) == 1 else empty[:, columns]
-        whole = self._whole(rows)
-        return whole[rows] if len(self.shape) == 1 else whole[rows, columns]
-
-
-#: Names of the decoded copies in a store's scratch folder.
-_SOURCE_NAMES = itertools.count()
-
-
-def _mapped_in_place(array: Any) -> np.ndarray | None:
-    """An uncompressed HDF5 dataset stored in one piece, mapped where it lies in its
-    file (read-only; nothing copied), or None for any other array."""
-    try:
-        import h5py
-    except ImportError:  # pragma: no cover - h5py is a dependency
-        return None
-    if not isinstance(array, h5py.Dataset) or array.chunks is not None or array.compression is not None:
-        return None
-    # A file read through the operating system as it lies on disk, named by
-    # its driver's identifier: ``File.driver`` names the default driver
-    # "windows" on Windows (HDF5's Windows driver is the sec2 driver there).
-    driver = array.file.id.get_access_plist().get_driver()
-    if driver not in (h5py.h5fd.SEC2, h5py.h5fd.STDIO) or array.dtype.kind not in "biuf" or array.size == 0:
-        return None
-    offset = array.id.get_offset()
-    if offset is None:
-        return None
-    return np.memmap(array.file.filename, dtype=array.dtype, mode="r", offset=offset, shape=array.shape)
+    def release_all(self) -> None:
+        with self._lock:
+            held = [array for array, _ in self._held.values()]
+            self._held.clear()
+        for array in held:
+            with contextlib.suppress(ValueError):
+                array.flags.writeable = True
 
 
-class _Vector(_Rows):
-    """One 1-D array of a source (a sparse matrix's indices or data), read by ranges."""
+class _Job:
+    """One matrix laid out (or copied) by the store's worker.
 
-    def ranges(self, starts: np.ndarray, ends: np.ndarray) -> np.ndarray:
-        """The values of ranges ``[starts[i], ends[i])``, one after another."""
-        starts = np.asarray(starts, dtype=np.int64)
-        ends = np.asarray(ends, dtype=np.int64)
-        if len(starts) == 1 and isinstance(self.array, np.ndarray):
-            return np.asarray(self.array[int(starts[0]) : int(ends[0])])
-        return self.take(_range_index(starts, ends))
+    ``work`` does it; ``progress`` says the share done and the seconds left
+    at its pace (None before it has one); ``values`` sizes it among the jobs
+    ahead of a key that waits; ``held`` are the object's arrays it reads,
+    writeable again (``protection``) once it ends, done or failed."""
+
+    def __init__(
+        self,
+        label: str,
+        values: int,
+        work: Callable[[], object],
+        progress: Callable[[], tuple[float, float | None]],
+        *,
+        held: list[np.ndarray] | None = None,
+        protection: _ReadOnly | None = None,
+    ) -> None:
+        self.label = label
+        self.values = max(1, int(values))
+        self._work = work
+        self.progress = progress
+        self._held = held or []
+        self._protection = protection
+        self.queued = False
+        self.started = threading.Event()
+        self.finished = threading.Event()
+        self.error: BaseException | None = None
+        self.seconds: float | None = None
+
+    def run(self) -> None:
+        import time
+
+        self.started.set()
+        began = time.monotonic()
+        try:
+            self._work()
+        except BaseException as error:
+            # Its frames may hold an array mapping a file of the store, which
+            # Windows would keep from being removed while the error is alive.
+            traceback.clear_frames(error.__traceback__)
+            self.error = error
+        finally:
+            self.seconds = time.monotonic() - began
+            if self._protection is not None:
+                self._protection.release(self._held)
+            self._held = []
+            self.finished.set()
+
+    def require(self) -> None:
+        """Raise the error it ended with, as the reason a key cannot be answered."""
+        if self.error is not None:
+            raise RuntimeError(f"{self.label} could not be laid out for the viewer: {self.error}") from self.error
 
 
-@dataclass(frozen=True)
-class _Sparse:
-    """A compressed sparse matrix of a source: its form, shape and three arrays."""
+class _Worker:
+    """The store's background worker: one daemon thread running its jobs in
+    the order queued (``X`` first). Nothing here refers to the store, so
+    dropping the store closes it (:meth:`PriorityStore._release`)."""
 
-    form: str
-    shape: tuple[int, int]
-    indptr: Callable[[], np.ndarray]
-    indices: _Vector
-    data: _Vector
+    def __init__(self, stop: threading.Event) -> None:
+        self._stop = stop
+        self._ready = threading.Condition()
+        self._queue: list[_Job] = []
+        self._thread: threading.Thread | None = None
+        #: Stored values a second, from the jobs done so far.
+        self._pace: float | None = None
 
-    @property
-    def nnz(self) -> int:
-        return self.indices.length
+    def queue(self, job: _Job) -> None:
+        with self._ready:
+            if job.queued or self._stop.is_set():
+                return
+            job.queued = True
+            self._queue.append(job)
+            if self._thread is None:
+                self._thread = threading.Thread(target=self._loop, name="cellucid-layout", daemon=True)
+                self._thread.start()
+            self._ready.notify()
 
+    def _loop(self) -> None:
+        while True:
+            with self._ready:
+                while not self._queue and not self._stop.is_set():
+                    self._ready.wait()
+                if self._stop.is_set():
+                    return
+                job = self._queue[0]
+            job.run()
+            with self._ready:
+                self._queue.remove(job)
+                if job.error is None and job.seconds:
+                    self._pace = job.values / job.seconds
+            if job.error is not None and not self._stop.is_set():
+                logger.warning("%s could not be laid out for the viewer: %s", job.label, job.error)
 
+    def not_ready(self, job: _Job) -> NotReady:
+        """Why ``job``'s key waits: how far it is, and the seconds left for it
+        and the jobs ahead of it (queued now, if it was not)."""
+        self.queue(job)
+        with self._ready:
+            ahead = list(self._queue[: self._queue.index(job)]) if job in self._queue else []
+        share, left = job.progress()
+        running = next((other for other in ahead if other.started.is_set()), None)
+        pace = self._pace
+        if running is not None:
+            done, running_left = running.progress()
+            if running_left is not None and done < 1:
+                pace = running.values * (1 - done) / max(running_left, 1e-9)
+        seconds: float | None = 0.0
+        for other in ahead:
+            other_share, other_left = other.progress()
+            if other.started.is_set() and other_left is not None:
+                seconds = None if seconds is None else seconds + other_left
+            else:
+                seconds = None if seconds is None or pace is None else seconds + other.values / pace
+        if job.started.is_set() and left is not None:
+            seconds = None if seconds is None else seconds + left
+        else:
+            seconds = None if seconds is None or pace is None else seconds + job.values * (1 - share) / pace
+        if job.started.is_set():
+            state = f"{share:.0%} done"
+        elif ahead:
+            state = f"after {len(ahead)} other {plural(len(ahead), 'matrix', 'matrices')}"
+        else:
+            state = "starting"
+        when = "" if seconds is None else f", about {max(1, math.ceil(seconds)):,} s left"
+        return NotReady(f"{job.label} is being laid out gene-major for the viewer ({state}{when}).", seconds)
+
+    def wait(self, jobs: list[_Job], timeout: float | None) -> None:
+        """Queue every job and wait until each has ended."""
+        for job in jobs:
+            self.queue(job)
+        for job in jobs:
+            if not job.finished.wait(timeout):
+                raise TimeoutError(f"{job.label} was not laid out within {timeout} s.")
+            job.require()
+
+    def close(self) -> None:
+        """Stop after the running job's current block (the store is closing)."""
+        with self._ready:
+            self._ready.notify_all()
+            thread = self._thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join()
 # =============================================================================
 # The arrays a served store makes on request
 # =============================================================================
@@ -365,17 +518,45 @@ class _Planned:
             "dimension_separator": ".",
         }
 
-    def chunk_bytes(self, index: tuple[int, ...]) -> bytes | None:
-        """Chunk ``index`` as Zarr v2 stores it (padded to the whole chunk), or None outside the grid."""
+    def in_grid(self, index: tuple[int, ...]) -> bool:
+        """Whether ``index`` names a chunk of the array."""
         grid = [-(-extent // size) for extent, size in zip(self.shape, self.chunks, strict=True)]
-        if len(index) != len(grid) or any(not 0 <= i < n for i, n in zip(index, grid, strict=True)):
-            return None
+        return len(index) == len(grid) and all(0 <= i < n for i, n in zip(index, grid, strict=True))
+
+    def chunk_length(self) -> int:
+        """The bytes of every chunk as Zarr v2 stores it (padded to the whole chunk)."""
+        return int(np.prod(self.chunks, dtype=np.int64)) * self.dtype.itemsize
+
+    def block_part(self, index: tuple[int, ...], first: int, last: int) -> np.ndarray:
+        """Values ``[first, last)`` of chunk ``index`` of a vector (offsets in
+        the chunk, within the array). An array that can make part of a chunk
+        alone makes only those."""
+        return np.asarray(self.block(index))[first:last]
+
+    def chunk_bytes(self, index: tuple[int, ...], start: int = 0, end: int | None = None) -> bytes:
+        """Bytes ``[start, end)`` of chunk ``index`` (``in_grid``) as Zarr v2
+        stores it (padded to the whole chunk; ``end`` None: to its end). A
+        vector's are made alone, from the values they cover (a ``Range`` of a
+        large chunk is answered without making the chunk); any other array's
+        chunk is made whole."""
+        size = self.chunk_length()
+        end = size if end is None else end
+        if not 0 <= start <= end <= size:
+            raise ValueError(f"No bytes [{start}, {end}) in a chunk of {size}.")
+        if len(self.chunks) == 1:
+            item = self.dtype.itemsize
+            first, last = start // item, -(-end // item)
+            values = np.zeros(last - first, dtype=self.dtype)
+            held = max(0, min(last, self.shape[0] - index[0] * self.chunks[0]) - first)
+            if held > 0:
+                values[:held] = self.block_part(index, first, first + held)
+            return values.view(np.uint8)[start - first * item : end - first * item].tobytes()
         values = np.ascontiguousarray(self.block(index), dtype=self.dtype)
         if values.shape != tuple(self.chunks):
             padded = np.zeros(self.chunks, dtype=self.dtype)
             padded[tuple(slice(0, extent) for extent in values.shape)] = values
             values = padded
-        return values.tobytes()
+        return values.reshape(-1).view(np.uint8)[start:end].tobytes()
 
 
 class _Values(_Planned):
@@ -403,9 +584,9 @@ class _Values(_Planned):
 class _DenseRows(_Planned):
     """A dense per-cell array with its rows in priority order."""
 
-    def __init__(self, array: Any, order: np.ndarray | None, chunks: tuple[int, ...], scratch: _Scratch, *, encoded: bool = True) -> None:
+    def __init__(self, array: Any, order: np.ndarray | None, chunks: tuple[int, ...], scratch: Scratch, *, encoded: bool = True) -> None:
         self.array = array
-        self.source = _Rows(array, scratch)
+        self.source = Rows(array, scratch)
         self.order = order
         self.shape = tuple(int(extent) for extent in array.shape)
         self.dtype = np.dtype(array.dtype)
@@ -425,54 +606,198 @@ class _DenseRows(_Planned):
         return self.source.take(self.order[start:end], columns)
 
 
-class _DenseGeneMajor(_Planned):
-    """A dense expression matrix of a file stored in chunks of whole rows (or
-    of more genes than a served strip), laid out once, on its first read,
-    gene-major in priority order into a memory-mapped file.
 
-    Read through the rows, every served strip of a gene would decode every
-    chunk of the matrix (300,000 x 200 in 1,000 x 200 gzip chunks: 1.2 s a
-    gene, each time); laid out once -- one pass over the file by blocks of
-    whole rows, memory one block -- a strip is one slice of the file it wrote.
-    """
+class _DenseSnapshot(_Planned):
+    """A dense per-cell array of an object held in memory (an ``obsm`` array)
+    as served: its rows in priority order, copied once -- its snapshot -- by
+    the store's worker into a memory-mapped file, the object's array
+    read-only while it is copied (an in-place change is refused by numpy
+    rather than mixed in). Until then a chunk is taken from that array at
+    once, the rows it will hold: the store is made, and the viewer draws,
+    without waiting for the copy (10M cells of a 30-column latent space: 1.2
+    GB)."""
 
-    def __init__(self, array: Any, priority: CellPriority | None, chunks: tuple[int, int], folder: Callable[[], Path], name: str) -> None:
-        self.array = array
-        self.priority = priority
-        self.shape = (int(array.shape[0]), int(array.shape[1]))
+    def __init__(
+        self,
+        array: np.ndarray,
+        order: np.ndarray | None,
+        chunks: tuple[int, ...],
+        scratch: Scratch,
+        name: str,
+        stop: threading.Event,
+    ) -> None:
+        self.array: np.ndarray | None = array
+        self.order = order
+        self.shape = tuple(int(extent) for extent in array.shape)
         self.dtype = np.dtype(array.dtype)
         self.chunks = chunks
         self.attrs = _encoding("array", "0.2.0")
-        self._folder = folder
+        self._scratch = scratch
         self._name = name
+        self._stop = stop
+        self._lock = threading.Lock()
+        self._copied: np.ndarray | None = None
+        self._done = 0
+        self._began: float | None = None
+        self.job: _Job | None = None
+        scratch.keep(self)
+
+    def copy(self) -> None:
+        """The snapshot, by blocks of rows in priority order (the worker runs it)."""
+        import time
+
+        self._began = time.monotonic()
+        array = self.array
+        assert array is not None
+        out = np.lib.format.open_memmap(
+            self._scratch.path() / f"{self._name}-dense.npy", mode="w+", dtype=self.dtype, shape=self.shape
+        )
+        step = max(1, PASS_ENTRIES // max(1, int(np.prod(self.shape[1:], dtype=np.int64))))
+        for start in range(0, self.shape[0], step):
+            if self._stop.is_set():
+                raise RuntimeError("The served store was closed while an array of it was copied.")
+            end = min(self.shape[0], start + step)
+            out[start:end] = array[start:end] if self.order is None else array[self.order[start:end]]
+            self._done = end
+        out.flush()
+        with self._lock:
+            self._copied = out
+
+    def progress(self) -> tuple[float, float | None]:
+        import time
+
+        share = self._done / max(1, self.shape[0])
+        if self._copied is not None:
+            return 1.0, 0.0
+        if self._began is None or self._done == 0:
+            return share, None
+        elapsed = time.monotonic() - self._began
+        return share, elapsed * (self.shape[0] - self._done) / self._done
+
+    def release(self) -> None:
+        with self._lock:
+            self._copied = None
+            self.array = None
+
+    def block(self, index: tuple[int, ...]) -> np.ndarray:
+        start = index[0] * self.chunks[0]
+        end = min(self.shape[0], start + self.chunks[0])
+        columns = (
+            slice(index[1] * self.chunks[1], min(self.shape[1], (index[1] + 1) * self.chunks[1]))
+            if len(self.shape) == 2
+            else slice(None)
+        )
+        with self._lock:
+            copied, array = self._copied, self.array
+        if copied is not None:
+            return np.asarray(copied[start:end, columns] if len(self.shape) == 2 else copied[start:end])
+        if array is None:
+            raise RuntimeError("The served store is closed.")
+        rows = slice(start, end) if self.order is None else self.order[start:end]
+        return np.asarray(array[rows, columns] if len(self.shape) == 2 else array[rows])
+
+
+class _DenseGeneMajor(_Planned):
+    """A dense expression matrix laid out once, gene-major in priority order,
+    into a memory-mapped file, by the store's worker: an object's (its
+    snapshot, in the type ``prepare()`` stores it), or a file's stored in
+    chunks of whole rows (or of more genes than a served strip).
+
+    Read through the rows, every served strip of a gene would decode every
+    chunk of the matrix (300,000 x 200 in 1,000 x 200 gzip chunks: 1.2 s a
+    gene, each time); laid out once -- one pass over the source by blocks of
+    whole rows, memory one block -- a strip is one slice of the file it wrote.
+    A strip asked for before then is taken from the source's rows at once
+    (the snapshot, held read-only while it is laid out; a file's rows,
+    decoded once into the scratch folder): the viewer never waits for it.
+    """
+
+    def __init__(
+        self,
+        array: Any,
+        priority: CellPriority | None,
+        dtype: np.dtype,
+        chunks: tuple[int, int],
+        scratch: Scratch,
+        name: str,
+        stop: threading.Event,
+        worker: _Worker,
+    ) -> None:
+        self.array = array
+        self.worker = worker
+        self.new_row = None if priority is None or priority.identity else priority.new_row
+        #: Each served row's source row (None: the source's own order).
+        self.order = None if priority is None or priority.identity else priority.order
+        self.source = Rows(array, scratch)
+        self.shape = (int(array.shape[0]), int(array.shape[1]))
+        self.dtype = np.dtype(dtype)
+        self.chunks = chunks
+        self.attrs = _encoding("array", "0.2.0")
+        self._scratch = scratch
+        self._name = name
+        self._stop = stop
         self._lock = threading.Lock()
         self._laid: np.ndarray | None = None
+        self._done = 0
+        self._began: float | None = None
+        self.job: _Job | None = None
+        scratch.keep(self)
 
-    def _lay_out(self) -> np.ndarray:
+    def lay_out(self) -> None:
+        """The pass, by blocks of whole rows (the worker runs it)."""
+        import time
+
+        self._began = time.monotonic()
+        n_obs, n_vars = self.shape
+        out = np.lib.format.open_memmap(
+            self._scratch.path() / f"{self._name}-dense.npy", mode="w+", dtype=self.dtype, shape=(n_vars, n_obs)
+        )
+        step = max(1, PASS_ENTRIES // max(1, n_vars))
+        for start in range(0, n_obs, step):
+            if self._stop.is_set():
+                raise RuntimeError("The served store was closed while its matrix was laid out.")
+            block = np.asarray(self.array[start : start + step])
+            rows = np.arange(start, start + len(block)) if self.new_row is None else self.new_row[start : start + len(block)]
+            out[:, rows] = block.T
+            self._done = start + len(block)
+        out.flush()
         with self._lock:
-            if self._laid is None:
-                n_obs, n_vars = self.shape
-                out = np.lib.format.open_memmap(
-                    self._folder() / f"{self._name}-dense.npy", mode="w+", dtype=self.dtype, shape=(n_vars, n_obs)
-                )
-                step = max(1, _PASS_ENTRIES // max(1, n_vars))
-                for start in range(0, n_obs, step):
-                    block = np.asarray(self.array[start : start + step])
-                    rows = np.arange(start, start + len(block)) if self.priority is None else self.priority.new_row[start : start + len(block)]
-                    out[:, rows] = block.T
-                out.flush()
-                self._laid = out
-            return self._laid
+            self._laid = out
+
+    def progress(self) -> tuple[float, float | None]:
+        import time
+
+        share = self._done / max(1, self.shape[0])
+        if self._laid is not None:
+            return 1.0, 0.0
+        if self._began is None or self._done == 0:
+            return share, None
+        elapsed = time.monotonic() - self._began
+        return share, elapsed * (self.shape[0] - self._done) / self._done
 
     def release(self) -> None:
         with self._lock:
             self._laid = None
+            self.array = None
 
     def block(self, index: tuple[int, ...]) -> np.ndarray:
-        laid = self._lay_out()
-        rows = slice(index[0] * self.chunks[0], (index[0] + 1) * self.chunks[0])
+        assert self.job is not None
+        start = index[0] * self.chunks[0]
+        end = min(self.shape[0], start + self.chunks[0])
         genes = slice(index[1] * self.chunks[1], (index[1] + 1) * self.chunks[1])
-        return np.ascontiguousarray(laid[genes, rows].T)
+        if not self.job.finished.is_set():
+            # Not laid out yet: the strip's rows taken from the source as they will be laid out.
+            with self._lock:
+                if self.array is None:
+                    raise RuntimeError("The served store is closed.")
+            rows = np.arange(start, end, dtype=np.int64) if self.order is None else self.order[start:end]
+            return np.ascontiguousarray(self.source.take(rows, genes), dtype=self.dtype)
+        self.job.require()
+        with self._lock:
+            laid = self._laid
+        if laid is None:
+            raise RuntimeError("The served store is closed.")
+        return np.ascontiguousarray(laid[genes, start:end].T)
 
 
 def _reads_whole_rows(array: Any, strip: tuple[int, int]) -> bool:
@@ -481,6 +806,122 @@ def _reads_whole_rows(array: Any, strip: tuple[int, int]) -> bool:
     if isinstance(array, np.ndarray) or not chunks or len(chunks) != 2:
         return False
     return int(chunks[1]) > strip[1]
+
+
+class _LaidOut:
+    """An expression matrix laid out gene-major by the store's worker
+    (:class:`~cellucid.prepare_data._gene_major.GeneMajorLayout`, its output
+    files in the scratch folder): its job, and how its arrays are served.
+
+    What is asked for before the worker has placed it is made at once,
+    exactly as it will be placed, from what the worker has placed so far and
+    the source for the rest -- the snapshot of an object, the file
+    (:meth:`GeneMajorLayout.entries_now`, :meth:`GeneMajorLayout.count_prefixes`);
+    the viewer waits for a layout only when it ends sooner than its rest
+    would be made again (:meth:`GeneMajorLayout.sooner`). Only a file's
+    matrix not counted yet is "not ready" (where each gene's values go is
+    known once counted): its keys are answered ``503`` with ``Retry-After``."""
+
+    def __init__(self, layout: GeneMajorLayout, label: str, worker: _Worker, held: list[np.ndarray], protection: _ReadOnly) -> None:
+        self.layout = layout
+        self.worker = worker
+        self.job = _Job(label, layout.work, layout.run, layout.progress, held=held, protection=protection)
+        self._lock = threading.Lock()
+        self._released = False
+        #: The entries made last before they were placed (``(start, end)``,
+        #: rows, values): a range's indices and data are asked for apart.
+        self._made: tuple[tuple[int, int], np.ndarray, np.ndarray] | None = None
+        #: The prefix counts made before the worker ended.
+        self._counts: np.ndarray | None = None
+
+    def release(self) -> None:
+        """Let the mapped output files go (the store is closing)."""
+        with self._lock:
+            self._released = True
+            self.layout.outputs.clear()
+            self.layout.result = None
+
+    def pointers(self) -> np.ndarray:
+        if not self.layout.counted.is_set():
+            raise self.worker.not_ready(self.job)
+        self.job.require()
+        assert self.layout.indptr is not None
+        return self.layout.indptr
+
+    def entries(self, part: str, start: int, end: int, chunk: tuple[int, int]) -> np.ndarray:
+        """Entries ``[start, end)`` of ``part``, which lie in the served chunk
+        ``chunk`` (``[first, last)``): placed, or -- not placed yet -- made with
+        the rest of that chunk (kept for the other part and later ranges of
+        it: a pass over a cell-major source makes every gene a chunk reaches)."""
+        if not self.layout.ready(end) and self.layout.sooner():
+            # The layout ends sooner than its rest would be made again.
+            self.job.finished.wait()
+        if not self.layout.ready(end):
+            if self.job.finished.is_set():
+                self.job.require()
+            if not self.layout.counted.is_set():
+                raise self.worker.not_ready(self.job)
+            with self._lock:
+                made = self._made
+            if made is None or made[0] != chunk:
+                made = (chunk, *self.layout.entries_now(*chunk))
+                with self._lock:
+                    self._made = made
+            values = made[1] if part == "indices" else made[2]
+            return values[start - chunk[0] : end - chunk[0]]
+        with self._lock:
+            if self._released:
+                raise RuntimeError("The served store is closed.")
+            return np.asarray(self.layout.outputs[part][start:end])
+
+    def prefix_counts(self) -> np.ndarray:
+        if not self.job.finished.is_set():
+            if not self.layout.counted.is_set():
+                raise self.worker.not_ready(self.job)
+            with self._lock:
+                counts = self._counts
+            if counts is None:
+                counts = self.layout.count_prefixes()
+                with self._lock:
+                    self._counts = counts
+            return counts
+        self.job.require()
+        result = self.layout.result
+        if result is None or result.prefix_counts is None:
+            raise RuntimeError("The served store is closed.")
+        return result.prefix_counts
+
+
+class _LaidPointers(_Planned):
+    def __init__(self, matrix: _LaidOut, nnz: int) -> None:
+        self.matrix = matrix
+        n_vars = matrix.layout.shape[1]
+        self.shape = (n_vars + 1,)
+        self.dtype = np.dtype(np.int64 if nnz >= 2**31 else np.int32)
+        self.chunks = _vector_chunks(n_vars + 1, WHOLE_CHUNK_ELEMENTS)
+
+    def block(self, index: tuple[int, ...]) -> np.ndarray:
+        return self.matrix.pointers()[index[0] * self.chunks[0] : (index[0] + 1) * self.chunks[0]]
+
+
+class _LaidEntries(_Planned):
+    def __init__(self, matrix: _LaidOut, part: str, nnz: int) -> None:
+        self.matrix = matrix
+        self.part = part
+        layout = matrix.layout
+        assert layout.dtype is not None
+        self.shape = (nnz,)
+        self.dtype = np.dtype(position_dtype(layout.shape[0]) if part == "indices" else layout.dtype)
+        self.chunks = _vector_chunks(nnz, SERVED_ENTRY_CHUNK_ELEMENTS)
+
+    def block(self, index: tuple[int, ...]) -> np.ndarray:
+        start = index[0] * self.chunks[0]
+        return self.block_part(index, 0, min(self.shape[0], start + self.chunks[0]) - start)
+
+    def block_part(self, index: tuple[int, ...], first: int, last: int) -> np.ndarray:
+        start = index[0] * self.chunks[0]
+        chunk = (start, min(self.shape[0], start + self.chunks[0]))
+        return self.matrix.entries(self.part, start + first, start + last, chunk)
 
 
 class _Entries(_Planned):
@@ -495,7 +936,11 @@ class _Entries(_Planned):
 
     def block(self, index: tuple[int, ...]) -> np.ndarray:
         start = index[0] * self.chunks[0]
-        indices, data = self.matrix.entries(start, min(self.shape[0], start + self.chunks[0]))
+        return self.block_part(index, 0, min(self.shape[0], start + self.chunks[0]) - start)
+
+    def block_part(self, index: tuple[int, ...], first: int, last: int) -> np.ndarray:
+        start = index[0] * self.chunks[0]
+        indices, data = self.matrix.entries(start + first, start + last)
         return indices if self.part == "indices" else data
 
 
@@ -503,39 +948,28 @@ class _ServedSparse:
     """A source's compressed sparse matrix as served: its major axis in
     priority order (``major``: the source line of each served line) and/or its
     minor axis renumbered (``minor``: the served position of each source
-    position, entries sorted by it within each line), or cut to a window of
-    it (``window``: minor positions ``[lo, hi)``, each line's entries there
-    one run, as in a matrix whose lines are sorted: a Cell Ranger matrix's
-    features of one type)."""
+    position, entries sorted by it within each line). Each chunk is made when
+    it is asked for: the lazy form of a gene-major file's matrix, a graph, or
+    an ``obsm`` matrix."""
 
     def __init__(
         self,
-        source: _Sparse,
+        source: SparseSource,
         *,
         major: np.ndarray | None,
         minor: np.ndarray | None,
         cache: _Cache,
-        window: tuple[int, int] | None = None,
     ) -> None:
         self.source = source
         self.form = source.form
         self.major = major
         self.minor = minor
-        self.window = window
-        major_extent = source.shape[0] if self.form == "csr" else source.shape[1]
+        major_extent = source.n_lines
         #: The source's pointers, read once, when first needed.
         self._source = _Values((major_extent + 1,), np.int64, (major_extent + 1,), source.indptr)
-        if window is None:
-            self.shape = source.shape
-            self.nnz = source.nnz
-            self._runs: tuple[np.ndarray, np.ndarray] | None = None
-        else:
-            lo, hi = window
-            self.shape = (source.shape[0], hi - lo) if self.form == "csr" else (hi - lo, source.shape[1])
-            # Where each line's entries in the window are: one pass over the indices, now (the store's shape needs them).
-            self._runs = _window_runs(source, self._source.values(), lo, hi)
-            self.nnz = int((self._runs[1] - self._runs[0]).sum())
-        minor_extent = self.shape[1] if self.form == "csr" else self.shape[0]
+        self.shape = source.shape
+        self.nnz = source.nnz
+        minor_extent = source.extent
         self.indices_dtype = np.dtype(np.int64 if minor_extent > np.iinfo(np.int32).max else np.int32)
         self.indptr_dtype = np.dtype(np.int64 if self.nnz >= 2**31 else np.int32)
         self._cache = cache
@@ -548,13 +982,11 @@ class _ServedSparse:
 
     def _bounds(self, lines: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """The source entry runs ``[starts, ends)`` of source lines ``lines``."""
-        if self._runs is not None:
-            return self._runs[0][lines], self._runs[1][lines]
         pointers = self._source_indptr()
         return pointers[lines], pointers[lines + 1]
 
     def _served_indptr(self) -> np.ndarray:
-        if self.major is None and self._runs is None:
+        if self.major is None:
             return self._source_indptr()
         lines = np.arange(len(self._source_indptr()) - 1, dtype=np.int64)
         starts, ends = self._bounds(lines if self.major is None else self.major)
@@ -572,17 +1004,11 @@ class _ServedSparse:
         return np.asarray(indices), np.asarray(data)
 
     def _renumbered(self, indices: np.ndarray, data: np.ndarray, lengths: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        if self.window is not None:
-            return np.asarray(indices, dtype=np.int64) - self.window[0], data
         if self.minor is None:
             return indices, data
         positions = self.minor[indices]
-        # Within each line by position: one sort of line * extent + position
-        # (stable, as lines are kept in order and a repeated position keeps
-        # its stored order), a third of what sorting by two keys costs.
-        extent = len(self.minor)
-        lines = np.repeat(np.arange(len(lengths), dtype=np.int64) * extent, lengths)
-        order = np.argsort(lines + positions, kind="stable")
+        # Within each line by position, a repeated one in stored order.
+        order = line_order(np.repeat(np.arange(len(lengths), dtype=np.int64), lengths), positions, len(self.minor))
         return positions[order], data[order]
 
     def entries(self, start: int, end: int) -> tuple[np.ndarray, np.ndarray]:
@@ -622,323 +1048,75 @@ class _ServedSparse:
         counts = np.zeros((n_vars, len(levels)), dtype=np.uint32)
         gene = 0
         while gene < n_vars:
-            # Genes holding about _PASS_ENTRIES values at a time.
-            end = int(np.searchsorted(pointers, pointers[gene] + _PASS_ENTRIES, side="right")) - 1
+            # Genes holding about PASS_ENTRIES values at a time.
+            end = int(np.searchsorted(pointers, pointers[gene] + PASS_ENTRIES, side="right")) - 1
             end = min(n_vars, max(gene + 1, end))
             starts, ends = pointers[gene:end], pointers[gene + 1 : end + 1]
             rows = self.source.indices.ranges(starts, ends)
             if self.minor is not None:
                 rows = self.minor[rows]
-            counts[gene:end] = _counts_below(rows, ends - starts, levels)
+            counts[gene:end] = counts_below(rows, ends - starts, levels)
             gene = end
         return counts
-
-
-def _window_runs(source: _Sparse, pointers: np.ndarray, lo: int, hi: int) -> tuple[np.ndarray, np.ndarray]:
-    """Each line's run of entries at minor positions ``[lo, hi)``: ``(starts, ends)``, one pass over the indices.
-
-    Lines must hold their entries sorted (as Cell Ranger writes them), so a
-    window's entries are one run of each line.
-    """
-    n_lines = len(pointers) - 1
-    starts = np.empty(n_lines, dtype=np.int64)
-    ends = np.empty(n_lines, dtype=np.int64)
-    line = 0
-    while line < n_lines:
-        stop = int(np.searchsorted(pointers, pointers[line] + _PASS_ENTRIES, side="right")) - 1
-        stop = min(n_lines, max(line + 1, stop))
-        first, last = int(pointers[line]), int(pointers[stop])
-        indices = np.asarray(source.indices.ranges(np.asarray([first]), np.asarray([last])), dtype=np.int64)
-        local = pointers[line : stop + 1] - first
-        if len(indices) > 1:
-            rising = np.diff(indices) > 0
-            # A step down is allowed only where a line ends.
-            breaks = np.zeros(len(indices) - 1, dtype=bool)
-            inner = local[1:-1]
-            breaks[inner[(inner > 0) & (inner < len(indices))] - 1] = True
-            if not np.all(rising | breaks):
-                raise ValueError(
-                    "This matrix holds its entries unsorted within a cell, so one feature type's columns cannot be "
-                    "read as one run: read it with scanpy (sc.read_10x_h5(path, gex_only=False)), write it as .h5ad "
-                    "and serve that."
-                )
-        lengths = np.diff(local)
-        owner = np.repeat(np.arange(stop - line, dtype=np.int64), lengths)
-        below_lo = np.bincount(owner, weights=indices < lo, minlength=stop - line).astype(np.int64)
-        below_hi = np.bincount(owner, weights=indices < hi, minlength=stop - line).astype(np.int64)
-        starts[line:stop] = pointers[line:stop] + below_lo
-        ends[line:stop] = pointers[line:stop] + below_hi
-        line = stop
-    return starts, ends
-
-
-def _counts_below(rows: np.ndarray, lengths: np.ndarray, levels: np.ndarray) -> np.ndarray:
-    """For lines of ``lengths`` entries at ``rows`` (any order within a line):
-    each line's entries below each level."""
-    n_lines, n_levels = len(lengths), len(levels)
-    if n_levels == 0:
-        return np.zeros((n_lines, 0), dtype=np.uint32)
-    # An entry at row r counts toward level j when r < levels[j]: its first level is
-    # the number of levels <= r.
-    first = np.searchsorted(levels, rows, side="right")
-    lines = np.repeat(np.arange(n_lines, dtype=np.int64), lengths)
-    histogram = np.bincount(lines * (n_levels + 1) + first, minlength=n_lines * (n_levels + 1))
-    return np.cumsum(histogram.reshape(n_lines, n_levels + 1), axis=1)[:, :n_levels].astype(np.uint32)
-
-
-class _GeneMajor:
-    """An expression matrix held in memory (sparse, any format), laid out once,
-    gene-major in priority order, into memory-mapped files in ``folder``.
-
-    The layout is the store's snapshot of the matrix: made when the store is
-    made, before the caller has the object back, so the bytes served are the
-    matrix as it was then whatever is done to the object later (an in-place
-    ``np.log1p(adata.X.data, out=adata.X.data)`` is not seen; view the object
-    again to show it). Its values are stored as ``prepare()`` stores them, by
-    the same functions (:mod:`cellucid.prepare_data._inputs`): duplicate
-    coordinates summed, stored zeros dropped, float32 unless integer counts
-    need float64, a non-finite value refused. Each gene's entries land in
-    ascending served row; the prefix counts are its entries below each level.
-
-    A cell-major (CSR) matrix is read twice by blocks of rows in priority
-    order (counting, then placing); a gene-major (CSC) one twice by blocks of
-    genes. Memory holds one block beside the files; the files hold the matrix
-    once (its stored values, at 4 or 8 bytes, and a 4- or 8-byte row each).
-    """
-
-    def __init__(
-        self,
-        matrix: Any,
-        priority: CellPriority,
-        folder: Callable[[], Path],
-        name: str,
-        stop: threading.Event,
-        levels: np.ndarray | None,
-        label: str,
-    ) -> None:
-        from .prepare_data._inputs import expression_dtype, require_expression_values
-
-        self._stop = stop
-        self._lock = threading.Lock()
-        matrix = matrix if matrix.format in ("csr", "csc") else sparse.csr_matrix(matrix)
-        n_obs, n_vars = matrix.shape
-        self.shape = (int(n_obs), int(n_vars))
-        values = np.asarray(matrix.data)
-        require_expression_values(values, label)
-        self.dtype = np.dtype(expression_dtype(values))
-        self.indices_dtype = np.dtype(np.int64 if n_obs > np.iinfo(np.int32).max else np.int32)
-        self._levels = np.zeros(0, dtype=np.int64) if levels is None else np.asarray(levels, dtype=np.int64)
-        self._laid: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
-        lay_out = self._lay_out_rows if matrix.format == "csr" else self._lay_out_genes
-        self._laid = lay_out(matrix, priority, folder(), name)
-        self.nnz = int(self._laid[0][-1])
-
-    def laid_out(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        with self._lock:
-            if self._laid is None:
-                raise RuntimeError("The served store is closed.")
-            return self._laid
-
-    def release(self) -> None:
-        """Let go of the memory-mapped arrays, so their files can be removed (Windows keeps a mapped file)."""
-        with self._lock:
-            self._laid = None
-
-    def counts(self) -> np.ndarray:
-        return self._counts
-
-    def _files(self, folder: Path, name: str, nnz: int) -> tuple[np.ndarray, np.ndarray]:
-        def mapped(part: str, dtype: Any) -> np.ndarray:
-            if nnz == 0:
-                return np.zeros(0, dtype=dtype)
-            return np.lib.format.open_memmap(folder / f"{name}-{part}.npy", mode="w+", dtype=dtype, shape=(nnz,))
-
-        return mapped("indices", self.indices_dtype), mapped("data", self.dtype)
-
-    def _checked(self) -> None:
-        if self._stop.is_set():
-            raise RuntimeError("The served store was closed while its matrix was laid out.")
-
-    def _lay_out_rows(
-        self, matrix: sparse.csr_matrix, priority: CellPriority, folder: Path, name: str
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        from .prepare_data._inputs import canonical_block
-
-        n_obs, n_vars = self.shape
-        order = priority.order
-        lengths = np.diff(np.asarray(matrix.indptr, dtype=np.int64))[order]
-        served_end = np.cumsum(lengths, dtype=np.int64)
-        levels = self._levels
-        # Steps of rows ending at every level, so the cursors there are the prefix counts.
-        boundaries = np.unique(np.concatenate([levels[levels < n_obs], [n_obs]]))
-
-        def steps() -> Iterator[tuple[int, int]]:
-            row = 0
-            for boundary in boundaries.tolist():
-                while row < boundary:
-                    self._checked()
-                    base = 0 if row == 0 else int(served_end[row - 1])
-                    stop = int(np.searchsorted(served_end, base + _PASS_ENTRIES, side="right"))
-                    stop = min(boundary, max(row + 1, stop))
-                    yield row, stop
-                    row = stop
-
-        def block(row: int, stop: int) -> sparse.csc_matrix:
-            # The step's rows in priority order, by gene (each gene's rows ascending).
-            result: sparse.csc_matrix = canonical_block(sparse.csc_matrix(matrix[order[row:stop]]), self.dtype)
-            return result
-
-        per_gene = np.zeros(n_vars, dtype=np.int64)
-        for row, stop in steps():
-            per_gene += np.diff(block(row, stop).indptr)
-        indptr = np.concatenate([[0], np.cumsum(per_gene, dtype=np.int64)])
-        out_rows, out_data = self._files(folder, name, int(indptr[-1]))
-        cursor = indptr[:-1].copy()
-        counts = np.zeros((n_vars, len(levels)), dtype=np.uint32)
-        level_at = {int(level): j for j, level in enumerate(levels.tolist())}
-        for row, stop in steps():
-            part = block(row, stop)
-            step = np.diff(part.indptr)
-            within = np.arange(part.nnz, dtype=np.int64) - np.repeat(part.indptr[:-1].astype(np.int64), step)
-            places = np.repeat(cursor, step) + within
-            out_rows[places] = part.indices.astype(np.int64) + row
-            out_data[places] = part.data
-            cursor += step
-            if stop in level_at:
-                counts[:, level_at[stop]] = cursor - indptr[:-1]
-        for j, level in enumerate(levels.tolist()):
-            if level >= n_obs:
-                counts[:, j] = per_gene
-        return self._finished(indptr, out_rows, out_data, counts)
-
-    def _lay_out_genes(
-        self, matrix: sparse.csc_matrix, priority: CellPriority, folder: Path, name: str
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        from .prepare_data._inputs import canonical_block
-
-        n_obs, n_vars = self.shape
-        pointers = np.asarray(matrix.indptr, dtype=np.int64)
-
-        def steps() -> Iterator[tuple[int, int]]:
-            gene = 0
-            while gene < n_vars:
-                self._checked()
-                end = int(np.searchsorted(pointers, pointers[gene] + _PASS_ENTRIES, side="right")) - 1
-                end = min(n_vars, max(gene + 1, end))
-                yield gene, end
-                gene = end
-
-        def block(gene: int, end: int) -> sparse.csc_matrix:
-            part: sparse.csc_matrix = canonical_block(matrix[:, gene:end], self.dtype)
-            return part
-
-        per_gene = np.zeros(n_vars, dtype=np.int64)
-        for gene, end in steps():
-            per_gene[gene:end] = np.diff(block(gene, end).indptr)
-        indptr = np.concatenate([[0], np.cumsum(per_gene, dtype=np.int64)])
-        out_rows, out_data = self._files(folder, name, int(indptr[-1]))
-        counts = np.zeros((n_vars, len(self._levels)), dtype=np.uint32)
-        for gene, end in steps():
-            part = block(gene, end)
-            lengths = np.diff(part.indptr)
-            rows = priority.new_row[part.indices]
-            owner = np.repeat(np.arange(end - gene, dtype=np.int64), lengths)
-            # Each gene's entries by served row.
-            order = np.lexsort((rows, owner))
-            first, last = int(indptr[gene]), int(indptr[end])
-            out_rows[first:last] = rows[order]
-            out_data[first:last] = part.data[order]
-            counts[gene:end] = _counts_below(rows, lengths, self._levels)
-        return self._finished(indptr, out_rows, out_data, counts)
-
-    def _finished(
-        self, indptr: np.ndarray, out_rows: np.ndarray, out_data: np.ndarray, counts: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        for array in (out_rows, out_data):
-            if isinstance(array, np.memmap):
-                array.flush()
-        self._counts = counts
-        return indptr, out_rows, out_data
-
-
-class _GeneMajorEntries(_Planned):
-    def __init__(self, matrix: _GeneMajor, part: str) -> None:
-        self.matrix = matrix
-        self.part = part
-        self.shape = (matrix.nnz,)
-        self.dtype = np.dtype(matrix.indices_dtype if part == "indices" else matrix.dtype)
-        self.chunks = _vector_chunks(matrix.nnz, SLICED_CHUNK_ELEMENTS)
-
-    def block(self, index: tuple[int, ...]) -> np.ndarray:
-        _, rows, data = self.matrix.laid_out()
-        values = rows if self.part == "indices" else data
-        return values[index[0] * self.chunks[0] : (index[0] + 1) * self.chunks[0]]
-
 
 # =============================================================================
 # Elements of a source
 # =============================================================================
 
 
-def _encoding_of(node: Any) -> str | None:
-    value = node.attrs.get(_ENCODING) if hasattr(node, "attrs") else None
-    return value.decode() if isinstance(value, bytes) else value
+def _served_obs(obs: pd.DataFrame, label: str) -> pd.DataFrame:
+    """An in-memory object's ``obs`` with its text columns stored as ``prepare()``
+    stores them (``_string_column``: a categorical when a value repeats or is
+    missing, in code-point order, else a string array), so a served object
+    and the same object prepared open alike: an object-dtype column (common
+    before Scanpy first plots it) is not left to anndata's string array.
+    """
+    from .prepare_data._inputs import _string_column
+
+    converted: dict[str, Any] = {}
+    for column in obs.columns:
+        series = obs[column]
+        text = isinstance(series.dtype, pd.StringDtype) or (
+            series.dtype == object and pd.api.types.infer_dtype(series, skipna=True) == "string"
+        )
+        if text:
+            converted[column] = _string_column(series.to_numpy(dtype=object), f"{label} column {column!r}")
+    if not converted:
+        return obs
+    served = obs.copy(deep=False)
+    for column, value in converted.items():
+        served[column] = value
+    return served
 
 
-def _is_group(node: Any) -> bool:
-    """An h5py or Zarr group (a stored element), never an in-memory table."""
-    return hasattr(node, "keys") and hasattr(node, "attrs") and not hasattr(node, "dtype") and not hasattr(node, "iloc")
-
-
-def _sparse_of_memory(matrix: Any) -> _Sparse:
-    form = "csr" if matrix.format == "csr" else "csc"
-    return _Sparse(
-        form=form,
-        shape=(int(matrix.shape[0]), int(matrix.shape[1])),
-        indptr=lambda: np.asarray(matrix.indptr),
-        indices=_Vector(np.asarray(matrix.indices), None),
-        data=_Vector(np.asarray(matrix.data), None),
-    )
-
-
-def _sparse_of_group(group: Any, scratch: _Scratch) -> _Sparse:
-    form = "csr" if _encoding_of(group) == "csr_matrix" else "csc"
-    shape = [int(extent) for extent in group.attrs["shape"]]
-    pointers = group["indptr"]
-    return _Sparse(
-        form=form,
-        shape=(shape[0], shape[1]),
-        indptr=lambda: np.asarray(pointers[...]),
-        indices=_Vector(group["indices"], scratch),
-        data=_Vector(group["data"], scratch),
-    )
-
-
-def _is_sparse_group(node: Any) -> bool:
-    return _is_group(node) and _encoding_of(node) in ("csr_matrix", "csc_matrix")
-
-
-def _as_element(value: Any) -> Any:
+def _as_element(value: Any, *, expression: bool = False) -> Any:
     """An element as the store reads it: numpy, scipy CSR/CSC, or an h5py/Zarr node.
 
     anndata's backed sparse datasets are read through their stored group; a
-    dask array is computed; a ``numpy.matrix`` is a plain array.
+    dask array (anndata's lazily read element) is computed, a sparse one
+    staying sparse -- except an expression matrix's (``expression``) dask
+    array of sparse blocks, kept lazy and decoded block by block into the
+    store's scratch folder as it is laid out
+    (:func:`cellucid._source_arrays.sparse_source`), never whole in memory;
+    a ``numpy.matrix`` is a plain array.
     """
     group = getattr(value, "group", None)
     if group is not None and hasattr(value, "format"):
         return group
+    if expression and is_lazy_sparse(value):
+        return value
+    if hasattr(value, "compute") and hasattr(value, "dask") and not sparse.issparse(value):
+        value = value.compute()
     if sparse.issparse(value):
         return value if value.format in ("csr", "csc") else sparse.csr_matrix(value)
     if isinstance(value, np.matrix):
         return np.asarray(value)
-    if hasattr(value, "compute"):
-        return np.asarray(value.compute())
     return value
 
 
 def _is_dense_array(value: Any) -> bool:
     """A numeric numpy, h5py or Zarr array (read by rows)."""
-    return hasattr(value, "dtype") and hasattr(value, "shape") and not _is_group(value) and np.dtype(value.dtype).kind in "biuf"
+    return hasattr(value, "dtype") and hasattr(value, "shape") and not is_group(value) and np.dtype(value.dtype).kind in "biuf"
 
 
 def _take_rows(value: Any, order: np.ndarray) -> Any:
@@ -967,114 +1145,25 @@ def _permute_quantiles(uns: Any, order: np.ndarray, n_obs: int) -> Any:
     return {**uns, "cellucid": {**cellucid, "outlierQuantiles": {**quantiles, "fields": placed}}}
 
 
+def _stored_parts(values: Any) -> list[tuple[str, np.ndarray]]:
+    """The per-cell arrays anndata stores for a frame's index or column
+    (``write_dataframe`` writes each one's ``._values``), each by the suffix
+    of its path in the column: a categorical's codes (its categories are not
+    per cell), a nullable column's values and mask (``write_nullable``: a
+    missing value stored as 0 or ``""``), else the array itself. A type
+    anndata cannot write has been refused by anndata already (the frame's
+    head is written first)."""
+    if isinstance(values, pd.Categorical):
+        return [("/codes", np.asarray(values.codes))]
+    if isinstance(values, pd.arrays.IntegerArray | pd.arrays.BooleanArray):
+        return [("/values", values.to_numpy(na_value=0, dtype=values.dtype.numpy_dtype)), ("/mask", np.asarray(values.isna()))]
+    if isinstance(values, pd.api.extensions.ExtensionArray) and isinstance(values.dtype, pd.StringDtype):
+        return [("/values", values.to_numpy(na_value="")), ("/mask", np.asarray(values.isna()))]
+    return [("", np.asarray(values))]
+
+
 def _without(mapping: Mapping[str, Any], key: str) -> dict[str, Any]:
     return {name: value for name, value in mapping.items() if name != key}
-
-
-#: The prefix of a store's scratch folder in the temporary folder; a file
-#: ``owner`` in it names the process that made it.
-_SCRATCH_PREFIX = "cellucid-served-"
-
-
-def _process_alive(pid: int) -> bool:
-    """Whether process ``pid`` runs (on this machine), never signalling it
-    (``os.kill`` on Windows ends a process, whatever the signal). A process
-    that runs but may not be asked (another user's) counts as running."""
-    if pid <= 0:
-        return False
-    if sys.platform == "win32":  # pragma: no cover - Windows only
-        import ctypes
-        from ctypes import wintypes
-
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-        kernel32.OpenProcess.restype = wintypes.HANDLE
-        kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
-        kernel32.GetExitCodeProcess.restype = wintypes.BOOL
-        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
-        kernel32.CloseHandle.restype = wintypes.BOOL
-        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
-        if not handle:
-            return ctypes.get_last_error() == 5  # ERROR_ACCESS_DENIED: it runs; no such process otherwise
-        try:
-            code = wintypes.DWORD()
-            return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259  # STILL_ACTIVE
-        finally:
-            kernel32.CloseHandle(handle)
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
-def remove_stale_scratch(temporary: Path | None = None) -> list[Path]:
-    """Remove the scratch folders of stores whose process is gone (a kernel
-    killed before it closed them), and return them. A folder whose owner runs,
-    or names none it can read, is left alone."""
-    removed = []
-    for folder in Path(temporary or tempfile.gettempdir()).glob(f"{_SCRATCH_PREFIX}*"):
-        try:
-            pid = int((folder / "owner").read_text().strip())
-        except (OSError, ValueError):
-            continue
-        if pid != os.getpid() and not _process_alive(pid):
-            shutil.rmtree(folder, ignore_errors=True)
-            removed.append(folder)
-    return removed
-
-
-class _Scratch:
-    """The folder a store's layouts and snapshots are written to, made when
-    first needed and removed with the store, after its memory-mapped arrays
-    are let go (:meth:`release`): Windows removes no file that is mapped. It
-    names its process (``owner``), so a later store removes it when that
-    process was killed before closing it (:func:`remove_stale_scratch`)."""
-
-    def __init__(
-        self,
-        closers: list[Callable[[], None]],
-        stop: threading.Event,
-        layouts: list[_GeneMajor | _DenseGeneMajor | _Rows],
-    ) -> None:
-        self._closers = closers
-        self._stop = stop
-        self._layouts = layouts
-        self._lock = threading.Lock()
-        self.folder: Path | None = None
-
-    def path(self) -> Path:
-        with self._lock:
-            if self._stop.is_set():
-                raise RuntimeError("The served store is closed.")
-            if self.folder is None:
-                remove_stale_scratch()
-                folder = Path(tempfile.mkdtemp(prefix=_SCRATCH_PREFIX))
-                (folder / "owner").write_text(str(os.getpid()))
-                self.folder = folder
-
-                def remove() -> None:
-                    self.release()
-                    shutil.rmtree(folder, ignore_errors=True)
-
-                self._closers.append(remove)
-            return self.folder
-
-    def keep(self, layout: _Rows) -> None:
-        """Let ``layout``'s memory-mapped file go when the store closes."""
-        with self._lock:
-            self._layouts.append(layout)
-
-    def release(self) -> None:
-        """Let every memory-mapped array kept here go (each layout's own lock
-        taken outside this one, which a layout takes inside its own)."""
-        with self._lock:
-            layouts = list(self._layouts)
-        for layout in layouts:
-            layout.release()
-
 
 # =============================================================================
 # The store
@@ -1091,7 +1180,7 @@ class PriorityStore:
     and the files the layout of a cell-major matrix wrote.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, cache_bytes: int | None = None) -> None:
         import zarr
 
         self._documents: dict[str, Any] = {}
@@ -1099,18 +1188,34 @@ class PriorityStore:
         self.root = zarr.open_group(self._memory, mode="w", zarr_format=2)
         self.root.attrs.update(_encoding("anndata", "0.1.0"))
         self._planned: dict[str, _Planned] = {}
-        self._lines = _Cache(LINE_CACHE_BYTES)
+        #: The genes (or rows) whose renumbered, sorted entries the store
+        #: keeps, least recently used first out, within ``cache_bytes``
+        #: (:func:`require_cache_bytes`): a long gene spans several chunks of
+        #: the store, and is sorted once for all of them while it is kept.
+        self._lines = _Cache(require_cache_bytes(cache_bytes))
         self._closers: list[Callable[[], None]] = []
         #: Set when the store closes: a layout still running stops at its next step.
         self._stop = threading.Event()
-        #: Arrays that map a file: matrices laid out into the scratch folder,
-        #: and source arrays mapped in place or decoded there (let go on close).
-        self._layouts: list[_GeneMajor | _DenseGeneMajor | _Rows] = []
-        #: The folder the layouts write (nothing here refers back to the store,
-        #: so dropping the store releases it).
-        self._folder = _Scratch(self._closers, self._stop, self._layouts)
+        #: The folder the layouts and decoded source arrays write; what maps a
+        #: file of it is let go on close (nothing here refers back to the
+        #: store, so dropping the store releases it).
+        self._folder = Scratch(self._stop)
+        #: The background worker laying the expression matrices out, the jobs
+        #: it has (each matrix's, queued from the start or when first asked
+        #: for), and the object's arrays it holds read-only while it reads them.
+        self._worker = _Worker(self._stop)
+        self._jobs: list[_Job] = []
+        self._protection = _ReadOnly()
         self._finalizer = weakref.finalize(
-            self, PriorityStore._release, self._closers, self._stop, self._folder, self._planned, self._lines
+            self,
+            PriorityStore._release,
+            self._closers,
+            self._stop,
+            self._worker,
+            self._protection,
+            self._folder,
+            self._planned,
+            self._lines,
         )
         self.etag = f'"served-{secrets.token_hex(12)}"'
         self._consolidated: bytes | None = None
@@ -1121,55 +1226,73 @@ class PriorityStore:
         self.layout = "anndata"
         #: The rows of each AnnData group (``""``, ``"mod/<name>/"``): its arrays of one row per cell are chunked as such.
         self._groups: dict[str, int] = {}
+        #: The cells' names in their original order (the order the viewer
+        #: names cells in), taken with the rest of what is served; None when
+        #: the source has no obs index.
+        self.obs_names: pd.Index | None = None
 
     # -- building ------------------------------------------------------------
 
     @classmethod
-    def of_anndata(cls, adata: anndata.AnnData) -> PriorityStore:
+    def of_anndata(cls, adata: anndata.AnnData, *, cache_bytes: int | None = None) -> PriorityStore:
         """The store of an AnnData object, its cells in priority order.
 
         Its cells' original positions are the ones ``prepare()`` gives them,
         by the one rule (:func:`~cellucid.prepare_data._priority.stored_order`):
         an object in a verified stored order (read from a file in priority
-        order, its record kept) is put back in its original order first; any
-        other is taken in its own order, and a position column with no record
-        that describes the cells names nothing (it is not served; a warning
-        says so, as ``prepare()`` says it).
+        order, its record kept) is taken from its stored rows by the original
+        position each records -- the way back to the original order and on to
+        the served one is one permutation, so an object in the served order
+        already is served as it is; any other is taken in its own order, and
+        a position column with no record that describes the cells names
+        nothing (it is not served; a warning says so, as ``prepare()`` says it).
         """
         if adata.n_obs <= 0:
             raise ValueError("AnnData datasets must contain at least one observation")
-        adata = in_original_order(adata)
-        return cls._built(lambda store: store._plan_object(adata))
+        stored = stored_order_of(adata)
+        if stored.notice is not None:
+            warnings.warn(stored.notice, UserWarning, stacklevel=2)
+        return cls._built(lambda store: store._plan_object(adata, stored.positions), cache_bytes)
 
     @classmethod
-    def of_file(cls, source: AnnDataStore) -> PriorityStore:
+    def of_file(cls, source: AnnDataStore, *, cache_bytes: int | None = None) -> PriorityStore:
         """The store of an AnnData file (``.h5ad``, a Zarr folder or zip).
 
         A file in priority order already (``uns['cellucid']['priority']``,
         served this way because the browser cannot decode one of its codecs)
         keeps its own order; any other is put in priority order.
         """
-        return cls._built(lambda store: store._plan_file(store._open(source)))
+        return cls._built(lambda store: store._plan_file(store._open(source)), cache_bytes)
 
     @classmethod
-    def of_mudata_file(cls, source: AnnDataStore) -> PriorityStore:
+    def of_mudata_file(cls, source: AnnDataStore, *, cache_bytes: int | None = None) -> PriorityStore:
         """The store of a MuData file (``.h5mu``, a MuData Zarr folder or zip), its cells in priority order.
 
         The shared cells are in priority order, and each modality's rows in
         the order of its cells (``prepare()``'s MuData layout): a prefix of
         the cells is a prefix of every modality.
         """
-        return cls._built(lambda store: store._plan_mudata_file(store._open(source)))
+        return cls._built(lambda store: store._plan_mudata_file(store._open(source)), cache_bytes)
 
     @classmethod
-    def of_loom(cls, source: AnnDataStore) -> PriorityStore:
+    def of_mudata(cls, mdata: Any, *, cache_bytes: int | None = None) -> PriorityStore:
+        """The store of a MuData object, as :meth:`of_mudata_file` makes one of
+        its file, from a snapshot as :meth:`of_anndata` makes one: no copy
+        written, its cells by the original positions ``prepare()`` gives them."""
+        stored = stored_order_of(mdata)
+        if stored.notice is not None:
+            warnings.warn(stored.notice, UserWarning, stacklevel=2)
+        return cls._built(lambda store: store._plan_mudata_object(mdata, stored.positions), cache_bytes)
+
+    @classmethod
+    def of_loom(cls, source: AnnDataStore, *, cache_bytes: int | None = None) -> PriorityStore:
         """The store of a Loom file, presented as the browser presents it (:mod:`cellucid._served_formats`)."""
         from ._served_formats import loom_presented
 
-        return cls._built(lambda store: store._plan_presented(loom_presented(store._open(source), source.path.name)))
+        return cls._built(lambda store: store._plan_presented(loom_presented(store._open(source), source.path.name)), cache_bytes)
 
     @classmethod
-    def of_cell_ranger(cls, source: AnnDataStore) -> PriorityStore:
+    def of_cell_ranger(cls, source: AnnDataStore, *, cache_bytes: int | None = None) -> PriorityStore:
         """The store of a 10x Cell Ranger ``.h5``, or of an ``outs/`` folder with its analysis
         (:mod:`cellucid._served_formats`): one AnnData, or a MuData of its feature types."""
         from ._served_formats import cell_ranger_presented, outs_analysis, outs_matrix_file
@@ -1189,16 +1312,16 @@ class PriorityStore:
                 presented = cell_ranger_presented(store._open(source), source.path.name, analysis=None)
             store._plan_presented(presented)
 
-        return cls._built(plan)
+        return cls._built(plan, cache_bytes)
 
     @classmethod
-    def _built(cls, plan: Callable[[PriorityStore], None]) -> PriorityStore:
+    def _built(cls, plan: Callable[[PriorityStore], None], cache_bytes: int | None) -> PriorityStore:
         """A new store planned by ``plan``, or -- when planning fails -- the
         store closed and the error raised. The frames the error passed through
         are cleared first: their variables may hold an array mapping a file
         of the store (a snapshot being copied, a layout being written), which
         Windows would keep from being removed while the error is alive."""
-        store = cls()
+        store = cls(cache_bytes)
         try:
             plan(store)
             store._settle()
@@ -1244,18 +1367,79 @@ class PriorityStore:
         with zarr.config.set({"array.write_empty_chunks": True}):
             write_elem(self.root[parent] if parent else self.root, key, value, dataset_kwargs={"compressor": None})
 
+    def _write_obs(self, path: str, obs: pd.DataFrame, priority: CellPriority | None) -> None:
+        """A frame of one row per cell (``obs``), its rows in ``priority``'s
+        order and, with an order, each row's original position
+        (:data:`ORIGINAL_POSITION_COLUMN`) its last column (None: as stored).
+
+        anndata writes the frame's empty head -- its encodings, column order,
+        categories, each array's type -- and every per-cell array it would
+        store (the index, a column, a categorical's codes, a nullable column's
+        values and mask: :func:`_stored_parts`) is cut straight from the
+        column, in served order, in the chunks ``prepare()`` cuts it in: no
+        copy of the frame in served order, and no second pass to re-cut what
+        anndata chunked otherwise (a 10M-cell ``obs``: seconds before the
+        server's first answer)."""
+        rows = len(obs)
+        order = None if priority is None else priority.order
+        head = obs.iloc[:0]
+        if priority is not None:
+            head = head.assign(**{ORIGINAL_POSITION_COLUMN: np.zeros(0, dtype=np.uint32)})
+        self._write(path, head)
+        index = json.loads(self._documents[f"{path}/.zattrs"].to_bytes())["_index"]
+        parts: list[tuple[str, np.ndarray, np.ndarray | None]] = [
+            (f"{path}/{index}{suffix}", values, order) for suffix, values in _stored_parts(obs.index._values)
+        ]
+        for column, series in obs.items():
+            parts.extend((f"{path}/{column}{suffix}", values, order) for suffix, values in _stored_parts(series._values))
+        if priority is not None:
+            parts.append((f"{path}/{ORIGINAL_POSITION_COLUMN}", priority.original.astype(np.uint32), None))
+        chunks = _cell_chunks(rows)
+        for array_path, values, rows_order in parts:
+            document = json.loads(self._documents[f"{array_path}/.zarray"].to_bytes())
+            document = {**document, "shape": [rows], "chunks": list(chunks)}
+            self._put(f"{array_path}/.zarray", document)
+            size = chunks[0]
+            for index_of_chunk in range(-(-rows // size)):
+                taken = slice(index_of_chunk * size, (index_of_chunk + 1) * size)
+                block = values[taken] if rows_order is None else values[rows_order[taken]]
+                self._put_chunk(array_path, document, index_of_chunk, block)
+
+    def _put_chunk(self, path: str, document: Mapping[str, Any], index: int, block: np.ndarray) -> None:
+        """Chunk ``index`` (along the first axis) of an uncompressed array as
+        Zarr v2 stores it: a text array's (``vlen-utf8``) encoded, any other's
+        bytes; one at the array's edge stored whole, padded with zeros (``""``)."""
+        import numcodecs
+        from zarr.core.buffer import default_buffer_prototype
+
+        chunks = document["chunks"]
+        size = chunks[0]
+        text = any(item.get("id") == "vlen-utf8" for item in document.get("filters") or ())
+        dtype = np.dtype(object) if text else np.dtype(document["dtype"])
+        block = np.asarray(block, dtype=dtype)
+        if len(block) < size:
+            padded = np.empty((size, *block.shape[1:]), dtype=dtype)
+            padded[...] = "" if text else np.zeros((), dtype=dtype)
+            padded[: len(block)] = block
+            block = padded
+        raw = numcodecs.VLenUTF8().encode(np.ascontiguousarray(block, dtype=object)) if text else np.ascontiguousarray(block).tobytes()
+        name = document.get("dimension_separator", ".").join([str(index), *(["0"] * (len(chunks) - 1))])
+        self._documents[f"{path}/{name}"] = default_buffer_prototype().buffer.from_bytes(bytes(raw))
+
     def _group(self, path: str, attrs: Mapping[str, Any] | None = None) -> None:
         self.root.create_group(path).attrs.update(dict(attrs) if attrs is not None else _encoding("dict", "0.1.0"))
 
-    def _plan_object(self, adata: anndata.AnnData) -> None:
+    def _plan_object(self, adata: anndata.AnnData, given: np.ndarray | None) -> None:
         n_obs = int(adata.n_obs)
-        # In its original order (`of_anndata`): each row is its own original
-        # position, and a position column left names nothing.
+        # ``given``: each row's original position, for an object in a
+        # verified stored order (its position column is that order); None:
+        # each row its own, and a position column names nothing.
         obs = adata.obs
         if ORIGINAL_POSITION_COLUMN in obs.columns:
-            without_positions({ORIGINAL_POSITION_COLUMN: None}, "obs")
+            without_positions({ORIGINAL_POSITION_COLUMN: None}, "obs", verified=given is not None)
             obs = obs.drop(columns=[ORIGINAL_POSITION_COLUMN])
-        priority = CellPriority.of(n_obs, SERVED_PRIORITY_SEED)
+        obs = _served_obs(obs, "obs")
+        priority = CellPriority.of(n_obs, SERVED_PRIORITY_SEED, given)
         assert priority is not None
         levels = prefix_levels(n_obs)
         self.n_obs = n_obs
@@ -1264,8 +1448,8 @@ class PriorityStore:
             obs=obs,
             var=adata.var,
             uns=dict(adata.uns),
-            x=None if adata.X is None else _as_element(adata.X),
-            layers={key: _as_element(value) for key, value in adata.layers.items()},
+            x=None if adata.X is None else _as_element(adata.X, expression=True),
+            layers={key: _as_element(value, expression=True) for key, value in adata.layers.items()},
             obsm=dict(adata.obsm),
             obsp=dict(adata.obsp),
             varm=dict(adata.varm),
@@ -1273,13 +1457,14 @@ class PriorityStore:
             priority=priority,
             levels=levels,
             record=levels,
+            snapshot=True,
         )
         raw = adata.raw
         if raw is not None:
             self._group("raw", _encoding("raw", "0.1.0"))
             self._write("raw/var", raw.var)
             self._write("raw/varm", dict(raw.varm))
-            self._matrix("raw/X", _as_element(raw.X), priority, levels=None, expression=True)
+            self._matrix("raw/X", _as_element(raw.X, expression=True), priority, levels=None, expression=True, snapshot=True)
 
     def _plan_anndata(
         self,
@@ -1297,6 +1482,7 @@ class PriorityStore:
         priority: CellPriority | None,
         levels: np.ndarray | None,
         record: np.ndarray | None,
+        snapshot: bool = False,
     ) -> None:
         """One AnnData at ``prefix`` (``""``, or ``"mod/<name>/"``), its cells in ``priority``'s order.
 
@@ -1304,23 +1490,25 @@ class PriorityStore:
         are the prefix levels of its rows (a modality's: its rows below each
         global level); ``record``, when given, the levels ``uns['cellucid']['priority']``
         records (the dataset's own, at the root). ``priority`` None keeps the
-        rows as stored (a file in priority order already).
+        rows as stored (a file in priority order already). ``snapshot``: the
+        source is an object in memory (its matrices copied, every one laid out
+        from the start).
         """
         n_obs = len(obs)
         self._groups[prefix] = n_obs
         if priority is not None:
-            obs = obs.iloc[priority.order].copy()
-            obs[ORIGINAL_POSITION_COLUMN] = priority.original.astype(np.uint32)
+            if prefix == "":
+                self._name_cells(obs.index, priority)
             uns = _permute_quantiles(uns, priority.order, n_obs)
             if record is not None:
                 uns = self._with_priority(uns, priority, record)
-        self._write(f"{prefix}obs", obs)
+        self._write_obs(f"{prefix}obs", obs, priority)
         self._write(f"{prefix}var", var)
         self._write(f"{prefix}uns", uns)
-        counts = self._matrix(f"{prefix}X", x, priority, levels=levels, expression=True)
+        counts = self._matrix(f"{prefix}X", x, priority, levels=levels, expression=True, snapshot=snapshot, first=True)
         self._group(f"{prefix}layers")
         for key, value in layers.items():
-            self._matrix(f"{prefix}layers/{key}", value, priority, levels=None, expression=True)
+            self._matrix(f"{prefix}layers/{key}", value, priority, levels=None, expression=True, snapshot=snapshot)
         self._per_cell(f"{prefix}obsm", obsm, priority)
         self._graphs(f"{prefix}obsp", obsp, priority)
         # Prefix counts the source had are for its own order.
@@ -1331,7 +1519,7 @@ class PriorityStore:
         self._write(f"{prefix}varp", dict(varp))
 
     def _plan_file(self, root: Any) -> None:
-        if _encoding_of(root) != "anndata":
+        if encoding_of(root) != "anndata":
             raise ValueError(
                 "This AnnData store predates anndata's current encoding (anndata 0.8): "
                 "write it again with a current anndata to serve it."
@@ -1346,6 +1534,7 @@ class PriorityStore:
         if own is not None:
             # In a verified priority order already: kept as stored.
             self.seed = own
+            self._name_stored_cells(root, own)
         else:
             # Each row its own original position (a position column the file
             # holds is replaced: it names nothing).
@@ -1379,7 +1568,7 @@ class PriorityStore:
             levels=levels,
             record=record,
         )
-        if "raw" in root and _is_group(root["raw"]):
+        if "raw" in root and is_group(root["raw"]):
             raw = root["raw"]
             self._group(f"{prefix}raw", dict(raw.attrs))
             for key in raw:
@@ -1418,11 +1607,10 @@ class PriorityStore:
             return
         # Several feature types over the same cells: a MuData, every modality measuring every cell.
         names = list(presented.modalities)
-        obs = presented.obs.iloc[priority.order].copy()
-        obs[ORIGINAL_POSITION_COLUMN] = priority.original.astype(np.uint32)
+        self._name_cells(presented.obs.index, priority)
         self._mudata_root(names)
         self._groups[""] = n_obs
-        self._write("obs", obs)
+        self._write_obs("obs", presented.obs, priority)
         self._write("uns", self._with_priority({}, priority, levels))
         self._per_cell("obsm", presented.obsm, priority)
         self._group("obsp")
@@ -1471,83 +1659,209 @@ class PriorityStore:
 
         from ._anndata_files import _modality_names
 
-        if (_encoding_of(root) or "").lower() != "mudata" or "mod" not in root:
+        if (encoding_of(root) or "").lower() != "mudata" or "mod" not in root:
             raise ValueError("This MuData store has no MuData encoding or no mod group of modalities.")
         if int(np.asarray(root.attrs.get("axis", 0))) != 0:
             raise ValueError(
                 "This MuData shares features, not cells (axis != 0); Cellucid shows cells. Write it with shared cells (axis=0)."
             )
         obs = read_elem(root["obs"])
-        n_obs = len(obs)
-        if n_obs <= 0:
-            raise ValueError("MuData datasets must contain at least one observation")
         names = _modality_names(root["mod"])
         if not names:
             raise ValueError("The MuData store holds no modality.")
-        self.n_obs = n_obs
+        if len(obs) <= 0:
+            raise ValueError("MuData datasets must contain at least one observation")
         own = _verified_priority(root, warn=True)
+        for name in names:
+            if (encoding_of(root["mod"][name]) or "") != "anndata":
+                raise ValueError(
+                    f"Modality {name!r} predates anndata's current encoding (anndata 0.8): write the MuData again "
+                    "with a current mudata to serve it."
+                )
+        stored_maps = root.get("obsmap")
+        elements = {key: root.get(key, {}) for key in ("obsm", "obsp")}
+        self._plan_mudata(
+            obs=obs,
+            uns=read_elem(root["uns"]) if "uns" in root else {},
+            var=read_elem(root["var"]),
+            obsm={key: elements["obsm"][key] for key in elements["obsm"]},
+            obsp={key: elements["obsp"][key] for key in elements["obsp"]},
+            varm=read_elem(root["varm"]) if "varm" in root else {},
+            varp=read_elem(root["varp"]) if "varp" in root else {},
+            varmap=read_elem(root["varmap"]) if "varmap" in root else {},
+            obsmaps={
+                name: np.asarray(stored_maps[name][...]) for name in names if stored_maps is not None and name in stored_maps
+            },
+            modalities={name: _rows_of(root["mod"][name]) for name in names},
+            attrs={key: root.attrs[key] for key in root.attrs if key not in ("encoding-type", "encoding-version", "axis")},
+            own=own,
+            given=None,
+            plan_modality=lambda name, prefix, priority, levels: self._plan_file_group(
+                root["mod"][name], prefix, priority, levels, record=None
+            ),
+            modality_attrs=lambda name: {key: _attribute_value(root["mod"][name].attrs[key]) for key in root["mod"][name].attrs},
+        )
+
+    def _plan_mudata_object(self, mdata: Any, given: np.ndarray | None) -> None:
+        """A MuData held in memory, planned as its file would be (served from a
+        snapshot, as an AnnData object is: :meth:`_plan_object`)."""
+        if int(getattr(mdata, "axis", 0)) != 0:
+            raise ValueError(
+                "This MuData shares features, not cells (axis != 0); Cellucid shows cells. Make one with shared cells (axis=0)."
+            )
+        names = [str(name) for name in mdata.mod]
+        if not names:
+            raise ValueError("The MuData holds no modality.")
+        if int(mdata.n_obs) <= 0:
+            raise ValueError("MuData datasets must contain at least one observation")
+        obs = mdata.obs
+        if ORIGINAL_POSITION_COLUMN in obs.columns:
+            without_positions({ORIGINAL_POSITION_COLUMN: None}, "obs", verified=given is not None)
+            obs = obs.drop(columns=[ORIGINAL_POSITION_COLUMN])
+        obs = _served_obs(obs, "obs")
+        # A modality of a MuData in a verified stored order holds its rows in
+        # that order too, each one's original row in its own position column.
+        given_rows: dict[str, np.ndarray | None] = {}
+        for name in names:
+            modality = mdata.mod[name]
+            column = ORIGINAL_POSITION_COLUMN in modality.obs.columns
+            if given is not None and column:
+                from .prepare_data._priority import _require_positions
+
+                given_rows[name] = _require_positions(modality.obs[ORIGINAL_POSITION_COLUMN].to_numpy(), int(modality.n_obs))
+            else:
+                if column:
+                    without_positions({ORIGINAL_POSITION_COLUMN: None}, f"mdata.mod[{name!r}].obs")
+                given_rows[name] = None
+
+        def plan_modality(name: str, prefix: str, priority: CellPriority | None, levels: np.ndarray | None) -> None:
+            modality = mdata.mod[name]
+            self._plan_anndata(
+                prefix,
+                obs=_served_obs(modality.obs.drop(columns=[ORIGINAL_POSITION_COLUMN], errors="ignore"), f"mdata.mod[{name!r}].obs"),
+                var=modality.var,
+                uns=dict(modality.uns),
+                x=None if modality.X is None else _as_element(modality.X, expression=True),
+                layers={key: _as_element(value, expression=True) for key, value in modality.layers.items()},
+                obsm=dict(modality.obsm),
+                obsp=dict(modality.obsp),
+                varm=dict(modality.varm),
+                varp=dict(modality.varp),
+                priority=priority,
+                levels=levels,
+                record=None,
+                snapshot=True,
+            )
+            raw = modality.raw
+            if raw is not None:
+                self._group(f"{prefix}raw", _encoding("raw", "0.1.0"))
+                self._write(f"{prefix}raw/var", raw.var)
+                self._write(f"{prefix}raw/varm", dict(raw.varm))
+                self._matrix(f"{prefix}raw/X", _as_element(raw.X, expression=True), priority, levels=None, expression=True, snapshot=True)
+
+        self._plan_mudata(
+            obs=obs,
+            uns=dict(mdata.uns),
+            var=mdata.var,
+            obsm=dict(mdata.obsm),
+            obsp=dict(mdata.obsp),
+            varm=dict(mdata.varm),
+            varp=dict(mdata.varp),
+            varmap={name: np.asarray(mdata.varmap[name]) for name in names},
+            obsmaps={name: np.asarray(mdata.obsmap[name]) for name in names},
+            modalities={name: int(mdata.mod[name].n_obs) for name in names},
+            attrs={},
+            own=None,
+            given=given,
+            given_rows=given_rows,
+            plan_modality=plan_modality,
+            modality_attrs=lambda name: _encoding("anndata", "0.1.0"),
+            snapshot=True,
+        )
+
+    def _plan_mudata(
+        self,
+        *,
+        obs: pd.DataFrame,
+        uns: Mapping[str, Any],
+        var: Any,
+        obsm: Mapping[str, Any],
+        obsp: Mapping[str, Any],
+        varm: Any,
+        varp: Any,
+        varmap: Any,
+        obsmaps: Mapping[str, np.ndarray],
+        modalities: Mapping[str, int],
+        attrs: Mapping[str, Any],
+        own: int | None,
+        given: np.ndarray | None,
+        plan_modality: Callable[[str, str, CellPriority | None, np.ndarray | None], None],
+        modality_attrs: Callable[[str], Mapping[str, Any]],
+        given_rows: Mapping[str, np.ndarray | None] | None = None,
+        snapshot: bool = False,
+    ) -> None:
+        """One MuData, a file's or an object's: the shared cells in priority
+        order (or ``own``: a file's verified order, kept), each modality's rows
+        in the order of its cells (``prepare()``'s MuData layout), so a prefix
+        of the cells is a prefix of every modality. ``modalities`` names each
+        modality's rows; ``given``/``given_rows``, for an object in a verified
+        stored order, each cell's and each modality row's original position."""
+        n_obs = len(obs)
+        names = list(modalities)
+        self.n_obs = n_obs
         priority: CellPriority | None = None
         levels: np.ndarray | None = None
         if own is not None:
             # Served through the store because the browser cannot decode a codec: kept in its own order.
             self.seed = own
+            self.obs_names = _in_original_order(obs.index, own)
         else:
-            # Each row its own original position (a position column replaced).
-            priority = CellPriority.of(n_obs, SERVED_PRIORITY_SEED)
+            # Each row its own original position (a position column replaced),
+            # or the one an object in a verified stored order records.
+            priority = CellPriority.of(n_obs, SERVED_PRIORITY_SEED, given)
             assert priority is not None
             levels = prefix_levels(n_obs)
         self._mudata_root(names)
-        root_attrs = {key: root.attrs[key] for key in root.attrs if key not in ("encoding-type", "encoding-version", "axis")}
-        if root_attrs:
-            self.root.attrs.update({key: _attribute_value(value) for key, value in root_attrs.items()})
-        uns = read_elem(root["uns"]) if "uns" in root else {}
+        if attrs:
+            self.root.attrs.update({key: _attribute_value(value) for key, value in attrs.items()})
         # A modality's cell map; one with none measured every cell, in order
         # (as the browser reads it: ``views/modalities.js``).
-        stored_maps = root.get("obsmap")
-        obsmaps: dict[str, np.ndarray] = {}
+        maps: dict[str, np.ndarray] = {}
         for name in names:
-            if stored_maps is not None and name in stored_maps:
-                obsmaps[name] = np.asarray(stored_maps[name][...])
+            if name in obsmaps:
+                maps[name] = np.asarray(obsmaps[name])
                 continue
-            rows = _rows_of(root["mod"][name])
+            rows = modalities[name]
             if rows != n_obs:
                 raise ValueError(
                     f"Modality {name!r} has {rows:,} {plural(rows, 'cell')} and the dataset {n_obs:,}, and no cell map "
                     "(obsmap) says which they are."
                 )
-            obsmaps[name] = np.arange(1, n_obs + 1, dtype=np.uint32)
+            maps[name] = np.arange(1, n_obs + 1, dtype=np.uint32)
         if priority is not None:
-            obs = obs.iloc[priority.order].copy()
-            obs[ORIGINAL_POSITION_COLUMN] = priority.original.astype(np.uint32)
+            self._name_cells(obs.index, priority)
             uns = self._with_priority(_permute_quantiles(uns, priority.order, n_obs), priority, levels)  # type: ignore[arg-type]
         self._groups[""] = n_obs
-        self._write("obs", obs)
+        self._write_obs("obs", obs, priority)
         self._write("uns", uns)
-        self._write("var", read_elem(root["var"]))
-        obsm = root.get("obsm", {})
-        self._per_cell("obsm", {key: obsm[key] for key in obsm}, priority)
-        obsp = root.get("obsp", {})
-        self._graphs("obsp", {key: obsp[key] for key in obsp}, priority)
-        self._write("varm", read_elem(root["varm"]) if "varm" in root else {})
-        self._write("varp", read_elem(root["varp"]) if "varp" in root else {})
-        self._write("varmap", read_elem(root["varmap"]) if "varmap" in root else {})
+        self._write("var", var)
+        self._per_cell("obsm", obsm, priority)
+        self._graphs("obsp", obsp, priority)
+        self._write("varm", varm)
+        self._write("varp", varp)
+        self._write("varmap", varmap)
         served_maps: dict[str, np.ndarray] = {}
         for name in names:
-            group = root["mod"][name]
-            if (_encoding_of(group) or "") != "anndata":
-                raise ValueError(
-                    f"Modality {name!r} predates anndata's current encoding (anndata 0.8): write the MuData again "
-                    "with a current mudata to serve it."
-                )
-            self._group(f"mod/{name}", {key: _attribute_value(group.attrs[key]) for key in group.attrs})
+            self._group(f"mod/{name}", modality_attrs(name))
             if priority is None:
-                served_maps[name] = obsmaps[name]
-                self._plan_file_group(group, f"mod/{name}/", None, None, record=None)
+                served_maps[name] = maps[name]
+                plan_modality(name, f"mod/{name}/", None, None)
                 continue
-            modality, served_map, below = _modality_order(priority, obsmaps[name], _rows_of(group))
+            given_of_rows = None if given_rows is None else given_rows.get(name)
+            modality, served_map, below = _modality_order(priority, maps[name], modalities[name], given_of_rows)
             served_maps[name] = served_map
             assert levels is not None
-            self._plan_file_group(group, f"mod/{name}/", modality, below[levels], record=None)
+            plan_modality(name, f"mod/{name}/", modality, below[levels])
         self._write("obsmap", served_maps)
 
     def _with_priority(self, uns: Mapping[str, Any], priority: CellPriority, levels: np.ndarray) -> dict[str, Any]:
@@ -1578,125 +1892,207 @@ class PriorityStore:
         self._plan(f"{path}/indices", _Entries(served, "indices", chunk))
         self._plan(f"{path}/data", _Entries(served, "data", chunk))
 
+    def _name_cells(self, index: Any, priority: CellPriority) -> None:
+        """The cells' names in their original order (:attr:`obs_names`): the
+        source's ``index`` (its own rows), each at the original position
+        ``priority`` gives its row."""
+        names = np.asarray(pd.Index(index), dtype=object)
+        named = np.empty(len(names), dtype=object)
+        named[priority.original] = names[priority.order]
+        self.obs_names = pd.Index(named, dtype=object)
+
+    def _name_stored_cells(self, root: Any, seed: int) -> None:
+        """:attr:`obs_names` of a file served in its own verified priority order (``seed``)."""
+        from anndata.io import read_elem
+
+        obs = root["obs"]
+        key = obs.attrs.get("_index", "_index")
+        index = read_elem(obs[key.decode() if isinstance(key, bytes) else str(key)])
+        self.obs_names = _in_original_order(pd.Index(index), seed)
+
+    def _laid_out_job(self, matrix: _LaidOut | _DenseGeneMajor | _DenseSnapshot, *, first: bool) -> None:
+        """Hand a matrix's layout to the worker: now (``first``: an object's,
+        or ``X``), or when one of its keys is first asked for."""
+        job = matrix.job
+        assert job is not None
+        self._jobs.append(job)
+        if first:
+            self._worker.queue(job)
+
     def _matrix(
-        self, path: str, value: Any, priority: CellPriority | None, *, levels: np.ndarray | None, expression: bool
+        self,
+        path: str,
+        value: Any,
+        priority: CellPriority | None,
+        *,
+        levels: np.ndarray | None,
+        expression: bool,
+        snapshot: bool = False,
+        first: bool = False,
     ) -> Callable[[], np.ndarray] | None:
         """Plan one per-cell matrix at ``path``.
 
-        ``expression``: a cells x genes matrix (``X``, a layer, ``raw/X``),
-        presented gene-major when it is a cell-major matrix in memory.
-        Returns how its prefix counts are made when ``levels`` are given and
-        it is served gene-major and sparse.
+        ``expression``: a cells x genes matrix (``X``, a layer, ``raw/X``):
+        laid out gene-major by the worker when it is cell-major or held in
+        memory (``snapshot``: an object's, laid out from the start, its
+        arrays read-only meanwhile; ``first``: ``X``, laid out from the
+        start; any other when first asked for). Returns how its prefix counts
+        are made when ``levels`` are given and it is served gene-major and sparse.
         """
         if value is None:
             return None
-        order = None if priority is None else priority.order
+        order = None if priority is None or priority.identity else priority.order
         from ._served_formats import CellRangerX
 
         if isinstance(value, CellRangerX):
-            # Cell-major, as stored: rows in priority order, a feature type's columns as a window.
+            # Cell-major, as stored: a feature type's columns laid out gene-major.
             matrix = value.matrix
             group = matrix.group
             whole = value.start == 0 and value.count == matrix.n_features
-            served = _ServedSparse(
-                _Sparse(
-                    form="csr",
-                    shape=(matrix.n_cells, matrix.n_features),
-                    indptr=lambda: np.asarray(group["indptr"][...]),
-                    indices=_Vector(group["indices"], self._folder),
-                    data=_Vector(group["data"], self._folder),
-                ),
-                major=order,
-                minor=None,
-                cache=self._lines,
-                window=None if whole else (value.start, value.start + value.count),
+            source = SparseSource(
+                form="csr",
+                shape=(matrix.n_cells, matrix.n_features),
+                indptr=lambda: np.asarray(group["indptr"][...]),
+                indices=Vector(group["indices"], self._folder),
+                data=Vector(group["data"], self._folder),
             )
-            self._plan_sparse(path, served, SLICED_CHUNK_ELEMENTS if expression else WHOLE_CHUNK_ELEMENTS)
-            return None
-        if sparse.issparse(value) and expression and priority is not None:
-            # In memory: a snapshot, stored as prepare() stores it.
-            return self._gene_major(path, value, priority, levels)
+            genes = None if whole else np.arange(value.start, value.start + value.count, dtype=np.int64)
+            return self._laid_out(path, source, priority, levels, genes=genes, snapshot=False, first=first)
+        if expression and (sparse.issparse(value) or is_sparse_group(value) or is_lazy_sparse(value)):
+            source = sparse_source(value, self._folder)
+            if source.form == "csr" or sparse.issparse(value):
+                return self._laid_out(path, source, priority, levels, genes=None, snapshot=snapshot, first=first or snapshot)
         if sparse.issparse(value) and priority is not None:
             # A graph or an obsm matrix in memory: a snapshot, canonical.
             value = sparse.csr_matrix(value, copy=True) if value.format == "csr" else sparse.csc_matrix(value, copy=True)
             value.sum_duplicates()
             value.eliminate_zeros()
-        if sparse.issparse(value) or _is_sparse_group(value):
-            source = _sparse_of_memory(value) if sparse.issparse(value) else _sparse_of_group(value, self._folder)
-            renumber = priority is not None and source.form == "csc"
+        if sparse.issparse(value) or is_sparse_group(value):
+            source = sparse_source(value, self._folder)
+            renumber = priority is not None and not priority.identity and source.form == "csc"
             served = _ServedSparse(
                 source,
                 major=order if source.form == "csr" else None,
                 minor=priority.new_row if renumber and priority is not None else None,
                 cache=self._lines,
             )
-            self._plan_sparse(path, served, SLICED_CHUNK_ELEMENTS if expression else WHOLE_CHUNK_ELEMENTS)
+            self._plan_sparse(path, served, SERVED_ENTRY_CHUNK_ELEMENTS if expression else WHOLE_CHUNK_ELEMENTS)
             if levels is not None and source.form == "csc":
-                return lambda: served.prefix_counts(levels)
+                # Counted by the worker, the first time a subsample asks for them.
+                counted: dict[str, np.ndarray] = {}
+
+                def count() -> None:
+                    counted["counts"] = served.prefix_counts(levels)
+
+                nnz = served.nnz
+                job = _Job(f"{path} (its prefix counts)", nnz, count, lambda: (0.0, None))
+                self._jobs.append(job)
+
+                def make() -> np.ndarray:
+                    if not job.finished.is_set():
+                        raise self._worker.not_ready(job)
+                    job.require()
+                    return counted["counts"]
+
+                return make
             return None
         if not _is_dense_array(value):
             raise ValueError(f"{path} is not a matrix Cellucid serves ({type(value).__name__}).")
-        if isinstance(value, np.ndarray) and priority is not None:
-            # In memory: a snapshot in priority order (rows as served).
-            value = self._dense_snapshot(path, value, priority, expression=expression)
-            order = None
         shape = tuple(int(extent) for extent in value.shape)
-        chunks: tuple[int, ...]
-        if len(shape) == 2 and expression and _reads_whole_rows(value, _strip_chunks((shape[0], shape[1]))):
-            laid = _DenseGeneMajor(value, priority, _strip_chunks((shape[0], shape[1])), self._folder.path, path.replace("/", "-"))
-            self._layouts.append(laid)
+        if len(shape) == 2 and expression and (isinstance(value, np.ndarray) or _reads_whole_rows(value, _strip_chunks((shape[0], shape[1])))):
+            # An object's dense matrix (its snapshot, in the type prepare()
+            # stores it), or a file's stored in whole rows: laid out gene-major.
+            dtype = np.dtype(value.dtype)
+            held: list[np.ndarray] = []
+            if isinstance(value, np.ndarray):
+                from .prepare_data._inputs import expression_dtype, require_expression_values
+
+                require_expression_values(value, path)
+                dtype = np.dtype(expression_dtype(value))
+                held = self._protection.hold([value])
+            laid = _DenseGeneMajor(
+                value, priority, dtype, _strip_chunks((shape[0], shape[1])), self._folder, path.replace("/", "-"), self._stop, self._worker
+            )
+            laid.job = _Job(path, shape[0] * shape[1], laid.lay_out, laid.progress, held=held, protection=self._protection)
+            self._laid_out_job(laid, first=first or isinstance(value, np.ndarray))
             self._plan(path, laid)
             return None
+        chunks: tuple[int, ...]
         if len(shape) == 2:
             chunks = _strip_chunks((shape[0], shape[1])) if expression else _row_chunks((shape[0], shape[1]))
         else:
             # One value per cell.
             chunks = _cell_chunks(shape[0])
+        if isinstance(value, np.ndarray) and priority is not None:
+            # In memory: a snapshot in priority order (rows as served), copied
+            # by the worker, the array read-only meanwhile.
+            copied = _DenseSnapshot(value, order, chunks, self._folder, path.replace("/", "-"), self._stop)
+            values = int(np.prod(shape, dtype=np.int64))
+            copied.job = _Job(f"{path} (its snapshot)", values, copied.copy, copied.progress, held=self._protection.hold([value]), protection=self._protection)
+            self._laid_out_job(copied, first=True)
+            self._plan(path, copied)
+            return None
         self._plan(path, _DenseRows(value, order, chunks, self._folder))
         return None
 
-    def _gene_major(
-        self, path: str, matrix: Any, priority: CellPriority, levels: np.ndarray | None
+    def _laid_out(
+        self,
+        path: str,
+        source: SparseSource,
+        priority: CellPriority | None,
+        levels: np.ndarray | None,
+        *,
+        genes: np.ndarray | None,
+        snapshot: bool,
+        first: bool,
     ) -> Callable[[], np.ndarray] | None:
-        """An expression matrix in memory, laid out now (its snapshot): ``_GeneMajor``."""
-        laid = _GeneMajor(matrix, priority, self._folder.path, path.replace("/", "-"), self._stop, levels, path)
-        self._layouts.append(laid)
-        n_obs, n_vars = laid.shape
+        """An expression matrix laid out gene-major by the worker
+        (:class:`~cellucid.prepare_data._gene_major.GeneMajorLayout`) into
+        memory-mapped files. An object's (``snapshot``) is stored as
+        ``prepare()`` stores it: counted now -- its size and type are in the
+        store's metadata, and a value ``prepare()`` refuses is refused at once
+        -- and placed by the worker, its arrays read-only meanwhile. A file's
+        keeps its values as stored, its size and type known before any value
+        is read; counted and placed by the worker."""
+        name = path.replace("/", "-")
+        folder = self._folder
+
+        def allocate(part: str, dtype: np.dtype, length: int) -> np.ndarray:
+            if length == 0:
+                return np.zeros(0, dtype=dtype)
+            return np.lib.format.open_memmap(folder.path() / f"{name}-{part}.npy", mode="w+", dtype=dtype, shape=(length,))
+
+        order, new_row = (None, None) if priority is None else priority.rows_moved
+        layout = GeneMajorLayout(
+            source,
+            order=order,
+            new_row=new_row,
+            label=path,
+            genes=genes,
+            levels=levels,
+            allocate=allocate,
+            copy=True,
+            as_stored=not snapshot,
+            stop=self._stop,
+        )
+        held = self._protection.hold([source.matrix.indptr, source.matrix.indices, source.matrix.data]) if snapshot and source.matrix is not None else []
+        try:
+            if layout.nnz is None:
+                layout.count()
+        except BaseException:
+            self._protection.release(held)
+            raise
+        nnz = layout.nnz
+        assert nnz is not None
+        laid = _LaidOut(layout, path, self._worker, held, self._protection)
+        self._folder.keep(laid)
+        self._laid_out_job(laid, first=first)
+        n_obs, n_vars = layout.shape
         self._sparse_group(path, "csc", (n_obs, n_vars))
-        self._plan(
-            f"{path}/indptr",
-            _Values(
-                (n_vars + 1,),
-                np.int64 if laid.nnz >= 2**31 else np.int32,
-                _vector_chunks(n_vars + 1, WHOLE_CHUNK_ELEMENTS),
-                lambda: laid.laid_out()[0],
-            ),
-        )
-        self._plan(f"{path}/indices", _GeneMajorEntries(laid, "indices"))
-        self._plan(f"{path}/data", _GeneMajorEntries(laid, "data"))
-        return None if levels is None else laid.counts
-
-    def _dense_snapshot(self, path: str, value: np.ndarray, priority: CellPriority | None, *, expression: bool) -> np.ndarray:
-        """A dense array held in memory, copied now (its snapshot) in priority
-        order into a memory-mapped file: an expression matrix in the type
-        ``prepare()`` stores it (a non-finite value refused), any other as it is."""
-        from .prepare_data._inputs import expression_dtype, require_expression_values
-
-        array = np.asarray(value)
-        dtype = array.dtype
-        if expression:
-            require_expression_values(array, path)
-            dtype = np.dtype(expression_dtype(array))
-        snapshot = np.lib.format.open_memmap(
-            self._folder.path() / f"{path.replace('/', '-')}-dense.npy", mode="w+", dtype=dtype, shape=array.shape
-        )
-        order = None if priority is None else priority.order
-        step = max(1, _PASS_ENTRIES // max(1, int(np.prod(array.shape[1:], dtype=np.int64))))
-        for start in range(0, array.shape[0], step):
-            rows = slice(start, start + step) if order is None else order[start : start + step]
-            snapshot[start : start + step] = array[rows]
-        snapshot.flush()
-        return snapshot
+        self._plan(f"{path}/indptr", _LaidPointers(laid, nnz))
+        self._plan(f"{path}/indices", _LaidEntries(laid, "indices", nnz))
+        self._plan(f"{path}/data", _LaidEntries(laid, "data", nnz))
+        return None if levels is None else laid.prefix_counts
 
     def _plan_counts(self, path: str, make: Callable[[], np.ndarray], n_vars: int, levels: np.ndarray) -> None:
         """``varm['cellucid_prefix_counts']``: one column per level, each read whole (made on first read)."""
@@ -1709,14 +2105,14 @@ class PriorityStore:
         from anndata.io import read_elem
 
         self._group(key)
-        order = None if priority is None else priority.order
+        order = None if priority is None or priority.identity else priority.order
         for name, value in elements.items():
             value = _as_element(value)
             path = f"{key}/{name}"
-            if sparse.issparse(value) or _is_sparse_group(value) or _is_dense_array(value) and len(value.shape) == 2:
+            if sparse.issparse(value) or is_sparse_group(value) or _is_dense_array(value) and len(value.shape) == 2:
                 self._matrix(path, value, priority, levels=None, expression=False)
                 continue
-            if _is_group(value) or hasattr(value, "attrs") and hasattr(value, "dtype") and not isinstance(value, np.ndarray):
+            if is_group(value) or hasattr(value, "attrs") and hasattr(value, "dtype") and not isinstance(value, np.ndarray):
                 value = read_elem(value)
             self._write(path, value if order is None else _take_rows(value, order))
 
@@ -1728,18 +2124,18 @@ class PriorityStore:
         for name, value in elements.items():
             value = _as_element(value)
             path = f"{key}/{name}"
-            if sparse.issparse(value) or _is_sparse_group(value):
-                source = _sparse_of_memory(value) if sparse.issparse(value) else _sparse_of_group(value, self._folder)
+            if sparse.issparse(value) or is_sparse_group(value):
+                moved = priority is not None and not priority.identity
                 served = _ServedSparse(
-                    source,
-                    major=None if priority is None else priority.order,
-                    minor=None if priority is None else priority.new_row,
+                    sparse_source(value, self._folder),
+                    major=priority.order if moved and priority is not None else None,
+                    minor=priority.new_row if moved and priority is not None else None,
                     cache=self._lines,
                 )
                 self._plan_sparse(path, served, WHOLE_CHUNK_ELEMENTS)
                 continue
             dense = np.asarray(value if isinstance(value, np.ndarray) else read_elem(value))
-            self._write(path, dense if priority is None else dense[np.ix_(priority.order, priority.order)])
+            self._write(path, dense if priority is None or priority.identity else dense[np.ix_(priority.order, priority.order)])
 
     def _settle(self) -> None:
         """Every array anndata wrote uncompressed (its scalars carry zarr's default
@@ -1804,32 +2200,16 @@ class PriorityStore:
 
     def _rechunk(self, path: str, document: dict[str, Any], chunks: tuple[int, ...]) -> None:
         """Lay one uncompressed array anndata wrote out in ``chunks`` (along its first axis)."""
-        import numcodecs
         import zarr
-        from zarr.core.buffer import default_buffer_prototype
 
         values = np.asarray(zarr.open_array(self._memory, path=path, mode="r", zarr_format=2)[...])
         for name in [name for name in self._documents if name.startswith(f"{path}/") and "/" not in name[len(path) + 1 :] and not name[len(path) + 1 :].startswith(".")]:
             del self._documents[name]
         document = {**document, "chunks": list(chunks)}
         self._put(f"{path}/.zarray", document)
-        # A text array (dtype "|O", vlen-utf8), whatever numpy string type zarr reads it as.
-        text = any(item.get("id") == "vlen-utf8" for item in document.get("filters") or ())
-        if text:
-            values = values.astype(object)
-        separator = document.get("dimension_separator", ".")
         size = chunks[0]
         for index in range(-(-values.shape[0] // size)):
-            block = values[index * size : (index + 1) * size]
-            if len(block) < size:
-                # A chunk at the array's edge is stored whole.
-                padded = np.empty((size, *values.shape[1:]), dtype=values.dtype)
-                padded[...] = "" if text else np.zeros((), dtype=values.dtype)
-                padded[: len(block)] = block
-                block = padded
-            raw = numcodecs.VLenUTF8().encode(np.ascontiguousarray(block, dtype=object)) if text else np.ascontiguousarray(block).tobytes()
-            name = separator.join([str(index), *(["0"] * (values.ndim - 1))])
-            self._documents[f"{path}/{name}"] = default_buffer_prototype().buffer.from_bytes(bytes(raw))
+            self._put_chunk(path, document, index, values[index * size : (index + 1) * size])
 
     # -- serving -------------------------------------------------------------
 
@@ -1842,15 +2222,20 @@ class PriorityStore:
             self._consolidated = json.dumps({"zarr_consolidated_format": 1, "metadata": metadata}).encode()
         return self._consolidated
 
-    def get(self, key: str) -> bytes | None:
-        """One key of the store, or None when it has none (refused once it is closed)."""
+    def body(self, key: str) -> StoreBody | None:
+        """One key of the store as its length and its bytes made on request,
+        or None when it has none (refused once it is closed): a server answers
+        a ``Range`` of a chunk with only those bytes made. A chunk of a matrix
+        not laid out yet is made at once from the source; only a chunk of a
+        file's matrix the worker has not counted yet raises :class:`NotReady`,
+        which says how long it may take."""
         if self._stop.is_set():
             raise RuntimeError("The served store is closed.")
         if key == ".zmetadata":
-            return self._consolidated_metadata()
+            return StoreBody.of(self._consolidated_metadata())
         found = self._documents.get(key)
         if found is not None:
-            return bytes(found.to_bytes())
+            return StoreBody.of(bytes(found.to_bytes()))
         path, _, name = key.rpartition("/")
         array = self._planned.get(path)
         if array is None or not name:
@@ -1859,7 +2244,14 @@ class PriorityStore:
             index = tuple(int(part) for part in name.split("."))
         except ValueError:
             return None
-        return array.chunk_bytes(index)
+        if not array.in_grid(index):
+            return None
+        return StoreBody(array.chunk_length(), lambda start, end: array.chunk_bytes(index, start, end))
+
+    def get(self, key: str) -> bytes | None:
+        """One key of the store whole (:meth:`body`), or None when it has none."""
+        found = self.body(key)
+        return None if found is None else found.read(0, found.size)
 
     def contents(self) -> AnnDataContents:
         """What the store holds, from its metadata (as for a store on disk)."""
@@ -1879,20 +2271,34 @@ class PriorityStore:
             for index in _product(grid):
                 yield f"{path}/{'.'.join(str(i) for i in index)}"
 
+    def laid_out(self, timeout: float | None = None) -> None:
+        """Lay out every matrix the worker has (those laid out when first asked
+        for, too) and wait until each has ended; raise the first error."""
+        self._worker.wait(list(self._jobs), timeout)
+
     @staticmethod
     def _release(
-        closers: list[Callable[[], None]], stop: threading.Event, scratch: _Scratch, planned: dict[str, _Planned], lines: _Cache
+        closers: list[Callable[[], None]],
+        stop: threading.Event,
+        worker: _Worker,
+        protection: _ReadOnly,
+        scratch: Scratch,
+        planned: dict[str, _Planned],
+        lines: _Cache,
     ) -> None:
-        """Close the store: every array that maps a file let go -- the
-        layouts, and the planned arrays and cached lines that hold the rest
-        (a snapshot, a source array) -- before its files are closed and its
-        scratch folder removed. Run on :meth:`close`, or when the store is
-        dropped (its attributes are still alive then, so they are emptied
-        here, not left to be collected after)."""
+        """Close the store: the worker stopped (a layout running ends at its
+        next block), the object's arrays writeable again, every array that
+        maps a file let go -- the layouts, and the planned arrays and cached
+        lines that hold the rest (a snapshot, a source array) -- its scratch
+        folder removed, then its files closed. Run on :meth:`close`, or when
+        the store is dropped (its attributes are still alive then, so they are
+        emptied here, not left to be collected after)."""
         stop.set()
-        scratch.release()
+        worker.close()
+        protection.release_all()
         planned.clear()
         lines.clear()
+        scratch.close()
         while closers:
             closer = closers.pop()
             with contextlib.suppress(Exception):
@@ -1922,12 +2328,14 @@ def _attribute_value(value: Any) -> Any:
     return value
 
 
-def _modality_order(priority: CellPriority, obsmap: np.ndarray, n_rows: int) -> tuple[CellPriority, np.ndarray, np.ndarray]:
+def _modality_order(
+    priority: CellPriority, obsmap: np.ndarray, n_rows: int, given: np.ndarray | None = None
+) -> tuple[CellPriority, np.ndarray, np.ndarray]:
     """A MuData modality's rows in the order of its cells (``prepare()``'s
     ``CellPriority.modality``): its priority, its served cell map, and its
     rows below each served cell (``below[k]``: the modality rows of the first
-    ``k`` cells). Each of its rows is its own original position (a dataset
-    in a verified stored order is served as stored)."""
+    ``k`` cells). Each of its rows is its own original position, or the one
+    ``given`` names (a modality of an object in a verified stored order)."""
     placed = np.asarray(obsmap)[priority.order]
     measured = placed > 0
     mod_order = placed[measured].astype(np.int64) - 1
@@ -1938,8 +2346,23 @@ def _modality_order(priority: CellPriority, obsmap: np.ndarray, n_rows: int) -> 
     served = np.zeros(len(placed), dtype=np.uint32)
     served[measured] = np.arange(1, n_rows + 1, dtype=np.uint32)
     below = np.concatenate([[0], np.cumsum(measured)]).astype(np.int64)
-    modality = CellPriority(seed=priority.seed, order=mod_order, original=mod_order, new_row=new_row)
+    modality = CellPriority(
+        seed=priority.seed,
+        order=mod_order,
+        original=mod_order if given is None else np.asarray(given, dtype=np.int64)[mod_order],
+        new_row=new_row,
+        identity=bool(np.array_equal(mod_order, np.arange(n_rows))),
+    )
     return modality, served, below
+
+
+def _in_original_order(stored: pd.Index, seed: int) -> pd.Index:
+    """Names of rows in a verified priority order (``seed``), put in their original order."""
+    priority = CellPriority.of(len(stored), seed)
+    assert priority is not None
+    names = np.empty(len(stored), dtype=object)
+    names[priority.original] = np.asarray(stored, dtype=object)
+    return pd.Index(names, dtype=object)
 
 
 def _rows_of(root: Any) -> int:
@@ -1965,8 +2388,8 @@ def _verified_priority(root: Any, *, warn: bool) -> int | None:
     from anndata.io import read_elem
 
     uns = root.get("uns")
-    cellucid = uns.get("cellucid") if uns is not None and _is_group(uns) else None
-    group = cellucid.get("priority") if cellucid is not None and _is_group(cellucid) else None
+    cellucid = uns.get("cellucid") if uns is not None and is_group(uns) else None
+    group = cellucid.get("priority") if cellucid is not None and is_group(cellucid) else None
     record = read_elem(group) if group is not None else None
     obs = root["obs"]
     column = np.asarray(read_elem(obs[ORIGINAL_POSITION_COLUMN])) if ORIGINAL_POSITION_COLUMN in obs else None
@@ -1991,7 +2414,7 @@ def file_order(source: AnnDataStore) -> str:
     from ._anndata_files import _open_root
 
     with _open_root(source) as root:
-        encoding = (_encoding_of(root) or "").lower()
+        encoding = (encoding_of(root) or "").lower()
         if encoding not in ("anndata", "mudata"):
             return "older"
         return "priority" if _verified_priority(root, warn=False) is not None else "as-given"

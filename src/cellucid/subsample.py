@@ -16,6 +16,8 @@ operation in the specified order.
 from __future__ import annotations
 
 import math
+import numbers
+import warnings
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -75,6 +77,16 @@ def _ranks(positions: NDArray[Any], seed: int) -> NDArray[np.uint32]:
         return _fmix32(positions.astype(np.uint32) ^ _U32(_seed_key(seed)))
 
 
+def _rank_argsort(ranks: NDArray[np.uint32]) -> NDArray[np.intp]:
+    """The indices that sort ``ranks`` (which never tie: the one order any
+    sort gives), by two stable counting passes over their 16-bit halves --
+    linear time, where numpy's stable sort of 32-bit keys compares (10M
+    cells: 0.4 s against 6 s)."""
+    low = np.argsort((ranks & _U32(0xFFFF)).astype(np.uint16), kind="stable")
+    high = np.argsort((ranks[low] >> _U32(16)).astype(np.uint16), kind="stable")
+    return low[high]
+
+
 def _require_uint32(value: Any, label: str, minimum: int = 0) -> int:
     if isinstance(value, bool) or not isinstance(value, int | np.integer):
         raise TypeError(f"{label} must be an integer; got {value!r}")
@@ -87,17 +99,22 @@ def _require_uint32(value: Any, label: str, minimum: int = 0) -> int:
 def count_from_fraction(fraction: float, n_obs: int) -> int:
     """The subsample size a fraction of ``n_obs`` cells stands for, exactly.
 
-    The fraction, in ``(0, 1]``, is taken as the rational its shortest
-    round-trip decimal names (``repr``, as the web app's ``String(x)`` and
-    R's shortest ``%.Ng``), and the size is ``round-half-up(n_obs * fraction)``
+    The fraction, any real number in ``(0, 1]`` (a NumPy float too, widened
+    exactly), is taken as the rational its shortest round-trip decimal names
+    (``repr``, as the web app's ``String(x)`` and R's, found in C with a
+    correctly rounded conversion), and the size is ``round-half-up(n_obs * fraction)``
     in integer arithmetic, at least 1 and at most ``n_obs``.
     """
     from fractions import Fraction
 
     n_obs = _require_uint32(n_obs, "n_obs")
-    if isinstance(fraction, bool) or not isinstance(fraction, (int, float)) or not math.isfinite(fraction) or not 0 < fraction <= 1:
+    # Any real number (a NumPy float32 too, widened exactly), never a bool.
+    if isinstance(fraction, (bool, np.bool_)) or not isinstance(fraction, numbers.Real):
+        raise TypeError(f"fraction must be a real number; got {fraction!r}")
+    value = float(fraction)
+    if not math.isfinite(value) or not 0 < value <= 1:
         raise ValueError(f"fraction must be in (0, 1]; got {fraction!r}")
-    share = Fraction(repr(float(fraction)))
+    share = Fraction(repr(value))
     k = (2 * n_obs * share.numerator + share.denominator) // (2 * share.denominator)
     return min(n_obs, max(1, k))
 
@@ -119,7 +136,7 @@ def _blocks(n_obs: int, k: int, seed: int, block_size: int) -> NDArray[np.int64]
     count = -(-n_obs // block_size)
     take = min(count, -(-k // block_size) + 1)
     chosen = _lowest(np.arange(count, dtype=np.uint32), take, seed)
-    order = chosen[np.argsort(_ranks(chosen, seed), kind="stable")]
+    order = chosen[_rank_argsort(_ranks(chosen, seed))]
     pieces = []
     left = k
     for block in order.tolist():
@@ -237,11 +254,33 @@ def _spatial(coordinates: NDArray[Any], k: int, seed: int, grid_size: int) -> ND
 
 
 def _n_obs_of(data: Any) -> int:
+    """The cells of ``data``, whose rows are each its own original position.
+
+    An object in a Cellucid-ready file's verified stored order
+    (``uns['cellucid']['priority']``, :func:`~cellucid.prepare_data._priority.stored_order`)
+    is refused, as ``pull``, ``subset`` and a session refuse it: the cells are
+    chosen by original position, and a row of such an object is not one, so
+    ``adata[kept]`` would take other cells than the viewer's. A record that
+    no longer describes the cells leaves each row its own original position,
+    as the web app reads such a file, with a warning.
+    """
     if isinstance(data, int | np.integer) and not isinstance(data, bool):
         return _require_uint32(data, "n_obs")
     n_obs = getattr(data, "n_obs", None)
     if n_obs is None:
         raise TypeError("data must be an AnnData, a MuData or a cell count")
+    if hasattr(data, "uns") and hasattr(data, "obs"):
+        from .prepare_data._priority import stored_order_of
+
+        stored = stored_order_of(data)
+        if stored.notice is not None:
+            warnings.warn(stored.notice, UserWarning, stacklevel=3)
+        if stored.positions is not None:
+            raise ValueError(
+                "data holds its cells in a Cellucid-ready file's stored order (uns['cellucid']['priority']), "
+                "and a subsample names cells by their original position, so data[kept] would take other "
+                "cells than the viewer opens. Put them back first: data = cellucid.restore_original_order(data)."
+            )
     return _require_uint32(n_obs, "n_obs")
 
 
@@ -273,6 +312,12 @@ def _coordinates_of(data: Any, basis: Any, columns: Sequence[int]) -> NDArray[An
         values = np.asarray(basis)
     if values.ndim == 1:
         values = values[:, None]
+    outside = [c for c in columns if c >= values.shape[1]]
+    if outside:
+        raise ValueError(
+            f"columns {list(columns)} name column {outside[0]}, and the embedding has {values.shape[1]} "
+            f"{plural(values.shape[1], 'column')}"
+        )
     return values[:, list(columns)]
 
 
@@ -301,7 +346,11 @@ def subsample_cells(
     ----------
     data
         An AnnData, a MuData, or the cell count ``n_obs`` itself (enough for
-        ``uniform`` and ``blocks``).
+        ``uniform`` and ``blocks``). Its rows are the cells' original
+        positions: an object read from a Cellucid-ready file in priority order
+        (``anndata.read_zarr`` of ``prepare()``'s output) is refused until
+        :func:`~cellucid.restore_original_order` puts it back, as ``pull``,
+        ``subset`` and a session refuse it.
     n_cells
         How many cells to keep; or give ``fraction``. A count of every cell or
         more keeps every cell.
@@ -350,6 +399,12 @@ def subsample_cells(
     --------
     >>> kept = cellucid.subsample_cells(adata, fraction=0.1, seed=0)
     >>> small = adata[kept].copy()
+
+    A file ``prepare()`` wrote holds its cells in priority order; put them
+    back first:
+
+    >>> adata = cellucid.restore_original_order(anndata.read_zarr("pbmc.zarr"))
+    >>> kept = cellucid.subsample_cells(adata, fraction=0.1, seed=0)
     """
     n_obs = _n_obs_of(data)
     seed = _require_uint32(seed, "seed")

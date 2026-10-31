@@ -14,7 +14,7 @@ maintainers serving official starting states
 
 - A session stores declarative application state, not the dataset.
 - The generic reader accepts exactly one session format — the version named
-  in the file's signature, currently 2 — and restores the complete document
+  in the file's signature, currently 3 — and restores the complete document
   all-or-nothing. A file of an earlier format is refused by its signature,
   before anything else is read; there is no migration.
 - A session stores choices, not what the dataset already holds: labels, filter
@@ -69,9 +69,11 @@ maintainers serving official starting states
 
 The container is:
 
-1. the 19-byte signature `CELLUCID_SESSION/2\n` (`SESSION_FORMAT_VERSION` in
-   `bundle/format.js`; a file that does not begin with it is refused with
-   `NOT_A_SESSION_FILE_MESSAGE`);
+1. the 19-byte signature `CELLUCID_SESSION/3\n` (`SESSION_FORMAT_VERSION` in
+   `bundle/format.js`; a file with another format version's signature is
+   refused naming it, `sessionSignatureRefusal()`: a format-2 file, saved by an
+   earlier Cellucid, carries a cell-order digest no later version can check;
+   any other file is refused with `NOT_A_SESSION_FILE_MESSAGE`);
 2. unsigned 32-bit little-endian manifest length;
 3. exactly that many UTF-8 JSON bytes; and
 4. for every manifest chunk, an unsigned 32-bit stored length plus exact stored
@@ -84,7 +86,19 @@ specification, the kept original positions as the LEB128 cell-set bytes in
 base64, and their digest, {doc}`19_subsampling_specification`; its `k` must
 equal the fingerprint's `cellCount`). A manifest without `cells` was saved on
 every cell. Loading such a session opens exactly those cells (the dataset is
-read again first when it is open with others) before the restore runs. `source` (`session/dataset-source-record.js`) is
+read again first when it is open with others) before the restore runs. A
+session saved while genes were read for a sample of the open cells
+(`data/anndata/subsample-plan.js`, `genes`) also has `genes`
+(`cell-subset-record.js` `captureGeneSampleRecord`: `{cells, order,
+digest}` — how many of the open cells, the first in their order; every
+cell's order, `{method: 'blocks', seed, blockSize}`, when every cell was
+open, else null; and the cell-set digest of their original positions).
+Loading it reads genes for those cells: in the request that opens the
+dataset's cells (`genes`, `order`), or, on the cells already open in the
+same order, by reading genes for more cells (`readGenesForMoreCells`); with
+the cells in another order, the open cells are read again in the session's.
+cellucid-python (`CellucidSessionBundle.genes`) and cellucid-r check it as
+the web app does. `source` (`session/dataset-source-record.js`) is
 where the dataset was opened from — a sample, a data link's locator, a server
 address, or a local file's or folder's name (`{kind: 'file', name, dataset}`),
 with the dataset id — or `null` (a Python or R viewer); **Load** reads only the manifest
@@ -99,7 +113,7 @@ bound to (a renamed field by its original key; user-defined fields excluded).
 `null`, used in messages and never compared. `cellOrder` has exactly `embedding`
 (the embedding reference of the layout the live view shows), `dimension` (that
 layout's dimension, the integer 1, 2, or 3) and `digest` (16 lowercase
-hexadecimal characters). `dataMapping` is the dataset's canonical data mapping
+hexadecimal characters, the cell-order digest below). `dataMapping` is the dataset's canonical data mapping
 (`data/data-mapping.js`), always of `kind` `"anndata"`, with exactly
 `embeddings`, `knn`, `geneNames`, `expression`, `log1p`, `highlyVariable`,
 `latent` and `vectorFields`, plus `modality` for a dataset of several
@@ -178,7 +192,17 @@ reordered contributor groups are invalid.
   filters and centroid toggles; the live view its camera and centroid toggles
   beside the top-level embedding, filters and active field. A view's label and
   filter summary are recomputed when it is rebuilt. Highlight groups record
-  `fieldKey`/`categoryName`, not positions. `#hp-antialias` is never captured
+  `fieldKey`/`categoryName`, not positions; so do a categorical filter's hidden
+  categories (`visibility: [{categoryName, visible: false}]`), where the
+  category named `null` is the cells without a category (the legend's Missing
+  row). A name the field no longer has is refused, except on a text or boolean
+  column (`discovered`: its categories are the labels its open cells hold):
+  there a hidden or recoloured category no open cell holds (a published
+  starting view on a subsample) is held, said once ("2 categories of
+  "cell_type" in this session aren't among the open cells…"), and applied when
+  cells holding it open and the column grows it
+  (`state/managers/field/pending-categories.js`). Category renames are by
+  label already and apply when the label appears. `#hp-antialias` is never captured
   (a device capability); the theme is captured and restored through its owner
   like any other control.
 
@@ -218,7 +242,10 @@ The public file and URL entry points use one owner-controlled restore:
 9. the final UI refresh commits; and
 10. the serializer publishes **Session fully restored** by completing the
     restore's own progress notification — the one report of the outcome, as a
-    failure ends that same entry as **Loading failed**. A published sample view
+    failure ends that same entry as **Loading failed**; a session file you
+    chose announces its outcome however quickly it restored. A sample's own
+    view (a published default) restores without a word: it is part of
+    opening the sample, not a session you asked for. A published sample view
     is the exception on failure: its caller knows the dataset itself loaded and
     reports **Sample view unavailable**, so the progress entry is dismissed
     rather than failed a second time.
@@ -281,21 +308,55 @@ written into the manifest at save and re-derived from live state at restore:
 | `varCount` | the dataset's own var fields in `state.varData.fields` | user-defined fields (for example a duplicated gene) are not counted, so a session that added one still matches the freshly loaded dataset |
 | `cellOrder.embedding` | `state.getViewLayoutKey('live')`, named under the data mapping | `{key, columns}`: an `obsm` key with its 0-based columns |
 | `cellOrder.dimension` | `state.getViewDimensionLevel('live')` | exactly 1, 2, or 3 |
-| `cellOrder.digest` | `digestCellOrder(state.positionsArray, cellOrder.dimension, <rows by ascending original position>)` | 16 lowercase hex characters, the cells folded in original-position order |
+| `cellOrder.digest` | `state.dimensionManager.getCellOrderDigest(<the live layout>)`: the reader worker's sums of that embedding's stored values (`data/cell-order-digest.js`) | 16 lowercase hex characters |
 | `dataMapping` | `state.getDataMapping()` | a canonical data mapping |
 
-`getDatasetFingerprint()` throws unless `state.positionsArray` is a
-`Float32Array` of exactly `cellCount * cellOrder.dimension` values, so a
-fingerprint is never produced from a partially published dataset. The digest
-is defined over XYZ triples: a 1D or 2D embedding is held with only its own
-components per cell, and the axes it lacks are folded in as the zero words they
-are, so the digest does not depend on the in-memory layout and every saved
-session and published preset keeps matching. The cells are folded in
-original-position order (through the cell identity's `openOrder`), so the
-digest does not depend on the order a file stores them in either: a dataset
-written again in priority order keeps the digest of the same cells, and the
-published starting views of the demo samples validate against the rebuilt
-stores unchanged.
+`getDatasetFingerprint()` is asynchronous (the digest is the reader worker's)
+and throws unless `state.positionsArray` is a `Float32Array` of exactly
+`cellCount * cellOrder.dimension` values, so a fingerprint is never produced
+from a partially published dataset.
+
+### Cell-order digest
+
+The digest is a function of the cells and their stored coordinates only, so
+the same cells of the same file digest alike however they were opened: whole,
+grown step by step, raised or lowered by **Apply**, cut in place to a
+session's share, in priority order or in the order the file gives them.
+
+- Each cell contributes a 64-bit hash, two 32-bit lanes: MurmurHash3 (x86,
+  32-bit) of four little-endian 32-bit words, under seed `0x9e3779b1` (low
+  lane) and `0x85ebca6b` (high lane). The words are the cell's **original
+  position** ({doc}`19_subsampling_specification`) and the float32 bit
+  patterns of its values on axes 0, 1 and 2 of the embedding's `obsm` columns,
+  each stored value rounded to float32 (`+0.0`, the zero word, for an axis a
+  1D or 2D embedding does not have; every NaN as `0x7fc00000`).
+- A set of cells sums its cells' lanes, each modulo 2^32: the order of the
+  cells does not matter, and a set's sums are the sums of its parts.
+- The digest of `n` cells is `fmix32(high ^ fmix32(n ^ 0x297a2d39))` followed
+  by `fmix32(low ^ fmix32(n ^ 0x2c1b3c6d))`, 16 lowercase hexadecimal digits
+  (`fmix32` is MurmurHash3's finaliser).
+
+It is never taken over display coordinates: those are centred and scaled by
+the bounds of the cells an embedding was first read for, a frame an opening
+grown or cut in place keeps, so they depend on how the cells were opened.
+
+The reader worker sums an embedding as it reads it (`EmbeddingPayloads`,
+`embedding-payload.js`), in blocks of 4,096 open rows; a whole read is summed
+after its payload is handed to the page, 262,144 rows a task, so the page's
+next requests are answered between slices (anything that needs the sums
+first -- a digest, a growth, an opening cut in place -- takes the rest at once): a growth step adds only
+the rows it reads, an opening cut in place keeps the sums of the whole blocks it
+keeps and reads the fewer than 4,096 rows of the block it cuts through when the
+digest is asked for, and the same cells in another order keep the total. A
+digest of an embedding not read in the opening reads its stored values (no
+display coordinates). Saving a session therefore folds nothing on the page. A
+layout held only in memory (a generated dataset, every cell open) is digested
+over the coordinates it holds.
+
+The fingerprint is taken with the open cells in use (`useOpenCells`,
+`data/open-cells-work.js`): a growth step or **Apply** waits until the session
+is written, so the fingerprint, the `cells` record and every per-cell chunk
+describe the same cells.
 
 ### Why `cellOrder` exists
 
@@ -306,24 +367,17 @@ a different cell with nothing to detect it.
 
 Observation and variable names were the alternative and do not work here — they
 are invariant under a row permutation, which is the change being caught.
-Positions are the only per-cell payload the viewer always holds in memory, and
-a re-ordered export permutes them.
+Coordinates are what a re-ordered export permutes: with each cell named by its
+original position, another cell at a position changes that position's hash.
 
-`digestCellOrder()` reads the coordinate buffer as 32-bit words and folds two
-32-bit accumulators over it, each updated with a multiply and a rotation per
-word, then emits them as one 64-bit hex value. Per-word rotation is what makes
-the result depend on the order of the words rather than only on their multiset.
-On 842k cells (9.64 MiB of Float32 coordinates) the digest costs 4.3 ms and the
-complete fingerprint 5.6 ms. The result is memoized in a `WeakMap` keyed by the
-coordinate array itself; that array is replaced, never rewritten, when the
-dataset or the displayed embedding changes, so the per-contributor re-derivations
-during a capture cost 0.06 ms in total.
-
-`cellOrder.embedding` is part of the record because every embedding is a
-separate payload, normalized on its own, so a digest is comparable only within
-one of them. A restore verifies the digest against the very layout the session
-names, loading it (pinned, without touching any view) whichever embedding is on
-screen, so a session saved on the 2D t-SNE opens while a 3D UMAP is shown.
+`cellOrder.embedding` is part of the record because a digest is comparable only
+within one embedding's columns. A restore verifies the digest of the very
+embedding the session names, over the cells the session names (opened first),
+whichever embedding is on screen and without loading it for display, so a
+session saved on the 2D t-SNE opens while a 3D UMAP is shown. A capture
+re-checks every fingerprint field but the digest between contributors
+(`datasetFingerprintStillCurrent()`); the digest stands while the open cells,
+the embedding and the dataset do.
 
 ### Validation and comparison
 
@@ -348,12 +402,13 @@ session only named another embedding would make them distrust a sound dataset:
 
 | Cause | Detected by | Message |
 |---|---|---|
-| A file without the format-2 signature | the signature, in `bundle/reader.js` | `NOT_A_SESSION_FILE_MESSAGE`: "This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2)." |
+| A session of another format version | the signature, in `bundle/reader.js` | `otherSessionFormatMessage()`: "This session was saved by an earlier version of Cellucid (session format 2): the check that it marks the same cells cannot be verified, so it was not opened. Re-create it in this version of Cellucid." (a newer format: "…saved by a newer version of Cellucid (session format 4), which this version cannot read. Open it in that version of Cellucid.") |
+| A file without a session signature | the signature, in `bundle/reader.js` | `NOT_A_SESSION_FILE_MESSAGE`: "This file is not a Cellucid session file of format 3 (it does not start with CELLUCID_SESSION/3)." |
 | A different dataset | the counts differ, or the counts agree but the dataset id differs | names the saved and current cell and gene counts, or both identities (`"<name>" (id "<id>")`), and asks for the dataset the session was saved on |
 | An embedding this dataset cannot show | an enabled embedding of the saved mapping is neither enabled now nor one the dataset can show | "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have." (or the reason it cannot be plotted) |
 | A different neighbour graph, modality, gene names, expression matrix, log1p, highly variable genes, latent space or vector fields | that group of `dataMapping` differs | names the group and both values |
-| An embedding that is gone | `cellOrder.embedding` names no layout of this dataset, or cannot be loaded | names the embedding |
-| A re-ordered dataset | `cellOrder.digest` differs, everything else matches | says the dataset has the same name and the same cell and gene counts but its cell coordinates differ, so every saved selection could mark the wrong cells |
+| An embedding that is gone | `cellOrder.embedding` names no layout of this dataset | names the embedding |
+| A re-ordered dataset | `cellOrder.digest` differs, everything else matches | says the dataset has the same name and the same cell and gene counts but its cell coordinates differ, so every saved selection could mark the wrong cells; either the cells are listed in a different order, or the same cells were exported again from a re-computed embedding |
 | Fields or genes the session uses are missing | `describeMissingRequiredFields()` after the session's mapping is applied | names every missing observation field and gene at once |
 | A category highlight whose category changed | `decodeCellSet()` while the membership chunk restores | "The category this selection was saved relative to no longer holds the same cells." |
 
@@ -375,8 +430,8 @@ check, so an advertised
 `default.cellucid-session` must carry `cellOrder` and `dataMapping`, and its
 `cellOrder` must name an embedding the dataset has.
 
-The fingerprint is still not a content hash: the digest covers coordinates, not
-expression or metadata. Dataset publishers must assign a new identity when
+The fingerprint is still not a content hash: the digest covers one embedding's
+coordinates, not expression or metadata. Dataset publishers must assign a new identity when
 scientific content changes. What `cellOrder` adds is that a re-ordered
 republication under an unchanged identity is now detected instead of trusted.
 

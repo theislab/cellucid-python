@@ -49,8 +49,9 @@ Cache details: {doc}`09_server_mode_advanced`.
 `serve_anndata(...)` and `cellucid serve` bind the requested port
 exactly and report an error if it is unavailable. Pass `port=0` or `--port 0`
 to request one operating-system-assigned port. `AnnDataViewer(...)` without
-`port=` takes the next free port instead and prints a note: Google sign-in
-(Google Drive data, community annotation) works only on 8765. A notebook
+`port=` takes the next free port instead and prints a note: Google Drive files
+open only on 8765 (community annotation's GitHub sign-in works only on
+www.cellucid.com). A notebook
 widget (`show_anndata(...)`) uses no port.
 
 Always use the printed Viewer URL.

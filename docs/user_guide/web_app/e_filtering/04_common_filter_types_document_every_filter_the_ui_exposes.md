@@ -24,10 +24,9 @@ Cellucid’s current “visibility stack” is built from these filter types:
 | Outlier filter | Legend → **Outlier filter** slider | categorical obs fields of the file, once a latent space is chosen | Hide fringe/outlier-like cells within categories |
 
 :::{important}
-Not all filters apply at all times:
-
-- Gene filters apply only while that gene is the active field.
-- Outlier filtering applies only while the categorical field it was set on is the active field.
+Every filter applies until it is removed, whatever the view is coloured by:
+a gene's range filter and a categorical field's outlier filter keep hiding
+cells after you colour by another field, and **Filters** lists each of them.
 :::
 
 ---
@@ -90,7 +89,8 @@ Shows up in **Filters** when **at least one category is hidden**, even if you la
 
 In the continuous legend:
 
-- the **Visible range** section with `Minimum` / `Maximum` sliders
+- the **Visible range** section with `Minimum` / `Maximum`, each a slider
+  and a number box
 - `Live filtering` toggle
 - `Filter` and `Reset` buttons
 
@@ -115,36 +115,35 @@ The complete numeric-range control, with `Live filtering` switched **off** so
 - **Missing values**: `NaN` is treated as “outside range” and is filtered out whenever the filter is active. A `NaN` in a continuous obs column is a missing value (both writers store one as `NaN`); gene expression written by `prepare()` or `cellucid_prepare()` never holds one.
 - The filter stack is an **AND** with other filters (categories, other continuous fields, etc.).
 
-### What “0–100” means in the sliders
+### Sliders and number boxes
 
-The UI sliders are normalized to `0–100%` of the field’s numeric range in whole
-steps of 1:
+Each bound has a slider and a number box beside it, and the box always holds
+the exact bound applied:
 
-- `0` corresponds to the field’s minimum value
-- `100` corresponds to the field’s maximum value
-
-The UI shows the corresponding numeric values so you don’t have to reason in percent.
-
-The two sliders cannot cross: dragging `Minimum` past `Maximum` pushes `Maximum` along with
-it, and vice versa.
+- **Type a bound** in the box (a decimal point or a decimal comma; `1e-3`
+  works too) and press Enter or leave the box: it is applied exactly as
+  typed, so `≥ 1500` on `total_counts` from 500 to 100,000 is one entry.
+  A value past the data's minimum or maximum is that end; text that is not
+  a number is not applied, and the box shows the bound again.
+- **Drag a slider** for the feel: it moves in thousandths of the track, and
+  the bound it sets is the shortest decimal that tells one step from the
+  next (`1500`, `50250`, `0.0485`), which the box then shows. The track's
+  ends are the field's minimum and maximum exactly. With **Log color scale**
+  on, the track is spaced in log units from the smallest positive value to
+  the maximum, with the zeros (and anything below the smallest positive
+  value) at its first step, so most of the track is no longer the top decade.
+- Only the bound you move or type changes: the other keeps its exact value,
+  also one restored from a session. The two cannot cross: setting `Minimum`
+  past `Maximum` pushes `Maximum` to it, and vice versa.
 
 ### Live filtering vs Filter button
 
 `Live filtering` starts **On**.
 
-- `Live filtering = On`: changing sliders recomputes visibility immediately —
-  and `Filter` is **greyed out and unclickable**, with the tooltip
-  `Turn off Live filtering to use Filter`.
-- `Live filtering = Off`: changing sliders updates the displayed values only,
-  and you must click `Filter` to apply.
-
-```{figure} ../../../_static/screenshots/filtering/filter-button-disabled-live-on.png
-:alt: The same Visible range block with Live filtering on: the Filter button is greyed out under the pointer, beside an enabled Reset button.
-:width: 488px
-
-With `Live filtering` on, `Filter` is disabled. This is the intended state, not
-a fault: there is nothing for the button to do.
-```
+- `Live filtering = On`: changing sliders recomputes visibility immediately,
+  so there is no `Filter` button; only `Reset` sits under the sliders.
+- `Live filtering = Off`: changing sliders updates the displayed values only;
+  `Filter` appears beside `Reset`, and you click it to apply.
 
 :::{warning}
 **The toggle does not stay off.** It is rebuilt with the legend, so it returns
@@ -157,13 +156,16 @@ large dataset — see {doc}`05_performance_considerations`.
 ### Reset
 
 `Reset` returns the filter to the full range (equivalent to “no filter”). It
-also snaps both sliders back to `0` and `100`.
+also returns both sliders to the track's ends and the boxes to the field's
+minimum and maximum.
 
 ### Filters list entry
 
 Shows up in **Filters** when the range is not the full range:
 
-- `Field: min – max`, both numbers rounded to two decimal places
+- `Field: min – max`, each bound to six significant figures (scientific
+  notation below 0.01 and from 1,000,000), so a typed or slider bound reads
+  exactly as applied; figure provenance writes it the same way
 
 (with `(disabled)` appended if you turned the filter off via Filters —
 though on a narrow sidebar that suffix is usually past the ellipsis, so read
@@ -184,31 +186,20 @@ range; turn it off to keep the colours spanning the full data range.
 ## 3) Gene expression range filter (var field)
 
 Gene expression filters behave like numeric range filters — same block, same
-`Live filtering` / `Filter` / `Reset` controls — but with an important scope
-limitation:
-
-- **Gene filters apply only while that gene is the active field.**
-
-If you switch back to an obs field (clusters/QC/etc.), the gene filter no longer affects visibility.
+`Live filtering` / `Filter` / `Reset` controls — and like them they keep
+applying when you colour by another field: "filter by gene, colour by
+cluster" works. The filter is listed under **Filters** as
+`<gene>: <min> – <max>`; remove or disable it there, or colour by the gene
+again to change its range.
 
 ```{figure} ../../../_static/screenshots/filtering/window-gene-range-active.png
 :alt: The whole window coloured by the gene Ins1 with the Minimum slider raised, so only the cells expressing it are drawn and an Ins1 range row is listed in the Filters block.
 :width: 1440px
 
-**While `Ins1` is the active field**, its range filter is listed and enforced.
+Coloured by `Ins1`, its range filter is listed and hides every cell outside
+the range; coloured by another field afterwards, it is still listed and still
+hides them until you remove or disable it.
 ```
-
-```{figure} ../../../_static/screenshots/filtering/window-gene-range-scope-lost.png
-:alt: The same window after switching the active field to clusters: every cell is drawn again, the Ins1 row has left the Filters block, and the count line reads Showing all 3,696 cells.
-:width: 1440px
-
-**After switching the active field to `clusters`**, the gene row has left the
-list and every cell is drawn again. Nothing was removed by you — the filter is
-simply out of scope.
-```
-
-Practical workflows:
-- If you need “filter by gene, color by clusters”, consider exporting the gene score as an obs field and filtering it as obs.
 
 ---
 
@@ -264,6 +255,9 @@ quantiles, so the control is hidden for it.
 When active and set below 100%, Filters shows a line like:
 
 - `Field: outlier ≤ 95%`
+
+It keeps applying when you colour by another field, as every filter does, and
+stays listed under **Filters** until you remove or disable it.
 
 ### Enable/disable vs remove
 

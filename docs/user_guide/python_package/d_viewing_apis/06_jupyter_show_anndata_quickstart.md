@@ -48,13 +48,13 @@ the cell that showed it finishes.
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(
-    adata,
-    height=600,
-    dataset_name="My study",
-    dataset_id="my-study-v1",
-)
+viewer = show_anndata(adata)
 ```
+
+Data that declares no identity of its own (`uns['cellucid']`) is named
+`AnnData (<n> cells)` with an ID made from that, printed in one line; sessions
+are kept under it. Name it for an ID that stays the same:
+`show_anndata(adata, height=600, dataset_name="My study", dataset_id="my-study-v1")`.
 
 In marimo, make the widget the cell's output (end the cell with `viewer`);
 the other notebooks show it at once.
@@ -80,8 +80,8 @@ viewer = show_anndata(
 viewer = show_anndata(mdata, dataset_name="CITE-seq", dataset_id="cite", modality="rna")
 ```
 
-The object is written once to a temporary Cellucid-ready `.h5mu` (one
-modality at a time); `modality=` names the modality the viewer opens on.
+The object is served as a MuData store made from it, as an AnnData is;
+`modality=` names the modality the viewer opens on.
 
 ### D) Show a Cellucid-ready AnnData (fastest; names itself)
 
@@ -105,7 +105,7 @@ viewer = show_anndata("pbmc_cellucid.h5ad", height=600)
 | You pass | Best for | Tradeoffs |
 |---|---|---|
 | a path (`.h5ad`, Zarr store, or any other format Cellucid reads) | large data; files you will reopen | read in place, nothing copied (an AnnData file not in priority order is served in priority order, from the file) |
-| an in-memory `AnnData` or `MuData` | the object you are analysing now | an AnnData served in priority order, made from it as the viewer reads it; a MuData written once to a temporary `.h5mu`, removed when the viewer stops |
+| an in-memory `AnnData` or `MuData` | the object you are analysing now | served in priority order, made from it as the viewer reads it: the viewer opens at once, and its expression matrices are laid out gene-major in the background (read-only meanwhile); released when the viewer stops, or when the cell that showed it runs again |
 | a file written by `prepare()` | the fastest reads; sharing | written once by `prepare()` |
 
 ## How the embed works (so you can debug it)
@@ -113,8 +113,8 @@ viewer = show_anndata("pbmc_cellucid.h5ad", height=600)
 When you call `show_anndata(...)`, Cellucid:
 
 1) checks the dataset and the launch choices you passed (an in-memory AnnData
-   is served in priority order, made from it as the viewer reads it; a MuData
-   is written once to a temporary `.h5mu`), and
+   or MuData is served in priority order, made from it as the viewer reads it,
+   its expression matrices laid out gene-major in the background), and
 2) shows a {class}`~cellucid.jupyter.Widget` whose output frames the app at
    `https://www.cellucid.com/?viewer=embedded`. The page asks the widget for
    its credentials and a private channel (a `MessagePort`), then reads the
@@ -153,8 +153,10 @@ viewer.stop()
 ```
 
 This freezes the output on its last view, stops answering it, and releases what
-it served: the store of an in-memory `AnnData` with the files its cell-major
-`X` was laid out in, or the temporary `.h5mu` of a `MuData`.
+it served: the store of an in-memory `AnnData` or `MuData` with the files its
+expression matrices were laid out in. A viewer is stopped by itself when the
+cell that showed it runs again (its output is replaced), and when it is
+closed (`viewer.close()`).
 
 More lifecycle details (ports, multiple viewers): {doc}`11_viewer_lifecycle_cleanup_ports_and_multiple_viewers`.
 

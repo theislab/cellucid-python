@@ -53,7 +53,7 @@ the reassurance: the data loaded, and one filter row is hiding all of it.
 2) You hid categories until none remain visible.
 3) You are on a snapshot with a different filter stack than you expect.
 4) Outlier filtering is active and set aggressively (rare but possible).
-5) A gene-range filter is active (only while the gene is active).
+5) A gene-range filter is active (it applies whatever is coloured; see **Filters**).
 
 ### How to confirm
 
@@ -169,7 +169,7 @@ appears once the threshold drops below `99.99%`.
 ### Prevention
 
 - Use outlier filtering as a “clean up clusters” tool, not a general QC replacement.
-- Keep in mind it is active-field scoped (it stops applying when you switch to another field; its threshold is kept for when you come back).
+- Keep in mind it keeps applying when you colour by another field, until you remove or disable it under **Filters**.
 
 ---
 
@@ -185,8 +185,8 @@ appears once the threshold drops below `99.99%`.
 
 ### How to confirm
 
-- In the continuous legend, check the `Live filtering` switch state; while
-  it is on, hovering `Filter` shows `Turn off Live filtering to use Filter`.
+- In the continuous legend, check the `Live filtering` switch state: while it
+  is off, a `Filter` button stands beside `Reset`.
 
 ### Fix
 
@@ -198,30 +198,21 @@ appears once the threshold drops below `99.99%`.
 
 ---
 
-## “The Filter button is greyed out and won’t click”
+## “There is no Filter button”
 
 ### Symptom
 
-- `Filter` is pale and nothing happens when you click it.
+- Under the Minimum and Maximum sliders there is only `Reset`.
 
 ### Likely causes (ordered)
 
-1) `Live filtering` is `On`. That is the only cause.
-
-```{figure} ../../../_static/screenshots/filtering/filter-button-disabled-live-on.png
-:alt: The same Visible range block with Live filtering on: the Filter button is greyed out under the pointer, beside an enabled Reset button.
-:width: 488px
-
-`Filter` is deliberately disabled while `Live filtering` is on, because the
-range is already applied on every slider step. Its tooltip says so:
-`Turn off Live filtering to use Filter`.
-```
+1) `Live filtering` is `On`. That is the only cause: every slider step
+   already applies the range, so there is nothing for `Filter` to do.
 
 ### Fix
 
 - Nothing is broken. Either keep `Live filtering` on and just drag, or turn it
-  off if you want the apply-once workflow — the button becomes clickable the
-  moment you do.
+  off for the apply-once workflow; `Filter` appears the moment you do.
 
 ---
 

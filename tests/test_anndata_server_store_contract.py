@@ -343,13 +343,26 @@ def test_a_store_that_names_itself_needs_no_identity_at_launch(tmp_path: Path, w
         named.stop()
 
 
-def test_a_store_without_identity_must_be_named(tmp_path: Path) -> None:
+def test_a_store_without_identity_is_named_as_cellucid_r_names_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     source = tmp_path / "anonymous.h5ad"
     _adata().write_h5ad(source)
-    with pytest.raises(ValueError, match=r"dataset_name and dataset_id are required.*uns\['cellucid'\]"):
-        AnnDataServer(source, port=0, quiet=True, serve_web_ui=False)
-    with pytest.raises(ValueError, match="dataset_id is required"):
-        AnnDataServer(_adata(), port=0, quiet=True, serve_web_ui=False, dataset_name="Only a name")
+    # A file: its name, and its name without the extension as its id.
+    server = AnnDataServer(source, port=0, serve_web_ui=False)
+    try:
+        assert (server.dataset_id, server.dataset_name) == ("anonymous", "anonymous.h5ad")
+        # The id it was given is said, with how to set it: sessions are kept under it.
+        assert "anonymous (sessions are kept under it; name it with dataset_id=" in capsys.readouterr().out
+    finally:
+        server.stop()
+    # An object: what it is and how many cells, and an id from that.
+    adata = _adata()
+    server = AnnDataServer(adata, port=0, quiet=True, serve_web_ui=False, dataset_name="Only a name")
+    try:
+        assert (server.dataset_id, server.dataset_name) == (f"AnnData-{adata.n_obs}-cells", "Only a name")
+    finally:
+        server.stop()
     adata = _adata()
     adata.uns["cellucid"] = {"schema": 1, "id": "bad/id", "name": "Name"}
     with pytest.raises(ValueError, match=r"uns\['cellucid'\]\['id'\]"):
@@ -653,6 +666,21 @@ def test_a_zip_that_holds_no_zarr_store_is_refused(tmp_path: Path) -> None:
         classify_anndata_path(archive)
 
 
+def test_a_compressed_copy_is_refused_with_how_to_serve_it(tmp_path: Path) -> None:
+    # GEO ships many .h5ad files gzipped: the web app reads such a copy whole,
+    # but a served file is read in parts, which a gzip stream has none of.
+    import gzip
+
+    copy = tmp_path / "GSE1_cite.h5ad.gz"
+    copy.write_bytes(gzip.compress(b"\x89HDF\r\n\x1a\n" + bytes(64)))
+    with pytest.raises(ValueError, match=r"gzip-compressed copy of AnnData \(\.h5ad\).*gunzip GSE1_cite\.h5ad\.gz"):
+        classify_anndata_path(copy)
+    # A format read as one stream names its compressed endings itself.
+    rds = tmp_path / "object.rds.gz"
+    rds.write_bytes(gzip.compress(gzip.compress(b"X\n")))
+    assert classify_anndata_path(rds).kind == "rds"
+
+
 # =============================================================================
 # Objects, and stores the browser cannot decode
 # =============================================================================
@@ -697,10 +725,15 @@ def test_zarr_codecs_the_browser_cannot_decode_are_named(tmp_path: Path) -> None
     folder = _zarr_folder(tmp_path, consolidated=True)
     zarray = folder / "obsm" / "X_pca" / ".zarray"
     meta = json.loads(zarray.read_text())
-    meta["compressor"] = {"id": "bz2", "level": 1}
+    meta["compressor"] = {"id": "snappy"}
     meta["filters"] = [{"id": "delta", "dtype": "<f4"}]
     zarray.write_text(json.dumps(meta))
-    assert browser_undecodable(classify_anndata_path(folder)) == ["obsm/X_pca (bz2, delta)"]
+    assert browser_undecodable(classify_anndata_path(folder)) == ["obsm/X_pca (snappy, delta)"]
+    # bz2 and lzma the browser decodes (formats/zarr/codecs/pipeline.js): no copy for them.
+    meta["compressor"] = {"id": "bz2", "level": 1}
+    meta["filters"] = None
+    zarray.write_text(json.dumps(meta))
+    assert browser_undecodable(classify_anndata_path(folder)) == []
 
 
 def test_a_browser_decodable_store_needs_no_copy(tmp_path: Path) -> None:
@@ -713,6 +746,24 @@ def test_a_browser_decodable_store_needs_no_copy(tmp_path: Path) -> None:
     assert browser_undecodable(classify_anndata_path(lzf)) == []
     folder = _zarr_folder(tmp_path, consolidated=True)
     assert browser_undecodable(classify_anndata_path(folder)) == []
+
+
+def test_hdf5plugin_filters_the_browser_decodes_need_no_copy(tmp_path: Path) -> None:
+    """hdf5plugin's Blosc, LZ4, Zstandard and bitshuffle are undone in the
+    browser (formats/hdf5/filters.js, the WebAssembly decoders)."""
+    hdf5plugin = pytest.importorskip("hdf5plugin")
+    adata = _adata()
+    for name, compression in {
+        "blosc": hdf5plugin.Blosc(cname="lz4"),
+        "lz4": hdf5plugin.LZ4(),
+        "zstd": hdf5plugin.Zstd(),
+        "bitshuffle-lz4": hdf5plugin.Bitshuffle(cname="lz4"),
+        "bitshuffle-zstd": hdf5plugin.Bitshuffle(cname="zstd"),
+        "bitshuffle": hdf5plugin.Bitshuffle(cname="none"),
+    }.items():
+        source = tmp_path / f"{name}.h5ad"
+        adata.write_h5ad(source, compression=compression)
+        assert browser_undecodable(classify_anndata_path(source)) == [], name
 
 
 # =============================================================================

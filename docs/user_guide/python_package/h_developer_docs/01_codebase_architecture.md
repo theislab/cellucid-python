@@ -46,7 +46,9 @@ Most of the public API lives in `cellucid-python/src/cellucid/`:
 | `src/cellucid/data_mapping.py` | the data-mapping rules (validation, unique names, the default UMAP rule, vector-field keys), mirrored by the web app's `data/data-mapping.js` and pinned by a shared conformance fixture | want to change what the viewer plots and reads |
 | `src/cellucid/_contracts.py` | dataset-id and display-text rules, standard library only | want to change what counts as a valid id or name |
 | `src/cellucid/_non_finite.py` | the counted NaN/Inf/float32-range diagnosis in refusals | want to change how a non-finite input is reported |
-| `src/cellucid/_anndata_files.py` | classifies any file or folder by the input format registry (`input_formats.json`), reads AnnData and MuData metadata (never an array), finds arrays the browser cannot decode, builds missing consolidated Zarr metadata, writes the temporary `.h5mu` for an in-memory MuData | want to change what input is accepted or how it is handed to the browser |
+| `src/cellucid/_anndata_files.py` | classifies any file or folder by the input format registry (`input_formats.json`), reads AnnData and MuData metadata (never an array), finds arrays the browser cannot decode, builds missing consolidated Zarr metadata | want to change what input is accepted or how it is handed to the browser |
+| `src/cellucid/prepare_data/_gene_major.py` | the one gene-major layout pass (`GeneMajorLayout`): any sparse source, in memory or on disk, in any row order, as `prepare()` stores it (canonical, float32 or float64), with the prefix counts; shared by `prepare()`, the backed path and the served store | want to change how an expression matrix is laid out |
+| `src/cellucid/_source_arrays.py`, `src/cellucid/_scratch.py` | arrays of a source read by rows or ranges in any order (in memory, mapped in place, or decoded once into a scratch folder); the scratch folders, removed with their owner and by the next one when a process was killed | want to change how a source array is read |
 | `src/cellucid/anndata_server.py` | the data server: checks launch choices against AnnData/MuData metadata, serves the bytes with exact `Range` answers (`sendfile`), lists a folder of files, publishes `/_cellucid/datasets`, hands `/_cellucid/ws` to the viewer channel | want to add/modify server endpoints |
 | `src/cellucid/jupyter/` | the viewer API (`_viewer.py`: commands, hooks/event dispatch, results, session capture; a browser-tab viewer), the notebook widget (`_widget.py` with `static/widget.js`: an anywidget relaying the app's reads and channel over the comm); `_wire.py` checks every message | want to change notebook UX or hooks behavior |
 | `src/cellucid/_viewer_channel.py` | the viewer channel: WebSocket upgrade and `Origin` check, `hello`/`welcome`, the per-viewer registry and command outbox, events, session bundles streamed to disk | want to change how the viewer and Python talk |
@@ -57,6 +59,10 @@ Most of the public API lives in `cellucid-python/src/cellucid/`:
 | `src/cellucid/anndata_session/` | the round trip: `pull`, results → `obs` columns, GMT, obs-column CSV, and session bundle → AnnData | want to change how results reach AnnData |
 | `src/cellucid/vector_fields.py` | CellRank drift → vector fields | want to add helpers for velocity/drift conventions |
 | `src/cellucid/web_cache.py` | exact inventory-driven viewer generation establishment and verification | want to change source, staging, verification, or atomic publication behavior |
+| `src/cellucid/cli.py` | the `cellucid` command (`cellucid serve`) | want to add or change a command-line option |
+| `src/cellucid/subsample.py` | `subsample_cells()`: the subsampling specification, implemented as the web app's `data/subsample.js` and R's `subsample.R` (pinned by the shared conformance fixture) | want to change which cells a subsample keeps (change all three) |
+| `src/cellucid/_file_versions.py` | strong validators of a file's version, read from the open file: the server's `ETag` and dataset list, and the web cache's re-check (R's `.file_version()` builds the same tag) | want to change when a file counts as changed |
+| `src/cellucid/_console.py`, `src/cellucid/_plural.py` | encoding-safe console output; the noun a count takes | want to change user-facing console text |
 
 ---
 
@@ -67,8 +73,8 @@ it is: the web app's own readers (HDF5, Zarr, R serialization, MatrixMarket
 text) read it directly, from a server route, a link, or a file picked in the
 browser. An in-memory AnnData, and an AnnData file not in priority order, are
 served by Python as a Zarr store in priority order made as the viewer reads it
-(`src/cellucid/_served_store.py`); an in-memory MuData is first written once to
-a temporary `.h5mu`. A file written by
+(`src/cellucid/_served_store.py`), and so is an in-memory MuData, as a MuData
+store. A file written by
 `prepare()` follows the Cellucid-ready AnnData contract
 ({doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification`):
 gene-major, chunked for range reads, and naming itself in `uns['cellucid']`.
@@ -93,8 +99,8 @@ the launch choices — see
    (`classify_anndata_path`), presents an in-memory AnnData, an AnnData file
    not in priority order, and a MuData, Loom or 10x file as a Zarr store in
    priority order made as the browser reads it (`_served_store.py`,
-   `_served_formats.py`; an in-memory MuData is written once to a temporary
-   `.h5mu`), reads its metadata (an R object and a MatrixMarket folder are
+   `_served_formats.py`; an in-memory MuData as a MuData store), reads its
+   metadata (an R object and a MatrixMarket folder are
    read by the browser alone), and checks the launch choices against it.
 2) Browser: reads `/_cellucid/datasets`, then opens the store at
    `/_cellucid/anndata/<dataset_id><ending>` (the file's own ending, such as

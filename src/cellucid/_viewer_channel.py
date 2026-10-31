@@ -66,7 +66,7 @@ from ._websocket import (
     accept_key,
     require_client_key,
 )
-from .session_bundle import NOT_A_SESSION_FILE_MESSAGE, SESSION_BUNDLE_MAGIC
+from .session_bundle import SESSION_BUNDLE_MAGIC, session_signature_refusal
 
 if TYPE_CHECKING:
     import socket
@@ -734,7 +734,7 @@ def _receive_session_bundle(
     try:
         magic = message.read_exact(len(SESSION_BUNDLE_MAGIC))
         if magic != SESSION_BUNDLE_MAGIC:
-            raise ValueError(NOT_A_SESSION_FILE_MESSAGE)
+            raise ValueError(session_signature_refusal(magic))
         with tempfile.NamedTemporaryFile(
             delete=False, prefix="cellucid-session-", suffix=".cellucid-session"
         ) as tmp:

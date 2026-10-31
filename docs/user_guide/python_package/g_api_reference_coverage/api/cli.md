@@ -42,18 +42,24 @@ cellucid serve <data_path> [--port 8765] [--host 127.0.0.1] [--no-browser] [--qu
 - `.h5mu` file
 - `.loom` file
 - 10x Cell Ranger `.h5` file, or a Cell Ranger `outs/` folder
-- MatrixMarket folder (`matrix.mtx[.gz]` with `barcodes` and `features` or
-  `genes` lists, also under a shared prefix such as GEO's `GSM4567_`)
+- MatrixMarket folder (a `.mtx[.gz]` file, whatever its name: `matrix.mtx.gz`,
+  GEO's `GSM4567_matrix.mtx.gz` or `GSE158055_covid19_counts.mtx.gz`, with its
+  `barcodes` and `features` or `genes` lists)
 - R object: `.rds`, `.rda`, `.RData`, gzipped or not (`.rds.gz`)
 
 An h5Seurat file is not opened, so it is refused before anything is served,
 with the route that converts it: in R, read it with
 `SeuratDisk::LoadH5Seurat()` and save it with `saveRDS()`, then serve the
-`.rds` (or show the object with `cellucid::cellucid_view()`).
+`.rds` (or show the object with `cellucid::cellucid_view()`). A gzip-compressed
+copy of a file read in parts (`.h5ad.gz`, `.loom.gz`, `.h5.gz`, `.h5mu.gz`, as
+GEO ships many) is refused too, with how to decompress it (`gunzip`): a served
+file is read in parts, which a gzip stream has none of. The web app itself
+opens such a copy from a link or from this computer, reading it whole once.
 
 A file written by `cellucid.prepare()` declares its own name and id, so
 `cellucid serve pbmc_cellucid.h5ad` needs no `--dataset-name`/`--dataset-id`;
-an R object, Loom, 10x or MatrixMarket dataset always needs both. A file
+any other dataset is named after its file (its id the file's name without the
+extension) unless they name it. A file
 `prepare()` wrote is served as it is on disk, and the viewer reads it itself
 with HTTP range requests; any other AnnData, MuData, Loom or 10x file (or
 `outs/` folder) is served as a Zarr store in priority order, made from the file
@@ -68,6 +74,7 @@ once from the start.
 | `--port, -p` | Port to bind | Use a different port if 8765 is busy; `--port 0` takes any free port |
 | `--host, -H` | Host to bind to | Default `127.0.0.1`, which no other machine can reach. `0.0.0.0` accepts connections on every interface, which is what a compute node needs when a tunnel terminates on a different machine such as a cluster login node. A non-loopback bind has no authentication: every user who can reach the port reads the dataset |
 | `--allowed-host HOST` | Extra exact `Host` name this server answers to, and accepts notebook viewer pages from; repeat per name | Needed only behind a reverse proxy; one bare DNS name or IP address, no port, scheme, or wildcard |
+| `--cache-bytes BYTES` | Bytes a store served in priority order keeps of what it makes (renumbered genes), least recently used first out | Default a 64th of the machine's memory; `0` keeps nothing; `serve_anndata(cache_bytes=)` and cellucid-r's `cache_bytes` alike |
 | `--no-browser` | Don’t auto-open a browser tab | Helpful on remote servers |
 | `--quiet, -q` | Minimal output | Mutually exclusive with `--verbose` |
 | `--verbose, -v` | Debug logging | Useful for troubleshooting; also prints the traceback for any failure |
@@ -76,8 +83,8 @@ once from the start.
 | `--web-cache-dir PATH` | Directory for the active verified web build | |
 | `--latent-key KEY` | The `obsm` latent space (scVI, PCA) the outlier filter measures in | never a 2D/3D layout; without it the file's own `latentKey`, else none (the filter waits for one in Data mapping) |
 | `--centroid-min-points N` | The fewest cells a category needs for the outlier filter to measure it | without it the file's own `centroidMinPoints`, else 10; stored quantiles written for another number are computed again in the browser |
-| `--dataset-name NAME` | Set the display name | Defaults to the store's `uns['cellucid']['name']`, required without it |
-| `--dataset-id ID` | Set the stable dataset identifier | Defaults to the store's `uns['cellucid']['id']`, required without it |
+| `--dataset-name NAME` | Set the display name | Defaults to the store's `uns['cellucid']['name']`, else the file's name |
+| `--dataset-id ID` | Set the stable dataset identifier | Defaults to the store's `uns['cellucid']['id']`, else the file's name without its extension |
 | `--obs-key KEY` | Show this `obs` column; repeat per column, in order | every column is shown when omitted |
 | `--vector-field-default FIELD_ID` | The vector field the overlay opens on: `<field>` of an `obsm['<field>_<basis>']` array drawn over `X_<basis>` (`velocity` for `velocity_umap`) | |
 | `--modality NAME` | The modality a multimodal dataset (a MuData) opens on | without it the file's own `modality`, else the first gene-expression modality; refused for an AnnData, which has one feature space |

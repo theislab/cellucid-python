@@ -81,9 +81,13 @@ module* rather than by the coordinator:
 Two more are not initialized by the coordinator at all:
 `sidebar-controls.js` and `select-bar-placement.js` are wired by
 `ui/core/sidebar-layout.js`, which `main.js` calls right after the viewer is
-created. The sidebar toggle is painted with the first frame, and on a phone it
-is the only way out of the full-screen menu, so it must work before the first
-dataset has loaded, which is when the coordinator runs.
+created. The sidebar toggle and, on a phone, the panel's peek bar
+(`#phone-sheet-bar`: the dataset's name and a handle; a tap or an upward swipe
+opens the panel) are painted with the first frame, so they work before the
+first dataset has loaded, which is when the coordinator runs. A phone starts
+with the bar: `ui/core/viewport-init.js` marks the root before the stylesheet
+applies (`data-phone-sheet="peek"`), unless this tab last left the panel open
+(`cellucid:phone-sheet` in session storage, `ui/core/phone-sheet-memory.js`).
 
 If you are tracing why a control is inert, check which of these paths owns it
 before assuming the coordinator does.
@@ -115,7 +119,7 @@ The `ui/` layer also has directories this page does not otherwise cover:
 | Open… menu | `ui/modules/open-data-menu.js` | the **Open…** button's two-item menu (**File…**, **Folder…**) and its keyboard handling |
 | Address routing | `ui/modules/address-routing.js` | what the **Link or server** bar opens: a `cellucid serve` server, linked data, or (asked over `/_cellucid/health`) either |
 | Dataset connections | `ui/modules/dataset-connections.js` | local file and folder pickers, the **Link or server** bar (server and link connectors), the **Server** / **Link** connection lines with **Disconnect**, the sign-in step |
-| Dataset drop | `ui/modules/dataset-drop.js` | a file or folder dropped anywhere on the page, opened as the matching picker would (initialized by `dataset-connections.js`; `ui/core/file-drop-guard.js` stops the browser navigating to a dropped file) |
+| Dataset drop | `ui/modules/dataset-drop.js` | a file or folder dropped anywhere on the page, opened as the matching picker would (initialized by `dataset-connections.js`; `ui/core/file-drop-guard.js` stops the browser navigating to a dropped file; a folder listed concurrently by `data/local-folder.js`; in Chromium the item's handle kept to reopen, `app/local-file-handles.js`) |
 | Share dialog | `ui/modules/share-dialog.js` | the Dataset box's **Share**: link, badge and embed snippet for a dataset a URL can reopen |
 | Session controls | `ui/modules/session-controls.js` | save/load `.cellucid-session` buttons |
 | Data mapping controls | `ui/modules/data-mapping-controls.js` (+ `ui/modules/data-mapping/`) | Session › Data mapping: the Embeddings checklist (on/off, defaults, column selections; arrays rarely drawn under **Other arrays (N)**), the Genes (**Modality** for a dataset of several, Expression, Gene names, Values, Highly variable genes), Neighbour graph, Latent space and Vector fields sections, Revert/Apply |

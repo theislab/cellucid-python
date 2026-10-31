@@ -65,47 +65,134 @@ Loaded field values live in `_fieldDataCache` (obs fields) and
 `_varFieldDataCache` (gene-expression fields), shared across views. They are
 bounded in **bytes**, not entries (`field/residency.js`): once inactive fields
 hold more than their budget, the least recently used are released. The budget
-is `residencyBudgetBytes('inactiveFields')` (`data/memory-budget.js`): a
-sixteenth of the estimated device memory (see {ref}`memory-budgets`). The active field, any field with filter state, and fields still
-loading are always kept, and release runs only when the active field changes, so
-a session restore or an analysis that loads several fields cannot lose one.
+is `residencyBudgetBytes('inactiveFields')` (`data/memory-budget.js`): an
+eighth of what the working set leaves of the allowance (see
+{ref}`memory-budgets`). The active field, any field with filter state (a
+range, hidden categories or an outlier threshold: every filter applies
+whatever is coloured), and fields still loading are always kept. Release runs
+when the active field changes, when a `.h5ad` export has written a field's
+column, and when the memory model trims the share (the allowance or the
+working set changed, the page is hidden) -- except while the state is in a
+batch (a session restore staging the fields it shows next), whose fields are
+trimmed at the next field change.
 (An entry-count bound did not bound memory: browsing genes kept every one at
 4 bytes per cell.)
 
 (memory-budgets)=
 ### Memory budgets
 
-Every cache that decides what stays resident takes its budget from
-`data/memory-budget.js`. A budget is a residency policy: it decides what is
-released, spilled to disk or read again, never what can be opened or shown.
+`data/memory-budget.js` is the one memory model: what the device allows,
+what is drawn, what every cache keeps, and what happens when memory is
+short. A budget is a residency policy: it decides what is released, spilled
+to disk or read again, never what can be opened or shown.
 
-- **The device** is estimated from what the browser reports:
+- **The device** is estimated by the page from what the browser reports:
   `navigator.deviceMemory` (Chromium; earlier releases report at most 8 GiB,
   Chromium 151 reports 16 on a 16 GiB Mac) and the JavaScript heap limit
-  (`performance.memory.jsHeapSizeLimit`), which V8 sets at about a quarter of
-  physical memory (3.76 GB on that Mac). The heap limit raises an 8 GiB report
-  that may be a cap and stands in when deviceMemory is absent. A browser that
-  reports neither (Firefox, Safari) is taken to be 8 GiB.
-- **The allowance** is half the device: every budget together. The other half
-  is the system, the browser, other tabs and what the views show.
-- **The shares** of the allowance sum to exactly one, so no two caches count
-  the same bytes: the gene-column index 3/8 (it spills to disk beyond it),
-  positions of layouts no view shows 1/8, inactive fields 1/8, an analysis
-  run's default budget 1/8, the AnnData adapter's cache 1/16, a latent space
-  held for outlier quantiles 1/16, decoded chunk blocks 1/32, bytes of
-  remote files the page keeps for its reader workers 1/32 (another cell
-  subset of the same file, opened in a new worker, fetches none of them
-  again: `data/byte-range-cache.js`), decode workers 1/32 (about 40 MB each
-  while they decode; with the cores they size the pool) and selection undo
-  history 1/32.
-- **A refused allocation** of fewer bytes than the allowance halves the
-  allowance of the thread that saw it for every budget read afterwards.
+  (`performance.memory.jsHeapSizeLimit`, Chromium pages only), which V8 sets
+  at about a quarter of physical memory (3.76 GB on that Mac). The heap limit
+  raises an 8 GiB report that may be a cap and stands in when deviceMemory is
+  absent. A browser that reports neither (Firefox, Safari) is taken to be
+  8 GiB. The page hands its estimate to every reader worker it starts, so
+  every thread counts against the same device.
+- **The allowance** is half the device: what the app may use, drawn and kept
+  together. The other half is the system, the browser and other tabs.
+  Cellucid pages of one origin (tabs, the widgets of one notebook) divide it
+  (`data/memory-census.js`): each may use what the others do not hold, and at
+  least an equal share. A page knows which others are open from Web Locks
+  (the browser frees a page's lock when the page is gone) and what each holds
+  from a `BroadcastChannel`. Pages in different storage partitions (a
+  Cellucid tab and a notebook widget, two hosts) do not see each other, and
+  a page that is not a secure context counts only itself.
+- **The working set** is what is drawn: 77 bytes a cell of the shown
+  dataset's open cells (`CELL_WORKING_SET_BYTES`, measured: positions,
+  colours, visibility, the spatial tree and draw order on the page and the
+  GPU, the coloured field), a neighbour graph while a view shows its edges or
+  the k-NN tool uses it, which cells of the file the open cells are (the
+  page's cell identity, `'cell identity'`: the kept cells, their open order
+  and its lookups, 4 to 16 bytes an open cell), the reader worker's rows of
+  an open subsample (`'cell rows'`: the kept rows, their runs and their
+  inverse, the inverse in the smaller of a table of the kept rows and an
+  array of every row of the file, and the ranks the subsample was drawn
+  from, kept so a growth or another size draws without ranking again), and,
+  where the browser measures the page
+  (`measureUserAgentSpecificMemory`, cross-origin isolated pages only), what
+  it uses beyond everything counted. The auto-fit sizes the open cells so the
+  working set and the gene index fit the allowance together
+  ({doc}`../b_data_loading/21_subsampled_loading`).
+- **The shares** divide what the working set leaves of the allowance and sum
+  to exactly one, so the working set and every cache together never exceed
+  the allowance and no two caches count the same bytes: the gene-column index
+  with the CSR row pointers it is built from 3/8 (the index spills to disk
+  beyond it), positions of layouts no view shows 1/8, inactive fields 1/8,
+  analysis runs 1/16 (the genes a run buffers, the per-cell state it keeps in
+  every analysis worker, kept marker runs), the values analysis windows keep
+  for their pages with the page cell lists made for them (`analysisPages`,
+  `app/analysis/data/data-layer.js`) 1/16, the AnnData adapter's cached copies
+  (obs payloads not handed to a view, coordinates, the neighbour graph while
+  nothing draws it) 1/16, a latent space held for outlier quantiles 1/16,
+  decoded chunks of every open store 1/32, bytes of remote files the page
+  keeps for its reader workers 1/32 (`data/byte-range-cache.js`), decode
+  workers 1/32 (about 40 MB each; with the cores they size the pool) and
+  selection undo history 1/32.
+- **The ledger.** Every cache registers as a holder of its share
+  (`registerResidentHolder`): what it keeps now and how to keep less, least
+  recently used first, never what is in use. Whenever the allowance or the
+  working set changes, every share over its budget is trimmed, cheapest to
+  rebuild first (`RELEASE_ORDER`), in every thread: the reader worker reports
+  what its holders keep to the page, and the page tells the other pages what
+  it holds in all. The JavaScript heap is never measured: it counts no
+  `ArrayBuffer`, where every per-cell array lives, and exists only on
+  Chromium pages.
+- **A refused allocation** (in any thread) of fewer bytes than the allowance
+  halves the allowance everywhere, and every cache over its new budget gives
+  memory back at once; one notification names what went. It comes back a
+  step at a time, on evidence: an allocation at least as large granted while
+  the app already holds the lowered allowance, or the refused size granted
+  again when another dataset opens.
+- **A tab ended while it opened a dataset.** A phone ends a tab that holds
+  more memory than it allows, with no refused allocation the page could hear
+  first, and a browser that reports neither its device memory nor a heap
+  limit (Safari, Firefox) is taken to be an 8 GiB device. An opening under way
+  is marked in the tab's session storage (`app/page-memory.js`), and the mark
+  goes when it ends or the page is left (a reload or a navigation fires
+  `pagehide`; an ended tab fires nothing). The next load that finds the mark
+  halves the allowance (`recordInterruptedOpening`), so the opening fits half
+  the cells, and says why; it comes back as a refused allocation's does.
+- **Hidden and frozen pages.** A page the person does not see keeps only what
+  it draws: every cache but the gene-column index and the selection undo
+  steps is let go at once, and every idle worker ends. A page the browser
+  freezes, or puts in the back/forward cache, lets the gene-column index go
+  too. Everything comes back on demand when the page is shown again.
+- **A dataset no longer shown** (another source is) keeps only what opens it
+  again: its reader worker ends with everything it held, and its next read
+  reopens the same cells, from what this browser keeps of it
+  (`AnnDataFileSource.suspend`). A dataset opening makes the open ones give
+  back their rebuildable caches first, keeping what is shown.
+- **Workers** that have had nothing to do for 10 s end
+  (`workers/idle-retirement.js`): the decode pool, the analysis pool, the
+  plot raster workers and the figure-export worker with its WebGL contexts.
+  The analysis pool runs no more workers than the analysis share holds a
+  run's per-cell state for (5 bytes a cell a worker).
+- Nothing is invalidated by a trim: reads in flight finish and are
+  delivered, no analysis window is closed. Invalidating a dataset's caches
+  (another source shown, the dataset closed) stops its reads in flight as
+  cancellations (`AbortError`), never failures.
 
-| Device | Allowance | Gene index | Positions, inactive fields, analysis (each) | Decode workers |
-|---|---|---|---|---|
-| 4 GiB | 2 GiB | 768 MiB | 256 MiB | 1 |
-| 8 GiB (or unreported) | 4 GiB | 1.5 GiB | 512 MiB | 3 |
-| 16 GiB | 8 GiB | 3 GiB | 1 GiB | 6 |
+Before any cell is drawn (the working set takes its part first: 77 MB for
+1M cells, 770 MB for 10M):
+
+| Device | Allowance | Gene index | Positions, inactive fields (each) | Analysis, analysis pages (each) | Decode workers |
+|---|---|---|---|---|---|
+| 4 GiB | 2 GiB | 768 MiB | 256 MiB | 128 MiB | 1 |
+| 8 GiB (or unreported) | 4 GiB | 1.5 GiB | 512 MiB | 256 MiB | 3 |
+| 16 GiB | 8 GiB | 3 GiB | 1 GiB | 512 MiB | 6 |
+
+Not counted: GPU objects beyond the working set's measured share (kept
+views' colour stores, highlights, edge geometry), the shard indexes of
+sharded Zarr arrays (a store's structure, 16 MiB a store), and the
+operations of the read activity log under way (ended ones are counted into
+its totals and dropped).
 
 ### Multi-view contexts (live + snapshots)
 
@@ -136,13 +223,19 @@ arrays: the outgoing context keeps the ones the state was using, and the state
 adopts the incoming context's. A new snapshot (“Keep view”) **shares** the
 transparency array and visibility mask with the view it was kept from, copy on
 write (`state/managers/per-cell-array-ownership.js`): every writer goes through
-`writableTransparency`, `writableCellVisibilityMask`, `writableColors` or
-`writableColorAlphaBytes`, which copy first if another view still holds the
-array. A kept view's colours are one copy that the viewer and renderer keep by
-reference; once published, an array is never written again. A context handed
+`writableTransparency`, `writableCellVisibilityMask` or `writableColors`, which
+copy first if another view still holds the array. A kept view shares the
+colours array too: the viewer and renderer keep it by reference, and once
+published it is never written again, so whichever view recolours first writes
+a copy. A filter writes the transparency alone: colours carry no visibility
+(their alpha byte layers a field's no-value grey beneath the coloured cells,
+`BENEATH_ALPHA_BYTE`, and a gene sample's cells not read beneath both,
+`UNREAD_ALPHA_BYTE`). A context handed
 to `restoreContext` is copied, because its caller may still hold it. So never
 write a per-cell array directly — always take it through a `writable*` helper.
-A kept view now adds about 6–7.4 bytes per cell instead of 26.
+A kept view added about 6–7.4 bytes per cell instead of 26, measured while it
+still copied the colours (4 bytes a cell on the CPU, now shared until a view
+recolours).
 
 ### Field switch cost
 
@@ -179,6 +272,17 @@ cluster in a 30M-cell dataset would fail. Cell lists are checked with
 for the same reason. `tests/cell-set-contract.test.mjs`
 enforces this in the selection modules.
 
+Order cells the same way: by a typed key, never by a comparator sort or an
+object per cell. `orderByKey` (`utils/radix-order.js`) is the stable order of
+32-bit keys in two linear passes (10M cells by original position: 0.24 s,
+against 1.4 s for a comparator sort and 7.8 s and 1.2 GB for an array of
+`[cell, value]` pairs); exports, scores moved with their cells and values
+named by original position use it. A per-cell column the reader decodes is a
+typed array too: a boolean column is one byte a cell (0, 1, or missing,
+`decodeAnnDataBooleanFlags`), coded without a lookup per cell.
+`tests/scale-boundaries-contract.test.mjs` holds each of these past 2^24
+cells.
+
 ### Representations + vector fields
 
 A view shows one *representation*: one embedding, at its columns, of any
@@ -197,10 +301,10 @@ dimension. Cellucid tracks them via:
   (`state/managers/mapping-manager.js`) read and change the mapping.
 
 Coordinates of an enabled layout are read the first time a view shows it and
-kept while a view shows it; afterwards they stay in a cache whose budget is a
-sixteenth of the estimated device memory
+kept while a view shows it; afterwards they stay in a cache whose budget is an
+eighth of what the working set leaves of the allowance
 (`residencyBudgetBytes('positions')`, see {ref}`memory-budgets`), released least
-recently shown first, and entirely under memory pressure. The budget never
+recently shown first, and entirely when the page is hidden. The budget never
 refuses what the views show: the layouts shown plus the one being shown are
 always admitted, even above it.
 

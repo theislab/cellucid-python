@@ -1,5 +1,5 @@
 """
-Internal codecs used by `.cellucid-session` bundles (session format 2).
+Internal codecs used by `.cellucid-session` bundles (session format 3).
 
 These mirror the web app's codecs exactly:
 

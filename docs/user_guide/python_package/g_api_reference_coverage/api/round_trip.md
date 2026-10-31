@@ -91,13 +91,15 @@ cellucid.pull(adata, "~/Downloads/cellucid-exports")   # a folder, a file, or a 
 | a user-defined categorical field (labels, annotations, clusters) | `<key>` (`field_prefix`) | `category`, the viewer's categories in order |
 | a continuous field, a score (a gene signature's: `<set> score`) | `<key>` (`field_prefix`) | `float32` |
 | the cells the filters leave visible (`visibility=True`) | `cellucid_visible` | `bool` |
-| a gene set | -- | `uns["cellucid"]["gene_sets"][name]`: `genes`, `symbols` (from a viewer), `description`, `origin`, `pulled_from`, `id` |
+| a gene set | -- | `uns["cellucid"]["gene_sets"][name]`: `genes`, `symbols` (from a viewer whose Data mapping names the genes by a var column), `description`, `origin`, `pulled_from`, `id` |
 
 - **Genes by identifier.** A gene set's `genes` are the var index, as
-  `adata.var_names` holds them -- Ensembl ids for a CELLxGENE dataset -- and
-  `symbols` the names the viewer shows for them (a symbol column such as
-  `feature_name`). {meth}`AnnDataViewer.gene_sets` returns the identifiers,
-  or the symbols with `symbols=True`. A gene set name used twice is
+  `adata.var_names` holds them. When the viewer's Data mapping names the
+  genes by a var column (such as a CELLxGENE dataset's `feature_name`),
+  `symbols` holds the names it shows for them; named by the var index, the
+  identifiers are the names and there is no `symbols`.
+  {meth}`AnnDataViewer.gene_sets` returns the identifiers, or with
+  `symbols=True` the names shown. A gene set name used twice is
   `"name (2)"`, `"name (3)"`…, as everywhere in Cellucid.
 - **Missing values.** A cell with no category or no value is missing (`NaN`).
 - **Subsamples.** When the viewer opened a subsample, every result names
@@ -187,8 +189,8 @@ replaces it; a field of that key the notebook did not push is never replaced
 session (`user-defined/values/<id>` holds a continuous one's values).
 
 {meth}`AnnDataViewer.push_gene_set` adds a gene set (or replaces the one of
-that name), its genes by identifier (`adata.var_names`) or by the symbols the
-viewer shows (identifiers first): Gene signature and Dot plot offer it under **From notebook**, and
+that name), its genes by identifier (`adata.var_names`) or by the names the
+viewer shows when a var column names them (identifiers first): Gene signature and Dot plot offer it under **From notebook**, and
 it is saved with the session (`gene-sets/notebook`).
 
 ---
@@ -204,8 +206,9 @@ protocol schema 2, `viewer-protocol.json`):
   `values` (one per named cell, or per cell of the dataset when `cells` is
   `null`; a code type's largest value is "no category", `NaN` "no value").
   Kinds: `highlight`, `categorical`, `continuous`, `geneSet` (`genes` by
-  identifier, the var index, and `symbols`, the names shown, in the same
-  order), `visibility` (`visible`), `subset` (`open`, the open cells);
+  identifier, the var index, and `symbols`, the names shown in the same
+  order when a var column names the genes, else `null`), `visibility`
+  (`visible`), `subset` (`open`, the open cells);
 - `result_removed {epoch, revision, kind, id}` and `results {epoch, dataset,
   revision, nObs, items}`, the inventory ending a snapshot: after a dataset
   opens (a page reload included) and whenever the channel opens again the
@@ -223,8 +226,14 @@ protocol schema 2, `viewer-protocol.json`):
   result they made (carrying their `requestId`), or by `command_error`; so
   are `highlight`, `setVisibility`, `setField` and `setGeneSet` refused while
   the viewer shows another dataset;
-- `color_by {field, source, label}`: a gene by its identifier, and the name
-  the viewer shows for it.
+- `color_by {field, source, symbol, cells_read}`: a gene by its identifier,
+  and the name the viewer shows for it when a var column names the genes
+  (`symbol`; `null` otherwise, and for an obs field); for a gene read for a
+  sample of the open cells (a large dataset stored cell by cell opens every
+  cell on the map and reads a gene for the first of them:
+  {ref}`genes-on-a-sample-of-the-cells`), how many of the open cells it is
+  read for (`cells_read`; `null` when every open cell's are, and for an obs
+  field), sent again when that grows.
   {attr}`AnnDataViewer.results` is the live copy; `viewer.register_hook("result", …)` runs on each.
   Nothing in the round trip is a request the notebook waits on.
 

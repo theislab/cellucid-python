@@ -74,9 +74,10 @@ As the dialog says, signing in does not by itself give Cellucid access to any of
 your repositories; that is the next step, and you choose which ones.
 
 :::{important}
-The sign-in token is held in `sessionStorage` only. Closing the browser tab
-discards it, and a shareable `?annotations=owner/repo` link never carries it.
-Every collaborator signs in as themselves.
+The sign-in token expires after 8 hours and is held in this tab's
+`sessionStorage` only. Closing the browser tab discards it, **Sign out**
+revokes it at GitHub, and a shareable `?annotations=owner/repo` link never
+carries it. Every collaborator signs in as themselves.
 :::
 
 ---
@@ -374,7 +375,7 @@ Three causes, in order of likelihood:
 
 | What | Where it lives | Survives a tab close? |
 |---|---|---|
-| Your GitHub sign-in token | `sessionStorage` | No |
+| Your GitHub sign-in token (expires after 8 hours) | `sessionStorage` | No |
 | Your votes, suggestions, comments, profile | Annotation-specific local storage | Yes |
 | Files downloaded by Pull | IndexedDB, with the SHA index in local storage | Yes |
 | The shared record | The GitHub repository | Yes, for everyone |

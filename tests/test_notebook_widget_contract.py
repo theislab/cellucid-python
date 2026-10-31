@@ -116,14 +116,21 @@ class FrontEnd:
             time.sleep(0.01)
         raise AssertionError(f"the widget did not send it; it sent {[c for c, _ in self.messages()]}")
 
-    def fetch(self, *requests: dict[str, Any]) -> list[tuple[dict[str, Any], bytes]]:
+    def fetch(self, *requests: dict[str, Any], timeout: float = 10.0) -> list[tuple[dict[str, Any], bytes]]:
+        """The answers to ``requests``, in the order asked: each is answered
+        on a thread of its own, and sent as it is ready."""
         before = len(self.messages("answers"))
         self.post({"t": "fetch", "requests": list(requests)})
-        answered = []
-        for content, buffers in self.messages("answers")[before:]:
-            for answer in content["answers"]:
-                answered.append((answer, buffers[answer["buffer"]] if answer["buffer"] >= 0 else b""))
-        return answered
+        ids = [request["id"] for request in requests]
+        deadline = time.monotonic() + timeout
+        while True:
+            answered = {}
+            for content, buffers in self.messages("answers")[before:]:
+                for answer in content["answers"]:
+                    answered[answer["id"]] = (answer, buffers[answer["buffer"]] if answer["buffer"] >= 0 else b"")
+            if all(i in answered for i in ids) or time.monotonic() > deadline:
+                return [answered[i] for i in ids if i in answered]
+            time.sleep(0.005)
 
     def connect(self, socket_id: int = 0) -> None:
         widget = self.widget
@@ -238,10 +245,56 @@ def test_answers_that_arrive_together_share_messages_of_bounded_size(widget, fro
     before = len(front.messages("answers"))
     front.fetch(*({"id": index, "method": "GET", "path": url, "range": f"bytes=0-{39 + index}"} for index in range(4)))
     messages = front.messages("answers")[before:]
-    # 40, 41, 42, 43 bytes with 64 bytes to a message: one body per message.
+    # 40, 41, 42, 43 bytes with 64 bytes to a message: one body per message
+    # (each answered on its own thread, in whatever order they are ready).
     assert [len(content["answers"]) for content, _ in messages] == [1, 1, 1, 1]
-    assert [len(buffers[0]) for _, buffers in messages] == [40, 41, 42, 43]
+    assert sorted(len(buffers[0]) for _, buffers in messages) == [40, 41, 42, 43]
     assert _ANSWER_MESSAGE_BYTES == 8 * 1024 * 1024
+
+
+def test_a_slow_request_holds_back_no_other_and_frees_the_kernel_at_once(widget, front):
+    """A chunk made while its matrix is laid out took 2.7 s at 10M cells, and
+    every request after it waited (the kernel answered in turn): each is
+    answered on a thread of its own now, as the HTTP server answers them."""
+    release = threading.Event()
+    server = widget._server
+    answer_request = server.answer_request
+
+    def slow_first(method, path, range_header):
+        if path == "_cellucid/info":
+            assert release.wait(10)
+        return answer_request(method, path, range_header)
+
+    server.answer_request = slow_first
+    try:
+        started = time.monotonic()
+        front.post({"t": "fetch", "requests": [
+            {"id": 1, "method": "GET", "path": "_cellucid/info", "range": None},
+            {"id": 2, "method": "GET", "path": "_cellucid/health", "range": None},
+        ]})
+        # The kernel's thread is free as soon as the requests are handed over.
+        assert time.monotonic() - started < 1
+        content, _ = front.wait_for(lambda c: c["t"] == "answers" and any(a["id"] == 2 for a in c["answers"]))
+        assert all(answer["id"] != 1 for answer in content["answers"]), "the slow one is still being made"
+        release.set()
+        front.wait_for(lambda c: c["t"] == "answers" and any(a["id"] == 1 and a["status"] == 200 for a in c["answers"]))
+    finally:
+        release.set()
+        server.answer_request = answer_request
+
+
+def test_answers_ready_together_share_a_message(widget, front):
+    """Answers keep under Jupyter Server's message limit (1,000 a second over
+    3 s, which it enforces by dropping messages): those ready together go in
+    one message."""
+    import cellucid.jupyter._widget as module
+
+    assert module._ANSWER_MESSAGE_INTERVAL == 2 / 1000
+    before = len(front.messages("answers"))
+    answers = front.fetch(*({"id": index, "method": "GET", "path": "_cellucid/health", "range": None} for index in range(60)))
+    assert [answer["status"] for answer, _ in answers] == [200] * 60
+    messages = front.messages("answers")[before:]
+    assert len(messages) < 60
 
 
 def test_the_channel_runs_over_the_comm_commands_first_then_events_in_order(widget, front):
@@ -389,6 +442,17 @@ def test_a_self_hosted_app_address_is_accepted(tmp_path):
         made.close()
 
 
+def test_the_kernel_keeps_what_cache_bytes_allows_of_what_it_makes(tmp_path):
+    adata = ad.AnnData(X=np.zeros((2, 1), np.float32), obsm={"X_umap": np.zeros((2, 2), np.float32)})
+    made = Widget(adata, dataset_name="Demo", dataset_id="demo", cache_bytes=4096)
+    try:
+        assert made._server.cache_bytes == 4096
+        assert made._server._served.priority._lines._budget == 4096
+    finally:
+        made.stop()
+        made.close()
+
+
 def test_outside_a_notebook_there_is_nowhere_to_show_it(widget):
     widget._context["in_jupyter"] = False
     with pytest.raises(RuntimeError, match="browser tab"):
@@ -415,9 +479,90 @@ def test_the_cell_that_showed_it_does_not_show_it_twice(widget, monkeypatch):
     assert "notebook widget" in widget._repr_html_()
 
 
+def test_a_cell_run_again_stops_the_widget_it_showed_before(monkeypatch, tmp_path):
+    """A notebook cell run again replaces its output: the widget it showed
+    before is stopped and its served store (the object's snapshot, laid out in
+    files of the temporary folder) released -- unless another cell shows it
+    too. Several widgets of one run are kept; a widget closed is stopped."""
+    import cellucid.jupyter._widget as module
+    from cellucid import _scratch
+
+    monkeypatch.setattr(_scratch.tempfile, "tempdir", str(tmp_path))
+    run = {"cell": "cell-a", "count": 1}
+    monkeypatch.setattr(module, "_cell_id", lambda: run["cell"])
+    monkeypatch.setattr(module, "_execution_count", lambda: run["count"])
+    monkeypatch.setattr("IPython.display.display", lambda obj: None)
+    adata = ad.AnnData(
+        X=np.arange(12, dtype=np.float32).reshape(4, 3),
+        obs=pd.DataFrame(index=list("wxyz")),
+        obsm={"X_umap": np.arange(8, dtype=np.float32).reshape(4, 2)},
+    )
+
+    def shown() -> Widget:
+        made = Widget(adata, dataset_name="Demo", dataset_id="demo")
+        made.display()
+        return made
+
+    first, second = shown(), shown()
+    for made in (first, second):
+        made._server._served.priority.laid_out()
+    assert len(list(tmp_path.glob("cellucid-scratch-*"))) == 2
+    run["count"] = 2
+    third = shown()
+    assert first._server is None and second._server is None
+    assert third._server is not None
+    third._server._served.priority.laid_out()
+    assert len(list(tmp_path.glob("cellucid-scratch-*"))) == 1
+    # Shown by another cell as well: kept when its first cell runs again.
+    run.update(cell="cell-b", count=3)
+    third.display()
+    run.update(cell="cell-a", count=4)
+    fourth = shown()
+    assert third._server is not None
+    third.close()
+    fourth.close()
+    assert third._server is None and fourth._server is None
+    assert list(tmp_path.glob("cellucid-scratch-*")) == []
+
+
+def test_where_no_cell_id_is_sent_showing_a_dataset_again_stops_its_earlier_widget(monkeypatch, tmp_path, capsys):
+    """A front end that sends no cell id (classic Notebook): showing the same
+    dataset id again stops the widget shown before (its served store
+    released) and says so, as cellucid-r's cellucid_view() does where it
+    knows no cell; another dataset's widget stays."""
+    import cellucid.jupyter._widget as module
+    from cellucid import _scratch
+
+    monkeypatch.setattr(_scratch.tempfile, "tempdir", str(tmp_path))
+    monkeypatch.setattr(module, "_cell_id", lambda: None)
+    monkeypatch.setattr(module, "_execution_count", lambda: None)
+    monkeypatch.setattr("IPython.display.display", lambda obj: None)
+    adata = ad.AnnData(
+        X=np.arange(12, dtype=np.float32).reshape(4, 3),
+        obs=pd.DataFrame(index=list("wxyz")),
+        obsm={"X_umap": np.arange(8, dtype=np.float32).reshape(4, 2)},
+    )
+
+    def shown(dataset_id: str) -> Widget:
+        made = Widget(adata, dataset_name="Demo", dataset_id=dataset_id)
+        made.display()
+        return made
+
+    first = shown("demo")
+    other = shown("other")
+    again = shown("demo")
+    try:
+        assert first._server is None, "the earlier widget of the same dataset is stopped"
+        assert other._server is not None and again._server is not None
+        assert "Stopped the earlier viewer of 'demo'" in capsys.readouterr().out
+    finally:
+        for made in (first, other, again):
+            made.close()
+
+
 # The widget's front end, byte for byte cellucid-r's inst/widget/: pinned here
 # and in cellucid-r's tests/testthat/test-viewer-widget.R.
-WIDGET_JS_SHA256 = "e296bc2cfba93560f24d35792fe84934b707f5bf3fca82083fa4c39db9ebbc04"
+WIDGET_JS_SHA256 = "75258ef90ac240b3902dded04695a7b51efbd7755606076d598b6a64c49a466b"
 WIDGET_CSS_SHA256 = "3b9acad3ebc04ece34acf580446a72ed7f73f3497b747539a11bc33fe281d82b"
 
 

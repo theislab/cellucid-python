@@ -160,8 +160,10 @@ A loaded dataset in Cellucid: the sidebar controls the active view while the cat
 - **Names.** Repeated cell or gene names are made unique (`MATR3`, `MATR3-1`)
   and reported; keys and columns must be portable path components
   ({doc}`../../c_data_preparation_api/02_input_requirements_global`).
-- **Values.** Embeddings, expression, graph and vectors must be finite and fit
-  in float32; `obs`/`var` numbers may hold NaN but not infinities.
+- **Values.** Expression and the graph must be finite and fit in float32;
+  embeddings and vectors fit float32, a row of NaN being a cell the array does
+  not place (written as given, not drawn in that embedding); `obs`/`var`
+  numbers may hold NaN but not infinities.
 - **Cell order.** The cells are stored in priority order (`priority_seed`), so
   `anndata.read_h5ad` / `anndata.read_zarr` give them in that order;
   {func}`~cellucid.restore_original_order` puts them back in the order given.

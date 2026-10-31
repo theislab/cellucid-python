@@ -94,6 +94,51 @@ the file that states the same dataset id. An `.rds` file or a MatrixMarket
 folder opened again in the same tab reads what was kept the first time
 ({doc}`17_open_r_objects`).
 
+(reopen-local-file)=
+### Reopening a file after a reload, or from a session
+
+In Chrome, Edge and other Chromium-based browsers (with Cellucid open as a
+page of its own, not inside a frame), **Open… › File…** and **Open… ›
+Folder…** use the browser's own file pickers, and the browser hands Cellucid
+a *handle* of what you chose, or dropped. Once the dataset opened, the handle
+is kept in this browser (IndexedDB) under the dataset's id, with the file's
+name, size and modification time; no path and nothing of the content
+({doc}`../o_accessibility_privacy_security/02_privacy_model`). Then:
+
+- **After a reload** of a tab that showed it, a notification says
+  *"cells.h5ad" was open in this tab before the page was reloaded.* with
+  **Reopen cells.h5ad**. (The page itself opens what its address names, as
+  before; the dataset the tab showed is noted in the tab's own
+  `sessionStorage`, never in the address.)
+- **Loading a session saved on it** (**Session file › Load**) opens it, then
+  applies the session. When the browser still lets Cellucid read the file,
+  this needs no click; otherwise the session offers **Reopen cells.h5ad**
+  and is applied once you click it and the file is open.
+
+Whether the browser still lets Cellucid read the file is the browser's
+decision: Chrome keeps that leave while any tab of the site stays open (a
+reload included, so there **Reopen** opens the file at once), and across
+visits when you chose *Allow on every visit*. Otherwise the click on
+**Reopen** is what lets the browser ask (*Allow this time*, *Allow on every
+visit* or *Don't allow*); it asks once, then the file opens exactly as a
+picked one, and the highlights draft of that dataset is offered back as
+usual. When the file
+cannot be reopened, the opening says why and what to do — choose it again
+with **Open… › File…** (or **Folder…**):
+
+- you did not allow reading it (the handle stays, to be offered again);
+- it is no longer where it was opened from (moved, renamed or deleted);
+- it changed since it was opened here (another size or modification time,
+  or for a folder any of its files): a changed file may hold another
+  dataset, so it is not reopened under the old one's name.
+
+A file that moved or changed has its handle forgotten. **Session › Open
+data › Stored › Manage…** lists every file kept to reopen and forgets the
+ones you choose ({ref}`stored-in-this-browser`). Firefox and Safari give a
+page no handle of a chosen file: there nothing is kept or offered, and after
+a reload, or for a session saved on a local file, you choose the file again
+with **Open…**.
+
 ## Load a Zarr Store Folder
 
 ### When to use this
@@ -285,13 +330,17 @@ what `obsm` holds and why each entry was not used:
 ```text
 Cellucid found nothing to plot. It needs an obsm array with one row per cell
 (10,000) and at least one numeric column. obsm holds: X_df (table),
-spatial (10,000 × 2, NaN at cell 17). Add a 2-D embedding to obsm (for example
+spatial (10,000 × 2, not representable as float32 at cell 17). Add a 2-D embedding to obsm (for example
 with sc.tl.umap in Scanpy), then open the data again.
 ```
 
-The list is the useful half: a table, a sparse array, or a dense array with the
-cell that holds a missing or infinite value. Fix that array, or add an
-embedding (for example `sc.tl.umap(adata)`), and open the file again.
+The list is the useful half: a table, a sparse array, or a dense array and why
+it cannot be drawn (another row count, every cell missing, a value past
+float32 at the cell named). Fix that array, or add an embedding (for example
+`sc.tl.umap(adata)`), and open the file again. An `obsm` with no dense numeric
+array at all (empty, or only tables and sparse arrays) is refused sooner,
+before any cell is read, as having no cell embedding
+({ref}`no-cell-embedding`).
 
 ## Common Failure Modes (and Why They Happen)
 
@@ -324,9 +373,14 @@ embedding (for example `sc.tl.umap(adata)`), and open the file again.
 
 - **Folder…** uses the folder-input capability available in supported
   current desktop browsers; Safari's leaves out hidden files (see
-  [Hidden metadata files](#hidden-metadata-files)).
-- **File…** is an ordinary single-file input, with the same validation
-  contract in Chrome, Edge, Firefox, and Safari.
+  [Hidden metadata files](#hidden-metadata-files)). In Chrome and Edge it is
+  the browser's folder picker, which lists hidden files and asks once to let
+  the site view the folder's files.
+- **File…** is an ordinary single-file input in Firefox and Safari, and the
+  browser's file picker in Chrome and Edge (so the file can be reopened with
+  one click, {ref}`reopen-local-file`); the same names are offered and the
+  same validation applies in all four. Where a browser policy blocks those
+  pickers, the same click opens the file inputs instead.
 - **Permission prompts**: if you deny folder access, Cellucid cannot read files.
 - **Large `.h5ad`**: read from disk as each view needs it; a cell-major matrix is reorganised by gene in the background, with a progress notice.
 - **Zarr ZIP root**: the archive must contain either root metadata at archive
@@ -387,7 +441,7 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 **How to confirm**
 - Read the message itself: its `obsm holds: …` part lists every
   entry with its shape and, for a dense array, the reason it was not used
-  (for example `NaN at cell 17`).
+  (for example `not representable as float32 at cell 17`).
 - In Python:
 
   ```python

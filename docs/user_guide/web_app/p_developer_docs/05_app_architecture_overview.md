@@ -214,6 +214,52 @@ These are the most common sources of accidental regressions:
 
 ---
 
+## Cancellation and failures (one rule each)
+
+Every thread of the app (the page, the reader, decode, analysis and
+figure-export workers) follows the same three rules. A contract test
+(`tests/cancellation-guard-contract.test.mjs`) keeps every module on them.
+
+- **One way to stop work** (`assets/js/utils/abort.js`). Work stops through
+  `cancel(controller, kind, words)` or a controller aborted with
+  `cancelled(kind, words)`. A cancellation is an `AbortError` with a kind:
+  `user` (the person pressed Cancel or closed something), `superseded` (a
+  newer choice replaced it), `closed` (what it belonged to went away),
+  `released` (memory was given back under it; asked again, it works) or
+  `page-left`. `isCancellation(error)` answers by name alone, so the
+  platform's own aborts count too, and `cancellationKind(error)` tells the
+  kinds apart. **A cancellation is never shown as a failure.** Shared work
+  (`SharedWork`) stops only once every waiter has left, and its own abort
+  names no waiter's reason. `awaitWithSignal` and `onAbort` keep one listener
+  on a signal however many reads wait on it. No module defines its own abort
+  helpers, aborts with a plain `Error`, builds an `AbortError` by hand,
+  checks `name === 'AbortError'`, or uses a subsystem code for supersession.
+- **No clock turns slowness into failure.** An analysis task, a probe of a
+  Cellucid server and a request to a viewer host have no deadline of their
+  own. What bounds a wait is its owner's signal (Cancel, a newer choice,
+  closing) or measured silence (startup steps, an opening's stall note).
+  A request to a notebook kernel counts as a wait on the person
+  (`utils/person-wait.js`): the kernel answers between cells. A kernel that
+  goes away is said, not timed (`data/viewer-embed.js`, `ended`).
+- **One wire format, one notice** (`utils/error-wire.js`, `utils/errors.js`).
+  Every worker answers a failed request with `toWire(error)` and the page
+  rebuilds it with `fromWire`, so a refused allocation stays a `RangeError`,
+  a cancellation keeps its kind, and an explained failure keeps its words,
+  code and cause. The surface that shows a failure marks it
+  (`markReported`), and a caller further up skips a marked one
+  (`isReported`): a gene that fails to load is said once, by its loading
+  card. Background work nobody awaits (a kept journal's removal) is observed
+  with `settleQuietly(promise, doing)`.
+
+A worker that never loaded (a page that outlived its deploy) is retired, and
+its calls fail saying "reload the page". A stray error in a live worker is
+logged and fails none of the reads waiting on it. A page put in the
+back/forward cache keeps its reader worker, so the person comes back to reads
+still under way. Cellucid checks before startup that the browser has the
+newest platform features it calls (`BROWSER_FEATURES` in
+`app/startup-failure.js`: `AbortSignal.any`, which sets the floor at Chrome
+116, Firefox 124 and Safari 17.4).
+
 ## Troubleshooting: how to report a bug in a way that can be fixed
 
 If you are reporting an issue (even as a non-developer), include:

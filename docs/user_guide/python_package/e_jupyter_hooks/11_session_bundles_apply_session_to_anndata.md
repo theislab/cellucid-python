@@ -106,7 +106,8 @@ All materialized fields are cell-aligned `adata.obs` columns.
 ### 3) Provenance metadata → `adata.uns["cellucid"]`
 
 By default, application stores:
-- the session manifest,
+- the session manifest (without `source`: where the viewer opened the dataset
+  is not part of the object),
 - dataset fingerprint,
 - and “applied settings”
 under:
@@ -156,8 +157,8 @@ mapped gene axis.
 ### `cellOrder`: shape-checked here, enforced in the viewer
 
 `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
-16-character lowercase hexadecimal `digest` of the coordinates of that
-embedding. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
+16-character lowercase hexadecimal `digest` of that embedding's stored
+coordinates, each cell named by its original position. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
 columns that were read, one per dimension. It is what stops a dataset republished under the same
 name with the same cell and gene counts but a different row order from silently
 re-pointing every saved selection at different cells.
@@ -166,9 +167,9 @@ re-pointing every saved selection at different cells.
 - **Its shape is checked strictly.** Anything other than the three keys above,
   a `dimension` outside 1–3, a malformed `digest`, or an `embedding` whose
   columns do not fit its kind raises before payload decoding.
-- **Its digest is never verified.** It is taken over the normalized coordinates
-  the viewer drew, and `apply_session_to_anndata` writes into an `AnnData` whose
-  row order the caller controls. There is nothing here to check it against.
+- **Its digest is never verified.** It is the viewer's check, taken on the
+  cells it opens when it restores a session, and `apply_session_to_anndata`
+  writes into an `AnnData` whose rows and embeddings the caller controls.
 
 Enforcing cell-order identity is therefore the viewer's job, not this reader's,
 so a bundle this reader accepts is not necessarily one the web app will open.

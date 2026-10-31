@@ -26,6 +26,19 @@ If you hit this, your fastest fix is usually:
 
 ---
 
+## Hard requirement: a browser from 2024 or later
+
+Cellucid also calls platform features that set a minimum browser version:
+**Chrome or Edge 116, Firefox 124, Safari 17.4** (macOS 14.4 / iPadOS 17.4) or
+later. The newest of them is `AbortSignal.any`, which every opening uses to
+stop its reads together. Cellucid checks for these features before it starts.
+An older browser (for example Safari on macOS Monterey or Ventura that has not
+been updated past 17.3) sees **This browser cannot run Cellucid** with the
+minimum versions, instead of a failure part-way through opening a dataset.
+Cellucid does not ship stand-ins for missing features: update the browser.
+
+---
+
 ## Supported desktop environments
 
 Cellucid supports the current stable releases of:
@@ -38,7 +51,11 @@ Cellucid supports the current stable releases of:
 | Safari | Yes | — | — |
 
 All supported browsers must provide WebGL2 and the native
-`DecompressionStream('gzip')` API. Browser-native file pickers differ visually,
+`DecompressionStream('gzip')` API. Data compressed with Zstandard, LZ4 or
+Blosc (most Zarr stores) is decoded with WebAssembly: where it is turned off
+(Safari's Lockdown Mode, Edge's enhanced security mode, a managed policy),
+opening such data says so and asks to allow WebAssembly for the site or to use
+another browser; gzip-compressed and uncompressed files open as before. Browser-native file pickers differ visually,
 but opening a file or a folder (**Open… › File…** or **Folder…**, or a drop)
 reads it the same way on every supported platform.
 
@@ -62,7 +79,14 @@ JavaScript memory and the GPU — not CPU speed:
   ({doc}`../n_benchmarking_performance/05_benchmark_tools` has every
   measurement). Opening a dataset larger than the device holds, Cellucid
   opens a subsample sized to fit (77 bytes a cell against half the device's
-  memory: about 104 million cells on a 16 GB machine).
+  memory: about 104 million cells on a 16 GB machine), and its caches use
+  what those cells leave of that half.
+- **Several tabs and notebook widgets share the device.** Cellucid pages of
+  one site (two tabs of www.cellucid.com, or the widgets of one notebook)
+  divide the memory the app may use: each takes what the others do not hold,
+  and at least an equal share. A tab and a notebook widget, or two different
+  sites, cannot see each other: each counts as alone. A tab you are not
+  looking at keeps only what it shows, so the others get its memory.
 - **GPU driver quality**: outdated drivers can cause rendering glitches or failures.
 
 Rule of thumb:
@@ -91,9 +115,11 @@ that device.
   on iPhone and iPad and many Android browsers do not offer. There, choosing
   smoke shows “Volumetric smoke isn't available on this device: …” and the view
   stays in Points; everything else works.
-- On a phone-sized screen (720 px wide or less) the sidebar opens over the whole
-  screen. Tap **✕** in its top-right corner to close it and see the plot; tap
-  **☰** in the top-left corner to bring it back.
+- On a phone-sized screen (720 px wide or less) the plot comes first: the
+  sidebar waits as a bar at the foot of the screen with the dataset's name.
+  Tap it, or swipe it up, to open the sidebar over the whole screen; tap **✕**
+  in its top-right corner to return to the bar. The tab remembers which you
+  left (until the tab is closed; never in the address).
 - A camera frames the same data on every screen shape: the 45° field of view
   applies to the plot's shorter side, so on a phone held upright a sample's
   preset or the default view shows across what a landscape screen shows down,
@@ -129,11 +155,12 @@ On a phone the sidebar is the whole screen; **✕** at the top right closes it.
 
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/web_app/phone-plot.png
-:alt: The same phone screen after tapping ✕: the whole Pancreas sample in view on the plot, the menu button (☰) at the top left, and the selection bar with its Select mode switch at the bottom.
+:alt: Cellucid on a phone-sized touch screen as it opens the Pancreas sample: the whole sample in view on the plot, the selection bar with its Select mode switch, and below it the bar naming the dataset at the foot of the screen.
 :width: 780px
 
-Closed, the plot fills the screen with the whole sample in view: **☰** brings
-the sidebar back, and the selection bar at the bottom holds **Select mode**.
+A phone opens on the plot, with the whole sample in view: the bar at the foot
+names the dataset (tap it, or swipe it up, for the sidebar), and the selection
+bar above it holds **Select mode**.
 ```
 :::
 
@@ -207,7 +234,9 @@ This section is intentionally long. Use the symptom that matches what you see.
 
 **Likely causes (ordered):**
 
-1) Browser does not support WebGL2 (old version, unusual browser).
+1) Browser does not support WebGL2 (old version, unusual browser). A
+   browser older than the minimum versions above is refused at start with
+   **This browser cannot run Cellucid** and those versions.
 2) Hardware acceleration disabled (browser setting or corporate policy).
 3) GPU/driver blacklisted by the browser (stability protection).
 4) Remote desktop / VM environment without GPU passthrough.
@@ -258,9 +287,15 @@ This section is intentionally long. Use the symptom that matches what you see.
 
 ---
 
-### Symptom: “WebGL context lost. Reload required…”
+### Symptom: “Graphics reset by the browser”
 
-Cellucid shows an overlay and requires a reload when the GPU context is lost.
+When the browser takes the GPU context away (a GPU crash or reset, memory
+pressure), Cellucid shows a dialog, saves your session in the page at once
+(its Save session button writes it), and restores the graphics as soon as the
+browser gives the context back: your filters, selections, kept views and
+analyses are kept, and the view is drawn as before. Only if restoring fails
+does the dialog offer Reload, and the session is written to disk first so you
+can load it after reloading.
 
 **Likely causes (ordered):**
 
@@ -278,8 +313,9 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
 
 **Fix (safe → aggressive)**
 
-1) Reload the page.
-2) After reload, reduce GPU load:
+1) Usually nothing: the graphics come back by themselves. If the dialog says
+   they could not be restored, keep the session it saved and reload the page.
+2) If it repeats, reduce GPU load:
    - avoid smoke mode, or lower its render resolution, ray quality, and noise detail,
    - keep fewer views,
    - reduce point size,

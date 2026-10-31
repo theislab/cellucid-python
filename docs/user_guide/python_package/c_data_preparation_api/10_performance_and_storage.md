@@ -42,6 +42,13 @@ every gene in two cell types). Full method and the per-step numbers:
 - `prepare()` holds the converted arrays in memory next to its inputs: the
   expression matrix as float32 CSC, the embeddings as float32. Plan for a few
   times the size of the expression matrix's stored values.
+- A sparse `X` that is not in memory is never read whole: a backed AnnData's
+  (`read_h5ad(path, backed="r")`) is read from its file in blocks, and a
+  lazily read one (a dask array of sparse blocks, `anndata.experimental.read_lazy`)
+  is decoded block of rows by block of rows into a scratch folder in the
+  temporary folder (removed afterwards), then laid out from there; the same
+  holds for an AnnData `show_anndata()` serves (its X, layers and raw). A
+  dense dask array is computed.
 - Compressing the chunks is most of the time `prepare()` takes. An `.h5ad`'s
   chunks are compressed on every core and stored with HDF5's direct chunk
   write, in the layout HDF5 itself writes; a Zarr store's are compressed

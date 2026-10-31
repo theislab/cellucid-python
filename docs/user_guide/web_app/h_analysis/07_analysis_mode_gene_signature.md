@@ -110,7 +110,7 @@ expression matrix in use (see {doc}`../b_data_loading/13_data_mapping`):
 | **Median** | the median of `x_ig` (the mean of the two middle values for an even count) | — |
 | **Mean z-score** | the mean of `(x_ig − μ_g) / σ_g`, with `μ_g`, `σ_g` (ddof 1) over every cell of the dataset | — |
 | **Module score (scanpy)** | the mean of `x_ig` over `G` less the mean over control genes | scanpy `tl.score_genes` (Satija et al. 2015) |
-| **Rank-based (UCell)** | `1 − (Σ_{g∈G} min(r_ig, R+1) − S(S+1)/2) / (S·R)` | Andreatta & Carmona 2021 |
+| **Rank-based (UCell)** | `1 − (Σ_{g∈G} min(r_ig, R) − S(S+1)/2) / (S·R − S(S+1)/2)` | Andreatta & Carmona 2021; the UCell package's `u_stat` (UCell 2.x) |
 
 Details:
 - **Mean** and **Median** use the cell’s finite values; a cell with none gets no
@@ -126,8 +126,12 @@ Details:
   view names the controls.
 - **UCell** ranks every gene in each cell, highest first, ties sharing their
   average rank; `r_ig` is gene `g`’s rank, `S` the set size and `R` **Max rank**
-  (1500), past which a rank counts as `R + 1`. Scores lie in 0–1, comparable
-  across cells and datasets.
+  (1500, at most the dataset's genes), at or past which a rank counts as `R`.
+  This is the current UCell package's score (R `u_stat`): 1 when the set's
+  genes are the cell's top `S`, 0 when none is ranked within `R`. (The 2021
+  paper's form counted such ranks as `R + 1` over `S·R`, so a cell with no set
+  gene in range scored `(S − 1) / (2R)` instead of 0.) A set needs
+  `R > (S + 1) / 2`. Scores lie in 0–1, comparable across cells and datasets.
 
 What a run reads:
 - **Mean**, **Median**: each set gene once, as its non-zero entries.
@@ -183,7 +187,11 @@ file joins back to `adata.obs`. See {doc}`09_exporting_analysis_results`.
 ## Edge cases and pitfalls
 
 - **Huge signatures (hundreds of genes)**: each gene is one read, so the time grows
-  with the gene count over a slow link.
+  with the gene count over a slow link. The genes (and a Module score's
+  controls) are read a batch at a time, as many as the analysis memory holds,
+  and each is added to every page's scores and let go, so a large signature on
+  a large dataset never holds every gene at once; a gene in two sets is read
+  for each.
 - **Housekeeping-dominated signatures**: scores track library size and QC rather
   than biology; try UCell, or Module score.
 - **Comparing sets**: Mean scores of two sets are on different footings when their

@@ -47,7 +47,8 @@ links the checked notebook and its exact launch command.
 browser** loads from `https://www.cellucid.com` into the cell's output (or
 from a copy you host, named with `web_source_url=`). The kernel needs no
 network access and opens no port: the app reads your data from the kernel
-through the notebook's own connection, so nothing is uploaded anywhere.
+through the notebook's own connection, so nothing is uploaded anywhere. The
+widget's page is a viewer page, which sends no usage analytics.
 ```
 
 ## Minimal Cells (Copy/Paste)
@@ -129,9 +130,9 @@ When you call `show_anndata(...)`, Cellucid:
 1) **Checks the dataset and your launch choices.** It reads only metadata (the
    cell and gene counts and the names of `obs`, `var`, `obsm`, `obsp` and the
    layers) and checks every option you named against it. An in-memory
-   `AnnData` is served as a store with its cells in priority order, made from
-   it as the viewer reads it (a `MuData` is written once to a temporary
-   `.h5mu`, removed when the viewer stops).
+   `AnnData` or `MuData` is served as a store with its cells in priority
+   order, made from it as the viewer reads it (no copy of it is written as a
+   file).
 2) **Shows a widget** (`cellucid.Widget`, an [anywidget](https://anywidget.dev))
    in the cell's output. The widget frames the app at
    `https://www.cellucid.com/?viewer=embedded` and hands it, in a message, the
@@ -170,12 +171,11 @@ plain script or through an SSH tunnel (see {ref}`remote-hpc`).
 `show_anndata()` is the fastest way to get started in an analysis notebook.
 
 It supports:
-- an in-memory `AnnData`, served as a store with its cells in priority order
-  (its arrays copied once, as the viewer starts, into memory-mapped files
-  removed when the viewer stops: the object as it was then, its sparse
-  expression matrices laid out gene-major; each chunk made from that copy when
-  the viewer asks for it), or an in-memory `MuData`, written once to a
-  temporary `.h5mu`
+- an in-memory `AnnData` or `MuData`, served as a store with its cells in
+  priority order (its arrays copied into memory-mapped files removed when the
+  viewer stops: the object as it was shown, its expression matrices laid out
+  gene-major in the background while the viewer opens, read-only until then;
+  each chunk made from that copy when the viewer asks for it)
 - a `.h5ad` file or a Zarr store folder (Zarr v2 with `.zgroup`, or v3 with
   `zarr.json`) or zipped Zarr store (`.zip`, such as `.zarr.zip`): one
   `prepare()` wrote read as it is on disk, any other served in priority order,
@@ -190,8 +190,8 @@ It supports:
 Nothing is converted ahead: the viewer reads the store itself, with range
 requests, and a subsample it opens (Session › Open data) reads only its cells,
 the first rows of every array in priority order. A store holding an array
-stored with a codec the browser cannot decode (an HDF5 filter such as Blosc,
-Zstandard or szip; a Zarr codec such as bz2, lzma or zfpy) is decoded on the
+stored with a codec the browser cannot decode (an HDF5 filter such as
+szip or scale-offset; a Zarr codec such as Snappy or zfpy) is decoded on the
 kernel, chunk by chunk as the viewer asks.
 
 ### Exact parameters
@@ -725,8 +725,10 @@ session collect `request.result()` (or
 ### Symptom: “The viewer says Cellucid found nothing to plot”
 
 **Likely causes**
-- No `obsm` array can be plotted: each one is a table, sparse, not one row per
-  cell, or non-finite in the columns that would be drawn.
+- No `obsm` array can be plotted: each dense one has another row count than
+  the cells, places no cell (every row non-finite), or holds a value past
+  float32. (An `obsm` with no dense numeric array at all is refused as having
+  no cell embedding: {ref}`no-cell-embedding`.)
 
 **How to confirm**
 - `print(adata.obsm.keys())`

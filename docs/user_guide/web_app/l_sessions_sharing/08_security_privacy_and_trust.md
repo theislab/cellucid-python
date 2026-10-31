@@ -26,9 +26,10 @@ Depending on what you did in the UI, a session bundle may include:
 
 - **Dataset identifiers**
   - the dataset id, counts and cell-order digest of the dataset it was saved on
-  - where the dataset was opened from, for a sample, a data link (the link
-    itself, including any access key it carries) or a server (its address);
-    for a file opened from your own computer, its file or folder name
+  - where the dataset was opened from, for a sample, a data link (in its
+    public form: never a key, signature or token the link carries) or a
+    server (its address); for a file opened from your own computer, its file
+    or folder name
 - **Field names and category labels**
   - including any renames you applied
   - including deleted/purged field registry state
@@ -47,8 +48,12 @@ Depending on what you did in the UI, a session bundle may include:
 - **Figure Export settings**
   - including the figure title and axis labels you typed
 - **Where the dataset came from**
-  - the sample id, data link (including any access key the link carries), or
-    server address; for a local file, its file or folder name
+  - the sample id, data link in its public form (never a key, signature or
+    token it carries: a recipient who has no access of their own opens the
+    link you sent them first, then loads the session; see
+    {ref}`link-access-keys`), or server address; for a local file, its file
+    or folder name (never its path, nor the handle a Chromium browser keeps
+    to reopen it, which stays in that browser)
 
 Practical implication:
 - Do not put patient identifiers or private sample barcodes into highlight/page names if you intend to share sessions.

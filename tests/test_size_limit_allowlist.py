@@ -28,11 +28,11 @@ MIB_INLINE = re.compile(r"\b1024\s*\*\s*1024")
 CLASSES = {"FORMAT", "PLAT", "HOST", "PERF", "MSG"}
 
 ALLOWLIST: dict[str, tuple[str, str]] = {
-    "src/cellucid/prepare_data/_inputs.py:FLOAT32_EXACT_INTEGER_LIMIT": (
+    "src/cellucid/prepare_data/_gene_major.py:FLOAT32_EXACT_INTEGER_LIMIT": (
         "FORMAT",
         "The largest integer float32 holds exactly (2**24); counts above it are stored as float64.",
     ),
-    "src/cellucid/prepare_data/_inputs.py:_FLOAT32_MAX": (
+    "src/cellucid/prepare_data/_gene_major.py:FLOAT32_MAX": (
         "FORMAT",
         "The largest finite float32; a larger magnitude would be stored as an infinity.",
     ),

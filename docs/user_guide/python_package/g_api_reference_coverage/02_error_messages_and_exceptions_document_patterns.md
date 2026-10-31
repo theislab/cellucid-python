@@ -75,8 +75,9 @@ Document these explicitly:
 - missing embeddings (an empty or absent `embeddings=` mapping)
 - mismatched `n_cells` across inputs (`obs`, embeddings, `gene_expression`,
   `connectivities`, vector fields)
-- NaN/Inf in embeddings, expression, the graph and vector fields, counted with
-  the first affected positions
+- NaN/Inf in expression and the graph, counted with the first affected
+  positions; an embedding or vector field with no finite row (a NaN row alone
+  is a cell it does not place), or a value past float32
 - keys and column names that cannot be a path in a store on every platform
 - text the viewer prints verbatim -- `dataset_name`, `dataset_description`,
   `citation_text`, `source_name` -- carrying a character with no glyph

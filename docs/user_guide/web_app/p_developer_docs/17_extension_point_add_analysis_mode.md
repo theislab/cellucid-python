@@ -86,11 +86,11 @@ If your UI creates:
 
 …you must provide a cleanup path:
 - call `purgePlot(...)` when replacing plots
-- unregister memory monitor handlers if you register them
+- stop counting a cache you registered with the memory model (`registerResidentHolder` returns the unregister)
 - clear timers and event listeners
 
-Memory monitor:
-- `cellucid/assets/js/app/analysis/shared/memory-monitor.js`
+Memory model:
+- `cellucid/assets/js/data/memory-budget.js`
 
 ---
 
@@ -136,7 +136,7 @@ Because analysis interacts with highlights, pages, datasets, and caching, valida
 - dataset switch resets caches cleanly
 - page add/remove/rename does not corrupt selection state
 - plots are purged when replaced
-- memory monitor cleanup does not break active UI
+- a memory-model trim (`releaseResidentMemory('caches')`) does not break active UI
 
 See:
 - {doc}`14_testing_ci_and_release_process`
@@ -162,7 +162,7 @@ Likely causes:
 
 Fix:
 - add `destroy()` and purge/clear resources
-- register cleanup with the memory monitor if appropriate
+- count what it keeps in the memory model (`registerResidentHolder`) if it keeps memory by choice
 
 ---
 

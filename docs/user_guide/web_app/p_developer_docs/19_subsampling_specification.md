@@ -63,15 +63,24 @@ An interface offers a share; the size it stands for is computed exactly:
 ```
 share  = the rational a decimal text names: a percentage text over 100
          (`0.35` → 35/10000), or a fraction given as a binary64 number
-         taken as its shortest round-trip decimal (JavaScript `String(x)`,
-         Python `repr(x)`, R the first `%.Ng` that reads back as `x`)
+         taken as its shortest round-trip decimal: the fewest significant
+         digits whose text reads back as `x` under correctly rounded
+         conversion, and among those the nearest to `x` (JavaScript
+         `String(x)`, Python `repr(x)`, R in C with the C library's
+         `strtod`)
 k      = min(n, max(1, floor((2·n·P + Q) / (2·Q))))   for share = P/Q
 ```
 
 that is `n × share` rounded half up, in integer arithmetic (no binary64
 product). A share must be in (0, 1] (a percentage in (0, 100]). The size is
 always stored as `k` with `n`, never as the share. The fixture lists
-fractions (`fraction`) and percentages (`percent`) with their counts.
+fractions (`fraction`) and percentages (`percent`) with their counts,
+including shares a converter can get wrong at sizes where that changes the
+count: 2^-24 of 25,165,824 cells is 2 (its 16-digit text is
+`5.960464477539063e-08`; `…062` reads back as another double, since a power
+of two's rounding interval is narrower below it), and 16-digit shares that a
+string-to-double conversion that is not correctly rounded reads one ulp off
+(R's own, on some builds), whose 17-digit text rounds the other way.
 
 ## Methods
 
@@ -93,26 +102,64 @@ until the next one would exceed `k`; that block contributes its first
 Nested like `uniform`. With `B = 1` a block's number is its cell's position,
 so `blocks` keeps exactly `uniform`'s cells.
 
-`B` is part of the specification of a subsample and is recorded with it. The
-web app chooses it from the storage layout alone (`subsample-plan.js`,
-`defaultBlockSize`), from the **dominant per-cell array**:
+`B` is part of the specification of a subsample and is recorded with it:
+whatever chose it, a session, a link carrying the subsample and Python's or
+R's `subsample_cells` reproduce the same cells from the recorded `B`. When a
+request leaves `B` out, the web app takes a rung of the file's **ladder**
+(`subsample-plan.js`, `blockRung`, `blockSizeLadder`): the storage's block
+`B₀` (below) and its doublings `B₀·2^j` up to the cell count, so a larger
+block holds whole smaller ones and every rung stays aligned to the storage.
+The storage's block comes from the layout alone (`defaultBlockSize`), from
+the **dominant per-cell array**. That is the
+expression matrix genes are read from by default (`defaultExpressionPath`):
+the matrix the file's launch defaults name (`uns['cellucid']['defaults']['expression']`),
+else the default expression rule's (`raw.X` when it holds more genes than
+`X` or `X` holds scaled values, else `X`, else the layer the rule picks);
+written `M` below:
 
-1. a CSR `X` holding values: a chunked index (`X/indices`) gives
+1. a CSR `M` holding values: a chunked index (`M/indices`) gives
    `B = max(1, round(4 × chunk / m))`, `m` the mean stored values per cell
    (about four of its chunks);
-2. else a dense `X`: `B = 4 × ` its chunk's rows;
-3. else (`X` is CSC, of another encoding, absent, or a CSR matrix with no
+2. else a dense `M`: `B = 4 × ` its chunk's rows;
+3. else (`M` is CSC, of another encoding, absent, or a CSR matrix with no
    value) the `obsm` array with one row per cell and the most columns:
    `B = 4 × ` its chunk's rows; with no such array, `B = 1`.
+
+The same matrix prices the gene sample (the open cells a gene is read for,
+by gene time and the gene index's memory: `geneTimeFit`, `geneIndexFit`,
+`geneSampleOf`): a file whose genes come from a cell-major `raw.X` beside a
+gene-major `X` reads genes for the sample a gene of `raw.X` fits. Every cell
+of a file in its own order, opened with a gene sample, opens in the priority
+order of this method's subsample at seed 0 (`cellOrder`), so the gene sample
+of `m` cells is the `blocks` subsample of `m` cells. That order, and a
+`blocks` subsample requested without `B` (a share typed or chosen in the
+Cells to open control, auto-fit), take the same rung (`blockRung`):
+
+- **a revisit keeps its rung**: the rung a gene index kept in this browser
+  was built under (`kept-column-index.js`, filed by method, seed and `B`),
+  whatever the link measures now; of several kept, the one holding most
+  cells. Another rung would open other cells and read them again;
+- **a first visit chooses by request economics**: the lowest rung at or past
+  `requests × loadedRoundTrip × rate / (connections × stored bytes a cell)`
+  (`requests` what a block's first gene reads: the runs of its arrays' chunks
+  and the chunk-index nodes that find them). Below it a sample is bound by
+  round trips (fewer cells in the gene time); above it by bytes (no more
+  cells, in coarser blocks). The opening's own rate is a lower bound (its
+  structure reads are a few requests on new connections), so `rate` is the
+  higher of it and the seed: the rate the host sustained on earlier visits
+  (`host-link-memory.js`) or this browser's downlink measured on the page's
+  own assets (`pageDownlinkBytesPerMs`). `B₀` itself without a measured link.
 
 An array read byte by byte instead of by chunks (stored in one piece, or an
 uncompressed Zarr array whose chunks are read in part) has no chunk to align
 to: `B` is then the cells whose bytes fill 64 KiB of it,
-`ceil(65536 / bytes per cell)` (a CSR `X`: `m` × the index's element size;
-a dense `X`: genes × element size; an `obsm` array: columns × element size).
-Never the link: the same file and request open the same cells wherever and
-whenever they are opened, and a larger share of the same request keeps every
-cell of a smaller one.
+`ceil(65536 / bytes per cell)` (a CSR `M`: `m` × the index's element size;
+a dense `M`: genes × element size; an `obsm` array: columns × element size).
+`B₀` is never the link: it is a property of the file. The rung depends on
+the link and on what this browser keeps, so two browsers may open a request
+without `B` in different blocks; the recorded `B` reproduces either, and a
+larger share of the same request (same `B`) keeps every cell of a smaller
+one.
 
 ### Splitting a size over strata
 
@@ -231,8 +278,8 @@ source layout.
 | Data | The store the browser reads |
 |---|---|
 | A file `prepare()` / `cellucid_prepare()` wrote | the file, as it is |
-| An AnnData object Python serves (`show_anndata`, `cellucid.Widget`, `serve_anndata`, `AnnDataViewer`) | a Zarr v2 store made from the object as the browser reads it (`cellucid._served_store.PriorityStore`): `obs`, `uns` and the other small elements written once in memory; the object's arrays copied once as the store is made (its snapshot), into memory-mapped files removed with the server: sparse expression matrices (`X`, layers, `raw/X`, CSR or CSC) laid out gene-major in priority order and stored as `prepare()` stores them (duplicates summed, zeros dropped, float32 unless integer counts need float64, non-finite refused), dense arrays in priority order; every chunk made from that copy when it is asked for |
-| An AnnData file Python serves that is not in a verified priority order (`.h5ad`, Zarr folder or zip; `cellucid serve`) | the same store, made from the file's own arrays (h5py, zarr), each matrix in its stored form: a cell-major `X` stays cell-major (rows in priority order, entries `[0, indptr[k])`), a gene-major one is renumbered with `varm['cellucid_prefix_counts']` counted in one pass when first read |
+| An AnnData or MuData object Python serves (`show_anndata`, `cellucid.Widget`, `serve_anndata`, `AnnDataViewer`) | a Zarr v2 store made from the object as the browser reads it (`cellucid._served_store.PriorityStore`; a MuData as a MuData store): `obs`, `uns` and the other small elements written once in memory; the object's arrays snapshotted into memory-mapped files removed with the server: expression matrices (`X`, layers, `raw/X`, sparse or dense) counted as the store is made and laid out gene-major in priority order by the store's background worker, `X` first, by the one layout pass `prepare()` writes with (`prepare_data/_gene_major.py`), stored as `prepare()` stores them (duplicates summed, zeros dropped, float32 unless integer counts need float64, non-finite refused), the arrays read-only while they are read; other dense arrays in priority order; every chunk made from that copy when it is asked for, a chunk of a matrix not laid out yet made from the snapshot at once, exactly as it will be laid out (cellucid-r's served store the same, its layout on a native thread) |
+| An AnnData file Python serves that is not in a verified priority order (`.h5ad`, Zarr folder or zip; `cellucid serve`) | the same store, made from the file's own arrays (h5py, zarr): a cell-major `X` laid out gene-major by the worker as above, its values as stored (layers and `raw/X` when first asked for), so a gene is one range; a gene-major one renumbered with `varm['cellucid_prefix_counts']` counted in one pass when first read |
 | A MuData file Python serves that is not in a verified priority order (`.h5mu`, MuData Zarr folder or zip) | a MuData Zarr store made the same way: the shared cells in priority order, each modality an AnnData group as above with its rows in the order of its cells (`obsmap` renumbered; a modality's prefix levels are its rows of cells below each global level), so a prefix of the cells is a prefix of every modality |
 | A Loom file or a 10x Cell Ranger `outs/` folder Python serves (`cellucid._served_formats`) | the AnnData the browser's layout view presents from the file (`views/loom.js`, `views/tenx-h5.js`, `views/tenx-outs.js`: the same `obs`, `var`, embeddings, graphs and names), as the same store: a Loom matrix read transposed by row spans, a Cell Ranger matrix cell-major with its rows in priority order; several feature types (or genomes) are a MuData of modalities, each a column window of the one matrix. A Cell Ranger `.h5` alone, or a Loom file, with no embedding is refused in the browser's words |
 | An R object R serves (`cellucid_view`, `cellucid_serve`, the notebook widget) | the `cellucid_prepare()` plan in memory, in priority order |
@@ -254,8 +301,8 @@ describes the cells — a column alone, a subset or reordering of such an
 object, a column that is not the seed's order — names nothing: it is not
 served or written, and a warning says why, in the same words on every path.
 So a selection, a highlight or a session lands on the same cells whichever
-path wrote or serves the data. A MuData object Python serves is written once to a temporary
-`prepare()` `.h5mu` (in priority order). The web app's own tests open each
+path wrote or serves the data. A MuData object Python serves is served as a
+MuData Zarr store in priority order, from a snapshot, with no file written. The web app's own tests open each
 foreign file Python serves both ways — the file through the browser's view,
 the served store — and compare them cell for cell
 (`tests/served-priority-store.test.mjs`). Files the servers serve as they
@@ -335,21 +382,21 @@ What the web app builds on it (`subsample-plan.js`, `views/cell-subset.js`,
   (`KEPT_INDEX_REVISION`), identity digest and sizes; its file rows against
   the opening's; its row pointers against the file's, read now (a mismatch
   removes the run); the CRC-32s of its column starts and per-gene checksum
-  tables; and, unless the file's identity names its content
-  (`space.js` `namesContent`: a provider's checksum or content hash, a
-  commit, a Census release, a OneDrive content tag), its **fingerprint**:
-  the CRC-32 of the entries of one seeded row in each doubling band of its
-  rows (`fingerprintRows`; `floor(log2(n + 1))` of any first `n` rows),
-  taken when it was kept and read again from the file. A rewrite that
-  changes a share `f` of the run's rows is missed with probability about
-  `(1 - f)^k` over the `k` rows read; a change to a few cells can be missed.
+  tables. The file's version is the one rule of every kept kind: runs are
+  filed under the identity this opening established from the file's source
+  (a content name where the source has one, else its size with its
+  Last-Modified date and strong ETag, `space.js` `writeVersion`; a local
+  file's size and modification time), and opening a version first forgets
+  what is kept of the file's other versions (`forgetOtherVersions`), so a
+  run of another version is never found.
   Each gene's piece of every per-gene array (positions, rows, values)
   carries a CRC-32 checked as it is read; a mismatch removes the run, the
   gene is read from the file and the run is built and kept again (CRC-32,
   not SHA-256: 1.6 µs against 23 µs for a 3.2 KB piece, 45 µs against 93 µs
   for 96 KB, Node 26 on an M1 Pro; it finds accidental damage, not
   tampering). Kept across visits only under an identity that names a
-  version (`persistsAcrossVisits`), else for the tab. A kept run makes room
+  version (`persistsAcrossVisits`), else for the opening that built it (and
+  its readings again with other cells). A kept run makes room
   only from other kept runs (`optional`), and after a `QuotaExceededError`
   removes more and writes again while that frees anything; the index being
   built (`column-store-placement.js` `diskFreeBytes`) and a conversion make
@@ -357,6 +404,17 @@ What the web app builds on it (`subsample-plan.js`, `views/cell-subset.js`,
   each. Every run an opening takes is held (a Web Lock) until its reader
   closes, and the writer of a run lets go of it only once the page holds it
   (`{storeHeld}`).
+- **Kept work is priced at no download.** The gene sample's fit by the
+  first gene's read time (`geneTimeFit`) leaves out of the cost the first
+  open cells whose index runs are kept (`kept-column-index.js`
+  `keptIndexPrefix`, from the runs' manifests, for the open cells' order:
+  a subsample's, or every cell's `cellOrder`, filed as the `blocks`
+  subsample whose order it is) and every chunk of the matrix's arrays this
+  browser holds already (`heldChunkBands`: chunks of a file's downloaded
+  parts, `formats/io/kept-parts.js`, read from this machine's disk). A
+  later visit therefore reads genes for more cells within the same target;
+  the fit records what was kept (`genes.fit.kept`: `{cells, bytes}`), which
+  the details table names (*Kept here*).
 
 ## Edge cases
 
@@ -411,9 +469,9 @@ the app names cells by original position.
 
 | Read path | How it reads the kept cells |
 |---|---|
-| obs columns, categorical codes, nullable values and masks, obs index | the kept rows' runs, chunk by chunk |
+| obs columns, categorical codes, nullable values and masks, obs index | the kept rows' runs, chunk by chunk, in the stored order: a read of many open cells goes over the stored chunks in ascending order, a slab after another (`readInSourceOrder`, `values.js` `readRowsInStoreOrder`), each slab's rows put where they belong (the whole view of a column row by row in the open rows' file order, `cell-subset.js` `rowWaves`: one copy a row, no piece listed), so the requests are the stored array's whatever the open order (every cell of a 10M-cell `.h5ad` in its `blocks` order: the embedding in 24 requests; read a slab of open cells at a time, 318). A column of variable-length strings (the obs index, a text column; HDF5 or Zarr) reads its kept rows alone (`formats/store.js` `readRows`): an HDF5 column the references of the chunks they lie in, then of the global heap only the collections those rows point into, each read up to the furthest object asked for (its other references name the objects before it), asked for as each chunk's references arrive while the link has room for a request, gathered into one plan while requests queue (`hdf5/nodes.js` `HeapStream`, `byte-reader.js` `whenRoom`); a Zarr column the chunks they lie in, each kept as stored (its bytes and an offset an item) and only the rows asked for decoded. A share holds and decodes its own strings, never every string of the chunks it touches, and a heap collection only while a chunk being decoded points into it. The byte reader fetches each byte in flight once: a read of bytes another request carries waits for it, and no plan fetches a gap across them (`byte-reader.js`, "Each byte in flight once") |
 | dense `obsm`, dense `X`, layers, `raw/X`, stored outlier quantiles | the same |
-| CSR `X` / layers / `raw/X` | the kept rows' `indptr` only, when the matrix is first read (never at opening; another opening of the same store takes over what was read); the kept rows' entry ranges only; the gene index is built over them alone, in segments of priority order |
+| CSR `X` / layers / `raw/X` | the kept rows' `indptr` only, when the matrix is first read (never at opening; another opening of the same store takes over what was read), and of a gene sample only its own rows' (`readRowPointers` given `rows`, `rowsMatrix`); the kept rows' entry ranges only; the gene index is built over them alone, in segments of priority order; over a link, values stored in chunks read whole are read with the first gene beside the indices and kept (`buysValues`) |
 | CSC `X` / layers / `raw/X` | a gene's own entries, the kept cells' kept |
 | `obsp` graphs | the kept rows' `indptr` and entry ranges; columns not kept dropped; renumbered. The values of the edges kept are read after the indices, and only theirs, when the values of the edges dropped would cost more than one round trip of the link (always for a local file); else every kept row's values are read with the indices. The Dataset box says how much of the open cells' graph that keeps (the other edges lead to cells not open) |
 | modalities (MuData, 10x feature types, Seurat assays) | each modality's rows the kept cells measured, its cell map renumbered |

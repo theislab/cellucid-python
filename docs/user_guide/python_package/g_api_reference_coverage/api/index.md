@@ -91,7 +91,7 @@ Compute/store vector overlays (e.g., CellRank drift) for visualization.
 ## Reference conventions
 
 - “**Cellucid-ready AnnData**” means a standard AnnData written by {func}`~cellucid.prepare` (or R's `cellucid_prepare()`): gene-major, chunked for range reads, naming itself in `uns['cellucid']`.
-- Every viewing API hands a file or folder, or an in-memory `AnnData` or `MuData`, to the viewer, which reads it itself: in place with HTTP range requests where the format allows it (AnnData, MuData, Loom, 10x), once from the start for an R object or a MatrixMarket folder. An in-memory AnnData, and an AnnData, MuData, Loom or 10x file (or `outs/` folder) not in priority order, are served as a store with their cells in priority order, made as the viewer reads it and holding what the viewer presents from the file itself; an in-memory MuData is first written once to a temporary `.h5mu`.
+- Every viewing API hands a file or folder, or an in-memory `AnnData` or `MuData`, to the viewer, which reads it itself: in place with HTTP range requests where the format allows it (AnnData, MuData, Loom, 10x), once from the start for an R object or a MatrixMarket folder. An in-memory AnnData, and an AnnData, MuData, Loom or 10x file (or `outs/` folder) not in priority order, are served as a store with their cells in priority order, made as the viewer reads it and holding what the viewer presents from the file itself; an in-memory MuData as a MuData store, the same way. Expression matrices held in memory, and a cell-major `X` of a file, are laid out gene-major in the background, so the viewer opens at once.
 - Many APIs are **lazy-imported** from `cellucid.__init__` to keep CLI startup fast; importing `cellucid` is intentionally lightweight.
 
 ```{toctree}

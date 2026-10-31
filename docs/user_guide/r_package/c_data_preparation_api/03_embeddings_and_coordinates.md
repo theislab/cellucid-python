@@ -36,9 +36,13 @@ them to its view. A 50-column PCA is therefore one array, from which the viewer
 can show columns 1-2 in 2D or 1-3 in 3D, and which can also serve as the latent
 space for outlier quantiles.
 
-Values must be finite and within the float32 range
-({doc}`02_input_requirements_global`). Names follow the path rules on the same
-page.
+Values must be within the float32 range ({doc}`02_input_requirements_global`).
+A row holding `NA`/`NaN` (or an infinity) is a cell the embedding does not
+place (one computed on some of the cells): it is written as given, the viewer
+leaves it out of that embedding's views and says how many cells it leaves out,
+and every other view and analysis keeps it; in the latent space it gets no
+outlier quantile. At least one cell must have finite coordinates. Names follow
+the path rules on the same page.
 
 ## What the viewer shows first
 
@@ -96,8 +100,9 @@ can be changed under **Session › Data mapping**
 
 - **A matrix with a different number of rows** than the others:
   `All embeddings must have one row per cell: 'X_umap' has 3 rows and 'X_b' has 2.`
-- **Non-finite coordinates**: `Embedding 'X_umap' must contain only finite values.`
-  followed by counts and the first positions.
+- **No cell with finite coordinates**: `Embedding 'X_umap': every cell's values
+  are missing (NaN or infinite).` A row of `NA` alone is a cell the embedding
+  does not place, not a mistake.
 - **A default the embedding cannot fill**:
   `embedding_defaults[["3d"]] names 'X_umap', which has 2 columns; a 3d view needs 3.`
 

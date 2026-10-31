@@ -214,17 +214,35 @@ Cellucid’s viewer UI may run on a different origin than your dataset server in
 To make browser requests work, the server sends CORS headers.
 
 High-level behavior:
-- The server only allows a limited set of origins (loopback + Cellucid’s hosted origin).
-- Requests from random websites should not be able to read your dataset from a browser tab.
+- The server allows exactly the hosted app's origins (`https://www.cellucid.com`
+  and its bare apex) and pages on this machine (`localhost`, `127.0.0.1`, any
+  port); no other site, including other `cellucid.com` names such as the
+  documentation, can read your dataset from a browser tab.
+- CORS only governs browsers. Any program on the same machine reads the data
+  routes without a secret: on a machine several people use at once, that is
+  every user of it ({ref}`shared-machines`).
 
 ## Notebook-specific security notes
 
-Notebook mode uses one channel: the viewer opens a WebSocket to the server
-(`/_cellucid/ws`), says hello with its `viewerId` and `viewerToken`, and the
-server checks the token before anything passes. The upgrade also passes the
-`Host` check and an `Origin` check (the server's own host, a loopback name or
-a host in `allowed_hosts`). Python's commands and the viewer's events
-(selections as binary cell indices) both travel on it.
+A notebook widget (`show_anndata`) starts no server and opens no WebSocket:
+the page talks to the kernel through the widget's own comm (a `MessagePort`
+the widget hands the page, with the `viewerId` and `viewerToken` posted to the
+app's exact origin), so nothing is reachable from outside the notebook. The
+widget's page is a viewer page and sends no usage analytics.
+
+A browser-tab viewer (`AnnDataViewer`, `serve_anndata`) uses one channel: the
+viewer opens a WebSocket to the server (`/_cellucid/ws`), says hello with its
+`viewerId` and `viewerToken`, and the server checks the token before anything
+passes. The upgrade also passes the `Host` check and an `Origin` check (the
+server's own host, a loopback name or a host in `allowed_hosts`). Python's
+commands and the viewer's events (selections as binary cell indices) both
+travel on it. Its address carries the token, and `display()` writes that
+address into the notebook output, which is saved with the notebook. The token
+works only while that viewer runs, against that machine's server: a saved
+notebook's link is dead once the viewer stops, but while it runs, anyone who
+can read the notebook file and reach that machine (another user of a shared
+node) could use it. Stop viewers you no longer use (`viewer.stop()`), or use
+the notebook widget, whose token is never in an address.
 
 Practical guidance:
 - keep the server bound to localhost unless you have a strong reason,

@@ -402,15 +402,15 @@ def test_a_session_is_applied_in_original_order_and_refuses_a_stored_order(tmp_p
     from cellucid import apply_cellucid_session_to_anndata
 
     stored = _stored(prepare(tmp_path / "s.zarr", format="zarr", **_inputs()))
-    fixture = Path(__file__).parent / "fixtures" / "session_format2" / "session.cellucid-session"
+    fixture = Path(__file__).parent / "fixtures" / "session_format3" / "session.cellucid-session"
     with pytest.raises(ValueError, match="restore_original_order"):
-        apply_cellucid_session_to_anndata(fixture, stored, expected_dataset_id="format2")
+        apply_cellucid_session_to_anndata(fixture, stored, expected_dataset_id="format3")
     # A record that no longer describes the object (rows reordered since):
     # each row is its own original position, as the web app read the file;
     # the warning says why, and the session's own checks apply.
     resorted = stored[np.argsort(stored.obs_names.to_numpy())[::-1]].copy()
     with pytest.warns(UserWarning, match="is not its seed's order"), pytest.raises(ValueError) as refused:
-        apply_cellucid_session_to_anndata(fixture, resorted, expected_dataset_id="format2")
+        apply_cellucid_session_to_anndata(fixture, resorted, expected_dataset_id="format3")
     assert "restore_original_order" not in str(refused.value)
 
 

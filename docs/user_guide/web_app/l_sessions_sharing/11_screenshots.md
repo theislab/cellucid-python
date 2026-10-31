@@ -117,10 +117,10 @@ Wrong dataset. The message names both sizes so you can tell which one you meant.
 ```
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/refusal-02-not-a-session-file.png
-:alt: A Cellucid notification reading "This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load.
+:alt: A Cellucid notification reading "This file is not a Cellucid session file of format 3 (it does not start with CELLUCID_SESSION/3).", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load.
 :width: 760px
 
-Wrong file. `This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).` means the file does not
+Wrong file. `This file is not a Cellucid session file of format 3 (it does not start with CELLUCID_SESSION/3).` means the file does not
 begin with the session container's signature, so it is not a session bundle at
 all — regardless of what it is named.
 ```

@@ -23,6 +23,8 @@ Start with the web app user guide landing page: {doc}`../index`.
 | Work on sessions (save/load) | {doc}`10_sessions_persistence_and_serialization` | {doc}`13_debugging_playbook` |
 | Work on figure export | {doc}`12_figure_export_architecture` | {doc}`18_extension_point_add_export_renderer` |
 | Understand loading sources (local/remote/GitHub/Jupyter) | {doc}`09_data_loading_pipeline_and_caching` | {doc}`../b_data_loading/index` (user-facing view) |
+| Change how data is read, priced, kept or drawn (bytes, link, share, gene sample) | {doc}`20_read_path_architecture` | {doc}`19_subsampling_specification` → {doc}`09_data_loading_pipeline_and_caching` |
+| Find out why a subsystem is built the way it is (decisions, measurements, what was reverted) | the decision records {doc}`21_decisions_decoders_and_codecs` … {doc}`28_decisions_rendering_layers` | {doc}`20_read_path_architecture` |
 
 ---
 

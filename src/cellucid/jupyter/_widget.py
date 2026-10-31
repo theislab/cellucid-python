@@ -25,7 +25,9 @@ Three hops carry everything, each authenticated by what carries it:
   :class:`_CommSocket`; the dataset's requests (its documents and the
   store's bytes, by ``Range``) are answered by
   :meth:`cellucid.anndata_server.AnnDataServer.answer_request`, which also
-  backs the HTTP server.
+  backs the HTTP server, each on a thread of its own as the HTTP server
+  answers them (:class:`_Answers`), so a request that takes long to make
+  (a chunk of a matrix still being laid out) holds back no other.
 
 The widget's messages are handled where the kernel handles every message
 from the notebook: between cells. While a cell runs, the viewer waits for
@@ -40,7 +42,9 @@ import logging
 import queue
 import sys
 import threading
+import weakref
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
@@ -71,6 +75,96 @@ _STATIC = Path(__file__).with_name("static")
 #: Bodies sent to the front end in one message, at most (a message's shape,
 #: not a limit on what is read: a larger body is sent in a message of its own).
 _ANSWER_MESSAGE_BYTES = 8 * 1024 * 1024
+
+#: The least time between two messages of answers. Jupyter Server drops (does
+#: not delay) a kernel's messages while they exceed 1,000 a second over three
+#: seconds (``ServerApp.iopub_msg_rate_limit``, ``rate_limit_window``; comm
+#: messages count): answers keep to half of it, the rest left to the viewer
+#: channel's frames and the cells' output. Answers made meanwhile share the
+#: next message, so this bounds messages, not bytes.
+_ANSWER_MESSAGE_INTERVAL = 2 / 1000
+
+
+class _Answers:
+    """The page's requests answered off the kernel's thread, as the HTTP
+    server answers them: each on a thread of a pool, a slow one (a chunk made
+    while its matrix is laid out) holding back no other, and the kernel's
+    thread free for the next message at once. Answers ready together go in
+    one message, at most ``_ANSWER_MESSAGE_BYTES`` of bodies each and one
+    message every ``_ANSWER_MESSAGE_INTERVAL``."""
+
+    def __init__(self, send: Callable[[dict[str, Any], list[bytes] | None], None]) -> None:
+        self._send = send
+        self._pool = ThreadPoolExecutor(thread_name_prefix="cellucid-widget-answer")
+        self._ready = threading.Condition()
+        #: Answers made and not sent yet: (output, answer, body).
+        self._outbox: list[tuple[str, dict[str, Any], bytes]] = []
+        self._sender: threading.Thread | None = None
+        self._closed = False
+
+    def submit(self, view: str, request: dict[str, Any], answer: Callable[[dict[str, Any]], tuple[dict[str, Any], bytes]]) -> None:
+        """Answer ``request`` (for output ``view``) on the pool."""
+        if self._closed:
+            return
+        self._pool.submit(self._made, view, request, answer)
+
+    def _made(self, view: str, request: dict[str, Any], answer: Callable[[dict[str, Any]], tuple[dict[str, Any], bytes]]) -> None:
+        made = answer(request)
+        with self._ready:
+            if self._closed:
+                return
+            self._outbox.append((view, *made))
+            if self._sender is None:
+                self._sender = threading.Thread(target=self._send_loop, name="cellucid-widget-answers", daemon=True)
+                self._sender.start()
+            self._ready.notify()
+
+    def _send_loop(self) -> None:
+        import time
+
+        sent_at = float("-inf")
+        while True:
+            with self._ready:
+                while not self._outbox and not self._closed:
+                    self._ready.wait()
+                if self._closed:
+                    return
+            # Answers made meanwhile join this message.
+            wait = sent_at + _ANSWER_MESSAGE_INTERVAL - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            with self._ready:
+                if self._closed or not self._outbox:
+                    continue
+                view = self._outbox[0][0]
+                answers: list[dict[str, Any]] = []
+                bodies: list[bytes] = []
+                size = 0
+                taken = []
+                for index, (output, answer, body) in enumerate(self._outbox):
+                    if output != view:
+                        continue
+                    if body and size and size + len(body) > _ANSWER_MESSAGE_BYTES:
+                        break
+                    entry = {**answer, "buffer": -1}
+                    if body:
+                        entry["buffer"] = len(bodies)
+                        bodies.append(body)
+                        size += len(body)
+                    answers.append(entry)
+                    taken.append(index)
+                for index in reversed(taken):
+                    del self._outbox[index]
+            self._send({"t": "answers", "v": view, "answers": answers}, bodies)
+            sent_at = time.monotonic()
+
+    def close(self) -> None:
+        """Answer nothing more (the widget is closed)."""
+        with self._ready:
+            self._closed = True
+            self._outbox.clear()
+            self._ready.notify_all()
+        self._pool.shutdown(wait=False, cancel_futures=True)
 
 # A WebSocket close code for a text frame larger than the channel accepts.
 _CLOSE_TOO_BIG = 1009
@@ -353,6 +447,7 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
         vector_field_default: str | None = None,
         modality: str | None = None,
         web_source_url: str = CELLUCID_WEB_URL,
+        cache_bytes: int | None = None,
     ) -> None:
         """
         Prepare the dataset for the viewer; the viewer starts when the widget is shown.
@@ -380,6 +475,8 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
         self._sockets: dict[tuple[str, int], _CommSocket] = {}
         self._sockets_lock = threading.Lock()
         self._send_lock = threading.Lock()
+        #: The page's requests, answered on threads of their own.
+        self._answers = _Answers(self._send_to_page)
         #: The thread the kernel hands this widget's messages to: a wait on it
         #: could never be answered (:meth:`_require_answerable`).
         self._comm_thread: threading.Thread | None = None
@@ -400,6 +497,7 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
                 expression_source=expression_source,
                 vector_field_default=vector_field_default,
                 modality=modality,
+                cache_bytes=cache_bytes,
             )
             self._activate()
             self.on_msg(self._on_page_message)
@@ -514,47 +612,32 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
         ).start()
 
     def _answer(self, view: str, requests: object) -> None:
-        """Answer the page's requests, several bodies to a message."""
+        """Hand the page's requests to their threads (:class:`_Answers`)."""
         if not isinstance(requests, list):
             return
-        server = self._server
-        answers: list[dict[str, Any]] = []
-        bodies: list[bytes] = []
-        size = 0
-
-        def flush() -> None:
-            nonlocal answers, bodies, size
-            if answers:
-                self._send_to_page({"t": "answers", "v": view, "answers": answers}, bodies)
-            answers, bodies, size = [], [], 0
-
         for request in requests:
-            if not isinstance(request, dict) or type(request.get("id")) is not int:
-                continue
-            method, path, range_header = request.get("method"), request.get("path"), request.get("range")
-            if server is None:
-                status, headers, body = 410, {"Content-Type": "text/plain"}, b"The viewer was stopped"
-            elif (
-                not isinstance(method, str)
-                or not isinstance(path, str)
-                or not (range_header is None or isinstance(range_header, str))
-            ):
-                status, headers, body = 400, {"Content-Type": "text/plain"}, b"Malformed request"
-            else:
-                try:
-                    status, headers, body = server.answer_request(method, path, range_header)
-                except Exception as error:
-                    logger.exception("A widget request could not be answered")
-                    status, headers, body = 500, {"Content-Type": "text/plain"}, str(error).encode()
-            if body and size and size + len(body) > _ANSWER_MESSAGE_BYTES:
-                flush()
-            answer: dict[str, Any] = {"id": request["id"], "status": status, "headers": headers, "buffer": -1}
-            if body:
-                answer["buffer"] = len(bodies)
-                bodies.append(body)
-                size += len(body)
-            answers.append(answer)
-        flush()
+            if isinstance(request, dict) and type(request.get("id")) is int:
+                self._answers.submit(view, request, self._answer_one)
+
+    def _answer_one(self, request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
+        """One request answered as the HTTP server answers it: the answer and its body."""
+        server = self._server
+        method, path, range_header = request.get("method"), request.get("path"), request.get("range")
+        if server is None:
+            status, headers, body = 410, {"Content-Type": "text/plain"}, b"The viewer was stopped"
+        elif (
+            not isinstance(method, str)
+            or not isinstance(path, str)
+            or not (range_header is None or isinstance(range_header, str))
+        ):
+            status, headers, body = 400, {"Content-Type": "text/plain"}, b"Malformed request"
+        else:
+            try:
+                status, headers, body = server.answer_request(method, path, range_header)
+            except Exception as error:
+                logger.exception("A widget request could not be answered")
+                status, headers, body = 500, {"Content-Type": "text/plain"}, str(error).encode()
+        return {"id": request["id"], "status": status, "headers": headers}, body
 
     # ------------------------------------------------------------------
     # Waiting, shown, stopped
@@ -612,6 +695,7 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
         display(self)
         self._displayed = True
         self._displayed_in_cell = _execution_count()
+        _claim_cell(self)
 
     def _shown_by_this_cell(self) -> bool:
         count = _execution_count()
@@ -623,6 +707,7 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
         if self._shown_by_this_cell():
             return {"text/plain": repr(self)}
         self._displayed = True
+        _claim_cell(self)
         return anywidget.AnyWidget._repr_mimebundle_(self, **kwargs)
 
     def _repr_html_(self) -> str | None:  # type: ignore[override]
@@ -709,9 +794,13 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
         }
 
     def stop(self) -> None:
-        """Stop the viewer: its page keeps the last view, and the temporary file is removed.
+        """Stop the viewer: its page keeps the last view, and what was served is let go.
 
-        The output stays on screen, frozen; Python stops answering it.
+        The output stays on screen, frozen; Python stops answering it, and
+        the served store -- the object's snapshot, its matrices laid out in
+        files of the temporary folder -- is removed. A widget is stopped by
+        itself when the cell that showed it runs again (its output is
+        replaced) and when it is closed (``close()``).
         """
         try:
             super().stop()
@@ -722,10 +811,85 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
             for socket_ in sockets:
                 socket_.close(CLOSE_GOING_AWAY, "The viewer was stopped")
 
+    def close(self) -> None:
+        """Close the widget: the viewer stops first (:meth:`stop`), then its comm closes."""
+        try:
+            if getattr(self, "_server", None) is not None or getattr(self, "_message_routing_registered", False):
+                self.stop()
+        finally:
+            answers = getattr(self, "_answers", None)
+            if answers is not None:
+                answers.close()
+            anywidget.AnyWidget.close(self)
+
     def __repr__(self) -> str:
         status = "running" if self._message_routing_registered else "stopped"
         dataset = None if self._server is None else self._server.dataset_id
         return f"cellucid.Widget(dataset={dataset!r}, status={status})"
+
+
+#: The widgets each notebook cell showed in its last run: by the cell's id
+#: (the front end's ``cellId``), that run's execution count and the widgets.
+#: A cell run again replaces its output, so a widget it showed before -- and
+#: that no other cell shows -- is stopped, its served store released; a
+#: notebook would otherwise keep every re-run's snapshot until the kernel ends.
+_shown_by_cell: dict[str, tuple[int | None, list[weakref.ref[Widget]]]] = {}
+#: The widgets shown where the front end sends no cell id: showing a dataset
+#: again stops the earlier widget of the same dataset id (as cellucid-r's
+#: ``cellucid_view()`` does where it knows no cell).
+_shown_without_cell: weakref.WeakSet[Widget] = weakref.WeakSet()
+_shown_lock = threading.Lock()
+
+
+def _cell_id() -> str | None:
+    """The id of the notebook cell running now (JupyterLab, Notebook 7 and VS
+    Code send it with each run), or None where the front end sends none."""
+    try:
+        from IPython import get_ipython
+    except ImportError:
+        return None
+    shell = get_ipython()
+    get_parent = getattr(shell, "get_parent", None)
+    parent = get_parent() if callable(get_parent) else getattr(shell, "parent_header", None)
+    metadata = parent.get("metadata") if isinstance(parent, dict) else None
+    cell = metadata.get("cellId") if isinstance(metadata, dict) else None
+    return cell if isinstance(cell, str) and cell else None
+
+
+def _claim_cell(widget: Widget) -> None:
+    """``widget`` is shown by the cell running now: a widget that cell showed
+    in an earlier run, and no other cell shows, is stopped. Where the front
+    end sends no cell id, a widget shown before of the same dataset id is
+    stopped, and a message says so."""
+    cell = _cell_id()
+    if cell is None:
+        with _shown_lock:
+            earlier = [
+                old for old in _shown_without_cell
+                if old is not widget and old._served_dataset_id == widget._served_dataset_id
+            ]
+            _shown_without_cell.add(widget)
+        for old in earlier:
+            if old._server is None:
+                continue
+            old.stop()
+            print(f"Stopped the earlier viewer of {widget._served_dataset_id!r}: it was shown again.")
+        return
+    count = _execution_count()
+    with _shown_lock:
+        previous = _shown_by_cell.get(cell)
+        if previous is not None and previous[0] == count:
+            previous[1].append(weakref.ref(widget))
+            replaced: list[Widget] = []
+        else:
+            replaced = [old for old in (ref() for ref in (previous[1] if previous else [])) if old is not None and old is not widget]
+            _shown_by_cell[cell] = (count, [weakref.ref(widget)])
+        shown_elsewhere = {
+            id(other) for key, (_, refs) in _shown_by_cell.items() if key != cell for other in (ref() for ref in refs) if other is not None
+        }
+    for old in replaced:
+        if id(old) not in shown_elsewhere:
+            old.stop()
 
 
 def _execution_count() -> int | None:

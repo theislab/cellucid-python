@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
-from ..data_mapping import vector_field_keys
+from ..data_mapping import default_graph, vector_field_keys
 
 #: The launch defaults ``uns['cellucid']['defaults']`` may hold, by the
 #: ``prepare()`` argument each one fills. ``knn`` and ``expression`` are not
@@ -79,8 +79,8 @@ def cellucid_record(uns: Mapping[str, Any], *, what: str) -> dict[str, Any]:
         return {}
     if not isinstance(record, Mapping):
         raise TypeError(f"{what}.uns['cellucid'] must be a mapping, got {type(record).__name__}.")
-    # Only the keys read below are converted: a prepared dataset's record also
-    # holds its outlier quantiles (one value per cell and categorical column),
+    # Only the keys read below are converted: the record of a Cellucid-ready
+    # dataset (one prepare() wrote) also holds its outlier quantiles (one value per cell and categorical column),
     # which prepare() recomputes and would otherwise turn into Python lists.
     record = {
         str(key): native(item)
@@ -157,22 +157,50 @@ def split_obsm(obsm: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, dict[
     return embeddings, fields
 
 
-def anndata_components(adata: Any) -> dict[str, Any]:
+def anndata_components(adata: Any, notes: list[tuple[str, str]] | None = None) -> dict[str, Any]:
     """Every component ``prepare()`` takes, as ``adata`` holds it.
 
     ``X`` is the expression matrix and ``var`` its genes (neither when ``X``
     is absent); ``obsm`` gives the embeddings and vector fields
     (:func:`split_obsm`); ``obsp['connectivities']`` the neighbour graph;
-    ``uns['cellucid']`` the identity and launch defaults.
+    ``uns['cellucid']`` the identity and launch defaults. What is not written
+    goes in ``notes``, by the component it would have been part of (shown
+    when that component comes from ``adata``), as cellucid-r names what it
+    does not write: obs and var columns of no AnnData encoding Cellucid
+    writes, obsm entries that are not numeric arrays, layers, ``raw`` and
+    other obsp graphs.
     """
+    from ._inputs import storable_columns
+
+    notes = [] if notes is None else notes
     embeddings, fields = split_obsm(adata.obsm)
-    components: dict[str, Any] = {"embeddings": embeddings, "obs": adata.obs}
+    obs, note = storable_columns(adata.obs, "obs")
+    if note is not None:
+        notes.append(("obs", note))
+    for key, value in adata.obsm.items():
+        if not is_cell_array(value):
+            notes.append(("embeddings", f"obsm[{key!r}] holds no numeric coordinates and was not read."))
+    components: dict[str, Any] = {"embeddings": embeddings, "obs": obs}
     if fields:
         components["vector_fields"] = fields
     if adata.X is not None:
         components["gene_expression"] = adata.X
-        components["var"] = adata.var
-    if "connectivities" in adata.obsp:
-        components["connectivities"] = adata.obsp["connectivities"]
+        var, note = storable_columns(adata.var, "var")
+        components["var"] = var
+        if note is not None:
+            notes.append(("var", note))
+    if len(adata.layers):
+        notes.append(("gene_expression", f"layers not read: {list(adata.layers)} (prepare() writes X; one is written as X with adata.X = adata.layers[name])."))
+    if adata.raw is not None:
+        notes.append(("gene_expression", "raw not read (prepare() writes X; raw is written as X with adata.X = adata.raw.X)."))
+    # The graph the viewer's default rule opens with (default_graph):
+    # connectivities, else Seurat's <assay>_snn (an AnnData converted from a
+    # Seurat object), written as obsp['connectivities'].
+    graph = default_graph(adata.obsp.keys())
+    other = [key for key in adata.obsp if key != graph]
+    if other:
+        notes.append(("connectivities", f"obsp {other} not read (prepare() writes one graph, obsp[{graph!r}], as obsp['connectivities'], the viewer's neighbour graph)." if graph is not None else f"obsp {other} not read (no undirected neighbour graph: prepare() writes obsp['connectivities'] or a Seurat '<assay>_snn' graph)."))
+    if graph is not None:
+        components["connectivities"] = adata.obsp[graph]
     components.update(cellucid_record(adata.uns, what="data"))
     return components

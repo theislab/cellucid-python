@@ -77,8 +77,8 @@ rendering). View it in the browser: `cellucid_view(seu, pane = "browser")`.
 ## Symptom: “Port 8765 is in use; serving on 8766”
 
 Another viewer (or another program) holds 8765, so the next free port was
-taken. Everything works there except Google sign-in (community annotation),
-which accepts only `localhost:8765`. Stop the other viewers with
+taken. Everything works there except opening Google Drive files, which Google
+accepts only on `localhost:8765`. Stop the other viewers with
 `cellucid_stop_all()` and view again.
 
 ## Symptom: “The Cellucid web app could not be downloaded … and no verified copy is cached”

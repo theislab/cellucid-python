@@ -43,11 +43,11 @@ route is named by the dataset id, so the local file name is never published.
   writes), each chunk made from the source when the viewer asks for it: a
   subsample the viewer opens is then the first rows of every array and the
   first entries of every gene, so only its cells are sent, whatever the
-  source's layout. An in-memory object is copied once, before the call
-  returns, into memory-mapped files removed when the server stops or Python
-  exits (its sparse expression matrices laid out gene-major, so a gene is one
-  range: see below); a file is read where it is, its matrices keeping their
-  form (an array stored in chunks -- compressed, or a sparse matrix anndata
+  source's layout. An in-memory object is snapshotted into memory-mapped files
+  removed when the server stops or Python exits (its expression matrices laid
+  out gene-major in the background, so the viewer opens at once and a gene is
+  one range: see below); a file is read where it is, a cell-major `X` of it
+  laid out gene-major the same way (an array stored in chunks -- compressed, or a sparse matrix anndata
   wrote -- is decoded once into memory-mapped files beside the store as its
   rows are first read, since rows in priority order lie all over the file;
   removed when the server stops). Original positions are the ones `prepare()` gives: an object read
@@ -109,11 +109,13 @@ serve_anndata(
 ```
 
 `dataset_name` and `dataset_id` default to the store's own
-`uns['cellucid']['name']` and `uns['cellucid']['id']`. An object without them
-needs both, and serving it without them stops with:
+`uns['cellucid']['name']` and `uns['cellucid']['id']`. Data without them is
+named as the R package names it: a file by its file name, its ID the file name
+without the extension; an object as `AnnData (<n> cells)`, its ID made from
+that. The ID is printed in one line (sessions are kept under it):
 
 ```text
-Error: dataset_name and dataset_id are required: this AnnData declares no Cellucid identity of its own (uns['cellucid']['id'] and ['name']). Name the dataset, for example dataset_name="My study", dataset_id="my-study-v1" (--dataset-name/--dataset-id on the command line).
+  Dataset id: data (sessions are kept under it; name it with dataset_id=, --dataset-id on the command line, or uns['cellucid']['id'])
 ```
 
 Sessions and community annotations are keyed by the dataset id.
@@ -146,12 +148,14 @@ slots from `adata.obsm`, in this order:
    guessed slot as guessed under **Session › Data mapping**.
 
 The viewer applies these rules when it opens the store, the same rules it
-applies to a file opened in the browser. If nothing in `obsm` can be plotted,
-the viewer stops with a message that lists what `obsm` holds and why each entry
-was not used:
+applies to a file opened in the browser. If `obsm` holds no dense numeric
+array at all (empty, or only tables and sparse arrays), the viewer stops at
+once with the no-cell-embedding message ({ref}`no-cell-embedding`). If it holds
+some but none can be plotted, the viewer stops with a message that lists what
+`obsm` holds and why each entry was not used:
 
 ```text
-Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, NaN at cell 17). Add a 2-D embedding to obsm (for example with sc.tl.umap in Scanpy), then open the data again.
+Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, not representable as float32 at cell 17). Add a 2-D embedding to obsm (for example with sc.tl.umap in Scanpy), then open the data again.
 ```
 
 Those are the embeddings each dimension shows first, its *defaults*. The
@@ -282,7 +286,7 @@ its embedding id (`X_umap`, or `X_pca[0,1]` when only some columns are read).
 ### When nothing can be plotted
 
 ```text
-Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, NaN at cell 17). Add a 2-D embedding to obsm (for example with sc.tl.umap in Scanpy), then open the data again.
+Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, not representable as float32 at cell 17). Add a 2-D embedding to obsm (for example with sc.tl.umap in Scanpy), then open the data again.
 ```
 
 Each entry says what the array is and, for a dense array, why it was not used:
@@ -323,20 +327,26 @@ index.
 ### In-memory `AnnData`
 
 An in-memory object is served as a store in priority order, made from it as
-the viewer reads it; your object is not modified. A cell-major (CSR) sparse
-`X` is laid out gene-major once, so one gene is one contiguous read.
+the viewer reads it; your object is not modified. Every expression matrix is
+laid out gene-major once, so one gene is one contiguous read.
 
 The viewer shows the object **as it was when you called** `show_anndata()` /
-`serve_anndata()`: before the call returns, the object's arrays are copied
-once into memory-mapped files in the system temporary folder — every sparse
-expression matrix (`X`, layers, `raw.X`) gene-major in priority order, every
-dense one in priority order, the `obsm`/`obsp` matrices — so what the viewer
-reads is one consistent snapshot. Replacing an element afterwards
-(`adata.X = …`) or changing an array in place
-(`np.log1p(adata.X.data, out=adata.X.data)`) does not show, and never mixes
-into what is served; view the object again to show a change. The copy costs
-a pass over each array (about two seconds per 100 million stored values) and
-the disk space of the arrays, never a second copy in memory; the files are
+`serve_anndata()`, a snapshot in memory-mapped files in the system temporary
+folder: its small elements and sparse `obsm`/`obsp` matrices copied before the
+call returns, its expression matrices (`X`, layers, `raw.X`) counted then (a
+value `prepare()` refuses is refused at once) and laid out gene-major in
+priority order by a background worker after it, `X` first, its dense `obsm`
+arrays copied in priority order by the same worker -- the viewer opens and
+draws at once, and anything it asks for before the worker reaches it (a gene,
+an embedding) is made at once from the object, exactly as it will be laid
+out. While the worker reads an array of the object, that array is
+**read-only**: changing it in place then
+(`np.log1p(adata.X.data, out=adata.X.data)`) is refused by numpy
+("assignment destination is read-only") rather than mixed into what is
+served. Replacing an element (`adata.X = …`), or changing an array once it is
+laid out, does not show; view the object again to show a change. The layout
+costs a pass over each matrix (about two seconds per 100 million stored values)
+and the disk space of the arrays, never a second copy in memory; the files are
 removed when the server stops or Python exits, and by the next server when
 the kernel was killed first. The matrices are stored as `prepare()` stores
 them, by the same functions: float32 unless integer counts need float64,
@@ -600,21 +610,26 @@ case where the tunnel has to terminate on a login node,
 
 ## Troubleshooting
 
-### “dataset_name and dataset_id are required”
+### A session does not reopen after the file was renamed
 
 **Likely cause**
-- the store declares no `uns['cellucid']['id']` and `['name']`
+- the data declares no `uns['cellucid']['id']`, so its ID was made from its
+  file name, and the new name makes a new ID
 
 **Fix**
-- pass `dataset_name=` and `dataset_id=` (`--dataset-name` / `--dataset-id`)
+- pass the old ID as `dataset_id=` (`--dataset-id`), or write one into the data
+  with `cellucid.prepare()` (`uns['cellucid']['id']`)
 
 ### “Cellucid found nothing to plot”
 
 **Likely causes**
-- you didn’t compute an embedding yet
-- every `obsm` array is a table, sparse, non-numeric, or has a non-finite
-  coordinate in the columns that would be plotted
+- every dense `obsm` array places no cell (every row non-finite), holds a
+  value past float32, or gives every cell the same coordinates, in the columns
+  that would be plotted
 - `n_cells` mismatch between `adata.obsm[...]` and `adata.n_obs`
+- (no embedding computed at all -- an empty `obsm`, or only tables and sparse
+  arrays -- is refused as having no cell embedding instead:
+  {ref}`no-cell-embedding`)
 
 **How to confirm**
 - read the `obsm holds:` list: each entry names the array and why it was not used

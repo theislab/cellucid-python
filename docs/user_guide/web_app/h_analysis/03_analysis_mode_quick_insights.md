@@ -103,14 +103,14 @@ full sort gives, not an approximation, no matter how large the selection is.
 From half a million finite values the selection runs on an analysis worker, so
 the page stays responsive while it does.
 
-**Std is the population standard deviation** — it divides by *n*, not by *n − 1*.
+**SD (population) is the population standard deviation** — it divides by *n*, not by *n − 1*, as its column says.
 That matters if you are checking the number against pandas, whose
 `Series.std()` defaults to the *sample* standard deviation and divides by
 *n − 1*. On a page of a few thousand cells the difference is invisible; on a page
 of 20 cells Quick's value reads about 2.5% lower. `numpy.std(values)` reproduces
-it exactly, because numpy defaults the other way. Detailed mode's **Std Dev**
-column uses the same denominator as Quick, so the two panels agree with each
-other.
+it exactly, because numpy defaults the other way. Detailed mode's **SD
+(population)** row uses the same denominator as Quick, so the two panels agree
+with each other (the tests beside them use *n − 1*, as SciPy and R do).
 :::
 
 ---

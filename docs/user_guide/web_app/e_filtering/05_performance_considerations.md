@@ -140,9 +140,9 @@ the toggle before every drag.
 :width: 488px
 
 The state you want on a large dataset: `Live filtering` **Off**, so `Filter`
-becomes clickable and one recomputation replaces one per slider step. While
-`Live filtering` is On the button is greyed out entirely, which is the quickest
-way to tell which mode you are in.
+appears and one recomputation replaces one per slider step. While `Live
+filtering` is On there is no `Filter` button at all, which is the quickest way
+to tell which mode you are in.
 ```
 
 ### 2) Change one thing at a time

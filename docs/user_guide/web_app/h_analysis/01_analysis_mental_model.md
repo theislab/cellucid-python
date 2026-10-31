@@ -124,7 +124,7 @@ Cellucid analysis uses caching at multiple levels:
 - **Gene read-ahead**: a gene-heavy run reads genes ahead of its workers, as far as it measures it needs, within the analysis memory budget (see {doc}`06_analysis_mode_differential_expression_de`, How Cellucid sizes a run).
 - **Marker genes cache**: the same marker run is answered from memory and marked **Cached**, with **Recompute** beside it.
 - **Gene moments**: each gene's mean and spread over all cells, read once per dataset for Gene signature's Mean z-score and Module score.
-- **Page data cache**: the per-cell values of each page and variable, kept in their own numeric type and bounded at 100 entries and 256 MiB, least recently used first out.
+- **Page data cache**: the per-cell values of each page and variable, kept in their own numeric type with the page cell lists made for them, bounded at 100 entries and by its share of the memory the app's caches may hold (a sixteenth), least recently used first out.
 - **Density curves**: a density plot's curve is reused across cosmetic option changes and CSV export, and recomputed only when the data or the bandwidth changes.
 
 Quick and Detailed recompute when their inputs change. Every other mode computes
@@ -181,7 +181,8 @@ Keep these scope limits in mind:
 - P-values are not globally adjusted unless a mode explicitly reports an adjustment, such as Benjamini–Hochberg values in Differential Expression or Marker Genes.
 
 For categorical comparisons, Cellucid uses Pearson’s chi-squared test only
-when every expected cell count is at least 5. It automatically switches a
+when every expected cell count is at least 5 (with Yates’s continuity
+correction on a 2×2 table, as SciPy and R do). It automatically switches a
 sparse 2×2 table to a two-sided Fisher exact test. A larger sparse table is
 reported as **N/A** because Cellucid does not implement the corresponding
 general exact test; combine scientifically compatible sparse categories or

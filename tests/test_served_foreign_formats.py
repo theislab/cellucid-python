@@ -296,7 +296,8 @@ def test_an_outs_folder_is_served_with_its_analysis_in_priority_order(tmp_path: 
     assert np.array_equal(served.obs[ORIGINAL_POSITION_COLUMN].to_numpy(), order)
     # scanpy's names: the var index from features/name, gene_ids, feature_types, the tags.
     assert list(served.var.columns) == ["gene_ids", "feature_types", "genome"]
-    assert sparse.issparse(served.X) and served.X.format == "csr"
+    # Cell-major as stored: laid out gene-major, its values as stored.
+    assert sparse.issparse(served.X) and served.X.format == "csc"
     np.testing.assert_array_equal(served.X.toarray(), cells.toarray()[order])
     expected = umap.copy()
     expected[-1] = np.nan
@@ -335,17 +336,30 @@ def test_a_matrix_alone_is_refused_naming_the_outs_folder(tmp_path: Path) -> Non
         PriorityStore.of_cell_ranger(classify_anndata_path(path))
 
 
-def test_unsorted_cells_cannot_be_cut_into_feature_types(tmp_path: Path) -> None:
+def test_cells_stored_unsorted_are_cut_into_feature_types_all_the_same(tmp_path: Path) -> None:
+    # A feature type is a set of columns the layout takes (gene-major, by
+    # column), not a run of each cell's entries: a cell whose entries are
+    # stored out of order is served as any other.
+    mudata = pytest.importorskip("mudata")
     folder = tmp_path / "outs"
-    write_outs(folder, types=(("Gene Expression", 12), ("Antibody Capture", 4)))
+    cells, _, _ = write_outs(folder, types=(("Gene Expression", 12), ("Antibody Capture", 4)))
     with h5py.File(folder / "filtered_feature_bc_matrix.h5", "r+") as file:
         indices = file["matrix/indices"][()]
+        data = file["matrix/data"][()]
         pointers = file["matrix/indptr"][()]
         row = next(r for r in range(N_CELLS) if pointers[r + 1] - pointers[r] >= 2)
         indices[pointers[row] : pointers[row + 1]] = indices[pointers[row] : pointers[row + 1]][::-1]
+        data[pointers[row] : pointers[row + 1]] = data[pointers[row] : pointers[row + 1]][::-1]
         file["matrix/indices"][...] = indices
-    with pytest.raises(ValueError, match="unsorted within a cell"):
-        PriorityStore.of_cell_ranger(classify_anndata_path(folder))
+        file["matrix/data"][...] = data
+    store = PriorityStore.of_cell_ranger(classify_anndata_path(folder))
+    try:
+        served = mudata.read_zarr(_dump(store, tmp_path / "served.zarr"))
+    finally:
+        store.close()
+    dense = cells.toarray()[_order()]
+    np.testing.assert_array_equal(served.mod["Gene Expression"].X.toarray(), dense[:, :12])
+    np.testing.assert_array_equal(served.mod["Antibody Capture"].X.toarray(), dense[:, 12:])
 
 
 # =============================================================================

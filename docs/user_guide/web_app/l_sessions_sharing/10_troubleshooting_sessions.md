@@ -13,9 +13,10 @@
 | Symptom | Meaning | First action |
 |---|---|---|
 | File picker never opens | browser policy, embedded-context restriction, or handler error | use the ordinary browser tab, check Console, and retry from a direct click |
-| No dataset is loaded | sessions contain state, not the dataset; one saved on a sample, link or server opens its dataset on **Load**, one saved on a local file or in a notebook cannot | open that dataset first, then **Load** |
+| No dataset is loaded | sessions contain state, not the dataset; one saved on a sample, link or server opens its dataset on **Load**, one saved on a local file only where this browser kept the file (Chrome and Edge: **Reopen <name>**), one saved in a notebook cannot | click **Reopen <name>** if offered; otherwise open that dataset first, then **Load** |
 | Dataset identity error | one of dataset id, cell count, variable count, data mapping, or cell order differs, or the dataset lacks a field or gene the session uses — each with its own message | read the exact message first, then load the exact dataset the session was saved on |
-| "not a Cellucid session file of format 2" | the file does not start with the session signature `CELLUCID_SESSION/2` | check that you picked a session file saved by this release |
+| "saved by an earlier version of Cellucid (session format 2)" | the session was saved before this release; its cell check cannot be verified here | re-create it in this version and save it again |
+| "not a Cellucid session file of format 3" | the file does not start with the session signature `CELLUCID_SESSION/3` | check that you picked a session file saved by this release |
 | Manifest/chunk/profile error | file is not a complete current user bundle | obtain a fresh unchanged file from **Save** |
 | Gzip, byte-length, truncation, or trailing-data error | corrupt or dishonest container | transfer/download the original again; do not edit it |
 | Progress disappears after Cancel or a newer load | intentional abort | no action; the older restore neither succeeded nor failed |
@@ -97,7 +98,8 @@ The fingerprint has exactly:
 - `varCount`;
 - `cellOrder`, itself exactly the `embedding` the digest was taken over, its
   `dimension` (1, 2, or 3), and a 16-character hexadecimal `digest` of that
-  embedding's coordinates; and
+  embedding's stored coordinates, each cell by its position in the dataset's
+  own order; and
 - `dataMapping`, the stored embeddings and arrays the dataset was shown with.
 
 All but `name` must match, except that the data mapping may differ when this
@@ -133,7 +135,7 @@ Read the message before changing anything — each cause has its own:
 - **"the same name and the same number of cells and genes, but the cell
   coordinates differ"**: the digest no longer matches. A one-way digest cannot
   say *why*, so the message offers both causes it could be — the cells are
-  stored in a different order, or the same cells were exported again from a
+  listed in a different order, or the same cells were exported again from a
   re-computed embedding. Load the version the session was saved on, or re-create
   the selections on this one.
 - **"This session uses the observation fields … and the genes …, which the
@@ -187,10 +189,10 @@ file. Session files are binary and their names are easy to confuse with the
 figures and exports saved beside them.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/refusal-02-not-a-session-file.png
-:alt: A Cellucid notification reading "This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load.
+:alt: A Cellucid notification reading "This file is not a Cellucid session file of format 3 (it does not start with CELLUCID_SESSION/3).", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load.
 :width: 760px
 
-`This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).` means the file does not begin with
+`This file is not a Cellucid session file of format 3 (it does not start with CELLUCID_SESSION/3).` means the file does not begin with
 the session container's signature — so it is not a `.cellucid-session` file,
 whatever it is named. Check that you picked the right file before investigating
 anything else.

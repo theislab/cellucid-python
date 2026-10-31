@@ -695,25 +695,6 @@ function buildFilteringScenarios() {
       settle,
     },
     {
-      id: 'filtering-button-disabled-live-on',
-      topic: 'filtering',
-      name: 'filter-button-disabled-live-on',
-      describes:
-        'The same Visible range block with Live filtering on: the Filter button'
-        + ' is greyed out under the pointer, beside an enabled Reset button.',
-      dataset: 'pancreas',
-      steps: [
-        READY,
-        ...sScore,
-        { scrollIntoView: '#legend' },
-        { waitFor: '#legend .legend-filter button.switch[aria-checked="true"]' },
-        { waitFor: '#legend .legend-filter .btn-primary[disabled]' },
-      ],
-      shot: { mode: 'element', selector: '#legend .legend-filter', padding: 6 },
-      cursor: { on: '#legend .legend-filter .btn-primary', at: 'center', state: 'hover' },
-      settle,
-    },
-    {
       id: 'filtering-window-continuous-range',
       topic: 'filtering',
       name: 'window-continuous-range-applied',
@@ -933,29 +914,6 @@ function buildFilteringScenarios() {
         ...ins1,
         { scrollIntoView: '#legend' },
         setRange(MIN_SLIDER, 3),
-        { scrollIntoView: '#active-filters-container' },
-        NOTIFICATIONS_DRAINED,
-      ],
-      shot: { mode: 'window' },
-      settle,
-    },
-    {
-      id: 'filtering-window-gene-range-scope-lost',
-      topic: 'filtering',
-      name: 'window-gene-range-scope-lost',
-      describes:
-        'The same window after switching the active field to clusters: every '
-        + 'cell is drawn again, the Ins1 row has left the Filters block, and the '
-        + 'count line reads Showing all 3,696 cells.',
-      dataset: 'pancreas',
-      steps: [
-        READY,
-        { closeSection: '#session-section' },
-        ...ins1,
-        { scrollIntoView: '#legend' },
-        setRange(MIN_SLIDER, 3),
-        ...clusters,
-        { waitForText: '#filter-count', text: 'Showing all 3,696 cells' },
         { scrollIntoView: '#active-filters-container' },
         NOTIFICATIONS_DRAINED,
       ],
@@ -2137,7 +2095,7 @@ function buildAnnotationAndSessionScenarios() {
       name: 'refusal-02-not-a-session-file',
       describes:
         'A Cellucid notification reading "This file is not a Cellucid session '
-        + 'file of format 2 (it does not start with CELLUCID_SESSION/2).", with a'
+        + 'file of format 3 (it does not start with CELLUCID_SESSION/3).", with a'
         + ' dismiss button at its right, after a file that is not a session '
         + 'bundle was chosen in Load.',
       dataset: 'pancreas',
@@ -5107,6 +5065,13 @@ async function openFromDisk(page, kind, target) {
     `${document.getElementById('dataset-name')?.textContent}|`
       + `${document.getElementById('dataset-origin')?.textContent}`
   ));
+  // Where the browser has its own pickers (Chromium's showOpenFilePicker),
+  // Open… uses them, and an automated browser cannot answer them; without
+  // them the same item opens the file inputs, whose chooser it can.
+  await page.evaluate(() => {
+    window.showOpenFilePicker = undefined;
+    window.showDirectoryPicker = undefined;
+  });
   await page.click('#user-data-open-btn');
   await page.waitForSelector('#user-data-open-menu', { state: 'visible' });
   const [chooser] = await Promise.all([
@@ -6528,6 +6493,9 @@ function buildPhoneScenarios() {
       steps: [
         PANCREAS_READY,
         NOTIFICATIONS_DRAINED,
+        // A phone starts with the plot and the panel as a bar at the foot of
+        // the screen; a tap on the bar opens it full screen.
+        { run: page => page.locator('#phone-sheet-bar').tap() },
         { run: page => page.waitForFunction(
           () => !document.getElementById('sidebar')?.classList.contains('hidden')
         ) },
@@ -6540,16 +6508,16 @@ function buildPhoneScenarios() {
       topic: 'web_app',
       name: 'phone-plot',
       describes:
-        'The same phone screen after tapping ✕: the whole Pancreas sample in '
-        + 'view on the plot, the menu button (☰) at the top left, and the '
-        + 'selection bar with its Select mode switch at the bottom.',
+        'Cellucid on a phone-sized touch screen as it opens the Pancreas sample: '
+        + 'the whole sample in view on the plot, the selection bar with its '
+        + 'Select mode switch, and below it the bar naming the dataset at the '
+        + 'foot of the screen.',
       dataset: 'pancreas',
       viewport: PHONE_VIEWPORT,
       steps: [
         PANCREAS_READY,
         NOTIFICATIONS_DRAINED,
-        SIDEBAR_SETTLED,
-        { run: page => page.locator('#sidebar-toggle').tap() },
+        // A phone opens on the plot, the panel waiting as the bar at its foot.
         { run: page => page.waitForFunction(
           () => document.getElementById('sidebar')?.classList.contains('hidden')
         ) },

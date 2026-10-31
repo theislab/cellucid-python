@@ -47,8 +47,14 @@ store <- cellucid_prepare(
 | `colPairs(sce)` | `obsp['connectivities']`: the pair named `connectivities`, then one named like `snn`, then any other: the first that is symmetric, its diagonal removed |
 | `metadata(sce)$cellucid` | the dataset's identity and launch defaults |
 
-Assays backed by HDF5Array or another DelayedArray backend are read into memory
-block by block, each block a set of whole cells. A **SummarizedExperiment** has no reduced
+Assays backed by HDF5Array or another DelayedArray backend (or BPCells) stay on
+disk: they are read a block at a time and never held whole, or as one
+`dgCMatrix`, in memory, exactly as for a Seurat object's BPCells layers (see the
+Seurat recipe): one pass counts the values, then they are placed a quarter of
+the machine's memory at a time, each pass reading only its genes' rows.
+There is no limit on the number of stored values; `cellucid_view()` lays the
+matrix out before the viewer opens, into scratch files of 8 bytes a stored
+value. A **SummarizedExperiment** has no reduced
 dimensions: pass `embeddings = list(X_umap = coordinates)`.
 
 ## Troubleshooting

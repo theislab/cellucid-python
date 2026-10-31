@@ -650,6 +650,8 @@ def test_cached_corruption_is_rejected_and_never_fetched_on_request(
     from cellucid._server_base import CORSMixin
 
     assets = _asset_payloads("build-1")
+    # The WebAssembly decoders: compileStreaming needs exactly this type.
+    assets["assets/wasm/codecs.wasm"] = (b"\x00asm\x01\x00\x00\x00", "application/wasm")
     _install_fetch_fixture(
         monkeypatch,
         build_id="build-1",
@@ -693,6 +695,11 @@ def test_cached_corruption_is_rejected_and_never_fetched_on_request(
         assert handler.status == 200
         assert handler.headers["Content-Type"] == "application/javascript; charset=utf-8"
         assert handler.writer.getvalue() == assets["assets/js/app.js"][0]
+
+        wasm = Handler()
+        assert wasm.handle_web_asset_get("/assets/wasm/codecs.wasm") is True
+        assert wasm.headers["Content-Type"] == "application/wasm"
+        assert wasm.writer.getvalue() == assets["assets/wasm/codecs.wasm"][0]
 
         (cache_dir / "assets" / "js" / "app.js").write_bytes(b"changed")
         with pytest.raises(ValueError, match="sha256|byte length"):

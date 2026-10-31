@@ -211,7 +211,7 @@ are browser chrome — Playwright cannot capture them, and both would expose
   - `cd ~/Downloads` and set `PS1='$ '` so no path or username is rendered.
   - Run: `ls -lh cellucid-session-*.cellucid-session` then
     `head -c 96 cellucid-session-*.cellucid-session | xxd | head -6`.
-  - The hexdump shows the ASCII signature `CELLUCID_SESSION/2\n`, the 32-bit
+  - The hexdump shows the ASCII signature `CELLUCID_SESSION/3\n`, the 32-bit
     manifest length, and the opening of the JSON manifest — exactly the framing
     documented in {doc}`/user_guide/web_app/l_sessions_sharing/12_reference`.
 - **Crop:** the terminal window, ~900 px wide, dark theme.
@@ -250,11 +250,11 @@ are browser chrome — Playwright cannot capture them, and both would expose
 - **Crop:** `#notification-center` — the card titled `Loading` that names
   `Session file`, its
   `.notification-progress-bar`, `.notification-progress-text`,
-  `.notification-speed`, and the `×` button
-  (`.notification-dismiss[data-role="cancel"]`, `aria-label="Cancel"`).
-- **Cursor:** yes, hovering the `×` — this is the **Cancel** the docs mention
-  seven times and never show. It is a `×` glyph, not a button labelled
-  "Cancel"; every page that writes "press **Cancel**" is describing this.
+  `.notification-speed`, and the **Cancel** button
+  (`.notification-cancel[data-role="cancel"]`).
+- **Cursor:** yes, hovering **Cancel** — the button every page that writes
+  "press **Cancel**" describes; a card of work that can be stopped carries
+  it under its message (a settled card has a `×` that dismisses it).
 - **File:** `session-lifecycle-12-restore-progress.png` · `:width: 400px`
 - **Timing:** pancreas restores fast. Throttle by capturing on the
   `startDownload` notification's first paint, or use a larger highlight group.
@@ -425,8 +425,8 @@ longer a reason to refuse it. Details under
     successfully**." There is no panel status; both strings are toasts in
     `#notification-center`.
   - The page correctly warns that the catalog's `default.cellucid-session` is
-    rejected by the manual loader. Session format 2 (re-verify once the presets
-    are regenerated): a published default carries exactly seven chunks
+    rejected by the manual loader. Session format 3 (the presets are
+    republished in it): a published default carries exactly seven chunks
     (`core/field-overlays`, `core/state`, `ui/dockable-layout`,
     `ui/figure-export`, `analysis/windows`, `analysis/docked`,
     `highlights/meta`) in that order and no `cinematic/camera`, which the
@@ -546,7 +546,7 @@ longer a reason to refuse it. Details under
   | 1 | **Different dataset** — names both cell and gene counts | Save a session on `pancreas` (3,696 / 3,753). Reload, load `dataset:local-demo:garcia` (219,731 / 5,754). **Load** the pancreas file. (`he` and `kanemaru` are unusable here: their published sample views currently fail to apply in headless Chromium and add two unrelated errors to the crop.) | **Yes — highest value.** The commonest real-world mistake, and the message names four concrete numbers. |
   | 2 | **An embedding this dataset does not have** — "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have." | Open an `.h5ad` with an `X_tsne`, show it in a view, save. Open the same file without `X_tsne` (or an export without it), **Load**. | **Yes — second highest.** It names the one array to restore, so a user does not conclude the dataset is corrupt. (A session saved while another embedding was on screen is no longer refused; see step 15.) |
   | 3 | **Coordinates differ** (re-ordered rows *or* re-computed embedding) | Needs a second file with the same id and sizes but permuted rows. Read `cellucid/tests/browser/fixtures/catalog/current-ui.h5ad` (120 cells, 6 genes, 2D only) with anndata, permute its rows (`adata[order]`), keep `uns['cellucid']` unchanged, and write it to a scratch store. Save a session against the original, load the permuted clone, **Load**. | **Yes**, but as the *third* image — it is rarer and its message is long. Note the fixture is 2D-only, so error #2 cannot be provoked on it. |
-  | 4 | **Not a session file** (`NOT_A_SESSION_FILE_MESSAGE` in `session/bundle/format.js`) | **Load** any file that does not start with `CELLUCID_SESSION/2\n`. | **Optional.** The message is self-explanatory in prose. |
+  | 4 | **Not a session file** (`NOT_A_SESSION_FILE_MESSAGE` in `session/bundle/format.js`) | **Load** any file that does not start with `CELLUCID_SESSION/3\n`. | **Optional.** The message is self-explanatory in prose. |
 
 - **needs** —
   - Crop for all four: `#notification-center`, the single red toast, full text
@@ -624,7 +624,7 @@ longer a reason to refuse it. Details under
 - **needs** — Three captures, each pinned to a section that currently has no
   visual:
   1. **Cancellation** (section "Eager and lazy scheduling"): reuse
-     `session-lifecycle-12-restore-progress.png` with the cursor on the `×`, and
+     `session-lifecycle-12-restore-progress.png` with the cursor on **Cancel**, and
      add one frame taken immediately after clicking it showing
      `#notification-center` **empty** — the docs' claim that cancellation
      produces "neither success nor a red product failure" is only convincing
@@ -729,7 +729,7 @@ longer a reason to refuse it. Details under
   - No app capture is appropriate; this page has no UI.
 - **notes** — To re-verify once the presets are regenerated in session format
   2: every official `default.cellucid-session` begins with
-  `CELLUCID_SESSION/2\n`, carries a six-key `datasetFingerprint` including
+  `CELLUCID_SESSION/3\n`, carries a six-key `datasetFingerprint` including
   `cellOrder` and a 16-hex digest plus `requires`, and lists exactly the seven
   chunks the page names, in the stated order. Each sample's `session` entry in the catalog carries its `sha256`. The implementation pointers at the end of the page all resolve to
   existing files.
@@ -928,10 +928,11 @@ that instruction and none of them shows it.
 - **needs** — Nine of the eleven cliffs are *sensations* (choppy, hot, throttled)
   or *configurations* already described in text. Exactly two produce a distinct
   on-screen artifact worth photographing:
-  1. **WebGL context lost.** The viewer builds a modal overlay with the title
-     `WebGL Context Lost`, the body `WebGL context lost. Reload required.`, and
-     a `Reload` button (the context-lost overlay in
-     `assets/js/rendering/viewer.js`). Provoke it in a
+  1. **Graphics reset by the browser.** The viewer builds a dialog with the
+     title `Graphics reset by the browser`, a body saying the graphics are
+     being restored, and a `Save session` button; `Reload` appears beside it
+     only if restoring fails (the notice in `assets/js/rendering/viewer.js`,
+     "Lost and restored graphics"). Provoke it in a
      scripted run with the WebGL debug extension
      `WEBGL_lose_context.loseContext()` on `#glcanvas` — `render-failure-state.spec.mjs`
      already reaches into `document.querySelector('#glcanvas')` for a comparable

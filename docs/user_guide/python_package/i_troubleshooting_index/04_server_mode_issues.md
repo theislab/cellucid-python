@@ -85,7 +85,7 @@ Where the time goes:
   made as the browser asks for them (`Serving: a Zarr store in priority order,
   made as the browser reads it`; a store holding arrays the browser cannot
   decode is decoded on the kernel this way too, after `Browser cannot decode: …`
-  names them); it writes a temporary `.h5mu` for an in-memory MuData. Any other
+  names them); an in-memory MuData is served as such a store too. Any other
   format holding such arrays is refused with that reason.
 - **Step 4** downloads and verifies the current viewer build from its
   configured source, at every start, before binding; that is where a machine

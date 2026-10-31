@@ -97,7 +97,7 @@ Tradeoffs:
   requests where the format allows it: only the bytes a view needs are
   transferred, and nothing is converted first. An in-memory AnnData is served
   with its cells in priority order, each chunk made from the object when the
-  viewer asks for it; a MuData object is written once to a temporary `.h5mu`.
+  viewer asks for it, and so is a MuData object (as a MuData store).
 - Not a deterministic “artifact” you can hand to collaborators
 
 ### Option B — prepare first (fastest viewing; one more step)
@@ -123,13 +123,13 @@ Tradeoffs:
 
 Cellucid-python supports viewing (with `cellucid serve`, `serve_anndata`
 and `show_anndata`) from:
-- **In-memory AnnData or MuData** objects (an AnnData served in priority
-  order as the viewer reads it, a MuData written once to a temporary `.h5mu`)
+- **In-memory AnnData or MuData** objects (served in priority order as the
+  viewer reads them)
 - **`.h5ad`** files and **AnnData Zarr** stores, a folder or zipped (`.zip`)
 - **`.h5mu`** files and **MuData Zarr** stores
 - **`.loom`** files, **10x Cell Ranger `.h5`** files and **`outs/`** folders
-- **MatrixMarket folders** (`matrix.mtx.gz` with barcodes and features, also
-  GEO's `GSM..._matrix.mtx.gz` naming) and **R objects** (`.rds`, `.rda`,
+- **MatrixMarket folders** (a `.mtx.gz` with barcodes and features, whatever
+  its name: `matrix.mtx.gz`, GEO's `GSM..._matrix.mtx.gz`) and **R objects** (`.rds`, `.rda`,
   `.RData`, gzipped or not), which the viewer reads once from the start
 - **Cellucid-ready AnnData or MuData** written by `prepare(...)`
 

@@ -27,7 +27,12 @@ cellucid.prepare(
 - At least one embedding is required; any number may be passed.
 - An array is `(n_cells, k)` with `k ≥ 1`; a plain `(n_cells,)` vector is one
   column. Sparse input is densified.
-- Values must be finite and fit in float32.
+- Values fit in float32. A row holding NaN (or an infinity) is a cell the
+  embedding does not place (one computed on some of the cells): it is written
+  as given, the viewer leaves it out of that embedding's views and says how
+  many cells it leaves out, and every other view and analysis keeps it. At
+  least one cell must have finite coordinates. In the latent space
+  (`latent_key`), such a cell gets no outlier quantile.
 - Keys follow the path rules of {doc}`02_input_requirements_global`.
 
 Nothing is normalized or cropped. The viewer scales each embedding into its

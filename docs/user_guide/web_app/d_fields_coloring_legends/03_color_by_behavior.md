@@ -42,6 +42,26 @@ list holding anything but hex colours is not used, nor is it for a text column
 whose categories are found when it is loaded. Once categories are merged, the
 merged field is coloured by Cellucid's palette.
 
+A text or true/false column (no stored categories) lists its labels in
+code-point order and gives each the colour its label names (a hash of the
+label picks it; of two labels naming one colour, the one first in that order
+keeps it and the other takes the next free one), so the legend does not depend
+on which cells are open: opening more cells adds the labels they hold, and
+every label shown keeps its place in that order and its colour.
+
+A categorical with more categories than there are open cells, and too many
+for one request of the connection to read (barcodes or clone ids kept as a
+categorical: one category per cell, a million or more on a web host), lists
+only the categories its open cells hold, in the file's order, each in the colour it has
+with every category listed (the file's colour at its place, else the palette's
+colour at its place), and the legend says how many of the file's categories
+those are ("12,034 of its 1,203,456 categories are among them"). Only those
+categories' names and colours are read. Opening more cells adds the ones they
+hold, in the file's order, every one shown keeping its colour and whether it
+is hidden; a session or starting view that names a category no open cell holds
+keeps what it set for it until cells holding it open. Any other categorical
+lists every category it stores, the unused ones too.
+
 A missing code is not a quiet variant of a category — it is outside the
 category system entirely, and that has two visible consequences:
 
@@ -97,7 +117,20 @@ Continuous values use the neutral gray “None” color when:
 
 `NaN` is a drawable value. Cellucid reads it as “not measured here” and gives it
 the neutral grey, which makes missing measurements obvious without forcing you
-to filter them out.
+to filter them out. The grey is drawn beneath the measured cells (a missing
+category's grey too), so a missing value never covers a measured one.
+
+The grey **follows the background**. It is a neutral grey one fixed step of
+lightness (CIE L* 15.4) from the background, toward the middle: on white it is
+the light grey Cellucid always drew (RGB 211), on the light grid a shade darker
+(202), and on dark backgrounds a mid-dark grey (55 on the dark grid, 39 on
+black). A light grey on a dark background outshone the expressing cells; at
+this step most of every colour map stands out from the background more than
+the grey does, on every theme. The same grey is used for a gene's zeros, for
+missing values of every field kind, in kept views and multiview, in smoke
+mode, in the cell info card's swatch, in the legend's dot beside **Gray**, and
+in exported figures (made from the figure's own paper, in every export
+strategy).
 
 An **infinity is not drawable, and it is not greyed**: it has no position on a
 colour scale, and it would stretch the field’s range so far that every other
@@ -198,12 +231,11 @@ Practical example:
 Continuous legends support two ways to apply the numeric filter:
 
 - **Live filtering: On** (default)  
-  Moving sliders immediately updates visibility — and `Filter` is greyed out
-  and unclickable while it is on, with the tooltip
-  `Turn off Live filtering to use Filter`. That is the intended state, not a
-  fault.
+  Moving sliders immediately updates visibility, so there is no **Filter**
+  button: only **Reset** sits under the sliders.
 - **Live filtering: Off**  
-  Move sliders freely, then click **Filter** to apply once.
+  **Filter** appears beside **Reset**. Move sliders freely, then click
+  **Filter** to apply once.
 
 When you might turn Live filtering off:
 - very large datasets where recomputing visibility on every slider tick feels slow,
@@ -226,27 +258,25 @@ inventory, are in
 
 ---
 
-## How range sliders work (what “0–100” means)
+## How the range bounds work
 
-The Min/Max sliders are normalized to **0–100%** of the field’s numeric range:
+Each bound — **Minimum** and **Maximum** — has a slider and a number box:
 
-- `0` means the field’s minimum value
-- `100` means the field’s maximum value
+- **Type** a bound in the box (a decimal point or comma; `1e-3` too) and press
+  Enter or leave the box: it applies exactly as typed. A value past the
+  field's minimum or maximum is that end; text that is not a number is not
+  applied.
+- **Drag** the slider: it moves in thousandths of the field's range (spaced in
+  log units when **Log color scale** is on, the zeros at its first step), and
+  the bound it sets is the shortest decimal that tells one step from the next,
+  which the box then shows. The track's ends are the field's minimum and
+  maximum exactly.
 
-The UI shows the corresponding numeric value next to each slider so you don’t have to reason in percent.
-
-The two sliders cannot cross. Dragging `Minimum` past `Maximum` pushes `Maximum` along with
-it (and vice versa), so pushing one all the way collapses the range to a single
-value rather than being refused.
-
-:::{note}
-**The sliders move in whole percent steps.** The finest bound you can reach
-from the UI is therefore one hundredth of the field's full data range, and
-there is no box to type an exact number into. Read the printed numeric readout
-beside each slider to see what you actually selected, and do finer gating
-upstream — in Python or R, before you write the file; see
-{doc}`../e_filtering/06_edge_cases_filtering`.
-:::
+The box always holds the exact bound applied, and only the bound you move or
+type changes: the other keeps its value, also one restored from a session.
+The two cannot cross. Setting `Minimum` past `Maximum` pushes `Maximum` along
+with it (and vice versa), so pushing one all the way collapses the range to a
+single value rather than being refused.
 
 ---
 
@@ -256,16 +286,38 @@ Gene expression fields behave like continuous fields with a few practical differ
 
 - Genes are selected via search and **loaded on demand** (first selection can be slower).
 - Many genes are sparse: a large fraction of cells can be exactly zero.
-  - With **log scale on**, zeros become “None” gray.
-  - With log scale off, zeros map to the low end of the colormap.
+  The cells where the gene is 0 (the cells that do not express it, for a gene
+  with no negative value) are drawn in the neutral gray of a missing value,
+  not the colormap's lowest colour, so the colours show where the gene is
+  expressed; the legend says so under the colour bar. The gray is the gene's
+  zero, never the colour range's minimum: with **Rescale to range** following
+  a filter of "≥ 1" on counts, the cells at 1 keep the lowest colour, and any
+  cell below a moved-up minimum takes the lowest colour, as scanpy's `vmin`
+  clamps it.
+  The gray cells are drawn **beneath** the expressing ones: in 2D every
+  expressing cell lies on top of the gray around it, and in 3D it shows
+  through gray on the same surface (a gray cell clearly in front still hides
+  it), at every level of detail, in kept views and in exported figures.
+  With **log scale on**, zeros are gray as well (they have no logarithm).
+  A gene with negative values (scaled expression) has no gray floor, and
+  neither has an obs field: a zero there is a value.
+- A gene read for a **sample** of the open cells (a large atlas,
+  {ref}`genes-on-a-sample-of-the-cells`) draws three states, which the legend
+  names in one line, **Faded: not read · gray: 0**. The cells it was not read
+  for are faded almost to the background (a shade of it, never the gray
+  of 0), so the map keeps its shape. The cells read are drawn on top and
+  larger, sized from how dense the sample is on screen, so the pattern shows
+  at once: 2,000 cells on a 2.3M-cell map draw as clear dots, while a sample
+  already dense on screen draws at the normal size. Their zeros are gray
+  beneath the expressing cells. This holds in 2D and 3D, at every level of
+  detail (every read cell stays drawn), in kept views and multiview, when you
+  pick a cell (a read cell is found at its drawn size), and in exported
+  figures, whose note says the same. The fade and the gray follow the
+  background: light or dark, and a figure's own paper; the legend shows a
+  dot of each colour beside its words.
 
-Current behavior to know:
-- **Gene filters apply only while that gene is the active field.**  
-  If you switch to an obs field, the gene range filter is not applied to visibility.
-
-If you want “filter by gene, color by clusters” workflows, treat this as a current limitation and use:
-- categorical/continuous obs filters, or
-- analysis outputs exported as obs fields (then filter as obs).
+A gene's range filter keeps applying after you colour by another field, so
+"filter by gene, colour by clusters" works; **Filters** lists it.
 
 ---
 
@@ -285,7 +337,8 @@ Semantics:
   - `95%` hides the farthest ~5% of every category.
 
 Important details:
-- Outlier filtering applies only while the categorical field it was set on is the active field.
+- An outlier filter keeps applying after you colour by another field, and
+  **Filters** lists it (`cell_type: outlier ≤ 90%`).
 - It needs a latent space, which Cellucid never picks for you: the file's
   (`prepare(latent_key=...)`), the launch's (`--latent-key`), or yours under
   **Data mapping › Latent space**. Without one there is no slider: the filter

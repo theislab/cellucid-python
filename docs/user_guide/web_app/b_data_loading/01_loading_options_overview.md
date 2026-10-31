@@ -97,13 +97,13 @@ How fast a gene reads depends on how the matrix is stored:
 
 | Format | Read in parts? | How it opens |
 |---|---|---|
-| AnnData `.h5ad`, AnnData Zarr (folder or `.zarr.zip`), MuData (`.h5mu`, Zarr), Loom, 10x `.h5` and `outs/` | Yes | Only what each view needs, from your disk or with HTTP range requests from a host; a matrix stored cell by cell has its gene index kept in this browser once built, so the same cells opened again read genes at once ({doc}`21_subsampled_loading`). Served from Python by path, each is served with its cells in priority order, so a subsample sends only its cells |
+| AnnData `.h5ad`, AnnData Zarr (folder or `.zarr.zip`), MuData (`.h5mu`, Zarr), Loom, 10x `.h5` and `outs/` | Yes | Only what each view needs, from your disk or with HTTP range requests from a host; what a host sent is kept in this browser, so opening the same version again downloads nothing read before (below); a matrix stored cell by cell has its gene index kept in this browser once built, so the same cells opened again read genes at once ({doc}`21_subsampled_loading`). Served from Python by path, each is served with its cells in priority order, so a subsample sends only its cells |
 | A Cellucid-ready AnnData (`prepare()` in Python, `cellucid_prepare()` in R) | Yes, fastest | As above, with the matrix stored by gene and chunked for range reads, so one gene is one small read |
-| Seurat or SingleCellExperiment `.rds`, `.rda`, `.RData` (gzip, bzip2, xz; GEO's `.rds.gz`) | No | Read whole, once, from start to end, and kept in this browser's storage; the next opening of the same file (even days later) opens from there in seconds, reading nothing of the file |
+| Seurat or SingleCellExperiment `.rds`, `.rda`, `.RData` (gzip, bzip2, xz, zstd; GEO's `.rds.gz`) | No | Read whole, once, from start to end, and kept in this browser's storage; the next opening of the same file (even days later) opens from there in seconds, reading nothing of the file |
 | An uncompressed R file (`saveRDS(compress = FALSE)`) | Its arrays, yes | Its structure is read once and kept; its arrays are read in place |
-| MatrixMarket folder (`matrix.mtx[.gz]` with its lists) | No | As an R object: read whole once, kept |
+| MatrixMarket folder (`matrix.mtx[.gz]` with its lists) | No | Its lists and cell tables first: the cells are drawn from them. Then the matrix, read once from its start, keeping only the rows of the cells genes are read for (as many as this device holds a gene index of); both kept ({doc}`17_open_r_objects`). A matrix no larger than its tables, or of several modalities, is read with them |
 | Any file on a host that serves no parts of files (no range requests, or `Content-Encoding` on every answer) | No | Downloaded whole, once, into this browser's storage as it arrives (memory where the page cannot write its storage), and kept: the next opening downloads nothing (for a file with a version; below) |
-| `.h5ad.gz`, zstd-compressed R files (`compress = "zstd"`), h5Seurat | Not opened | The message says how to write a file Cellucid opens |
+| `.h5ad.gz`, h5Seurat | Not opened | The message says how to write a file Cellucid opens |
 
 Before a file is read whole, the opening says so: that the format cannot be
 read in parts, how much will be read, that what is read is kept for next
@@ -111,28 +111,108 @@ time, and that a Cellucid-ready AnnData is read in parts instead. A file is
 known again by what it is and its version: a file on this computer by its
 name, size and modification time; a linked file by the provider's id for it
 (for a plain web address, the address without its signature or token
-parameters) and the version its host reports: an ETag the host lets other
-sites read (`Access-Control-Expose-Headers: ETag`), or the provider's
-revision or checksum (CELLxGENE, Zenodo, Figshare, Hugging Face, GitHub,
-Google Drive, OneDrive, when they state one). A changed file is read again.
+parameters) and its version, asked of the source at every opening, never
+remembered from an earlier one: the provider's name for its content where it
+has one (a CELLxGENE Census build, a Zenodo version record and checksum, a
+Figshare version and checksum, a Hugging Face file's own content hash, the GitHub commit that
+last wrote it or its Git LFS object's hash, a Google Drive checksum or
+revision, a OneDrive content tag), else its exact size with the
+`Last-Modified` date and the strong ETag its host sends (an ETag only when
+the host lets other sites read it, `Access-Control-Expose-Headers: ETag`; a
+weak `W/` one says nothing of the bytes). A changed file is read again.
 A file a viewer host serves (`cellucid serve`, `serve_anndata()`, a
 notebook widget, R's `cellucid_view()` / `cellucid_serve()`) has a version
 too: the host lists it with the `ETag` its bytes are answered with (made from
 the file's size, modification and change times), so a file rewritten in place
-is a new version. Only a file with a version is kept for later visits. One
-known only by its size is kept for its tab only, and only that tab opens it
-again: a file on a host that reports no readable version, a GEO file whose
-size comes from its series' file list.
+is a new version. Only a file with a version is kept for later visits. Of
+one known only by its size nothing is used by a later opening, in this tab
+or another: a file on a host that sends no `Last-Modified` date and no
+readable strong ETag, or a GitHub file whose commit GitHub's API would not
+name.
 
-What is kept stays until you clear it, or until the browser needs the room:
+A file read in parts from a host on the network (a link, CELLxGENE, a
+provider) keeps what was downloaded of it — its
+structure, embeddings, obs columns, the expression of the genes read — in
+this browser, under its version, as it arrives: a visit closed the moment
+it showed the picture keeps all it read (a browser that crashes loses at
+most the piece being written). Opening the same version again, another day
+or in another tab, downloads none of it: only its version is asked of the
+host (Google Drive and OneDrive read one byte of it beside the request that
+finds the file; Figshare reads its first 512 KiB again there), and only what no earlier opening
+read is downloaded. A store folder on a web host keeps its files the same
+way only when its files are named by their content (Hugging Face; GitHub,
+read at the commit that last changed the folder); a folder on a plain
+host is read anew at each opening. A file on this machine or served from a
+notebook (`cellucid serve`, a widget) keeps no downloaded parts: it costs
+no download. Before anything kept is used, every opening
+asks the source for the file's version; what is kept of another version is
+removed then, and a file that changes while it is open is refused with
+"open it again to read the new version". What cannot be noticed, and how
+each source names its version:
+{doc}`../p_developer_docs/09_data_loading_pipeline_and_caching`, *When a
+dataset changes*.
+
+(stored-in-this-browser)=
+### Stored in this browser
+
+What is kept stays until you remove it, or until the browser needs the room:
 when a new file does not fit in the storage the browser grants this site,
-kept gene indexes are removed first (they are the cheapest to make again),
+kept gene indexes and downloaded parts are removed first (they are the
+cheapest to make again),
 then the files opened least recently, never one a tab has open.
-**Session › Open data › Stored** says how many files are kept and how much
-they take, and of how many files stored cell by cell (most atlases, every
-CELLxGENE file) the gene index is kept, so the same cells opened again read
-their genes at once ({doc}`21_subsampled_loading`), with **Clear**, which
-removes whatever no open tab uses. In a private window nothing outlives the window:
+**Session › Open data › Stored** sums it up on one row (for example
+*2 datasets · 540 MB kept*, or *2 datasets · 540 MB · 1 highlights draft ·
+1 file to reopen · 1 connection speed* when drafts, files to reopen or a
+host's speed are kept too); its (i) says what is kept and why.
+**Manage…** opens the *Stored in this browser* dialog, which lists each
+dataset something is kept of, by its file's name and host (*this computer*
+for a local file; never its link) and the size it all takes, with a row per
+kind kept of it: the parts downloaded of a file read in parts (*Downloaded
+parts*, with what keeping them saves the next opening), a converted copy (an
+R object, a MatrixMarket folder), a whole download (a file its host serves
+only whole), or the gene index of a
+matrix stored cell by cell (most atlases, every CELLxGENE file) for one
+choice of cells, so the same cells opened again read their genes at once
+({doc}`21_subsampled_loading`). Each row shows its size, when it was last
+used, and whether an open tab uses it. Tick rows and **Remove selected**,
+**Remove** one dataset's whole, or **Remove all**; a row an open tab uses
+cannot be ticked and stays until that tab closes. Under the datasets,
+*Unsaved highlights* lists the draft of the highlights made on each dataset
+that no session holds yet (kept in this browser so a reload does not lose
+them, offered back with **Restore**): a row per dataset with its size and
+when it was last saved, chosen and removed like the others. In Chrome, Edge
+and other Chromium-based browsers, *Files to reopen* lists the files and
+folders of this computer whose handle the browser gave Cellucid when you
+opened them (so a reload or a session reopens them with one click,
+{ref}`reopen-local-file`): a row each with its name, whether it is a file or
+a folder and when it was last opened, chosen and forgotten like the others
+(forgetting one deletes only the handle, never the file). Then one
+row, *Connection speeds remembered (2 hosts)*, names the hosts data was read
+from whose speed is kept (in `localStorage`, to size the next opening from
+each; {doc}`21_subsampled_loading`; its tooltip gives each host's round trip
+and rate), with its own **Remove**. Another row, *Decoder choices measured
+(4 chunk sizes)*, is which decoder (WebAssembly or JavaScript, the browser's
+own or fflate) decodes each compression fastest in this browser (in its
+IndexedDB, so a later visit skips measuring them; no dataset is kept), with
+its own **Remove**; **Remove all** forgets both too.
+
+The dialog's foot, **Where it's kept**, answers where all of it lives, in
+any browser on any system:
+
+| Row | What it says |
+|---|---|
+| Place | This browser's private storage for this site (the *origin private file system* of the address you opened Cellucid at, for example `www.cellucid.com`; the connection speeds are in its `localStorage`). It lives inside your browser profile and is managed by the browser — Chrome and Edge, Firefox and Safari each keep a site's storage in their own profile data — so it is not a folder you can open from your file manager. |
+| Holds | Files (in its private file system), highlight drafts and decoder choices (in its IndexedDB; in Chrome and Edge also files to reopen, the browser's handles) and connection speeds (in its `localStorage`): all of them this site's storage in this browser. |
+| Removed by | This dialog, or the browser's *Clear site data* (also clearing cookies and site data for the site, or removing the browser profile). |
+| Space | What the whole site uses and what its quota still leaves free, marked *browser's figures*: the browser's own estimate (`navigator.storage.estimate()`). Each browser decides how much one site may use, from the disk's size and free space; Cellucid sets no limit of its own. |
+| Kept when space is low | *yes* when the browser keeps the site's storage when the disk runs low; *no, the browser may clear it* otherwise (`navigator.storage.persisted()`). **Keep it when space is low** asks the browser (`navigator.storage.persist()`), only when you press it: Firefox asks you, other browsers decide from how the site is used. What a browser clears is read again on the next opening. |
+
+A private or incognito window gives the site no storage that outlives the
+window: the Stored row says *Kept for this tab only*, and **Where
+it's kept** says the same. Cellucid finds this by asking the browser for its
+storage, not by its name.
+
+In a private window nothing outlives the window:
 Firefox and Safari give the page no storage (WebKit's private browsing has
 neither the origin-private file system nor IndexedDB, measured in Playwright's
 WebKit, whose test windows are private ones), so the file is held in memory
@@ -325,11 +405,15 @@ that is open, and only that one; opening another rewrites all of it.
   two lines with **More**.
 - **How much has been read**, for data read in place from a host:
   "5.5 MB read in 43 requests", or "Reading… 5.5 MB read in 43 requests" while
-  bytes arrive. What was read stays in this tab's memory (within its memory
-  budget), so opening another share of the same file fetches nothing twice,
-  and is released with the tab. Only what is listed under
-  {ref}`which-formats-are-read-in-parts` is kept on disk: a file read whole,
-  and the gene index of a matrix stored cell by cell.
+  bytes arrive. This tab holds what was read (within its memory budget), so
+  opening another share of the same file fetches nothing twice. For the next
+  visit, this browser also keeps, in this site's storage in your browser
+  profile, the downloaded parts of a file read in parts, the gene index of a
+  matrix stored cell by cell, and the copy of a file read whole
+  ({ref}`which-formats-are-read-in-parts`): only when the source names the
+  file's version, and never the parts of data served from this computer or a
+  notebook. {ref}`stored-in-this-browser` lists them and removes them, and so
+  does clearing this site's data; a private window keeps none of it.
 - **Details**, collapsed: the source and citation as links, the file, its
   format and size, how it is read (and, for a format read whole, where it is
   kept, what is read in parts instead and what was not read), cells (with a
@@ -358,8 +442,14 @@ and keeps the dataset on screen. How it ended goes to the notification center.
 - **No UMAP**: an AnnData without `X_umap_1d`, `X_umap_2d`, `X_umap_3d` or
   `X_umap` opens on a best guess from its other `obsm` arrays
   ({doc}`13_data_mapping`); only a file with nothing drawable is refused.
-- **NaN/Inf in embeddings**: an embedding holding one is refused, naming the
-  cell, before it can replace what is shown.
+- **NaN/Inf in embeddings**: a cell whose row holds NaN or an infinity has
+  no position in that embedding (one computed on some of the cells, a MuData
+  modality that did not measure it). The embedding opens; the cell is not
+  drawn, picked or selected in its views, a short notice counts such cells and
+  names the first, and every other view, filter and analysis keeps them. In a
+  latent space such a cell gets no outlier quantile; in a vector field it has
+  no arrow. Only an embedding with no finite row, or a value past float32, is
+  refused, naming the cell.
 - **Duplicate variable names**: the reader makes repeated gene names unique as
   AnnData's `var_names_make_unique()` does (`MATR3`, `MATR3-1`) and says so.
 - **Huge categorical fields** (e.g., 100k unique categories): they load (32-bit
@@ -403,8 +493,12 @@ and keeps the dataset on screen. How it ended goes to the notification center.
 
 ### Symptom: “It says Cellucid found nothing to plot”
 **Likely causes**
-- AnnData has no drawable `obsm` array: only tables, sparse arrays, or arrays
-  holding missing or infinite values (the message lists each entry and why).
+- AnnData has no drawable `obsm` array: each dense one has another row count,
+  places no cell (every row missing or infinite), or holds a value past
+  float32 (the message lists each entry and why). An `obsm` with no dense
+  numeric array at all (empty, or only tables and sparse arrays) is refused
+  sooner as having no cell embedding
+  ({ref}`no-cell-embedding`).
 
 **Fix**
 - Compute an embedding (for example `sc.tl.umap(adata)`) before viewing, or

@@ -203,7 +203,7 @@ selected
 
 A bundle's `datasetFingerprint` carries exactly `datasetId`, `name`,
 `cellCount`, `varCount`, a `cellOrder` record, and a `dataMapping` record — the
-current (format 2) session fingerprint:
+current (format 3) session fingerprint:
 
 ```python
 bundle.dataset_fingerprint
@@ -239,24 +239,25 @@ shared rule, and read from the mapping's expression matrix.
 
 ### What `cellOrder` is, and why Python does not check its digest
 
-Everything a session records about your cells is a **row number**. That is safe
-only for as long as row 417 keeps meaning the same cell. Rewrite a dataset
+Everything a session records about your cells is a **position**: the cell's row
+in the dataset's original order. That is safe only for as long as position 417
+keeps meaning the same cell. Rewrite a dataset
 from a re-sorted `AnnData` and the id, the cell count, and the gene count are
-all still identical, while every stored row number now denotes something else.
+all still identical, while every stored position now denotes something else.
 
-`cellOrder` closes that hole in the viewer. It is a digest of the coordinates
-of one embedding — the one `cellOrder.embedding` names, an `obsm` key with its
-0-based columns — plus that embedding's dimension.
-Every embedding is normalized on its own, so a digest only means anything for
-the embedding it was taken over.
+`cellOrder` closes that hole in the viewer. It is a digest of the stored
+coordinates of one embedding — the one `cellOrder.embedding` names, an `obsm`
+key with its 0-based columns — each cell named by its original position, plus
+that embedding's dimension. A digest only means anything for the embedding it
+was taken over; how the viewer opened the cells (all of them, a share, grown
+step by step) does not change it.
 
 Python requires `cellOrder`, validates its shape strictly (`embedding` a
 `{key, columns}` record that fits the mapping's kind, `dimension` exactly 1, 2,
 or 3, `digest` exactly 16 lowercase hex characters), and never checks the digest
-value. There is nothing here to check it against: the digest covers coordinates
-the viewer normalized and drew, and you — not Cellucid — chose the row order of
-the object you are applying the session to. Verifying cell-order identity is the
-viewer's job.
+value: the digest is the viewer's check, taken on the cells it opens, and you —
+not Cellucid — chose the rows and embeddings of the object you are applying the
+session to. Verifying cell-order identity is the viewer's job.
 
 The practical consequence: **apply a session only to the `AnnData` that produced
 it, in its original cell order** (a session names cells by original position;
@@ -337,8 +338,8 @@ column explicitly before applying.
 ### Symptom: Python applies a bundle the web app refuses to open
 
 The two readers are not symmetric: only the web app compares the `cellOrder`
-digest against the coordinates it loads, so a re-ordered dataset is caught there
-and not here.
+digest against the stored coordinates of the cells it opens, so a re-ordered
+dataset is caught there and not here.
 
 How to confirm:
 ```python

@@ -41,7 +41,7 @@ REQUEST_ID = "security-contract-request"
 #: The digest of ``tests/fixtures/viewer_protocol.json``: the web app's
 #: ``tests/fixtures/viewer-protocol.json`` byte for byte. The web app and
 #: cellucid-r pin the same one.
-VIEWER_PROTOCOL_SHA256 = "bf1db1f20d75f72359eea882297e880b9092f7682525f1caa56bdc8148b2b936"
+VIEWER_PROTOCOL_SHA256 = "24b8606e4ce533f5320b4adb88b6aaac314091943bbb5f3c6590f55b7adfd32a"
 
 
 def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], dict[str, object]]]:
@@ -138,8 +138,14 @@ def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], 
         ),
         (
             "color_by",
-            {"type": "color_by", "field": "leiden", "source": "obs", "label": "leiden"},
-            {"field": "leiden", "source": "obs", "label": "leiden"},
+            {"type": "color_by", "field": "leiden", "source": "obs", "symbol": None, "cells_read": None},
+            {"field": "leiden", "source": "obs", "symbol": None, "cells_read": None},
+        ),
+        (
+            "color_by",
+            # A gene read for the first 40,000 open cells only (a gene sample).
+            {"type": "color_by", "field": "ENSG00000168484", "source": "var", "symbol": "SFTPC", "cells_read": 40_000},
+            {"field": "ENSG00000168484", "source": "var", "symbol": "SFTPC", "cells_read": 40_000},
         ),
         (
             "pong",

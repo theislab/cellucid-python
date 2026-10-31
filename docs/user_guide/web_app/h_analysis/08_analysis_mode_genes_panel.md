@@ -64,7 +64,7 @@ result at once; any other change marks it **Stale · Run**.
 | Min cells per group | 10 |
 | Small groups | Skip and list |
 | Method | Wilcoxon rank-sum |
-| Wilcoxon p-values | Exact or continuity-corrected (SciPy, R) |
+| Wilcoxon p-values | Exact or continuity-corrected (R) |
 | Multiple testing | Benjamini–Hochberg |
 | Expression matrix | The mapped matrix |
 | Fold change from | Automatic |
@@ -120,6 +120,15 @@ is never an error. **Small groups** decides what happens to it:
 | **Skip and list** (default) | is not tested and stays in the rest; the result shows **n skipped** and the notification names them |
 | **Pool into one group** | is tested together with the other small groups as `Other small groups (k)` (**n pooled**); a pool still under the minimum is skipped |
 | **Test anyway, flagged** | is tested when it has at least 2 cells, and marked **low n** |
+
+When genes are read for a sample of the open cells
+({ref}`genes-on-a-sample-of-the-cells`), a group's cells are its cells among
+that sample, so a common cell type can fall under the minimum there. The chip
+then says so: **n skipped: too few sampled cells** (or **n skipped (k for too
+few sampled cells)** when some are small in every cell too), and its tooltip
+gives each skipped group's cells among the sample of its cells
+(`ionocyte (3 of 1,523)`). **Read for all cells**, in a gene's legend, then
+**Run** tests them on every cell.
 
 A group is then compared against its reference for one gene when **both sides
 hold at least `max(2, Min cells per group)` cells with a measured value** — 2
@@ -184,6 +193,10 @@ every other analysis keep the matrix the data mapping shows.
 | --- | --- |
 | **Mapped (…)** (default) | the matrix the data mapping shows, named in brackets; follows the mapping when it changes |
 | **X**, **layers['…']**, **raw.X · N genes** | that matrix, when it is not the mapped one |
+
+A matrix that holds counts (Data mapping lists it with `· counts`) is named
+`· counts, not normalised` in the result's settings: its means and fold changes
+are of raw counts, not corrected for each cell's sequencing depth.
 
 Each matrix names its genes on its own axis: `X` and every layer share `var`;
 `raw` has `raw.var`, which often holds genes `X` lacks (`X` is frequently the
@@ -292,8 +305,16 @@ Clustering is exact agglomerative clustering, in double precision, in the
 analysis workers: about 0.15 s for 3,000 genes × 69 groups, rows and columns, on
 an M1 Pro. Clustering n genes holds one 8-byte distance per pair (about 4 MB for
 1,000 genes, 256 MB for 8,192), which must fit the analysis memory budget (a
-sixteenth of the device memory); a larger request is refused with the size it
+thirty-second of the device memory); a larger request is refused with the size it
 needs. Show fewer genes, or turn that axis’s clustering off.
+
+A run's result holds 40 bytes per tested group and gene (each group's
+p-values, scores, fold changes, fractions and AUROC): 120 MB for 100 groups
+of 30,000 genes. Groups that are not tested (the reference, small groups
+skipped) hold nothing of their own. When the groups and genes of a run would
+hold more than the analysis memory budget, the Run row says so before you
+run, with the size, so you can test fewer groups or genes; it does not
+refuse.
 
 ### Cache
 

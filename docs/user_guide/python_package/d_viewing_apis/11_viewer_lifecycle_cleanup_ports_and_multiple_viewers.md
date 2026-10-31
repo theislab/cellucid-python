@@ -11,8 +11,8 @@ This page is about running Cellucid viewers/servers safely over long sessions:
 - Notebook users (re-run cells create new viewers)
 - Browser-tab viewer users (most common source of “why is my port in use?”)
 - Anyone viewing an in-memory `AnnData` or `MuData` (each viewer holds a
-  store of it, with the memory-mapped files a cell-major `X` is laid out in, or
-  a temporary `.h5mu`)
+  store of it, with the memory-mapped files its expression matrices are laid
+  out in; a notebook cell run again stops the viewer it showed before)
 
 ## The three lifecycles you might be in
 
@@ -56,10 +56,15 @@ In notebooks, it’s very common to:
 Calling `viewer.stop()`:
 - freezes the view on its last frame and stops answering it,
 - for a browser-tab viewer, stops the server and closes its port,
-- and releases what it served: the store of an in-memory `AnnData` (or of a
-  file not in priority order) with the files its cell-major `X` was laid out
-  in, and the temporary `.h5mu` an in-memory `MuData` was written to (a file is
-  read in place and left untouched).
+- and releases what it served: the store of an in-memory `AnnData` or
+  `MuData` (or of a file not in priority order) with the files its expression
+  matrices were laid out in (a file is read in place and left untouched).
+  A notebook widget is stopped so by itself when the cell that showed it runs
+  again (unless another cell shows it too), and when it is closed
+  (`viewer.close()`). The cell is known by the id JupyterLab, Notebook 7 and
+  VS Code send with each run; where none is sent, showing the same dataset id
+  again stops the widget shown before, and a printed line says so (as
+  cellucid-r's `cellucid_view()` does).
 
 ```{note}
 Cellucid registers an interpreter-exit cleanup handler that logs shutdown
@@ -74,13 +79,13 @@ handle any failure before interpreter teardown.
 - A notebook widget (`show_anndata`) uses no port.
 - CLI/server functions and classes default to the exact port `8765`.
 - `AnnDataViewer` defaults to `port=None`: port 8765 (the one local port
-  Google sign-in accepts), else the next free port.
+  Google Drive sign-in accepts), else the next free port.
 
 ### What happens if the port is already in use?
 
 - CLI/server mode binds the requested port exactly and raises if it is unavailable.
 - `AnnDataViewer` with `port=None` takes the next free port after 8765 and
-  print a note that Google sign-in works only on 8765; a port given is used or
+  print a note that Google Drive files open only on 8765; a port given is used or
   refused.
 
 **Rule:** use the CLI/server banner for blocking server mode and

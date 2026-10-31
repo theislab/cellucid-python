@@ -649,9 +649,13 @@ def _activate_staged_generation(stage: Path, cache_dir: Path) -> None:
 
 
 def get_web_cache_dir() -> Path:
-    """Return the default web cache directory (it may not exist yet).
+    """Return this user's default web cache directory (it may not exist yet).
 
-    Pass ``web_cache_dir=`` to a viewer or server to use another directory.
+    ``~/.cache/cellucid/web`` on Linux (``$XDG_CACHE_HOME`` when set),
+    ``~/Library/Caches/cellucid/web`` on macOS and
+    ``%LOCALAPPDATA%\\cellucid\\web`` on Windows: each user of a shared
+    machine has their own. Pass ``web_cache_dir=`` to a viewer or server to
+    use another directory.
     """
     return _web_cache_dir()
 

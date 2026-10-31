@@ -118,9 +118,14 @@ Paste either address into **Session › Open data › Link or server** and press
 | `owner/repo@branch/path/atlas.zarr` | the same host, another branch, tag or commit | `my-lab/atlas-data@v1/atlas.zarr` |
 | `https://owner.github.io/repo/path/atlas.zarr/` | GitHub Pages, once enabled (step 5) | `https://my-lab.github.io/atlas-data/atlas.zarr/` |
 
-A `github.com/owner/repo/tree/<branch>/…` link to the folder works too. To
-share it, put the address in a Cellucid link (`gh:` before the short form; a
-Pages address URL-encoded):
+A `github.com/owner/repo/tree/<branch>/…` link to the folder works too.
+Opened by its `owner/repo/…` address, the folder is read at the commit that
+last changed it (one request to GitHub's API), so what a visit reads of it
+is kept in the browser and the next visit downloads none of it until you
+push a change to the folder; past the API's 60 requests an hour for a
+browser without a sign-in, and from a GitHub Pages address, it is read
+anew at each visit. To share it, put the address in a Cellucid link (`gh:`
+before the short form; a Pages address URL-encoded):
 
 ```text
 https://www.cellucid.com/?data=gh:my-lab/atlas-data/atlas.zarr

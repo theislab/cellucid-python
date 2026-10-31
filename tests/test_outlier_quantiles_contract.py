@@ -32,7 +32,7 @@ from cellucid import prepare, restore_original_order
 from cellucid.prepare_data._outliers import latent_outlier_quantiles
 
 FIXTURE = Path(__file__).parent / "fixtures" / "latent_outlier_conformance.json"
-FIXTURE_SHA256 = "99f6a92dc25d0e1e783793bc0bd9e84ab5b2046d550e91a440661e5bb1945fdd"
+FIXTURE_SHA256 = "a812db4dd25c9b5b44549c001a0e3927043042ca12ad7d8567c73f583ecf498d"
 
 N_CELLS = 60
 
@@ -40,7 +40,9 @@ N_CELLS = 60
 def test_the_rule_gives_the_conformance_bytes() -> None:
     assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == FIXTURE_SHA256
     for case in json.loads(FIXTURE.read_text(encoding="utf-8"))["cases"]:
-        latent = np.asarray(case["latent"], dtype=np.float64).astype(np.float32).reshape(-1, case["width"])
+        # None (JSON null): a NaN row's value, a cell the latent space does not place.
+        stored = [np.nan if value is None else value for value in case["latent"]]
+        latent = np.asarray(stored, dtype=np.float64).astype(np.float32).reshape(-1, case["width"])
         quantiles = latent_outlier_quantiles(latent, np.asarray(case["codes"]), case["nCategories"], case["minPoints"])
         assert quantiles.astype("<f4").tobytes().hex() == case["quantilesHex"], case["name"]
 

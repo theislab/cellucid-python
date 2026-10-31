@@ -49,6 +49,7 @@ Common flags:
 - `--port/-p`: bind that exact port (default `8765`; `0` requests one operating-system-assigned port)
 - `--host/-H`: bind host (default `127.0.0.1`; use `0.0.0.0` for remote access)
 - `--allowed-host HOST` (repeatable): an extra exact `Host` name to answer to, behind a reverse proxy
+- `--cache-bytes BYTES`: what a store served in priority order keeps of what it makes (default a 64th of the machine's memory)
 - `--no-browser`: don’t auto-open a browser tab
 - `--quiet/-q`: less output
 - `--verbose/-v`: debug logging (mutually exclusive with `--quiet`)
@@ -60,9 +61,9 @@ Dataset flags:
 - `--latent-key KEY`: `obsm` latent space (scVI, PCA) the outlier filter
   measures in
 - `--dataset-name NAME`: exact display name (default: the store's
-  `uns['cellucid']['name']`; required without it)
+  `uns['cellucid']['name']`, else the file's name)
 - `--dataset-id ID`: exact stable identifier (default: the store's
-  `uns['cellucid']['id']`; required without it)
+  `uns['cellucid']['id']`, else the file's name without its extension)
 - `--obs-key KEY` (repeatable), `--embedding-1d/2d/3d KEY[:COLUMNS]`,
   `--knn KEY`, `--gene-id-column COLUMN`, `--expression X|raw|layer:NAME`,
   `--vector-field-default FIELD_ID`, `--[no-]normalize-embeddings`,

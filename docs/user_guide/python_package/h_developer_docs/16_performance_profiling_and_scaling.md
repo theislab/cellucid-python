@@ -70,8 +70,8 @@ What decides the cost:
   made on request (a store with browser-undecodable codecs is decoded on the
   kernel so), an object's arrays copied once at startup into memory-mapped
   files (its snapshot; sparse expression matrices laid out gene-major, stored
-  as `prepare()` stores them); an in-memory MuData written once to a temporary
-  `.h5mu`.
+  as `prepare()` stores them); an in-memory MuData served the same way, as a
+  MuData Zarr store, with no file written.
 
 Measured on one Mac over localhost, for a 562k-cell × 8,192-gene `.h5ad` (CSR,
 gzip): startup 0.16 s, obs fields about 90 ms, 2D/3D UMAP about 40 ms each,

@@ -32,6 +32,19 @@ small = adata[kept].copy()
 - `blocks` needs `block_size`: the web app derives it from the file's chunk
   layout and shows it with the subsample (Session › Dataset › Details).
 - A size of every cell or more returns every cell.
+- The rows of `data` are taken as the cells' original positions, so
+  `adata[kept]` holds the cells the viewer opens. An object read from a
+  Cellucid-ready file in priority order (`anndata.read_zarr` of `prepare()`'s
+  output, any sample dataset) holds them in its stored order: it is refused
+  with a `ValueError` until {func}`~cellucid.restore_original_order` puts the
+  cells back, as `viewer.pull()`, `viewer.subset()` and applying a session
+  refuse it. (Its first `k` rows are the `uniform` subsample of `k` cells
+  under the file's seed, `uns['cellucid']['priority']['seed']`.)
+
+```python
+adata = cellucid.restore_original_order(anndata.read_zarr("pbmc.zarr"))
+kept = cellucid.subsample_cells(adata, fraction=0.1, seed=0)
+```
 
 ## API reference
 

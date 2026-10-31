@@ -107,7 +107,7 @@ sessions.
 
 The **selection bar** is a small card at the bottom of the plot that carries
 Select mode's controls, so you can select, combine, confirm, discard, clear and
-leave the mode without opening the menu — which on a phone covers the whole
+leave the mode without opening the menu — which on a phone, once opened, covers the whole
 screen. Every control on it is the Highlighting panel's own control shown a
 second time: both show the same state and do exactly the same thing.
 
@@ -181,7 +181,10 @@ If you have more than one page, an **`×`** delete control appears on tabs.
 
 Rules:
 - you cannot delete the last remaining page,
-- if you delete the currently active page, the UI switches to another page automatically.
+- if you delete the currently active page, the UI switches to another page automatically,
+- the page goes at once, and a notification offers **Undo** for a few
+  seconds: it puts the very page back (its groups, its place, its id, so
+  analyses naming it find it again), unless the open cells changed since.
 
 ### Combine pages (union / intersection)
 You can create a derived page by dragging one page tab onto another, or by
@@ -233,7 +236,23 @@ This is the safest way to temporarily remove a group from consideration without 
 ### Remove a group
 Click the **`×`** next to a group to remove it from the page.
 
-There is no undo for deleting groups; if you need safety, save a session first.
+The group goes at once, and a notification offers **Undo** for a few seconds,
+putting it back in its place on its page (unless the open cells changed
+since). A session keeps your work across reloads.
+
+### After a reload
+Highlights are kept as a draft in this browser while you work (per dataset,
+each group's cells by their row in the file). When the same dataset opens
+again with nothing highlighted, a notification offers them back:
+*3 highlights from 14:32 on this dataset were not saved in a session* (*1
+highlight … was not saved* for one) with **Restore**. Highlights you saved in
+a session, or loaded from one, are not offered: the session file holds them,
+so their draft is removed until you change them. Restore puts the pages and groups back (a group made from a
+category or a value range comes back as a selection of the same cells and
+name); on another subsample of the dataset, the cells not open are left out
+and counted. Nothing is restored unless you press it, and a private window
+keeps no draft. A saved session is still the way to keep work for good or
+share it.
 
 ### Clear all groups (what “Clear” clears)
 The **Clear** button clears all groups on the **active page**.
@@ -254,9 +273,21 @@ Beside **Clear**, while cells are highlighted:
   one `true`/`false` column per group (`cellucid_highlight__<group id>`).
 - **.h5ad** writes the highlighted cells as an AnnData subset: their obs names
   and every obs field (your own fields included; continuous ones as `float32`
-  or `float64`, as Cellucid holds them), each group as a boolean column, the
-  genes, the expression rows of the matrix the data mapping reads, and the
-  embeddings shown, as stored. Its genes are their identifiers (the var
+  or `float64`, as Cellucid holds them; a categorical keeps whether its
+  categories are ordered, its labels in their own type -- integers stay
+  integers, `True`/`False` stay booleans -- and the colours shown, as Scanpy's
+  `uns['<field>_colors']`), each group as a boolean column, the genes, the
+  expression rows of the matrix the data mapping reads, and the embeddings
+  shown, as stored. Only the highlighted cells' names and embedding rows are
+  read, and a field read for the export is let go again once written, so a
+  few cells of a very large dataset cost their own rows. Before it reads, its
+  card says how many bytes the expression rows take to read and, over a
+  link, about how long on this connection (the price the gene sample and **Read for all
+  cells** are given; the parts are under **Details**), and **Cancel** on the
+  card stops it with nothing saved. The rows are one read of every
+  highlighted cell, written to this browser's storage part by part as they
+  arrive, so the export holds one part at a time while the next is
+  downloaded. Its genes are their identifiers (the var
   index, as `adata.var_names` holds them), with the names Cellucid shows in
   `var['symbol']` when they differ. A field name an HDF5 file cannot hold (one with
   `/` in it, or `.`) is written renamed, and Cellucid says which. anndata,
@@ -265,6 +296,15 @@ Beside **Clear**, while cells are highlighted:
 Both list the cells in the dataset's own order (ascending original
 position), whatever order the file stores them in or the viewer opened them
 in: the order `viewer.subset()` (R: `cellucid_subset()`) gives.
+
+An export shows a progress card with **Cancel**, which stops it where it is:
+nothing is downloaded, and nothing is reported as failed. A CSV names every
+open cell, so on a large dataset it is large whatever is highlighted (10
+million cells: a few hundred MB). Its card says about how large it will be
+once its first rows are written (`Export the highlighted cells (CSV) · about
+312 MB…`), and the finished card says its size. Its rows are written a batch
+at a time into this browser's storage, so the page never holds the file. While one export is
+being written, another click says so instead of starting a second.
 
 Each obs field's **Export** button (beside **Duplicate**) writes that field as
 a CSV of obs names and values; a gene set editor's **Export** writes its sets

@@ -82,7 +82,7 @@ Subdirectories (high-level):
 - `analysis/stats/`: statistical tests, corrections, result formatting
 - `analysis/plots/`: plot infrastructure and types
 - `analysis/ui/`: UI manager, analysis-type UIs, floating windows, shared UI components
-- `analysis/shared/`: memory monitor, plot theme, debug utils, cleanup utilities
+- `analysis/shared/`: plot theme, debug utils, cleanup utilities, the run tuner
 
 ---
 
@@ -206,22 +206,54 @@ Every gene and observation-field load goes through one download scheduler
   their bytes, so no gene value crosses the main thread. How many genes a
   task takes, how far ahead, and how many tasks the workers hold, is decided
   by the run's tuner (`analysis/shared/run-tuner.js`) from the worker count,
-  the run's genes, the analysis memory budget (`data/memory-budget.js`), each
+  the run's genes, the analysis memory budget (the `analysis` share of
+  `data/memory-budget.js` less the per-cell state the run keeps in every
+  worker: `compute/worker-pool.js` `analysisRunBudgetBytes`), each
   read's time and bytes and the link the reader measured: sixteen tasks per
-  worker over the run (held so the tasks in flight fit half the budget as
-  dense columns); the read-ahead covers the tasks consumed while one task's
+  worker over the run, held so the tasks in flight fit half the budget: at
+  each gene's densest form until a read is measured, then at the genes'
+  bytes as read, sized again at each read and each shrink of the budget (held
+  at the densest form, a 10M-cell differential expression of two groups went
+  one gene a task, 30,000 tasks and page messages); the read-ahead covers the tasks consumed while one task's
   genes are fetched, doubles while workers sit idle waiting for reads,
-  halves when throughput falls or memory pressure is reported, and buffered
+  halves when throughput falls or the budget shrinks (a refused allocation,
+  a larger working set, another page of the origin), and buffered
   genes hold at most 30% of the budget. The tuner never decides network
   parallelism; the scheduler above does. A worker the pool replaces during a
   run (a cancelled task outlived its grace) gets a new port; the genes on
   their way to the old one are read again.
+- **Two groups, read in their cells.** Differential expression of two groups
+  streams through the same loop over the groups' cells only
+  (`runGeneStream`'s `cells`): each read is a block of genes in those cells
+  (`DataLayer.deliverGeneCellSubset` over the route, `readGeneCellSubset`
+  without one; `data/gene-delivery.js` `block`), which the reader reads by
+  cell or by gene, whichever costs less. A read by cell decodes every row it
+  touches whatever its genes, so a read takes as many tasks as the memory
+  gate has room for (`bufferedTasks`): every gene in one read when they fit,
+  else several reads, each within the gate, never every gene at once. Until a
+  read is measured a gene of a block is taken to hold a position and a value
+  a cell (`CELL_SUBSET_ENTRY_BYTES`).
+- **Counted while held.** What a run has read and not yet computed (being
+  read, delivered and waiting, in a task) is a holder of the `analysis`
+  share while the run goes (`GENES_IN_FLIGHT_LABEL`, given back however the
+  run ends), so `memoryReport()` shows it and the caches of the share make
+  room for it. An analysis that computes on the page over many genes
+  (signature scores) reads them through `visitGeneColumnsHere`: a batch at a
+  time within the same gate, each gene visited and let go, the batch counted
+  the same way; the scorers' per-cell state is counted too while it is
+  built.
 - **Cancellation.** A finished or aborted run cancels its reads still
   waiting in the scheduler (they never start) and those under way; a shared
   read is cancelled only when every caller has left. Each dataset load has
   its own scheduler: replacing the dataset closes the previous one, which
   aborts and rejects every read it still held, so a stalled read of the
-  old dataset never holds back the new dataset's reads.
+  old dataset never holds back the new dataset's reads. No task has a
+  deadline: a task is one synchronous call with no progress to measure, so a
+  bound would only turn a slow success (10M cells on few cores) into a
+  failure of every window's tasks. A task stops through its signal, and a
+  worker that does not come back from a cancelled task is replaced. A
+  failed task's error reaches the caller with its class
+  (`utils/error-wire.js`).
 - **Progress.** Every read is reported to the read activity log
   (`data/read-activity-log.js`): a gene the user waits for shows in its
   loading notification, and a long read is written to the console as
@@ -242,17 +274,21 @@ Theme integration:
 - CSS variables must be resolved into concrete colors for Plotly.
 - Centralized in `analysis/shared/plot-theme.js` and updated on `cellucid:theme-change`.
 
-### 5) Memory monitor + cleanup
+### 5) Memory and cleanup
 
-Long analysis sessions can degrade memory if plots/caches are not cleaned up.
+What the analyses keep by choice is counted by the app's one memory model
+(`data/memory-budget.js`, {ref}`memory-budgets`), each where it is held: the
+page values the data layer keeps (`analysisPages`), kept marker runs and the
+per-cell state runs keep in the analysis workers (`analysis`, every worker's
+copy counted). The model trims them, oldest first, when the allowance or the
+working set changes, a refused allocation lowers the allowance, or the page
+is hidden; nothing in flight is invalidated and no window is closed. The
+analysis pool runs no more workers than the analysis share holds a run's
+per-cell state for, and its workers end once idle for 10 s
+(`workers/idle-retirement.js`), starting again for the next task.
 
-The module includes:
-- a memory monitor that triggers periodic and pressure-based cleanup
-- explicit cleanup hooks for components
-
-Code:
-- `cellucid/assets/js/app/analysis/shared/memory-monitor.js`
-- `cellucid/assets/js/app/analysis/shared/resource-cleanup.js`
+Components still clean up what they own (plots purged, caches cleared on a
+dataset reload): `cellucid/assets/js/app/analysis/shared/resource-cleanup.js`.
 
 ---
 
@@ -317,7 +353,9 @@ these properties, and each one is pinned by a test:
   background waits behind every other read, small chunks waiting together
   travel as one message, and a small chunk alone is decoded in the reader
   thread. The workers start when a file opens; there are as many as the cores
-  (less the page and the reader) and their memory budget allow.
+  (less the page and the reader) and their memory budget allows, the budget
+  as it is when one may start; idle ones end after 10 s or when the memory
+  model trims their share.
 - **Per-run work is done once per run.** A run's groups reach each worker
   once (a context the pool replays to a replaced worker), and a gene's task
   carries only its delivery; the per-gene work on the main thread is placing
@@ -339,6 +377,22 @@ these properties, and each one is pinned by a test:
   `shared/concurrency-utils.js`), not after a fixed item count through
   `setTimeout(0)`, whose 4 ms clamp turned a 20,000-gene run into seconds of
   idle waiting.
+
+- **Fold changes past float64.** "Automatic" on a file that records
+  `uns['log1p']` takes scanpy's formula `log2((expm1(a) + 1e-9) / (expm1(b) +
+  1e-9))`. `expm1` of a mean above about 709.78 is infinite in double
+  precision, so a file whose values are not logged although it records
+  `uns['log1p']` (EBI SCEA E-ANND-5: per-million values of 252–1,118 under an
+  empty `uns['log1p']`) gave ±Infinity or NaN, and differential expression
+  failed to draw. Where the ratio or a term overflows, `foldChangeOfMeans`
+  (`compute/gene-statistics.js`) takes the same formula in log space
+  (`logExpm1PlusEpsilon`: `ln(expm1(y) + ε) = y + ln1p((ε − 1)e^−y)`), so DE,
+  marker genes and pseudobulk get its finite value; below the overflow the
+  value is scanpy's bit for bit (tests `analysis-fold-change-scaled-data`, the
+  scanpy parity fixture). On E-ANND-5, cells 0–399 against 400–799 over
+  33,538 genes: 32 infinite or NaN fold changes before, none after. Such means
+  also show the matrix is not log1p: the user guide's DE page says to set
+  **Values** to **As stored** under Data mapping. Python and R compute no DE.
 
 ---
 
@@ -367,12 +421,12 @@ Likely causes:
 - missing cleanup handler registration
 
 How to confirm:
-- Use the memory monitor debug logs (enable analysis debug via `?debug=1` or localStorage `debug=1`).
+- Read what every cache holds against its budget: `memoryReport()` of `data/memory-budget.js` in the console; with analysis debug on (`?debug=1` or localStorage `debug=1`) each DE, correlation and signature run logs what the caches held before and after it.
 - Take a heap snapshot and look for retained plot DOM nodes.
 
 Fix:
 - Ensure `purgePlot(...)` is called when replacing plots.
-- Register cleanup handlers with the memory monitor for new components.
+- Count a new cache in the memory model (`registerResidentHolder` with its share), and unregister it when its owner is destroyed.
 
 ---
 

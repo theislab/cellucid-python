@@ -15,7 +15,7 @@ also an in-memory `AnnData` or `MuData` ({doc}`02_loading_routes`). The viewer
 reads a file in place, with range requests where the format allows it; an
 in-memory AnnData, and an AnnData file not in priority order, are served in
 priority order, made as the viewer reads them, so a subsample sends only its
-cells (a MuData object is written once to a temporary `.h5mu` first). A file
+cells (a MuData object as a MuData store). A file
 written by {func}`~cellucid.prepare` (a Cellucid-ready AnnData) reads fastest
 and names itself, so it needs no `dataset_name`/`dataset_id`.
 

@@ -171,23 +171,24 @@ Full rules: {doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
 ## Symptom: “Cellucid found nothing to plot”
 
 ### Likely causes (ordered)
-- no embedding was ever computed, so `obsm` holds only tables, sparse arrays, or
-  nothing at all
-- every candidate array holds a non-finite value (or no spread) in the columns
-  that would be plotted
+- every candidate array places no cell (every row non-finite), holds a value
+  past float32, or has no spread in the columns that would be plotted
 - arrays do not have one row per cell (`adata.n_obs`)
+- (no embedding ever computed -- `obsm` empty, or only tables and sparse
+  arrays -- is refused as having no cell embedding instead:
+  {ref}`no-cell-embedding`)
 
 ### How to confirm
 
 The message lists every `obsm` entry and says why it was not used:
 
 ```text
-Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, NaN at cell 17). Add a 2-D embedding to obsm (for example with sc.tl.umap in Scanpy), then open the data again.
+Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, not representable as float32 at cell 17). Add a 2-D embedding to obsm (for example with sc.tl.umap in Scanpy), then open the data again.
 ```
 
 ### Fix
 - compute an embedding (`sc.tl.umap(adata)`), or repair the array the message
-  names (the first non-finite cell is given)
+  names (the first cell past float32 is given)
 - or name a usable array explicitly with `embedding_keys` / `--embedding-<n>d`
 - a dimensional key whose array does not have exactly its own column count is an
   error, not a reinterpretation: `X_umap_3d` holding `(n_obs, 2)` is refused
@@ -326,7 +327,14 @@ Deep dive: {doc}`10_notebook_widget_mode_advanced`.
 ### Likely causes (ordered)
 - a cell is still running: the widget's messages reach Python between cells
 - the output belongs to a stopped or older viewer (after `viewer.stop()` or a
-  kernel restart it keeps its last view and says so)
+  kernel restart it keeps its last view and says so: where the notebook front
+  end reports the kernel's connection closing, JupyterLab and Notebook 7, the
+  output says *The notebook's kernel stopped: run this cell again*, and the
+  viewer ends the reads that were waiting on the kernel instead of waiting
+  for them)
+- a long cell is running while the viewer opens a large dataset: the viewer
+  waits for the kernel without a deadline (the kernel answers between cells)
+  and goes on once the cell finishes
 - in a browser tab (`AnnDataViewer`) behind a proxy: the channel (one
   WebSocket to `/_cellucid/ws`) cannot open because the proxy does not pass
   WebSockets; the viewer says “… this viewer cannot open its channel (…)”

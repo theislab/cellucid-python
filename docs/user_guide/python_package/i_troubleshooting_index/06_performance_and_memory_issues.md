@@ -28,7 +28,7 @@ except two that are labelled:
 
 | Last line | What is running | What to do |
 | --- | --- | --- |
-| `Format: written once to a temporary .h5mu, in priority order` | An in-memory MuData is being written to the temporary file | Serve the file from disk instead |
+| `Format: a Zarr store in priority order, made as the browser reads it` (an in-memory object) | Its expression matrices are counted, then laid out gene-major in the background; the viewer opens at once, and a gene read before the layout ends is made from the layout's progress (what is placed copied, the rest found by one scan of the object's column indices; slower than after the layout, which is waited for only when it ends sooner) | Wait for the layout, or serve a Cellucid-ready file (`prepare()`), which needs none |
 | `[4/4] Starting server...` | The configured viewer generation is being downloaded and verified, every asset, at every server or viewer start | Give the machine fast outbound access to the web source; on a machine without it, serve with `--no-web-ui` |
 
 The transcript is in {doc}`../../web_app/b_data_loading/04_server_tutorial`.
@@ -64,7 +64,11 @@ copies, and verify expression orientation before preparing.
 A server serves a file in priority order (one `prepare()` wrote) as its bytes
 from disk, and anything else as a store in priority order whose chunks it
 makes when they are asked for, from the object or from the file's own arrays
-(and a bounded cache of renumbered genes and chunk entries, 128 MiB). A file's
+(and a bounded cache of renumbered genes and chunk entries: a 64th of the
+machine's memory, 256 MiB on a 16 GB machine, as cellucid-r's served stores
+keep; `cache_bytes=` of {func}`~cellucid.serve_anndata`,
+{func}`~cellucid.show_anndata` and {class}`~cellucid.AnnDataServer` sets it,
+`0` keeping nothing). A file's
 array stored in chunks (compressed, or any sparse matrix anndata wrote) is
 decoded once, a source chunk at a time as rows in it are first asked for,
 into a memory-mapped file in the system temporary folder, so rows in priority

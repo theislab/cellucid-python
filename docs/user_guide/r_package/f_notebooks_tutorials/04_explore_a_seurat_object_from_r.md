@@ -115,8 +115,9 @@ highlight, label and score made in the viewer comes back in one call,
 cellucid_stop(viewer)
 ```
 
-This stops its server and frees its port (in a Jupyter notebook, where the
-viewer is the cell's output and no server runs, it freezes the output);
+This freezes an open page on its last view, as Python's `viewer.stop()` does,
+then stops its server and frees its port (in a Jupyter notebook, where the
+viewer is the cell's output and no server runs, the output stays, frozen);
 `cellucid_stop_all()` stops every viewer of the session.
 
 ## Next

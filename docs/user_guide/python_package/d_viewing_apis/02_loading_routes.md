@@ -40,10 +40,10 @@ If you want a decision tree instead of a table, go to {doc}`03_choose_your_workf
 | **Python** | `cellucid.serve_anndata(<a path, an AnnData or a MuData>, dataset_name="My dataset", dataset_id="my-dataset")` | every registry format, in-memory AnnData and MuData | scripted server startup |
 | **Jupyter** | `cellucid.show_anndata(<a path, an AnnData or a MuData>, dataset_name="My dataset", dataset_id="my-dataset")` | every registry format, in-memory AnnData and MuData | notebook exploration |
 
-A Cellucid-ready AnnData or MuData declares its own name and id, so the
-identity arguments are needed only for other data. Python reads the identity
-only of an AnnData or MuData: an R object, a Loom, 10x or MatrixMarket dataset
-always needs both arguments.
+A Cellucid-ready AnnData or MuData declares its own name and id. Any other
+dataset is named after its file (its id the file's name without the
+extension), and the id made so is printed with how to set it; the identity
+arguments name it otherwise. Sessions are kept under the id.
 
 The web app reaches a server through its **Link or server** bar (type
 `localhost:8765`, or just the port), or the server opens it: `cellucid serve`
@@ -53,7 +53,7 @@ own connection. The viewer reads the data itself exactly as it reads a linked
 file — in place with range requests where the format allows it, once from the
 start for an R object or a MatrixMarket folder; Python serves the bytes (an in-memory AnnData,
 and an AnnData file not in priority order, as a store in priority order made as the viewer reads
-it; a MuData written once to a temporary Cellucid-ready `.h5mu`).
+it; a MuData object the same way, as a MuData store).
 
 ## What you should actually use (recommended defaults)
 
@@ -76,9 +76,9 @@ web app reads too, and serves it with `serve_anndata(...)`:
   root) → served key by key, as AnnData or (by its root's `encoding-type`)
   MuData; the directory name does not need a `.zarr` suffix
 - a folder of files: a Cell Ranger `outs/` (its
-  `filtered_feature_bc_matrix.h5`), or a MatrixMarket folder (`matrix.mtx[.gz]`
-  with `barcodes`/`features` or `genes` lists, also under a shared prefix such
-  as GEO's `GSM4567_matrix.mtx.gz`) → served file by file, the files listed in
+  `filtered_feature_bc_matrix.h5`), or a MatrixMarket folder (a `.mtx[.gz]`
+  file, whatever its name, such as GEO's `GSM4567_matrix.mtx.gz`, with its
+  `barcodes`/`features` or `genes` lists) → served file by file, the files listed in
   `/_cellucid/datasets`
 
 Anything else is refused: `Unable to detect format for: <path>`.

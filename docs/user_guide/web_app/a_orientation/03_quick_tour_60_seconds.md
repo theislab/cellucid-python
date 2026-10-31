@@ -13,7 +13,7 @@ If you prefer to learn by definition-first, read {doc}`04_ui_glossary_terminolog
 ## What appears on ordinary startup
 
 ```{figure} ../../../_static/screenshots/web_app/welcome-startup.png
-:alt: The Cellucid welcome overlay as a first visit opens it, with Choose a dataset and Learn more, over the Suo atlas loaded behind it.
+:alt: The Cellucid welcome overlay as a first visit opens it, listing the sample datasets with the default one opening, Open a file and Paste a link, over the Suo atlas loaded behind it.
 :width: 1440px
 
 Every ordinary bundled or catalog startup opens the welcome overlay.
@@ -24,8 +24,12 @@ startup whose address already names its data (a Python or R viewer, a
 `cellucid serve` server, or a `?data=` link) skips the overlay.
 ```
 
-Choose **Choose a dataset** to open the data controls, or press {kbd}`Escape`
-to inspect the loaded default dataset first.
+The overlay lists the sample datasets; the default one says it is opening,
+with how far it is. Choose a sample to open it, **Open a file…** to pick one
+from this computer (or drop a file or folder anywhere), **Paste a link** to go
+to the link field, or press {kbd}`Escape` to look at the default dataset.
+**Open a file…** and **Paste a link** wait, with a line saying so, until
+Cellucid has started (the first moments of a visit).
 
 ```{figure} ../../../_static/screenshots/web_app/startup-loaded-build.png
 :alt: The Suo atlas loaded after the welcome overlay is dismissed, with every sidebar section collapsed so the footer shows, ending in the Version and Build line.

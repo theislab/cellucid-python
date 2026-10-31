@@ -43,11 +43,14 @@ from cellucid import show_anndata
       vector_field_default=None,
       modality=None,
       web_source_url="https://www.cellucid.com",
+      cache_bytes=None,
   )
   ```
 
   `dataset_name` and `dataset_id` default to `uns['cellucid']['name']` and
-  `uns['cellucid']['id']`, and are required when the data declares neither.
+  `uns['cellucid']['id']`; data that declares neither is named after its file,
+  or in memory as `AnnData (N cells)` (`MuData (N cells)`), with an id made
+  from that name and printed (sessions are kept under it).
   Every launch choice (`latent_key` through `modality`) is optional:
   each one named is checked against the data's metadata before the viewer is
   shown and handed to it as a launch default; one left unset is taken
@@ -55,6 +58,8 @@ from cellucid import show_anndata
   `obs_keys` names the exact `adata.obs` columns the viewer shows; every column
   is shown when it is omitted. `vector_field_default` names the vector field the
   overlay opens on. `web_source_url` is where the browser loads the app from.
+  `cache_bytes` bounds what the kernel keeps of what it makes for a store
+  served in priority order (a 64th of the machine's memory when None).
   The widget opens no port; for a viewer in a browser tab of its own (a
   script, an SSH tunnel) construct `AnnDataViewer`, which also takes `port`,
   `client_server_url`, `web_cache_dir` and `allowed_hosts`.
@@ -385,6 +390,7 @@ The server answers no `POST` (405).
 | `web_cache_dir` | `AnnDataViewer`: directory for the active verified web generation | Controlled writable location or explicit inspection |
 | `client_server_url` | `AnnDataViewer`: exact browser-facing HTTP(S) server base | A reverse proxy or tunnel in front of the server |
 | `allowed_hosts` | `AnnDataViewer`, `serve_anndata`: extra exact host names the data server answers to (`Host`) and accepts viewer pages from (`Origin`); one bare host name per entry, no port, scheme or wildcard | Required behind a reverse proxy, which forwards the browser's `Host` verbatim |
+| `cache_bytes` | Every entry point: bytes a store served in priority order keeps of what it makes (renumbered genes), least recently used first out; None keeps a 64th of the machine's memory, 0 nothing (cellucid-r's `cache_bytes` alike) | A large object on a machine whose memory other work needs, or a large machine with room to spare |
 
 ---
 

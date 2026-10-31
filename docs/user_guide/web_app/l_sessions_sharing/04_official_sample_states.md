@@ -18,7 +18,10 @@ publish ({doc}`../b_data_loading/02_local_demo_tutorial`).
 4. It downloads that one file, stops reading past the byte length the catalog
    declares, refuses a file of any other length, verifies its SHA-256 against
    the catalog, and confirms that the selected dataset has not changed.
-5. Cellucid applies the verified static starting view.
+5. Cellucid applies the verified static starting view. It says nothing when
+   it does: the view is part of opening the sample, not a session you
+   loaded, so the camera and colours simply change. Only a view that cannot
+   be applied is reported, once, as **Sample view unavailable**.
 
 This order matters: an unverified view file is never treated as scientific
 data. If the named session is missing, the wrong length, or fails its digest,

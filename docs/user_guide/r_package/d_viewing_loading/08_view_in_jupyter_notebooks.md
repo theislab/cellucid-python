@@ -76,6 +76,17 @@ sel <- cellucid_selection(viewer)
 seu$picked <- colnames(seu) %in% sel$cell_names
 ```
 
+## A cell run again
+
+A cell run again replaces its output, so the viewer it showed before is
+stopped: the object's matrices it held, its memoised arrays and its chunk
+cache are let go (an object reassigned after `NormalizeData()` would
+otherwise stay in memory beside the new one), as cellucid-python stops the
+widget a re-run cell replaced. A viewer that another cell shows too stays.
+The cell is known by the id JupyterLab, Notebook 7 and VS Code send with each
+run; where none is sent, viewing a dataset again stops the earlier viewer of
+the same dataset id, and says so.
+
 ## Why not a server here
 
 Outside a notebook, `cellucid_view()` and `cellucid_serve()` run a small web

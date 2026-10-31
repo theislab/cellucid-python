@@ -23,7 +23,7 @@ from cellucid._anndata_files import classify_anndata_path, input_formats
 #: The same digest is pinned in the web app
 #: (tests/input-formats-registry.test.mjs) and in cellucid-r
 #: (tests/testthat/test-input-formats.R). Update all three together.
-INPUT_FORMATS_SHA256 = "ed44816fc5299aea7b87a8f7e805a704779517e04a2dd5b9b6340ced511ba7e7"
+INPUT_FORMATS_SHA256 = "7c1e079c33dcd7d1abb17e4996e6e6cf35f1968327a9097701dd9a1ca860c902"
 
 HDF5_SIGNATURE = bytes.fromhex("894844460d0a1a0a")
 

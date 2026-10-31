@@ -26,6 +26,7 @@ from .data_mapping import (
     EmbeddingKeySpec,
     ObsmEntry,
     default_columns,
+    default_modality,
     enabled_embedding_keys,
     slot_dimension,
     validate_embedding_columns,
@@ -277,6 +278,13 @@ def _require_drawn_vector_field(contents: AnnDataContents, field: str, defaults:
             if slot.startswith("embedding")
         },
         latent_key=defaults.get("latentKey"),
+        # A MuData opens on its named modality, else the default one: its
+        # representations are the guess after the store's own.
+        modality=(
+            None
+            if contents.modalities is None
+            else defaults.get("modality") or default_modality(list(contents.modalities))
+        ),
     )
     declared: dict[str, bool] = {}
     for key, parsed in vector_field_keys(contents.obsm).items():

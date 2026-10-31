@@ -436,7 +436,8 @@ not on a paraphrase — each one has exactly one cause.
 |---|---|---|
 | `Vector field "<id>" has no data bound to <embedding label>.` | View manager | A load was asked for in a view showing an embedding this field is not bound to. |
 | `Vector field obsm['<obsmKey>'] cannot be drawn: <reason>.` | Data mapping | A binding (default or chosen by hand) the file cannot satisfy, for example `obsm['velocity_umap'] has 3 columns; it needs 2, or 2 like obsm['X_umap']`. |
-| `Vector field '<obsmKey>' cannot be drawn: NaN at cell N.` | AnnData reader (worker) | A `NaN` (or `Infinity`, `-Infinity`, or a value not representable as float32) in an `obsm` vector array; `N` is the cell's row. |
+| `Vector field '<obsmKey>' cannot be drawn: not representable as float32 at cell N.` | AnnData reader (worker) | A value too large (or too small, but not zero) for float32 in an `obsm` vector array; `N` is the cell's row. A row of `NaN` or an infinity is not refused: that cell has no arrow. |
+| `Vector field '<obsmKey>' cannot be drawn: every cell's vector is missing (NaN or infinite).` | AnnData reader (worker) | No row of the vector array is finite. |
 | `Vector field '<obsmKey>' component at flat index I is outside the finite Float32 range after normalization` | AnnData reader (worker) | The values are finite but leave `float32` range once scaled with their embedding. |
 | `VectorFieldManager.loadField: vectors length X does not equal expected length Y.` | Vector field manager | The array read is not `n_cells × components`: the `obsm` array does not have one row per cell. |
 | `Vector field obsm['<obsmKey>'] is bound to obsm['<embeddingKey>'], which cannot be plotted.` | Vector field manager | The embedding the binding names is not one the dataset can show, so there is no view to draw the field in. |

@@ -20,7 +20,9 @@ official GitHub repository.
 - **Hard dependencies:** `jsonlite`, and for the viewer `httpuv`, `later` and `curl`
 - **Optional:** `Matrix` (sparse expression matrices and neighbour graphs; recommended),
   `SeuratObject` and `SingleCellExperiment` / `SummarizedExperiment` (each only
-  to read its own objects), `DelayedArray` (assays kept on disk)
+  to read its own objects), `DelayedArray` (assays kept on disk, such as
+  HDF5Array), `BPCells` (matrices kept on disk; from
+  <https://bnprks.r-universe.dev>, not CRAN)
 - **Source builds:** Rtools on Windows, the Xcode Command Line Tools on macOS,
   or a C toolchain plus the R and zlib development headers on Linux (for
   example `r-base-dev`, which brings `zlib1g-dev`, on Debian and Ubuntu)

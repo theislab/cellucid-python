@@ -157,27 +157,39 @@ fits and says so.
    cellxgene:9f222629-9e39-47d0-b83f-e08d610c7479
    ```
 
-2. **Auto-fit.** Opening every cell would not fit this device's memory: the
-   view's own per-cell data and, for a cell-major matrix, the index that
-   makes its genes readable. Cellucid opens a seeded **Blocks** subsample
-   sized to fit, and the notice under **Session › Open data › Cells to open**
-   says how many cells it opened, why ("to fit this device: … in memory, and
-   this device has … for it"), and how far the subsample's categories are
-   from every cell's. Only the parts of the file holding the open cells are
-   read. **Open all cells** reads every cell anyway; the slider opens another
-   share ({doc}`21_subsampled_loading`). How many cells fit depends on the
-   device and the browser, which the notice states.
-3. **Genes by symbol.** The var index holds Ensembl ids, so Cellucid names the
-   genes from the `feature_name` column of symbols beside it (**Session ›
-   Data mapping › Genes** shows the choice as *Guessed*). Search `SFTPC` or
-   `ENSG00000168484`: both find the same gene. The cells are drawn before
-   any gene name is read: the gene list follows the first view, and until it
+2. **The whole map, genes on a sample.** Cellucid opens every cell this
+   device holds, with their cell types, in seconds (a device without the
+   memory for all of them opens a seeded **Blocks** subsample that fits, and
+   says so). The file stores its matrix cell by cell (sparse, CSR), so one
+   gene's values are spread over every cell's row: reading a gene for every
+   cell reads the whole matrix. So a gene is read for a sample of the open
+   cells, as many as the first gene reads in about 20 seconds on your
+   connection: drawn first on the cells about 10 seconds read, then on more
+   as the rest of the 20 seconds reads them. Under **Session › Open data › Cells to open** one line
+   says so ("Genes read for 40K of 2.3M cells."); its **Details**
+   table says why ("a gene in about 20 s here") and what every cell would
+   take. The gene's legend says the same, and the cells it was not read for
+   are faded toward the background, beneath the cells read, which are drawn
+   larger ("Faded: not read · gray: 0"). **Read for all
+   cells**, in the legend, reads the rest, its download and time said first
+   ({ref}`genes-on-a-sample-of-the-cells`).
+3. **Genes by symbol.** The genes open named by the var index, Ensembl ids
+   (search `ENSG00000168484`). To name them by symbol, choose
+   `feature_name` under **Session › Data mapping › Genes › Gene names** and
+   click **Apply**: the gene search then finds `SFTPC`, and each gene keeps
+   its Ensembl id wherever it leaves the viewer. The cells are drawn before
+   any gene name is read: the var index follows the first view, and until it
    arrives the gene search says *Reading gene names…*.
 4. **The first gene.** A gene of a cell-major matrix is spread over every
-   cell's row, so before reading the first one Cellucid says what it costs —
-   the bytes to read and the time at the speed it measured — with a
-   **Cancel** button. Later genes read only their own entries. A smaller
-   share of the cells costs less: reopen with fewer cells to explore faster.
+   cell's row, so before reading the first one Cellucid says what it costs
+   in one line — the bytes to read, the time at the speed it measured, the
+   cells — with a **Cancel** button; its **Details** say why, from how the
+   file stores its matrix. Its colours fill in on a growing sample of the
+   open cells, with the time the rest takes. Later genes read only their own
+   entries; picking another gene while the first is read joins that read
+   instead of starting over. A smaller share of the cells costs less, and a
+   copy written gene by gene (`cellucid.prepare()` in Python,
+   `cellucid_prepare()` in R) reads only each gene's own values.
 
 To give someone the same cells, add the subsample to the link
 (`&cells=10%&sample=blocks&seed=0`), or use **Copy link** under *Cells to

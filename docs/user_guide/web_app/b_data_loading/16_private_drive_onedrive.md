@@ -131,6 +131,24 @@ continues; Google's window usually closes by itself. However long Google's
 window, the consent screen or the picker stays open, the file waits for you:
 time spent there never counts as a stalled download.
 
+### Google's limits on reads, and which version is read
+
+- **Public files share one quota.** A public file read without a sign-in is
+  read through Cellucid's Google API key, and every visitor who reads a
+  public Drive file that way shares that key's quota with you. When Google
+  limits how fast it answers (its `rateLimitExceeded`), the reads wait and
+  go on as Google allows, and the line says so; signed in to Google (open the
+  file again after signing in), the file is read with your own account's
+  quota instead. When the key's daily quota is spent, Cellucid says so and
+  asks you to sign in.
+- **Signed in, the exact version is read.** A file opened with your sign-in
+  is read at the revision its details named when it opened, so a file
+  replaced on Drive while you read it is never mixed with its new contents:
+  reading it says it changed, and opening it again reads the new version.
+  Google does not let an API key read a revision, so a public file read
+  without a sign-in is read as it is now; what this browser keeps of it is
+  kept only once Google's details still name the version it opened as.
+
 ### Google Workspace accounts: administrator approval
 
 A Google Workspace organisation can restrict which apps its accounts may
@@ -258,14 +276,35 @@ nothing else about it.
 - **What Cellucid can read:** on Google Drive, the files you chose for Cellucid
   in Google's picker; on OneDrive, the files your account can read, and only
   when you open one.
-- **What is kept:** the sign-in (an access token, and for Microsoft a renewal
-  token) is kept in this browser tab's session storage. It survives a reload of
-  the tab and is gone when the tab closes. It is never saved to disk by
-  Cellucid, never put in a link, a session file, a figure, the console or
-  analytics, and never sent anywhere but to Google or Microsoft.
+- **A sharing link is never shown.** A OneDrive or SharePoint sharing link is
+  itself the key to its file; from the moment it is pasted, everything
+  Cellucid says while it opens (the opening's title and steps, a refusal)
+  names it as `onedrive:share:<host>`, and once open, by its drive and item
+  ids. Only the page's own address keeps the link you pasted.
+- **What is kept of the sign-in:** the access token (about an hour) is kept in
+  this browser tab's session storage, which the browser may write to its
+  profile on disk to restore the tab. It survives a reload of the tab and is
+  gone when it expires, when the tab closes, or when you sign out. Microsoft's
+  renewal token, which renews the access without a click for up to 24 hours,
+  is held only in the page's memory and never stored: after a reload, one
+  click signs in again once the access token expires. Neither is put in a
+  link, a session file, a figure, the console or analytics, or sent anywhere
+  but to Google or Microsoft.
+- **What is kept of the file:** what Cellucid downloaded of it to show it
+  (its structure, the embeddings, the genes read; an R object's converted
+  copy) is kept in this browser's storage, as for any other file, under the
+  file's real version (Drive's checksum or revision, OneDrive's content tag),
+  so opening the same version again downloads none of it; a changed file is
+  read anew and what was kept of it removed. What it is filed under holds no
+  token, download address or link: a digest of the provider's id and the
+  version, and the file's name and host for the Stored dialog
+  ({ref}`stored-in-this-browser`). On a shared machine, remove it there, or
+  use a private window to keep nothing.
 - **What a session file or a share link records:** the provider and the file's
-  id (`gdrive:<id>`, `onedrive:<drive>/<item>`), never a token or a download
-  address.
+  id (`gdrive:<id>`, `onedrive:<drive>/<item>`), never a token, a download
+  address, or the resource key a Drive link shared "with anyone who has the
+  link" may carry (the page's address keeps it, so a reload opens the file;
+  see {ref}`link-access-keys`).
 
 The privacy policy is at [www.cellucid.com/privacy.html](https://www.cellucid.com/privacy.html)
 and the terms of use at [www.cellucid.com/terms.html](https://www.cellucid.com/terms.html),
@@ -289,15 +328,17 @@ instead:
 
 While you are signed in, the line under the **Link or server** bar in the
 **Session** panel says so ("Signed in to Google") with **Sign out**; the line
-goes when the sign-in expires (Google's after about an hour, Microsoft's
-after 24 hours). Sign out
-forgets the sign-in in this tab (and revokes Google's token at Google), and
-any open file read with it asks to sign in again on its next read. To remove
-Cellucid's permission from your account as well:
+goes when the sign-in expires (Google's after about an hour; Microsoft's
+renews itself for up to 24 hours within the page, and after a reload lasts
+until its access token expires). Sign out forgets the sign-in in this tab and
+revokes Google's token at Google; Microsoft offers no way for an app like
+Cellucid to revoke its own token, so the OneDrive sign-in is forgotten and its
+access token lapses within the hour. A sign-out the provider did not revoke is
+said in a notification. Any open file read with it asks to sign in again on
+its next read. To remove Cellucid's permission from your account as well:
 
 - **Google:** [myaccount.google.com/permissions](https://myaccount.google.com/permissions)
-  → Cellucid → **Delete all connections**. Closing the tab already ends the
-  sign-in.
+  → Cellucid → **Delete all connections**.
 - **Microsoft, personal account:** [account.live.com/consent/Manage](https://account.live.com/consent/Manage)
   → Cellucid → **Remove these permissions**.
 - **Microsoft, work or school account:** [myapps.microsoft.com](https://myapps.microsoft.com)

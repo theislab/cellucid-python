@@ -52,8 +52,8 @@ Each viewer has:
 
 A widget hands both to its page in a message; a browser tab carries them in
 its address. A browser-tab viewer also runs its own server on its own port:
-with `port=None` it binds `127.0.0.1:8765` (the one local port Google sign-in
-accepts) or, when another viewer holds it, the next free port, and prints a
+with `port=None` it binds `127.0.0.1:8765` (the one local port Google Drive
+sign-in accepts) or, when another viewer holds it, the next free port, and prints a
 note saying so; a port given explicitly is used or refused.
 
 ---
@@ -70,9 +70,14 @@ note saying so; a port given explicitly is used or refused.
    (`{t: 'fetch', method, path, range}`, answered with status, headers and
    bytes) and the viewer channel's frames. The widget relays each to the
    kernel as an anywidget message (binary buffers for bodies; requests that
-   arrive together go as one message) and back. At most two batches of
-   requests are with the kernel at once (one being answered, the next
-   ready): the rest wait in the widget, where a request the page withdraws
+   arrive together go as one message) and back. A Python kernel takes every
+   batch at once (it answers each request on a thread). An R kernel sets the
+   trait `_fetch_messages` to 2: at most two batches are with it at once (one
+   being answered, the next ready), and the requests asked meanwhile gather
+   in the widget into the next batch, sent as soon as one is answered
+   (IRkernel spends about 1.7 ms of its own on each message: 450 requests in
+   450 messages took 1.28 s, in 15 messages 0.27 s). A request waiting in
+   the widget that the page withdraws
    (`{t: 'cancel', id}`, sent when the read that asked it is cancelled, from
    the reader worker through the page) is dropped before the kernel reads
    for it. A request the kernel already holds is answered, and its answer

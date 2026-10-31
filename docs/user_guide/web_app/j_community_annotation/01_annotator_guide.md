@@ -311,7 +311,7 @@ document or caller-selected upstream.
 - Search text is visible to the Cellucid Worker operator, CAP, and the network
   path. The GitHub bearer token and OAuth cookies are not sent to CAP.
 - A successful response has the bounded shape
-  `{ "contractVersion": 1, "results": [...], "omittedInvalidCount": number }`.
+  `{ "contractVersion": 2, "results": [...], "omittedInvalidCount": number }`.
 - If this disclosure is not acceptable, or if you are offline or CAP is
   blocked, use manual suggestions; voting and manual annotation still work.
 
@@ -367,7 +367,8 @@ Recommended wrap-up:
 
 Remember:
 
-- closing the tab clears your GitHub token (session-only),
+- your GitHub token expires after 8 hours, and closing the tab or **Sign out**
+  ends it sooner (**Sign out** also revokes it at GitHub),
 - your local annotation session may persist in browser storage, but it is not a substitute for publishing.
 
 ---

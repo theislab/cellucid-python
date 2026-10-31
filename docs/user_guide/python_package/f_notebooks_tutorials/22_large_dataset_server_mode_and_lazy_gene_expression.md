@@ -185,10 +185,11 @@ arrays decoded once into temporary memory-mapped files removed when the server
 stops ({doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`).
 
 An in-memory `AnnData` object is served as a Zarr store with its cells in
-priority order, each chunk made when the viewer asks for it from a copy of the
-object taken once, before the call returns, into memory-mapped files removed
-when the server stops or Python exits (a sparse `X` laid out gene-major in it,
-so a gene is one range; later edits to the object do not show). A
+priority order, each chunk made when the viewer asks for it from a snapshot of
+the object in memory-mapped files removed when the server stops or Python
+exits: its expression matrices laid out gene-major in the background after the
+call returns (so a gene is one range; the arrays read stay read-only until
+then, and later edits to the object do not show). A
 subsample the viewer opens is then the first rows of every array and the first
 entries of every gene, so only its cells are sent
 ({doc}`../d_viewing_apis/14_performance_scaling_and_lazy_loading` has the
@@ -324,7 +325,9 @@ Likely causes:
 - the viewer generation is being fetched and verified (`[4/4] Starting server`):
   every start downloads the whole declared web build again and checks every
   file, so a slow link to the configured source slows every start
-- an in-memory MuData is being written to a temporary `.h5mu`
+- a gene asked for before its matrix is laid out (an in-memory object's
+  expression matrices, and a cell-major `X` of a file, are laid out gene-major
+  in the background; the viewer asks again when they are)
 
 How to confirm:
 - read the last line printed; each of the four steps names its phase.
@@ -351,8 +354,11 @@ Fix:
 ### Symptom: “Cellucid found nothing to plot”
 
 Likely causes:
-- no `obsm` array can be plotted: each one is a table, sparse, not one row per
-  cell, or non-finite in the columns that would be drawn
+- no `obsm` array can be plotted: each dense one has another row count than
+  the cells, places no cell (every row non-finite), or holds a value past
+  float32 in the columns that would be drawn (an `obsm` with no dense numeric
+  array at all is refused as having no cell embedding:
+  {ref}`no-cell-embedding`)
 
 How to confirm:
 - read the message in the viewer. It lists every `obsm` entry and why it was

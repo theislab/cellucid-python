@@ -1,4 +1,4 @@
-# Outlier filtering (per active field)
+# Outlier filtering (per categorical field)
 
 **Audience:** everyone (wet lab + computational users)  
 **Time:** 10–15 minutes  
@@ -168,7 +168,11 @@ Stored quantiles are used only when they still fit the file: written for the
 latent space in use and the same `centroid_min_points`, and matching the
 field's categories as the file holds them now. A file whose obs was edited
 after it was prepared (categories renamed, cells subset) gets its quantiles
-computed instead, and the console says why.
+computed instead, and the console says why. The check holds for a category
+of any size: above 2^24 (16,777,216) cells float32 stores neighbouring ranks
+as one quantile, and the check reads each quantile as the range of ranks it
+names, so a 50-million-cell atlas's stored quantiles are used, not recomputed
+from its whole latent space.
 
 (outliers-on-a-subsample)=
 ### On a subsample
@@ -184,7 +188,10 @@ says why), and a category under `centroid_min_points` open cells is not
 measured. When the open cells change, a filter in use gets its quantiles
 again over the cells open now.
 
-A latent space holding a missing value (NaN) or a value beyond float32 cannot
+A cell whose latent row holds a missing value (NaN) or an infinity has no place
+in the latent space: it is measured as a cell with no category is (no
+quantile, never removed), and its category is measured over its other cells.
+A latent space holding a value beyond float32, or with no finite row, cannot
 be measured in: computing stops at that cell, the line under the slider says
 so, and the latent space is marked unusable in Data mapping.
 
@@ -214,9 +221,9 @@ and range rows. Its only numeric effect is on the `Showing X of Y cells` line.
 
 ### What happens with missing outlier quantiles
 
-A cell whose category has fewer than `centroid_min_points` cells (default
-`10`), or that has no category, gets no quantile, and is **never removed by
-outlier filtering**. The web app holds it as exactly `-1`, so its visibility
+A cell whose category has fewer than `centroid_min_points` placed cells
+(default `10`), that has no category, or whose latent row is not finite, gets
+no quantile, and is **never removed by outlier filtering**. The web app holds it as exactly `-1`, so its visibility
 loop can tell “none” from the valid `[0, 1]` interval without carrying a
 non-finite value into a hot loop (the file stores NaN).
 
@@ -235,8 +242,10 @@ the line under it says whether it can filter and why not.
   are a per-category statistic.
 - A field you create by merging or deleting categories has no outlier
   quantiles, so the control is hidden for it.
-- Switching to another field stops applying the first field's outlier filter;
-  its threshold is kept for when you come back.
+- Switching to another field keeps the first field's outlier filter applying:
+  every filter applies until it is removed, whatever is coloured. **Filters**
+  lists it (`cell_type: outlier ≤ 90%`), where it can be disabled or removed;
+  colour by the field again to move its slider.
 
 ### Sessions
 

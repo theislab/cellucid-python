@@ -305,9 +305,9 @@ class AnnDataViewer:
     Zarr, ``.h5mu`` and MuData Zarr, ``.loom``, 10x ``.h5`` and ``outs/``,
     MatrixMarket folders, ``.rds``/``.rda``/``.RData``, gzipped or not),
     served as it is on disk -- an AnnData, MuData, Loom or 10x file not in
-    priority order, and an in-memory AnnData, as a store in priority order
-    made as the page reads it -- and in-memory MuData objects, written once to a temporary ``.h5mu``
-    that is removed when the viewer stops.
+    priority order, and an in-memory AnnData or MuData, as a store in priority
+    order made as the page reads it (an object's expression matrices laid out
+    gene-major in the background), removed when the viewer stops.
 
     Example:
         >>> viewer = AnnDataViewer(
@@ -383,6 +383,7 @@ class AnnDataViewer:
         web_source_url: str = CELLUCID_WEB_URL,
         web_cache_dir: str | Path | None = None,
         allowed_hosts: Sequence[str] | None = None,
+        cache_bytes: int | None = None,
     ) -> None:
         """
         Initialize the AnnData viewer.
@@ -392,8 +393,9 @@ class AnnDataViewer:
                 Cellucid reads (see above). A leading ``~`` in a path is
                 expanded to the user's home directory.
             port: Port for the data server. None takes 8765 -- the one local
-                port Cellucid registers with Google, so Google sign-in (Google
-                Drive data, community annotation) works -- or, when another
+                port Cellucid registers with Google, so Google Drive files
+                open (community annotation's GitHub sign-in works only on
+                www.cellucid.com) -- or, when another
                 viewer holds it, the next free port, said in a printed note
                 (cellucid-r's ``cellucid_view()`` does the same). A port given
                 is used or refused.
@@ -413,12 +415,14 @@ class AnnDataViewer:
                 outlier quantiles (10 when None).
             dataset_name: Exact non-empty human-readable name without
                 surrounding whitespace or control characters. Defaults to
-                ``uns['cellucid']['name']``; required when the data has none.
+                ``uns['cellucid']['name']``, else the file's name, or
+                ``AnnData (<n> cells)`` for an object.
             dataset_id: Portable 1-180 byte ASCII identifier beginning with a
                 letter or digit and otherwise using letters, digits, ``.``,
                 ``_``, or ``-``; no trailing ``.`` or Windows device name.
-                Defaults to ``uns['cellucid']['id']``; required when the data
-                has none.
+                Defaults to ``uns['cellucid']['id']``, else made from the file's
+                name without its extension, or from the object's label (``AnnData (N cells)``) (said in
+                one line: sessions are kept under it).
             obs_keys: Exact ``obs`` columns the viewer shows, in this order. If
                 None, every column is shown.
             embedding_keys: The embedding of a dimension slot, such as
@@ -429,7 +433,9 @@ class AnnDataViewer:
                 graph, such as ``"connectivities"``; read only when a view draws
                 it. None follows the viewer's default rule.
             expression_source: ``"X"``, ``"raw"``, or ``"layer:<name>"``;
-                None follows the viewer's default rule (``X`` when present).
+                None follows the viewer's default rule (``raw`` when it holds
+                more genes than ``X`` or ``X`` is scaled, as Scanpy reads
+                genes; else ``X``).
             vector_field_default: The vector field the overlay opens on:
                 ``<field>`` of an obsm array ``<field>_<basis>`` drawn over
                 ``X_<basis>`` (``velocity`` for ``velocity_umap``).
@@ -441,6 +447,10 @@ class AnnDataViewer:
             allowed_hosts: Extra ``Host`` names the data server answers to.
                 Required when ``client_server_url`` points at a reverse proxy
                 such as ``jupyter-server-proxy``: name that proxy's host here.
+            cache_bytes: What the data server keeps of what it makes for a
+                store served in priority order, in bytes (least recently used
+                first out); None keeps a 64th of the machine's memory, 0
+                nothing (as :func:`cellucid.serve_anndata`'s).
         """
         if dataset_name is not None:
             dataset_name = _require_dataset_name(dataset_name, label="dataset_name")
@@ -470,6 +480,7 @@ class AnnDataViewer:
                 expression_source=expression_source,
                 vector_field_default=vector_field_default,
                 modality=modality,
+                cache_bytes=cache_bytes,
             )
             self._activate()
 
@@ -564,6 +575,7 @@ class AnnDataViewer:
         expression_source: str | None,
         vector_field_default: str | None,
         modality: str | None,
+        cache_bytes: int | None,
     ) -> None:
         """Start the AnnData server."""
         from ..anndata_server import AnnDataServer
@@ -590,6 +602,7 @@ class AnnDataViewer:
             expression_source=expression_source,
             vector_field_default=vector_field_default,
             modality=modality,
+            cache_bytes=cache_bytes,
         )
         # The viewer names the program serving it from /_cellucid/info: a
         # notebook kernel's viewer is "Jupyter", any other Python's "Python".
@@ -598,8 +611,8 @@ class AnnDataViewer:
         self._server.start_background()
         if not self._port_given and self._server.port != DEFAULT_PORT:
             console_print(
-                f"Port {DEFAULT_PORT} is in use; serving on {self._server.port}. Google sign-in "
-                f"(Google Drive data, community annotation) works only on port {DEFAULT_PORT}."
+                f"Port {DEFAULT_PORT} is in use; serving on {self._server.port}. Google Drive "
+                f"files open only on port {DEFAULT_PORT}."
             )
         self.port = self._server.port
         self._served_dataset_id = self._server.dataset_id
@@ -1315,32 +1328,39 @@ class AnnDataViewer:
     def _require_viewer_order(self, adata: Any) -> None:
         """Refuse an object whose rows are not the viewer's cells in order.
 
-        The viewer names a cell by its original position: an object it was
-        given, by the object's own row; a file in a verified priority order,
-        by the original position its record gives the row (:attr:`obs_names`
-        is in that order). An object whose obs names are the same cells in
-        another order -- read from such a file as stored (``anndata.read_zarr``
-        of ``prepare()``'s output), or sorted since -- would take each result
-        in the wrong rows. When this process cannot read the viewer's names
-        (a format only the browser reads), an object in a file's stored order
-        is still told by its priority record.
+        The viewer names a cell by its original position (:attr:`obs_names`
+        are in that order): an object's own row when it was shown in its
+        original order; for an object or a file in a verified priority order,
+        the original position its record gives the row. An object holding the
+        cells in another order -- read from such a file as stored
+        (``anndata.read_zarr`` of ``prepare()``'s output), or sorted since --
+        would take each result in the wrong rows, so it is refused: by its
+        verified record (the order it is in, whatever its names), and by its
+        names, which must be the viewer's in order (repeated names
+        included). When this process cannot read the viewer's names (a
+        format only the browser reads), the record alone tells.
         """
         from ..prepare_data._priority import stored_order_of
 
-        # In a verified stored order (`stored_order`): a record that does not
-        # describe the cells leaves each row its own original position.
-        stored = hasattr(adata, "uns") and hasattr(adata, "obs") and stored_order_of(adata).positions is not None
+        # In a verified stored order (`stored_order`) that moves a row: a
+        # record that does not describe the cells leaves each row its own
+        # original position.
+        positions = stored_order_of(adata).positions if hasattr(adata, "uns") and hasattr(adata, "obs") else None
+        stored = positions is not None and not np.array_equal(positions, np.arange(len(positions)))
         names = self.obs_names
         given = pd.Index(adata.obs_names)
-        if names is not None and names.is_unique and given.is_unique:
-            if len(given) != len(names) or given.equals(names):
-                return  # in order (a count that differs is refused with the counts)
-            missing = names.get_indexer(given) < 0
-            if missing.any():
-                raise ValueError(
-                    f"{int(missing.sum())} of this object's cells are not cells of the viewer's dataset "
-                    f"(first: {given[missing][0]!r}): pass the object the viewer shows."
-                )
+        if names is not None:
+            if len(given) != len(names):
+                return  # refused with the counts
+            if given.equals(names) and not stored:
+                return
+            if names.is_unique and given.is_unique:
+                missing = names.get_indexer(given) < 0
+                if missing.any():
+                    raise ValueError(
+                        f"{int(missing.sum())} of this object's cells are not cells of the viewer's dataset "
+                        f"(first: {given[missing][0]!r}): pass the object the viewer shows."
+                    )
         elif not stored:
             return
         restore = (
@@ -1357,9 +1377,21 @@ class AnnDataViewer:
 
     @property
     def obs_names(self) -> pd.Index | None:
-        """The obs names of the dataset this viewer shows, or None when this
-        process cannot read them (a format other than AnnData or MuData, read
-        only by the browser). Read once, when first asked."""
+        """The obs names of the cells this viewer shows, in the order it names
+        them (their original order), or None when this process cannot read
+        them (a format only the browser reads).
+
+        Taken from what is served (:attr:`AnnDataServer.obs_names
+        <cellucid.anndata_server.AnnDataServer.obs_names>`): an object's
+        names as they were when it was shown -- its cells put back in their
+        original order when it was read from a file in priority order --
+        whatever is done to it after; a file's at the version it is served
+        as. A viewer that stopped keeps the last ones."""
+        server = self._server
+        if server is not None:
+            names = server.obs_names
+            self._obs_names_cache = names
+            return names
         cached = getattr(self, "_obs_names_cache", False)
         if cached is False:
             cached = read_obs_names(self.data)
@@ -1394,6 +1426,11 @@ class AnnDataViewer:
             wanted = pd.Index(cells.index if isinstance(cells, pd.Series) and cells.dtype == bool else cells)
             if isinstance(cells, pd.Series) and cells.dtype == bool:
                 wanted = cells.index[cells.to_numpy()]
+            if not names.is_unique:
+                raise ValueError(
+                    "This viewer's dataset repeats obs names, so a name does not say which cell it is: "
+                    "name the cells by row, or make the names unique (adata.obs_names_make_unique()) and show it again."
+                )
             positions = names.get_indexer(wanted)
             if (positions < 0).any():
                 missing = wanted[positions < 0]
@@ -1457,14 +1494,17 @@ class AnnDataViewer:
         used again is ``"name (2)"``, as everywhere in Cellucid).
 
         Each set's genes are identifiers -- the var index, as
-        ``adata.var_names`` holds them (Ensembl ids for a CELLxGENE dataset)
-        -- or, with ``symbols=True``, the names the viewer shows for them (a
-        symbol column's, such as ``feature_name``).
-        :func:`cellucid.write_gmt` writes them as a GMT file."""
+        ``adata.var_names`` holds them -- or, with ``symbols=True``, the
+        names the viewer shows for them: those of the var column its data
+        mapping names the genes by (such as ``feature_name``), else the
+        identifiers themselves. :func:`cellucid.write_gmt` writes them as a
+        GMT file."""
         if type(symbols) is not bool:
             raise TypeError("symbols must be exactly True or False")
-        key = "symbols" if symbols else "genes"
-        return {name: list(entry[key]) for _, name, entry in _gene_sets_of(self.results)}
+        return {
+            name: list(entry["symbols"] if symbols and "symbols" in entry else entry["genes"])
+            for _, name, entry in _gene_sets_of(self.results)
+        }
 
     def push(self, values: Any, key: str | None = None) -> None:
         """Show a column in the viewer as a field: labels as a categorical, numbers
@@ -2008,7 +2048,7 @@ class AnnDataViewer:
         Stop the data server and cleanup all resources.
 
         This method:
-        1. Stops the underlying data server (which removes a temporary AnnData file)
+        1. Stops the underlying data server (which removes its served store's scratch folder)
         2. Removes the viewer from the active viewers set
         3. Clears all hooks
         4. Logs the cleanup
@@ -2087,6 +2127,7 @@ def show_anndata(
     vector_field_default: str | None = None,
     modality: str | None = None,
     web_source_url: str = CELLUCID_WEB_URL,
+    cache_bytes: int | None = None,
 ) -> Widget:
     """
     Show an AnnData or MuData object, or any file Cellucid reads, in a notebook.
@@ -2101,8 +2142,10 @@ def show_anndata(
     from the start for an R object or a MatrixMarket folder. An in-memory
     AnnData, and an AnnData, MuData, Loom or 10x file not in priority order,
     are served as a Zarr store with their cells in priority order, made as
-    the viewer reads it, so a subsample reads only its cells; a MuData object
-    is written once to a temporary ``.h5mu``.
+    the viewer reads it, so a subsample reads only its cells; so is a MuData
+    object. An object's expression matrices are laid out gene-major in the
+    background (read-only meanwhile), so the viewer opens at once; a cell of
+    the notebook run again stops the widget it showed before.
 
     To open a viewer in a browser tab of its own instead (a script, an SSH
     tunnel), use :class:`AnnDataViewer`, or ``serve_anndata`` /
@@ -2127,11 +2170,14 @@ def show_anndata(
             quantiles (10 when None).
         dataset_name: Exact non-empty human-readable name without surrounding
             whitespace or control characters. Defaults to
-            ``uns['cellucid']['name']``; required when the data has none.
+            ``uns['cellucid']['name']``, else the file's name, or
+            ``AnnData (<n> cells)`` for an object.
         dataset_id: Portable 1-180 byte ASCII identifier beginning with a
             letter or digit and otherwise using letters, digits, ``.``, ``_``,
             or ``-``; no trailing ``.`` or Windows device name. Defaults to
-            ``uns['cellucid']['id']``; required when the data has none.
+            ``uns['cellucid']['id']``, else made from the file's name without
+            its extension, or from the object's label (``AnnData (N cells)``) (said in one line:
+            sessions are kept under it).
         obs_keys: Exact ``obs`` columns the viewer shows, in this order. If
             None, every column is shown.
         embedding_keys: The embedding of a dimension slot, such as
@@ -2142,7 +2188,8 @@ def show_anndata(
             such as ``"connectivities"``; read only when a view draws it. None
             follows the viewer's default rule.
         expression_source: ``"X"``, ``"raw"``, or ``"layer:<name>"``; None
-            follows the viewer's default rule (``X`` when present).
+            follows the viewer's default rule (``raw`` when it holds more genes
+            than ``X`` or ``X`` is scaled, as Scanpy reads genes; else ``X``).
         vector_field_default: The vector field the overlay opens on:
             ``<field>`` of an obsm array ``<field>_<basis>`` drawn over
             ``X_<basis>`` (``velocity`` for ``velocity_umap``).
@@ -2151,6 +2198,10 @@ def show_anndata(
         web_source_url: Where the browser loads the Cellucid app the widget shows:
             ``https://www.cellucid.com`` (the default), or the address of a
             copy you host. The browser, not the kernel, loads it.
+        cache_bytes: What the kernel keeps of what it makes for a store
+            served in priority order, in bytes (least recently used first
+            out); None keeps a 64th of the machine's memory, 0 nothing (as
+            :func:`cellucid.serve_anndata`'s).
 
     Returns:
         The :class:`cellucid.jupyter.Widget`, for hooks and commands.
@@ -2160,10 +2211,12 @@ def show_anndata(
           10x .h5 files and Cell Ranger outs/ folders: a file prepare() wrote
           read in place, any other served in priority order as the viewer
           reads it
-        - MatrixMarket folders (also GEO's GSM..._matrix.mtx.gz naming) and R
-          objects (.rds, .rda, .RData, gzipped or not), read once
-        - In-memory AnnData objects, served in priority order as the viewer
-          reads them; MuData objects, written once to a temporary .h5mu
+        - MatrixMarket folders (a .mtx[.gz] file of any name, such as GEO's
+          GSM..._matrix.mtx.gz) and R objects (.rds, .rda, .RData, gzipped or
+          not), read once
+        - In-memory AnnData and MuData objects, served in priority order as
+          the viewer reads them, their expression matrices laid out gene-major
+          in the background
 
     Example:
         >>> from cellucid import show_anndata
@@ -2200,6 +2253,7 @@ def show_anndata(
         vector_field_default=vector_field_default,
         modality=modality,
         web_source_url=web_source_url,
+        cache_bytes=cache_bytes,
     )
     try:
         show_widget(widget)

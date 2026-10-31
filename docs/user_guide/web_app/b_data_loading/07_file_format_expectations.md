@@ -29,7 +29,8 @@ which ecosystem's tools write the format.
 | MuData `.h5mu` | Python | mudata 0.2 and later | in place, with its modalities ({doc}`19_multimodal_mudata`) |
 | MuData Zarr (a folder or `.zarr.zip`) | Python, R | mudata 0.2 and later, Zarr v2 and v3 | in place, with its modalities ({doc}`19_multimodal_mudata`) |
 | Seurat or SingleCellExperiment object: `.rds`, `.rda`, `.RData`, and their gzipped copies `.rds.gz`, `.rda.gz`, `.RData.gz` (GEO) | R | SeuratObject 3.0 and later (`Assay`, `Assay5`), SingleCellExperiment 1.8 and later, SummarizedExperiment; R serialization 2 and 3, gzip (once or twice), bzip2, xz or none | cannot be read in parts: read whole once into this browser's storage and kept for next time; an uncompressed file's arrays in place ({doc}`17_open_r_objects`, {ref}`which-formats-are-read-in-parts`) |
-| MatrixMarket folder: `matrix.mtx[.gz]` with its features and barcodes, or a GEO sample's `GSM…_matrix.mtx.gz` with its `GSM…_` lists | any | Cell Ranger 2 and later, STARsolo, kb-python, alevin-fry, GEO uploads | cannot be read in parts: read whole once into this browser's storage and kept for next time, with the folder's cell tables for the embedding ({doc}`17_open_r_objects`) |
+| A gzipped copy of a file read in parts: `.h5ad.gz`, `.loom.gz`, `.h5.gz`, `.h5mu.gz` (GEO ships many `.h5ad` files so) | any | as the file it copies | cannot be read in parts (gzip has no index): read whole once, decompressed as it arrives into this browser's storage and kept for next time, then read in parts from there; the uncompressed file is opened instead when the host has both. `cellucid serve` and `cellucid_serve()` refuse it with how to decompress it |
+| MatrixMarket folder: a `.mtx[.gz]` file (`matrix.mtx.gz`, a GEO sample's `GSM…_matrix.mtx.gz`, any producer's name) with its features and barcodes (its own prefix's lists) | any | Cell Ranger 2 and later, STARsolo, kb-python, alevin-fry, GEO uploads, sci-RNA-seq3 (`_gene_count.mtx.gz`, or GSE119945's `_gene_count.txt.gz`, with `_cell_annotate.csv.gz` and `_gene_annotate.csv.gz`) | cannot be read in parts: its cells are drawn from its lists and tables first, then the matrix is read once keeping the rows of the cells genes are read for, both kept in this browser's storage for next time, with the folder's cell tables for the embedding ({doc}`17_open_r_objects`) |
 | A dataset catalog: a folder holding `datasets.json` and the files it lists | any | schema 2 | [below](dataset-catalog-contract) |
 
 The format is decided by the file's content, not only its name: an `.h5`
@@ -109,7 +110,10 @@ Cellucid reads is the colours Scanpy keeps for a categorical obs column,
 the column's categories when the column is first shown: opening a file reads
 no category list, only how many categories each column has, so a column of
 one category per cell (barcodes stored as a categorical) costs nothing until
-it is shown.
+it is shown. A column with more categories than there are open cells, and
+more than one request of the connection reads, is read codes first, then the names and colours of the categories those codes name
+alone: a share of the cells reads a share of its categories (1 % of a
+1.2M-category column, about 12,000 names, not 35 MB).
 
 ---
 
@@ -202,15 +206,26 @@ are and read once by the browser.
 ### Compression the browser reads
 
 - **H5AD:** uncompressed, gzip (with or without shuffle), LZF (h5py's own
-  filter) and Fletcher-32 checksums. A dataset compressed with a filter outside
-  these (Blosc, Zstandard, LZ4, bitshuffle, bzip2, SZIP, N-bit, scale-offset) is
-  refused when it is read, naming the filter; the rest of the file still opens.
+  filter), Fletcher-32 checksums, and hdf5plugin's Blosc, Zstandard, LZ4 and
+  bitshuffle (uncompressed, LZ4 or zstd blocks) filters
+  (`write_h5ad(compression=hdf5plugin.Blosc(...))` and the like). A
+  dataset compressed with a filter outside these (bzip2, SZIP,
+  N-bit, scale-offset, Blosc2) is refused when it is read, naming the filter;
+  the rest of the file still opens.
 - **Zarr:** uncompressed, gzip, zlib, Blosc (blosclz, LZ4, LZ4HC, zlib,
   Zstandard; byte and bit shuffle, and the delta flag of a Blosc frame), LZ4,
-  Zstandard (Zarr v3's default), CRC-32C, variable-length strings, and Zarr v3
-  sharding. An array using another codec (bz2, LZMA, Snappy, ZFP, numcodecs'
-  Delta filter, fixed-scale-offset, …), or Blosc's Snappy or a Blosc2 chunk
-  (format version 3 and later), is refused when it is read, naming the codec.
+  Zstandard (Zarr v3's default), bz2, LZMA (numcodecs' default xz container),
+  CRC-32C, variable-length strings, and Zarr v3 sharding. An array using
+  another codec (Snappy, ZFP, numcodecs' Delta filter, fixed-scale-offset, …),
+  or Blosc's Snappy or a Blosc2 chunk (format version 3 and later), is refused
+  when it is read, naming the codec.
+- **A Zarr folder on Amazon S3 or Google Cloud Storage:** a bucket that does
+  not let its readers list it answers "403 Forbidden" for an object that does
+  not exist, and zarr-python leaves out every chunk that holds only the fill
+  value (an all-False `mask`, an all-zero block). Once the bucket has served
+  the store's metadata, such a 403 is read as the absent chunk it is (its fill
+  value); a bucket that refuses the metadata itself is private, and the store
+  is refused saying so.
 - **Served from Python:** `cellucid serve`, `serve_anndata()` and
   `show_anndata()` check every array's filters and codecs before they start.
   A store holding an array the browser cannot decode is decoded on the
@@ -254,6 +269,31 @@ a dropped file, a link and `cellucid serve` alike:
 Every column a file stores is shown, including those a SeuratDisk file leaves
 out of its `column-order` (anndata itself drops those). Ordered categories and
 missing values keep their meaning. Nothing needs converting first.
+
+### A column the browser cannot read
+
+One `obs` or `var` column the browser does not understand never refuses the
+file: a column of a compound, complex or opaque type, an encoding a later
+anndata introduced, the wrong length, or a `column-order` entry the frame does
+not hold is left out, and the rest of the dataset opens. The **Dataset** box's
+**Details** list it under **Not read**, with the reason ("obs column 'qc' uses
+an unsupported element type; the column was not read."). The same holds for
+`raw.var` and each MuData modality's `var`. Opening looks at each column
+itself, not at the parts a categorical or nullable column is stored in (its
+codes and categories, its values and mask: read when the column is), so a
+categorical with malformed codes is listed and refused when it is chosen, with
+the same reason, while the rest of the dataset reads. Categorical codes may be
+unsigned integers, as some writers store them (anndata writes signed ones,
+with -1 for a missing value). What a file needs is its index, its shape and
+`X`; a defect there still refuses it.
+
+### Integers stay exact
+
+An integer column wider than 16 bits (`int32`, `int64`, `uint32`, `uint64`, a
+nullable `Int64`) is held as float64: every integer up to 2^53 stays exact,
+so cell or donor ids and deep cells' counts above 16,777,216 are never merged
+by rounding, in colours, filters, highlights, analyses and exports. Narrower
+integers and every float column are held as float32, as before.
 `prepare()` and `show_anndata(adata)` take an AnnData you have already read, so
 they hold the columns anndata read; pass the file's path to `cellucid serve`,
 `serve_anndata` or `show_anndata` to keep the unlisted ones.
@@ -316,9 +356,11 @@ Naming and schema details:
 ### “Cellucid found nothing to plot”
 
 Meaning:
-- No `obsm` array can be drawn: every entry is a table, a sparse array, has
-  another row count, or holds a value that cannot be drawn. The message lists
-  each entry and why.
+- No `obsm` array can be drawn: every dense one has another row count, places
+  no cell, or holds a value that cannot be drawn. The message lists each entry
+  and why. An `obsm` with no dense numeric array at all (empty, or only tables
+  and sparse arrays) is refused as having no cell embedding
+  ({ref}`no-cell-embedding`).
 
 Fix:
 - Add an embedding (for example `sc.tl.umap(adata)`) or fix the array the
@@ -346,8 +388,14 @@ Fix:
 
 ## Edge cases and limits (read if you’re debugging weirdness)
 
-- **NaN/Inf in embeddings**: refused, naming the cell, before the dataset is
-  shown.
+- **NaN/Inf in embeddings**: a cell whose row holds NaN or an infinity has
+  no position in that embedding (one computed on some of the cells, a MuData
+  modality that did not measure it). The embedding opens; the cell is not
+  drawn, picked or selected in its views, a short notice counts such cells and
+  names the first, and every other view, filter and analysis keeps them. In a
+  latent space such a cell gets no outlier quantile; in a vector field it has
+  no arrow. Only an embedding with no finite row, or a value past float32, is
+  refused, naming the cell.
 - **Duplicate gene names**: made unique as AnnData's `var_names_make_unique()`
   does (`MATR3`, `MATR3-1`), and reported.
 - **Huge categorical fields**: any number of categories loads and the legend scrolls, but palettes cannot keep 50k–100k colours distinct; consider aggregating.

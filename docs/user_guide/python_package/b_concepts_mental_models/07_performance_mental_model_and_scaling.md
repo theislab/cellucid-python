@@ -251,7 +251,13 @@ Fix:
 Likely causes:
 - the viewer generation is being fetched (every viewer-serving startup
   downloads and verifies the complete generation again),
-- an in-memory MuData is being written to a temporary `.h5mu`.
+- a gene was asked for before its file's matrix was counted: a cell-major
+  `X` of a file is counted, then laid out gene-major in the background, and
+  until it is counted the viewer is told to ask again (`503`, `Retry-After`);
+  once counted, a gene asked for before it is laid out is made at once: what
+  the layout has placed is copied, and the rest found by one scan of the
+  file's column indices (slower than after the layout; the layout is waited
+  for only when it ends sooner).
 
 How to confirm:
 - read the last line printed. Each of the four steps names the phase it is in.

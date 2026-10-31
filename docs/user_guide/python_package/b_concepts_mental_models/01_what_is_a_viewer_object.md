@@ -193,7 +193,7 @@ It is normal to have multiple viewers in one notebook.
 - Each viewer's page opens its own channel and authenticates it with that
   viewer's `viewerId`/`viewerToken`, so its events reach only its viewer object.
 - Browser-tab viewers each start their own server. With the default
-  `port=None` it serves on 8765 -- the one local port Google sign-in accepts
+  `port=None` it serves on 8765 -- the one local port Google Drive sign-in accepts
   -- or, when another viewer holds it, on the next free port, which it prints
   (as the R package's `cellucid_view()` does outside a notebook).
 

@@ -258,7 +258,7 @@ that was already open reloads to the plain text “Internal server error”.
 
 - Without `port=`, an `AnnDataViewer` takes 8765, or the next free port when
   another viewer (or program) holds it, and prints a note saying so (Google
-  sign-in works only on 8765). A port you pass is used or refused, never
+  Drive files open only on 8765). A port you pass is used or refused, never
   replaced.
 - Stop viewers when done (`viewer.stop()`, or
   `cellucid.jupyter.cleanup_all()`), and choose a fixed port for tunnels:

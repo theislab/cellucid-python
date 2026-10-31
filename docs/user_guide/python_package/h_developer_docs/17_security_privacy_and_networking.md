@@ -127,8 +127,7 @@ Still:
 
 The server sends CORS headers that allow:
 - `localhost` / `127.0.0.1`
-- `https://www.cellucid.com`
-- `https://cellucid.com` and `https://*.cellucid.com`
+- `https://www.cellucid.com` and `https://cellucid.com` (the hosted app's origins, exactly)
 
 This helps the browser decide whether JS from one origin can read responses from another.
 

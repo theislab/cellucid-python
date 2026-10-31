@@ -186,7 +186,12 @@ Community annotation is scoped by dataset id. If the id changes, existing annota
 - A file without one gets an id from how it was opened: a data link gives a
   stable one, such as `cellxgene:<dataset id>` or `geo:<GSE>:<file>`
   ({doc}`../b_data_loading/14_open_from_link`); a local file gets one from its
-  file name. See {doc}`../b_data_loading/06_dataset_identity_why_it_matters`.
+  format, its file name, its cell and gene counts and its gene names
+  (`h5ad_atlas_1bd42f4e`). Writing the same data again (an observation column
+  added) keeps that id; two files with the same name, cell and gene counts and
+  gene list share annotations unless they carry their own id, which
+  `cellucid.prepare()` and `cellucid_prepare()` write. See
+  {doc}`../b_data_loading/06_dataset_identity_why_it_matters`.
 - When writing the file with `cellucid.prepare(...)`, set `dataset_id=...`.
 
 One repository can annotate several datasets. Each contributor's file keeps a
@@ -550,12 +555,13 @@ If you are using **cellucid.com**, you typically do *not* need to do anything he
 
 If your organization requires owning the auth infrastructure (recommended for many orgs), you can self-host.
 
-#### Exact version-1 route contract
+#### Exact version-2 route contract
 
 The Worker exposes the following ordered routes:
 
 - `/auth/login`
 - `/auth/callback`
+- `/auth/revoke`
 - `/auth/user`
 - `/auth/installations`
 - `/auth/installation-repos`
@@ -564,7 +570,7 @@ The Worker exposes the following ordered routes:
 
 Opening `/` must return the exact compatible service identity and ordered route
 inventory, beginning
-`{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":1,`
+`{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":2,`
 and continuing with an `endpoints` array containing the routes above. Before
 OAuth or token disclosure, the browser checks that health document and stops
 on a stale or incompatible Worker.
@@ -977,7 +983,7 @@ For non-technical collaborators, a screenshot of the status panel + error messag
 ### Publish failures (authors)
 
 - **Publishing fails with “Sign in required.”**
-  - Fix: sign in again (tokens are session-only; closing the tab clears them).
+  - Fix: sign in again (a token expires after 8 hours; closing the tab clears it).
 
 - **Publishing fails but you have write access**
   - Common causes:
@@ -1024,14 +1030,19 @@ For non-technical collaborators, a screenshot of the status panel + error messag
 - Search text is visible to the Worker operator, CAP, and the network path. The
   GitHub bearer token and OAuth cookies are not sent to CAP.
 - A successful response is
-  `{ "contractVersion": 1, "results": [...], "omittedInvalidCount": number }`.
+  `{ "contractVersion": 2, "results": [...], "omittedInvalidCount": number }`.
 - If your org blocks either network hop, CAP helper searches fail without
   blocking manual annotation.
 
 ### Security / privacy review questions
 
 - **Where are GitHub tokens stored?**
-  - In browser `sessionStorage` only (cleared when the tab closes).
+  - In browser `sessionStorage` only, with their expiry: a GitHub App user
+    token expires after 8 hours (the GitHub App must keep **Expire user
+    authorization tokens** on; the Worker refuses a token that never expires).
+    Closing the tab clears it; **Sign out** revokes it at GitHub through the
+    Worker's `/auth/revoke`. The refresh token GitHub issues never leaves the
+    Worker.
 - **What personal data ends up in the annotation repo?**
   - User files contain GitHub numeric id and optional profile fields (display name/title/orcid/linkedin handle).
   - The template validation disallows email fields.

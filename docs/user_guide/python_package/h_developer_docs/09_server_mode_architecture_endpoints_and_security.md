@@ -24,7 +24,7 @@ it, with nothing converted, for any format of the input format registry
 | `loom` | `.loom` | one file |
 | `tenx-h5` | 10x Cell Ranger `.h5` | one file |
 | `tenx-outs` | a Cell Ranger `outs/` folder | a folder of files, listed |
-| `mtx` | a MatrixMarket folder (`matrix.mtx[.gz]`, or GEO's `GSM…_matrix.mtx.gz` naming) | a folder of files, listed |
+| `mtx` | a MatrixMarket folder (a `.mtx[.gz]` file of any name: `matrix.mtx.gz`, GEO's `GSM…_matrix.mtx.gz`) | a folder of files, listed |
 | `rds`, `rda` | R objects `.rds`, `.rda`/`.RData`, gzipped or not | one file |
 
 A file is taken by its name and is then what its first bytes and HDF5 root
@@ -32,14 +32,19 @@ say (an HDF5 root marked `anndata` is an `h5ad`, one marked `mudata` an
 `h5mu`); a folder is a Zarr store by its root metadata (a MuData by its
 root's `encoding-type`), else what its files make it. An AnnData file not in
 priority order, and an in-memory `AnnData`, are served as a Zarr store in
-priority order made as the browser reads it (`_served_store.PriorityStore`); a
-`MuData` object is written once to a temporary Cellucid-ready `.h5mu`
-(through `prepare`, one modality at a time).
+priority order made as the browser reads it (`_served_store.PriorityStore`),
+and so is a `MuData` object (as a MuData store). An expression matrix held in
+memory, and a cell-major `X` of a file, are laid out gene-major by the store's
+background worker (`prepare_data/_gene_major.py`); a key of one not laid out
+yet is made at once from the source as it will be laid out
+(`GeneMajorLayout.entries_now`, `count_prefixes`, a dense strip taken from its
+rows), and only a key of a file's matrix not counted yet is answered `503`
+with `Retry-After` and how far it is; every other key at once.
 
 Implementation:
 - `cellucid-python/src/cellucid/anndata_server.py` (routes, launch choices)
 - `cellucid-python/src/cellucid/_anndata_files.py` (classifying the path,
-  reading AnnData and MuData metadata, the temporary `.h5mu`)
+  reading AnnData and MuData metadata)
 - `cellucid-python/src/cellucid/_served_store.py` (the store in priority
   order: chunks made on request from an object or a file)
 - `cellucid-python/src/cellucid/_viewer_channel.py` and `_websocket.py` (the

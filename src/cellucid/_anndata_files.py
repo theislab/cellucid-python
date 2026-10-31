@@ -21,18 +21,16 @@ markers, byte for byte the web app's ``tests/fixtures/input-formats.json``),
 reads the little a server reports and checks
 before it binds (the cell and gene counts and the names of the stored
 elements -- metadata only, never an array), finds arrays stored with a codec
-the browser's reader does not decode, builds missing consolidated metadata,
-and writes an in-memory MuData object to a temporary Cellucid-ready ``.h5mu``
-so it is served exactly like a file. (An AnnData object, and an AnnData file
-not in priority order, are served by :mod:`cellucid._served_store`.)
+the browser's reader does not decode, and builds missing consolidated
+metadata. (An AnnData or MuData object, and a file not in priority order, are
+served by :mod:`cellucid._served_store`.)
 """
 
 from __future__ import annotations
 
 import json
 import os
-import shutil
-import tempfile
+import re
 import zipfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -267,9 +265,10 @@ def folder_format_of_paths(paths: list[str]) -> str | None:
     ``paths`` start with the folder's own name (``outs/analysis/...``). The
     web app's ``folderFormatOfPaths`` twin: a folder named as a format names
     one (``atlas.zarr``) is that format; else the first format, in registry
-    order, with a marker file anywhere in it (``matrix.mtx.gz``), or, where
-    the format allows it, a marker under a shared prefix in one folder
-    (``GSM123_matrix.mtx.gz`` beside ``GSM123_barcodes.tsv.gz``).
+    order, with a marker file anywhere in it (``zarr.json``), or a file whose
+    name matches one of its patterns, compared without case (a MatrixMarket
+    matrix: ``matrix.mtx.gz``, ``GSE158055_covid19_counts.mtx.gz``,
+    ``GSE119945_gene_count.txt.gz``).
     """
     split = [path.replace("\\", "/").split("/") for path in paths]
     for parts in split:
@@ -279,41 +278,18 @@ def folder_format_of_paths(paths: list[str]) -> str | None:
                 return str(named[0]["id"])
     registry = input_formats()
     markers_of = registry["folderMarkers"]
-    prefixes_of = registry.get("folderMarkerPrefixes", {})
+    patterns_of = registry["folderMarkerPatterns"]
     leaves = {parts[-1] for parts in split}
-    by_folder: dict[str, list[str]] = {}
-    for parts in split:
-        by_folder.setdefault("/".join(parts[:-1]), []).append(parts[-1])
     for entry in registry["formats"]:
         markers = markers_of.get(entry["id"])
-        if markers is None:
-            continue
-        if any(marker in leaves for marker in markers):
+        if markers is not None and any(marker in leaves for marker in markers):
             return str(entry["id"])
-        separators = prefixes_of.get(entry["id"])
-        if separators and _has_prefixed_marker(by_folder, markers, separators):
+        patterns = patterns_of.get(entry["id"])
+        if patterns is not None and any(
+            re.search(pattern, leaf, re.IGNORECASE) is not None for leaf in leaves for pattern in patterns
+        ):
             return str(entry["id"])
     return None
-
-
-def _has_prefixed_marker(
-    by_folder: Mapping[str, list[str]], markers: list[str], separators: str
-) -> bool:
-    for names in by_folder.values():
-        for name in names:
-            for marker in markers:
-                if len(name) <= len(marker) or not name.endswith(marker):
-                    continue
-                prefix = name[: len(name) - len(marker)]
-                if prefix[-1] not in separators:
-                    continue
-                cut = 0
-                while cut < len(prefix) and prefix[cut] not in separators:
-                    cut += 1
-                first = prefix[: cut + 1]
-                if any(other != name and other.startswith(first) for other in names):
-                    return True
-    return False
 
 
 def _folder_files(root: Path) -> list[str]:
@@ -392,8 +368,30 @@ def classify_anndata_path(path: str | Path) -> AnnDataStore:
     return AnnDataStore(resolved, kind, "folder", files=tuple(files))
 
 
+def _compressed_copy_of(name: str) -> dict[str, Any] | None:
+    """The format a gzip-compressed copy (``x.h5ad.gz``) is a copy of, or None.
+
+    A copy of a file read in parts, as the web app's registry tells it
+    (``compressedFormatOfName``): a format read as one stream names its
+    compressed endings itself (``.rds.gz``).
+    """
+    if not name.lower().endswith(".gz"):
+        return None
+    named = _format_of_name(name[:-3], ("file", "zip"))
+    return named[0] if named is not None and named[0].get("access") == "ranges" else None
+
+
 def _classify_file(resolved: Path) -> AnnDataStore:
     named = _format_of_name(resolved.name, ("file", "zip"))
+    compressed = _compressed_copy_of(resolved.name) if named is None else None
+    if compressed is not None:
+        # The browser reads a served file in parts; a gzip stream has none.
+        raise ValueError(
+            f"{resolved.name} is a gzip-compressed copy of {compressed['label']}: it cannot be "
+            f"read in parts. Decompress it (gunzip {resolved.name}) and serve the "
+            "decompressed file. The web app opens the compressed copy itself, from a "
+            "link or from this computer, reading it whole once."
+        )
     if named is None:
         raise ValueError(
             f"A file Cellucid opens must be an {_file_endings()} file: {resolved}"
@@ -782,13 +780,14 @@ def consolidated_zarr_metadata(store: AnnDataStore) -> tuple[str, bytes] | None:
 # =============================================================================
 
 #: HDF5 filters the browser's reader undoes (``formats/hdf5/filters.js``):
-#: deflate, shuffle, Fletcher-32 and LZF.
-BROWSER_HDF5_FILTERS: frozenset[int] = frozenset({1, 2, 3, 32000})
+#: deflate, shuffle, Fletcher-32, LZF, and hdf5plugin's Blosc, LZ4,
+#: bitshuffle and Zstandard.
+BROWSER_HDF5_FILTERS: frozenset[int] = frozenset({1, 2, 3, 32000, 32001, 32004, 32008, 32015})
 
 #: Zarr v2 compressors the browser's reader decodes
 #: (``formats/zarr/codecs/pipeline.js``).
 BROWSER_ZARR_V2_COMPRESSORS: frozenset[str] = frozenset(
-    {"gzip", "zlib", "blosc", "zstd", "lz4", "crc32c", "shuffle", "bitround"}
+    {"gzip", "zlib", "blosc", "zstd", "lz4", "bz2", "lzma", "crc32c", "shuffle", "bitround"}
 )
 
 #: Zarr v2 filters it undoes: the string codecs, and filters that keep sizes.
@@ -809,7 +808,7 @@ BROWSER_ZARR_V3_CODECS: frozenset[str] = frozenset(
         "crc32c",
         *(
             f"numcodecs.{name}"
-            for name in ("gzip", "zlib", "blosc", "zstd", "lz4", "crc32c", "shuffle", "bitround")
+            for name in ("gzip", "zlib", "blosc", "zstd", "lz4", "bz2", "lzma", "crc32c", "shuffle", "bitround")
         ),
     }
 )
@@ -937,29 +936,3 @@ def is_mudata(value: object) -> bool:
         cls.__name__ == "MuData" and cls.__module__.split(".")[0] == "mudata"
         for cls in type(value).__mro__
     )
-
-
-def write_temporary_h5mu(mdata: Any, *, dataset_id: str, dataset_name: str) -> Path:
-    """Write ``mdata`` to a new temporary Cellucid-ready ``.h5mu`` and return its path.
-
-    Written by :func:`cellucid.prepare` (``format="h5mu"``): each modality
-    gene-major and chunked for range reads, one modality at a time, so memory
-    beyond the object stays near one converted matrix. The object is not
-    modified. The caller removes the file's folder with
-    :func:`remove_temporary_file`.
-    """
-    from .prepare_data import prepare
-
-    folder = Path(tempfile.mkdtemp(prefix="cellucid-mudata-"))
-    path = folder / f"{dataset_id}.h5mu"
-    try:
-        prepare(path, format="h5mu", data=mdata, dataset_id=dataset_id, dataset_name=dataset_name)
-    except BaseException:
-        shutil.rmtree(folder, ignore_errors=True)
-        raise
-    return path
-
-
-def remove_temporary_file(path: Path) -> None:
-    """Remove a file :func:`write_temporary_h5mu` wrote, with its folder."""
-    shutil.rmtree(path.parent, ignore_errors=True)

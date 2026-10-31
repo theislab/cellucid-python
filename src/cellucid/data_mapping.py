@@ -90,17 +90,37 @@ UMAP_KEYS: tuple[str, ...] = ("X_umap", "X_UMAP", "X_wnn.umap", "X_ref.umap")
 EMBEDDING_KEY_PREFIX = "X_"
 
 
+def obsm_namespace(key: str) -> tuple[str, str]:
+    """The namespace of one ``obsm`` key: ``(prefix, local)``.
+
+    A MuData modality's arrays are named ``<modality>:<key>`` (the web app's
+    MuData view, ``prepare()`` and ``cellucid_prepare()`` alike), each
+    modality's names its own; a key without ``:`` is the dataset's own
+    (prefix ``""``). The key rules (:func:`parse_vector_field_key`, the default
+    and best-guess embeddings) apply within one namespace. The web app's
+    ``obsmNamespace`` and cellucid-r apply the same rule.
+    """
+    colon = key.find(":")
+    if 0 < colon < len(key) - 1:
+        return key[: colon + 1], key[colon + 1 :]
+    return "", key
+
+
 @dataclass(frozen=True)
 class VectorFieldKey:
-    """One ``obsm`` key read as a vector field: ``<field>_<basis>`` on ``X_<basis>``."""
+    """One ``obsm`` key read as a vector field: ``<field>_<basis>`` on ``X_<basis>``.
+
+    ``field`` keeps the key's namespace (``rna:velocity``); ``basis`` is the
+    name's own, and the embedding is in the same namespace.
+    """
 
     field: str
     basis: str
 
     @property
     def embedding_key(self) -> str:
-        """The ``obsm`` key of the embedding the field is named for."""
-        return EMBEDDING_KEY_PREFIX + self.basis
+        """The ``obsm`` key of the embedding the field is named for, in the field's namespace."""
+        return obsm_namespace(self.field)[0] + EMBEDDING_KEY_PREFIX + self.basis
 
 
 def parse_vector_field_key(key: object, obsm_keys: Collection[str]) -> VectorFieldKey | None:
@@ -108,14 +128,17 @@ def parse_vector_field_key(key: object, obsm_keys: Collection[str]) -> VectorFie
 
     ``<field>_<basis>`` is the vector field ``<field>`` on the embedding
     ``X_<basis>`` (``velocity_umap`` on ``X_umap``, ``velocity_umap_3d`` on
-    ``X_umap_3d``, ``T_fwd_branches`` on ``X_branches``):
+    ``X_umap_3d``, ``T_fwd_branches`` on ``X_branches``), within one namespace
+    (:func:`obsm_namespace`): a modality's ``rna:velocity_umap`` is the field
+    ``rna:velocity`` on ``rna:X_umap``, never on the dataset's ``X_umap``.
 
-    - A key that starts with ``X_`` is never a vector field: AnnData names
-      representations that way.
-    - Otherwise every split of the key at one ``_`` into a non-empty
+    - A key whose own name (after its namespace) starts with ``X_`` is never a
+      vector field: AnnData names representations that way.
+    - Otherwise every split of the name at one ``_`` into a non-empty
       ``<field>`` and a non-empty ``<basis>`` is tried, and the split whose
-      ``X_<basis>`` is in ``obsm_keys`` wins; when several do, the longest
-      basis wins. Matching is exact and case-sensitive.
+      ``X_<basis>``, in the same namespace, is in ``obsm_keys`` wins; when
+      several do, the longest basis wins. Matching is exact and
+      case-sensitive.
     - A key with no such split is an ordinary ``obsm`` array (None).
 
     The rule reads names only; whether the field is drawn also depends on
@@ -123,16 +146,19 @@ def parse_vector_field_key(key: object, obsm_keys: Collection[str]) -> VectorFie
     ``parseVectorFieldKey`` and cellucid-r apply the same rule, pinned by the
     shared conformance fixture.
     """
-    if not isinstance(key, str) or key.startswith(EMBEDDING_KEY_PREFIX):
+    if not isinstance(key, str):
         return None
-    split = key.find("_")
+    prefix, local = obsm_namespace(key)
+    if local.startswith(EMBEDDING_KEY_PREFIX):
+        return None
+    split = local.find("_")
     while split != -1:
         # The first qualifying split from the left has the longest basis.
-        if 0 < split < len(key) - 1:
-            basis = key[split + 1 :]
-            if EMBEDDING_KEY_PREFIX + basis in obsm_keys:
-                return VectorFieldKey(field=key[:split], basis=basis)
-        split = key.find("_", split + 1)
+        if 0 < split < len(local) - 1:
+            basis = local[split + 1 :]
+            if prefix + EMBEDDING_KEY_PREFIX + basis in obsm_keys:
+                return VectorFieldKey(field=prefix + local[:split], basis=basis)
+        split = local.find("_", split + 1)
     return None
 
 
@@ -773,6 +799,38 @@ def default_modality(names: Sequence[str]) -> str | None:
     return names[0] if names else None
 
 
+#: The neighbour graph AnnData's ``sc.pp.neighbors`` writes, the default first.
+DEFAULT_GRAPH_KEY = "connectivities"
+
+_SNN_GRAPH_SUFFIX = "_snn"
+
+
+def default_graph(keys: Iterable[str], *, modality: str | None = None) -> str | None:
+    """The neighbour graph a dataset opens with, of its ``obsp`` keys.
+
+    Scanpy's ``connectivities``; else Seurat's shared-nearest-neighbour graph
+    of the modality (assay) it opens with (``<modality>_snn``), else the first
+    other shared-nearest-neighbour graph (``<assay>_snn``, or ``SNN``, in any
+    case) in code-point order; else None. Seurat's other graph
+    (``<assay>_nn``, directed) and Scanpy's ``distances`` are no undirected
+    neighbour graph and are never the default. ``prepare()`` writes the graph
+    this rule chooses as ``obsp['connectivities']``; the web app's
+    ``defaultGraph`` and cellucid-r apply the same rule, pinned by the shared
+    conformance fixture.
+    """
+    listed = list(keys)
+    if DEFAULT_GRAPH_KEY in listed:
+        return DEFAULT_GRAPH_KEY
+    if modality is not None and f"{modality}{_SNN_GRAPH_SUFFIX}" in listed:
+        return f"{modality}{_SNN_GRAPH_SUFFIX}"
+    shared = sorted(
+        key
+        for key in listed
+        if key.lower() == "snn" or (key.lower().endswith(_SNN_GRAPH_SUFFIX) and len(key) > len(_SNN_GRAPH_SUFFIX))
+    )
+    return shared[0] if shared else None
+
+
 def require_mapping_modality(mapping: Mapping[str, Any], modalities: Sequence[str] | None) -> None:
     """Check a mapping's ``modality`` against the dataset's modalities.
 
@@ -841,32 +899,38 @@ class ObsmEntry:
     reason: str | None = None
 
 
-def default_embedding_slots(entries: Sequence[ObsmEntry]) -> dict[str, dict[str, Any] | None]:
+def default_embedding_slots(
+    entries: Sequence[ObsmEntry], *, modality: str | None = None
+) -> dict[str, dict[str, Any] | None]:
     """Apply the default embedding rule and return the filled slots.
 
     If any of ``X_umap_1d``, ``X_umap_2d`` or ``X_umap_3d`` is present, those
     keys alone fill their slots, reading columns ``0 .. d-1``. Otherwise the
     first of ``UMAP_KEYS`` (``X_umap``, ``X_UMAP``, ``X_wnn.umap``,
-    ``X_ref.umap``) whose width is 1, 2 or 3 fills the slot of that width. Slots
-    without a default stay None. Presence is all this rule asks: a present key
-    that later fails its load-time check is reported, not skipped, because the
-    caller named that array on purpose.
+    ``X_ref.umap``) whose width is 1, 2 or 3 fills the slot of that width. A
+    dataset of several modalities whose own names fill no slot is given the
+    same names in the namespace of the modality it opens with (``modality``:
+    ``rna:X_umap``, :func:`obsm_namespace`). Slots without a default stay None.
+    Presence is all this rule asks: a present key that later fails its
+    load-time check is reported, not skipped, because the caller named that
+    array on purpose.
     """
     by_key = {entry.key: entry for entry in entries}
-    slots: dict[str, dict[str, Any] | None] = dict.fromkeys(DIMENSION_SLOTS)
-    dimensional = [key for key in DIMENSIONAL_UMAP_KEYS if key in by_key]
-    if dimensional:
-        for key in dimensional:
-            dimension = int(key[len("X_umap_")])
-            slots[dimension_slot(dimension)] = {"key": key, "columns": default_columns(dimension)}
-        return slots
-    for key in UMAP_KEYS:
-        single = by_key.get(key)
-        if single is not None and single.width in (1, 2, 3):
-            dimension = single.width
-            slots[dimension_slot(dimension)] = {"key": key, "columns": default_columns(dimension)}
-            break
-    return slots
+    for prefix in ("",) if modality is None else ("", f"{modality}:"):
+        slots: dict[str, dict[str, Any] | None] = dict.fromkeys(DIMENSION_SLOTS)
+        dimensional = [key for key in DIMENSIONAL_UMAP_KEYS if prefix + key in by_key]
+        if dimensional:
+            for key in dimensional:
+                dimension = int(key[len("X_umap_")])
+                slots[dimension_slot(dimension)] = {"key": prefix + key, "columns": default_columns(dimension)}
+            return slots
+        for key in UMAP_KEYS:
+            single = by_key.get(prefix + key)
+            if single is not None and single.width in (1, 2, 3):
+                dimension = single.width
+                slots[dimension_slot(dimension)] = {"key": prefix + key, "columns": default_columns(dimension)}
+                return slots
+    return dict.fromkeys(DIMENSION_SLOTS)
 
 
 #: The web app's best-guess ranking of ``obsm`` keys (``bestGuessTier`` in
@@ -886,17 +950,28 @@ _BEST_GUESS_TIERS: tuple[tuple[int, tuple[str, ...]], ...] = (
 _BEST_GUESS_NO_MATCH_TIER = 7
 
 
-def best_guess_order(keys: Iterable[str]) -> list[str]:
-    """Order ``obsm`` keys for the best guess: by tier, then by code point."""
+def best_guess_order(keys: Iterable[str], *, modality: str | None = None) -> list[str]:
+    """Order ``obsm`` keys for the best guess: by tier, then namespace, then code point.
+
+    A key ranks by its own name (``rna:X_umap`` is a UMAP); among keys of one
+    tier the dataset's own come first, then the modality it opens with
+    (``modality``), then the other modalities (:func:`obsm_namespace`).
+    """
 
     def tier(key: str) -> int:
-        name = key.lower()
+        name = obsm_namespace(key)[1].lower()
         for rank, needles in _BEST_GUESS_TIERS:
             if any(needle in name for needle in needles):
                 return rank
         return _BEST_GUESS_NO_MATCH_TIER
 
-    return sorted(keys, key=lambda key: (tier(key), key))
+    def namespace(key: str) -> int:
+        prefix = obsm_namespace(key)[0]
+        if prefix == "":
+            return 0
+        return 1 if modality is not None and prefix == f"{modality}:" else 2
+
+    return sorted(keys, key=lambda key: (tier(key), namespace(key), key))
 
 
 def enabled_embedding_keys(
@@ -904,6 +979,7 @@ def enabled_embedding_keys(
     *,
     named_slots: Mapping[str, str],
     latent_key: str | None,
+    modality: str | None = None,
 ) -> frozenset[str]:
     """The ``obsm`` keys the web app shows an AnnData store with when it opens.
 
@@ -916,7 +992,8 @@ def enabled_embedding_keys(
     or shown beside. This is the web app's ``resolveEmbeddingSlots`` and
     ``defaultEnabledEmbeddings`` read from metadata alone: the browser also
     loads each guessed array and passes over one that does not load, which
-    metadata cannot tell.
+    metadata cannot tell. ``modality``: the modality a dataset of several
+    opens with (:func:`default_embedding_slots`, :func:`best_guess_order`).
     """
     vector_keys = vector_field_keys(entry.key for entry in entries)
     candidates = {
@@ -928,17 +1005,19 @@ def enabled_embedding_keys(
         and entry.key not in vector_keys
         and entry.key != latent_key
     }
-    slots = default_embedding_slots(entries)
+    slots = default_embedding_slots(entries, modality=modality)
     if named_slots:
         for slot, key in named_slots.items():
             slots[slot] = {"key": key}
     elif all(slots[slot] is None for slot in DIMENSION_SLOTS):
         for dimension in (3, 2, 1):
-            exact = best_guess_order(key for key, width in candidates.items() if width == dimension)
+            exact = best_guess_order(
+                (key for key, width in candidates.items() if width == dimension), modality=modality
+            )
             if exact:
                 slots[dimension_slot(dimension)] = {"key": exact[0]}
         if all(slots[slot] is None for slot in DIMENSION_SLOTS):
-            wide = best_guess_order(key for key, width in candidates.items() if width > 3)
+            wide = best_guess_order((key for key, width in candidates.items() if width > 3), modality=modality)
             if wide:
                 slots[dimension_slot(2)] = {"key": wide[0]}
     shown = {ref["key"] for ref in slots.values() if ref is not None}

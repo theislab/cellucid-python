@@ -459,8 +459,9 @@ def _pruned(
 def _gene_sets_of(results: Sequence[ViewerResult]) -> list[tuple[_ResultKey, str, dict[str, Any]]]:
     """Each gene set: the result it is, a name unique among them
     (:func:`unique_gene_set_name`), and its entry: its genes by identifier
-    (the var index: ``adata.var_names``), and, from a viewer, the name it
-    shows for each (``symbols``)."""
+    (the var index: ``adata.var_names``), and, from a viewer whose data
+    mapping names the genes by a var column, the name it shows for each
+    (``symbols``)."""
     sets = []
     taken: set[str] = set()
     for result in results:
@@ -471,7 +472,7 @@ def _gene_sets_of(results: Sequence[ViewerResult]) -> list[tuple[_ResultKey, str
             (result.source, result.kind, result.id),
             unique_gene_set_name(meta["name"], taken),
             {"genes": list(meta["genes"]), "description": meta["description"], "origin": meta["origin"],
-             **({"symbols": list(meta["symbols"])} if "symbols" in meta else {})},
+             **({"symbols": list(meta["symbols"])} if meta.get("symbols") is not None else {})},
         ))
     return sets
 
@@ -782,8 +783,9 @@ def pull(
     every continuous field and score (``float32``) go to ``adata.obs`` (a
     MuData's global ``obs``), and every gene set to
     ``adata.uns['cellucid']['gene_sets']``: its genes by identifier -- the
-    var index, ``adata.var_names`` (Ensembl ids for a CELLxGENE dataset) --
-    and, from a viewer, the symbols it shows for them (``symbols``).
+    var index, ``adata.var_names`` -- and, from a viewer whose data mapping
+    names the genes by a var column (such as ``feature_name``), the names it
+    shows for them (``symbols``).
 
     Parameters
     ----------
@@ -934,9 +936,19 @@ def read_obs_names(data: Any) -> pd.Index | None:
     put back in original order, as the viewer reads it -- when the record
     describes the file's cells (:func:`cellucid.prepare_data._priority.stored_order`,
     the rule the viewer reads it by); a record that does not is reported and
-    the names are taken as stored. An object is served in its own row order."""
+    the names are taken as stored. An object's names follow the same rule:
+    one read from such a file and still in its stored order is named in its
+    original order, as it is served (:mod:`cellucid._served_store`)."""
     if hasattr(data, "obs_names"):
-        return pd.Index(data.obs_names)
+        from ..prepare_data._priority import stored_order_of
+
+        names = pd.Index(data.obs_names)
+        positions = stored_order_of(data).positions if hasattr(data, "uns") and hasattr(data, "obs") else None
+        if positions is None:
+            return names
+        named = np.empty(len(names), dtype=object)
+        named[positions] = np.asarray(names, dtype=object)
+        return pd.Index(named, dtype=object)
     from .._anndata_files import (
         ANNDATA_KINDS,
         MUDATA_KINDS,
@@ -1045,6 +1057,11 @@ def field_message(values: Any, key: str, *, n_obs: int, obs_names: pd.Index | No
         numbers = series.to_numpy(dtype=np.float64, na_value=np.nan)
         if bool(np.isinf(numbers).any()):
             raise ValueError("The column holds an infinity; the viewer takes finite numbers (NaN for no value)")
+        if bool((np.abs(numbers[np.isfinite(numbers)]) > np.finfo(np.float32).max).any()):
+            raise ValueError(
+                "The column holds a value beyond the float32 range the viewer takes (about 3.4e38); "
+                "scale it first, or push its logarithm"
+            )
         kind, field_categories, field_values = "continuous", None, numbers.astype(np.float32)
     else:
         raise TypeError(f"Values of dtype {dtype} cannot be pushed: push labels or numbers")

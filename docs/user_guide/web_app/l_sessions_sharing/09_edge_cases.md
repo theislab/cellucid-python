@@ -27,8 +27,9 @@ See {doc}`07_versioning_compatibility_and_dataset_identity`.
 ## Same fingerprint, changed content
 
 The fingerprint checks dataset id, cell count, variable count, the
-data mapping, and a `cellOrder` record — a digest of the coordinates of the
-embedding the live view showed, plus that embedding and its dimension. It is
+data mapping, and a `cellOrder` record — a digest of the stored coordinates of
+the embedding the live view showed, each cell by its position in the dataset's
+own order, plus that embedding and its dimension. It is
 not a hash of expression values, obs/var fields, category inventories, cell
 identifiers, or the embeddings that were not displayed.
 

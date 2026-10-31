@@ -29,9 +29,13 @@ ssh -L 8765:127.0.0.1:8765 me@cluster.example.org
 ```
 
 The server listens on the cluster node's loopback address only
-(`host = "127.0.0.1"`), so nobody else on the network reaches it; the tunnel is
-how you do. Keep the same port on both ends: Google sign-in (community
-annotation) accepts only `localhost:8765`. When 8765 is taken on the node, the
+(`host = "127.0.0.1"`), so no other machine on the network reaches it; the
+tunnel is how you do. Every other user of that node can, though: the served
+data needs no secret, so anyone with a shell on the node can read it while the
+viewer runs ({ref}`shared-machines`);
+when that matters, use the notebook widget in Jupyter instead (no port is
+opened). Keep the same port on both ends: Google accepts only
+`localhost:8765` for opening Google Drive files. When 8765 is taken on the node, the
 next free port is used and named in the message; tunnel that one.
 
 ## Behind RStudio Server or Posit Workbench

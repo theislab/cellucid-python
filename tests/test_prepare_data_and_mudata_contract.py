@@ -122,6 +122,24 @@ def test_data_writes_what_the_same_components_write_byte_for_byte(tmp_path: Path
     assert zipped_data.read_bytes() == zipped_hand.read_bytes()
 
 
+def test_data_writes_the_graph_the_viewer_opens_with_a_seurat_snn_without_its_diagonal(tmp_path: Path) -> None:
+    """An AnnData converted from a Seurat object (SeuratDisk, sceasy) holds
+    ``obsp['RNA_snn']`` (1 on its diagonal) and the directed ``RNA_nn``, no
+    ``connectivities``: ``prepare()`` writes the graph the viewer's default
+    rule opens with (``default_graph``), its diagonal left out."""
+    adata = _adata()
+    graph = adata.obsp["connectivities"].copy()
+    del adata.obsp["connectivities"]
+    del adata.obsp["distances"]
+    snn = (graph + sparse.identity(adata.n_obs, format="csr")).tocsr()
+    adata.obsp["RNA_snn"] = snn
+    adata.obsp["RNA_nn"] = sparse.triu(graph, format="csr")
+    written = restore_original_order(ad.read_h5ad(prepare(tmp_path / "data.h5ad", format="h5ad", data=adata)))
+    assert list(written.obsp) == ["connectivities"]
+    assert written.obsp["connectivities"].diagonal().sum() == 0
+    assert (written.obsp["connectivities"] != graph.astype(np.float32)).nnz == 0
+
+
 def test_data_takes_every_component_it_holds_and_leaves_out_what_a_cellucid_ready_anndata_has_none_of(
     tmp_path: Path,
 ) -> None:
@@ -504,8 +522,14 @@ def test_a_modality_embedding_and_latent_space_can_be_launch_defaults(tmp_path: 
     assert defaults["embedding2d"] == "rna:X_umap"
     assert defaults["latentKey"] == "rna:X_pca"
     assert "outlierQuantiles" in back.uns["cellucid"]
-    with pytest.raises(ValueError, match=re.escape("latent_key names 'prot:X_umap', and modality 'prot' did not measure every cell")):
-        prepare(tmp_path / "p.h5mu", format="h5mu", data=mdata, latent_key="prot:X_umap")
+    # A modality that did not measure every cell: its NaN rows are cells the
+    # latent space does not place, which get no quantile.
+    partial = _read_mudata(prepare(tmp_path / "p.h5mu", format="h5mu", data=mdata, latent_key="prot:X_umap"))
+    measured = np.asarray(mdata.obsmap["prot"]) > 0
+    assert not measured.all()
+    for quantiles in partial.uns["cellucid"]["outlierQuantiles"]["fields"].values():
+        assert np.isnan(np.asarray(quantiles)[~measured]).all()
+        assert not np.isnan(np.asarray(quantiles)[measured]).all()
 
 
 def _axis_one(mdata: Any) -> Any:

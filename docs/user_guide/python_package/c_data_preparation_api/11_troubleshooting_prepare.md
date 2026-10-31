@@ -55,8 +55,7 @@ on disk. The message names the argument, what was found, and usually the fix.
 
 | Message | Cause and fix |
 |---|---|
-| `Connectivity matrix must be exactly symmetric.` | Symmetrize: `(g + g.T) / 2`. |
-| `Connectivity diagonal values must all be exactly zero.` | `g.setdiag(0); g.eliminate_zeros()`. |
+| `Connectivity matrix must be exactly symmetric: a directed neighbour graph ...` | A directed graph (Seurat's `RNA_nn`, Scanpy's `distances`): pass a symmetric one (`obsp['connectivities']`, Seurat's `RNA_snn`), or symmetrize: `(g + g.T) / 2`. A diagonal (each cell its own neighbour, as in `RNA_snn`) is left out, never refused. |
 | `Connectivity weights must all be non-negative.` | Pass connectivities, not signed or distance-like values. |
 | `Vector field 'velocity' on embedding 'pca': the viewer binds a vector field to the embedding 'X_<basis>' it is named for ('velocity_umap' to 'X_umap'), so the embedding needs an 'X_<basis>' key. ...` | Name the embedding `X_<basis>` (`X_pca`) ({doc}`08_vector_fields_velocity_displacement`). |
 | `Vector field 'velocity' on embedding 'X_umap' has 3 columns, and 'X_umap' has 2: a vector field has one component per embedding column.` | Pass an array exactly as wide as its embedding. |

@@ -77,8 +77,13 @@ prepare(
 
 An AnnData or MuData that declares `uns['cellucid']['id']` and `['name']` is
 opened under them. Any other AnnData or MuData -- and every other format
-(Loom, 10x, MatrixMarket, an R object), which the browser alone reads --
-needs a stable name and ID, passed explicitly:
+(Loom, 10x, MatrixMarket, an R object), which the browser alone reads -- is
+named as the R package names it: a file by its file name, with its file name
+without the extension as its ID (`pbmc3k.h5ad` opens as `pbmc3k.h5ad`, ID
+`pbmc3k`); an in-memory object as `AnnData (<n> cells)` (or `MuData`), with an
+ID made from that. The ID it was given is printed in one line, because
+sessions are kept under it. Name it yourself for an ID that stays the same
+whatever the file is called:
 
 ```python
 from cellucid import show_anndata
@@ -86,12 +91,6 @@ viewer = show_anndata("data.h5ad", dataset_name="My study (raw)", dataset_id="my
 ```
 
 An explicit `dataset_name` / `dataset_id` overrides what the file declares.
-Data that declares neither (and is given neither) is refused before the server
-starts:
-
-```text
-dataset_name and dataset_id are required: this AnnData declares no Cellucid identity of its own (uns['cellucid']['id'] and ['name']). Name the dataset, for example dataset_name="My study", dataset_id="my-study-v1" (--dataset-name/--dataset-id on the command line).
-```
 
 Sessions and community annotations are keyed by this dataset ID.
 
@@ -100,7 +99,7 @@ Sessions and community annotations are keyed by this dataset ID.
 ## How sessions decide “same dataset or not”
 
 A `.cellucid-session` bundle contains a lightweight **dataset fingerprint** in
-its manifest (not the full dataset). In the current session format (format 2) it has exactly six required fields: three scalars — `datasetId`,
+its manifest (not the full dataset). In the current session format (format 3) it has exactly six required fields: three scalars — `datasetId`,
 `cellCount`, `varCount` — the dataset's display `name` (or null; used in
 messages only, never compared), `cellOrder`, recording *which ordering* of the
 cells the session was saved against, and `dataMapping`, recording *which arrays*
@@ -127,12 +126,12 @@ strict and atomic, and a bundle without `cellOrder` or `dataMapping` is refused.
 ### `cellOrder` is shape-checked here, its digest is verified in the viewer
 
 `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
-16-character lowercase hexadecimal `digest` of the coordinates of that
-embedding. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
+16-character lowercase hexadecimal `digest` of that embedding's stored
+coordinates, each cell named by its original position. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
 columns that were read, one per dimension. It closes a hole the three scalars
-cannot: sessions store selections as row numbers, and a dataset rewritten at
-the same id from re-sorted input matches all three scalars while every row
-number now denotes a different cell.
+cannot: sessions name cells by their original position, and a dataset
+rewritten at the same id from re-sorted input matches all three scalars while
+every position now denotes a different cell.
 
 `dataMapping` records which stored arrays the session was showing: `kind`
 (`"anndata"`), `embeddings` (`enabled`, the embeddings that are turned on, and
@@ -143,10 +142,12 @@ number now denotes a different cell.
 MuData), naming the one its genes and expression are read from.
 
 Both readers require both records. Python validates `cellOrder`'s shape and
-never its digest: the digest is taken over normalized coordinates the viewer
-drew, and `apply_cellucid_session_to_anndata(...)` targets an `AnnData` whose
-row order the caller controls, so there is nothing here to check it against.
-Enforcing cell-order identity is the viewer's job.
+never its digest: the digest is the viewer's check, taken on the cells it opens
+when it restores a session, and `apply_cellucid_session_to_anndata(...)`
+targets an `AnnData` whose rows and embeddings the caller controls (an
+embedding computed again would change the digest without changing the cells).
+Enforcing cell-order identity is the viewer's job; R's
+`cellucid_apply_session()` does the same.
 
 The consequence runs one way: **a bundle Python accepts may still be refused by
 the web app**, because only the viewer compares the digest. Do not read that as a disagreement between the two readers.
@@ -197,7 +198,7 @@ Many Cellucid interactions use **row index** as identity.
 If you reorder cells, previously saved sessions/highlights can map to different biological cells even if the shape is unchanged.
 
 The web app catches that for a rewritten dataset, because `cellOrder` digests
-the coordinates it drew. **Python does not**, and cannot: applying a
+the stored coordinates of the cells it opens. **Python does not**: applying a
 session to an `AnnData` you reordered in memory is checked only against
 `n_obs`, `n_vars`, and `datasetId`, all of which a permutation leaves intact.
 Keeping row order stable remains your responsibility on this side.

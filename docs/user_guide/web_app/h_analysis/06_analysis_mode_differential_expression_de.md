@@ -46,7 +46,7 @@ count what you changed from the defaults (see {doc}`02_analysis_ui_overview`).
 | --- | --- |
 | Essentials | **Compare** (Pages / Categories), **Group A**, **Group B**, **Swap A and B** |
 | More options → Cells | **Within**, **Min cells per group** |
-| More options → Test | **Replicates**, **Method**, **Wilcoxon p-values**, **Multiple testing**, **Expression matrix**, **Fold change from** |
+| More options → Test | **Replicates**, **Min cells per sample**, **Method**, **Wilcoxon p-values**, **Multiple testing**, **Expression matrix**, **Fold change from** |
 | More options → Filters | **Max adjusted p**, **Min \|log2FC\|**, **Min % expressing in either group**, the gene filters |
 | More options → Labels | **Labelled genes** |
 
@@ -72,8 +72,9 @@ after a run redraws the volcano at once; changing anything else marks the result
 | Within categories | All |
 | Min cells per group | 10 |
 | Replicates | None (cells) |
+| Min cells per sample | 10 |
 | Method | Wilcoxon rank-sum |
-| Wilcoxon p-values | Exact or continuity-corrected (SciPy, R) |
+| Wilcoxon p-values | Exact or continuity-corrected (R) |
 | Multiple testing | Benjamini–Hochberg |
 | Expression matrix | The mapped matrix |
 | Fold change from | Automatic |
@@ -172,14 +173,25 @@ test:
 - each sample’s cells of Group A form one observation, and its cells of Group B
   another (a sample with cells on both sides gives one to each); cells with no
   sample are left out;
+- a sample with fewer of a group’s cells than **Min cells per sample** (10 by
+  default) is left out of that side: every observation weighs the same in the
+  test, and the mean of a handful of cells is mostly noise. The result says how
+  many were (a `small samples left out` chip, and **Samples left out** in the
+  expanded view);
 - a gene’s value for an observation is its mean over those cells, read in one pass
-  over the gene’s non-zero entries;
+  over the gene’s non-zero entries; a cell with no value of the gene (`NaN`: a
+  modality that did not measure it) is left out of that mean, and **Min cells
+  per sample** counts the cells with a value, so a sample short of them is left
+  out of that gene’s test only — never silently: each gene’s samples tested are
+  `n_a` and `n_b` in the CSV, and a `genes with fewer samples` chip (and
+  **Genes with samples left out** in the expanded view) counts the genes;
 - the test is **Welch’s t** between the two groups’ per-sample means, as
   `scipy.stats.ttest_ind(..., equal_var=False)` on those means; the score is t,
   `log2FC` follows **Fold change from** on the mean of the per-sample means, and
-  `% A` / `% B` are the share of the group’s cells above 0.
+  `% A` / `% B` are the share of the group’s cells with a value that are above 0.
 
-Each group needs cells in at least 2 samples, else Run says so. **Method** and
+Each group needs at least 2 samples with **Min cells per sample** of its cells or
+more, else Run says so. **Method** and
 **Wilcoxon p-values** do not apply and are hidden. No variance moderation (limma,
 edgeR, DESeq2) and no pairing is applied; a gene with fewer than 2 samples with a
 value on a side is not tested. The result line reads `Pseudobulk t-test`, and the
@@ -189,7 +201,7 @@ expanded view states the field and the samples on each side.
 
 | Choice | p-value | Matches |
 | --- | --- | --- |
-| **Exact or continuity-corrected (SciPy, R)** (default) | exact when both groups have fewer than 50 values and no ties; otherwise normal, with tie and continuity correction | SciPy `mannwhitneyu(method='auto')`, R `wilcox.test` |
+| **Exact or continuity-corrected (R)** (default) | exact when both groups have fewer than 50 values and no ties; otherwise normal, with tie and continuity correction | R `wilcox.test`; SciPy `mannwhitneyu(method='exact')` below 50 values (SciPy's `method='auto'` is exact only up to 8) |
 | **Normal approximation (scanpy)** | `2Φ(−\|z\|)` with `f = 1` | scanpy `rank_genes_groups` (default `tie_correct=False`) |
 | **Normal, tie-corrected** | `2Φ(−\|z\|)` with the tie factor | scanpy with `tie_correct=True` |
 
@@ -225,12 +237,27 @@ genes for how each matrix names its genes and when only **Mapped** is offered.
 `log1p` values is set under **Session › Data mapping › Genes** (guessed from
 `uns['log1p']`); see {doc}`../b_data_loading/13_data_mapping`.
 
+Under **Undo log1p**, a mean above about 709 (natural-log units) is past what
+`expm1` can hold in double precision; scanpy then returns `inf` or `nan`. Cellucid
+takes the same formula in log space there, so the fold change is its finite
+value. Means that large mean the matrix is not `log1p` at all, as when a file
+records `uns['log1p']` over per-million values: the data mapping reads such a
+matrix as stored once its values are read (see
+{doc}`../b_data_loading/13_data_mapping`), and **Automatic** then takes the
+fold change of the stored values.
+
 Under **As stored**, scaled or z-scored expression can be negative, and a ratio
 of negative means has no meaning. For such a gene both means are first shifted
 by `m`, the most negative value over the cells of both groups:
 `log2((meanA − m + 0.01) / (meanB − m + 0.01))`, so the fold change is always
 finite and its sign is the sign of `meanA − meanB`. Read it as a direction and a
-strength, not as a biological fold.
+strength, not as a biological fold. Marker genes shift the same way: by the
+cells of the group and the rest, or of the group and its reference group.
+
+The pseudocount 0.01 is in the data's own units, as published. On data stored
+at a small scale (fractions, values around 1e-5) it outweighs the means and
+every **As stored** fold change shrinks towards 0; rescale such data, or read
+its scores and p-values instead.
 
 Interpretation:
 - `log2FC > 0` → higher in **Group A**
@@ -366,6 +393,8 @@ the filters), not significant.
   | **Genes tested** | Genes that produced a p-value: the correction’s `m`. |
   | **Not tested (fewer than 2 cells with a value)** | Genes a group had fewer than 2 measured cells for (with **Replicates**: **Not tested (fewer than 2 samples with a value)**). |
   | **Replicates** | With a sample field: the field and the samples on each side. |
+  | **Samples left out** | With a sample field: the samples of each side with fewer cells than **Min cells per sample**, and their cells. |
+  | **Genes with samples left out** | With a sample field: the genes whose test left out a sample for having fewer than **Min cells per sample** cells with a value of the gene. |
   | **Significant (adj p ≤ …, \|log2FC\| ≥ …)** | Tested genes passing the two filters; the label states the values in force. |
   | **Up in A** / **Down in A** | Significant genes with log2FC > 0 / < 0. |
   | **p-values** (Wilcoxon), **Multiple testing**, **Expression matrix**, **Fold change** | What the run used. |
@@ -377,7 +406,16 @@ the filters), not significant.
   gene search then names it.
 
 To get every gene, including those that did not pass, export the CSV
-({doc}`09_exporting_analysis_results`).
+({doc}`09_exporting_analysis_results`). Its rows, and a saved session's, are
+ranked by p-value; genes with the same p-value — at millions of cells hundreds
+of them whose p-value is below the smallest double, exactly 0 — by the size of
+their score (|z| or |t|), then of their log2 fold change, larger first; untested
+genes last.
+
+**Welch’s t-test** sums each group’s squared deviations over the gene’s non-zero
+values, with its zeros’ share added in one product, so a t-test run costs what a
+Wilcoxon run does (O(non-zero values) a gene, about 1.6 ms a gene at 10M cells),
+and its t agrees with exact rational arithmetic to the last bits.
 
 ---
 
@@ -393,10 +431,14 @@ result — a fast run and a slow run of the same form return the same statistics
   reads further ahead; a local file barely at all.
 - **Workers.** Every analysis worker is used (one per CPU core, less one for the
   page and one for the file reader), each with one gene running and one waiting.
-- **Memory.** Read-ahead is held to 30% of the analysis memory budget (a sixteenth
-  of the device memory the browser reports, 512 MB on an 8 GB machine), and what
+- **Memory.** Read-ahead is held to 30% of the analysis memory budget (a
+  thirty-second of the device memory the browser reports, 256 MB on an 8 GB
+  machine), and what
   the workers hold to half of it. Memory pressure, or an allocation the browser
-  refuses, halves the read-ahead at once.
+  refuses, halves the read-ahead at once. What a run has read and not yet
+  computed is counted in the app's memory model while it runs (the `analysis`
+  share of `memoryReport()`), so the caches give way to it rather than the tab
+  running out.
 - **Adapting.** Every quarter second (and at least every 32 genes) the run checks
   itself: workers waiting on reads double the read-ahead; a doubling that did
   not make the run faster is undone and not tried again (past that point more
@@ -406,11 +448,24 @@ result — a fast run and a slow run of the same form return the same statistics
 
 How a run reads the data:
 
-- Two small groups of a large dataset are read **by cell**, every gene in one
-  read, when that reads less than every gene’s column.
-- Otherwise each gene’s column is read once and moved to a worker without a copy;
-  the groups were sent to every worker once at the start, so the page never
-  gathers a group’s values.
+- Two groups are read **in their cells only**. Each read takes as many genes as
+  the run's memory holds — every gene in one read when they all fit — and the
+  file reader reads it by cell (the cells' rows) or by gene (each gene's
+  entries), whichever reads less. A run whose genes do not all fit is read in
+  several such reads, one after another while the workers test the last, never
+  every gene's dense values at once: at 10 million cells and 30,000 genes the
+  groups' values alone would be gigabytes. When the cells are read by their
+  rows (a file that stores cells as rows, such as a CSR `.h5ad`), each read
+  would read the same rows again; from the second read on, the groups'
+  stored values for every gene are read once and kept (8 bytes a stored
+  value, within the gene-index share of memory), and every later read is a
+  copy out of them. Measured on a synthetic 10-million-cell CSR `.h5ad`
+  (30,000 genes, 20 values a cell), the two largest of ten types (1.9M
+  cells): 1,000 genes read in 3.4 s and 319 MB instead of 18.5 s and 1.5 GB.
+- When a gene only the page holds is tested (a user-defined copy), each gene's
+  column is read once and moved to a worker without a copy; the groups were
+  sent to every worker once at the start, so the page never gathers a group's
+  values.
 
 Measured with `npm run bench:analysis` on 2026-10-24 (Suo sample, 561,947
 cells, 5,103 genes; Wilcoxon, every gene; a 10-core, 16 GB laptop, Chromium,

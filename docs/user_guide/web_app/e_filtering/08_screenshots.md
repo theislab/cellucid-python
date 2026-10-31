@@ -37,18 +37,11 @@ Scenario `filtering-type-category-visibility`.
 :alt: The Visible range block of the continuous S_score legend with Live filtering switched off: Minimum and Maximum sliders with their values, and the Filter button beside Reset enabled, with the pointer on Filter.
 :width: 488px
 
-**Numeric range.** With `Live filtering` off, `Filter` becomes clickable and
-applies the range once. Scenario `filtering-type-numeric-range`.
+**Numeric range.** With `Live filtering` off, `Filter` appears beside `Reset`
+and applies the range once; with it on, only `Reset` is there. Scenario
+`filtering-type-numeric-range`.
 ```
 
-```{figure} ../../../_static/screenshots/filtering/filter-button-disabled-live-on.png
-:alt: The same Visible range block with Live filtering on: the Filter button is greyed out under the pointer, beside an enabled Reset button.
-:width: 488px
-
-**The same block with `Live filtering` on.** `Filter` is greyed out and cannot
-be clicked, because the range is already being applied on every slider step.
-Scenario `filtering-button-disabled-live-on`.
-```
 
 ```{figure} ../../../_static/screenshots/filtering/outlier-slider-95.png
 :alt: The Outlier filter with its (i), its slider moved left of the end stop and its readout showing 95 percent, with the pointer on the slider.
@@ -172,14 +165,6 @@ Rows with nothing left to show are disabled, not merely empty. Scenario
 :alt: The whole window coloured by the gene Ins1 with the Minimum slider raised, so only the cells expressing it are drawn and an Ins1 range row is listed in the Filters block.
 :width: 1440px
 
-A gene range filter while the gene is the active field. Scenario
-`filtering-window-gene-range-active`.
-```
-
-```{figure} ../../../_static/screenshots/filtering/window-gene-range-scope-lost.png
-:alt: The same window after switching the active field to clusters: every cell is drawn again, the Ins1 row has left the Filters block, and the count line reads Showing all 3,696 cells.
-:width: 1440px
-
-The same session one field-change later. The gene filter stopped applying.
-Scenario `filtering-window-gene-range-scope-lost`.
+A gene range filter, listed under Filters; it keeps applying when the view is
+coloured by another field. Scenario `filtering-window-gene-range-active`.
 ```

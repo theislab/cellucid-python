@@ -21,15 +21,22 @@ of an `.h5ad` file, a Zarr store folder, a Zarr store zipped into a `.zip`, a
 Loom (`.loom`) or MuData (`.h5mu`) file, a Seurat or SingleCellExperiment
 object (`.rds`, `.rda`, `.RData`), or a dataset catalog folder (one holding
 `datasets.json`). Every file is read in place, except an R object or a GEO
-MatrixMarket sample, which cannot be read in parts: it is read whole, once,
-as it downloads, and kept in this browser; when its host reports a version
-(an ETag it lets other sites read, or the provider's revision or checksum),
-opening the same link again on a later visit downloads nothing
+MatrixMarket sample, which cannot be read in parts: it is read once, as it
+downloads, and kept in this browser (a MatrixMarket sample's cells are drawn
+from its lists and tables first, and its matrix is read after them, keeping
+only the cells genes are read for: {doc}`17_open_r_objects`); when its source names a version
+(the provider's revision, commit or checksum, else the file's size with the
+`Last-Modified` date or strong ETag its host lets other sites read, asked of
+the source at every opening), opening the same link again on a later visit
+downloads nothing while that version stands
 ({ref}`which-formats-are-read-in-parts`). A host that serves no parts of
 files gets the same treatment for any format: the file is downloaded whole
 into this browser's storage, said up front with its size, and kept. A
 dataset catalog on such a host is not listed: listing it would download
-every file whole; open each file by its own link instead. Nothing needs a server
+every file whole; open each file by its own link instead. A file read in
+place keeps what was downloaded of it in this browser under the same
+version: opening the link again downloads only what no earlier opening read
+(its version is still asked of the source every time). Nothing needs a server
 of your own, and only a private Google Drive file or a OneDrive file needs a
 sign-in ({doc}`16_private_drive_onedrive`).
 
@@ -38,12 +45,16 @@ then click **Open** (or press Enter). The page address gains a `?data=`
 parameter naming what you opened in its provider's form (the `?data=` column
 of [What you can paste](#what-you-can-paste): a pasted Google Drive link
 becomes `gdrive:<id>`), also for a link the page was opened with, and never a
-sign-in token or a download address. With a share of the cells you chose
-open, the address also names how they were chosen (`&cells=228245&sample=blocks&seed=0`;
-never the cells themselves), and a link may name one itself
-(`&cells=10%`), so whoever follows it opens the same cells
-({ref}`in-a-link`). So copying the address (or using **Share**)
-gives others the same view. The same bar connects to a Cellucid server
+sign-in token or a download address. A key the link itself carries to grant
+access (a pre-signed URL's signature, a Dropbox `rlkey`, a Drive resource key,
+a token) stays in the address, so a reload opens the same file, and goes
+nowhere else: **Share**, sessions, figures, notifications and the console get
+the link without it ({ref}`link-access-keys`). With a share of the cells you
+chose open, the address also names how they were chosen
+(`&cells=228245&sample=blocks&seed=0`; never the cells themselves), and a link
+may name one itself (`&cells=10%`), so whoever follows it opens the same cells
+({ref}`in-a-link`). So **Share** gives others the same view, of a file they
+can read without your key. The same bar connects to a Cellucid server
 ({doc}`04_server_tutorial`): see [The address bar](#the-address-bar).
 
 Cellucid reads the data **in place**: only the bytes a view needs are
@@ -104,16 +115,18 @@ the catalog's host and lists its datasets, and the line under the bar reads
 | You paste | It opens | `?data=` form |
 |---|---|---|
 | A CELLxGENE dataset id, or its **Explore** link (`cellxgene.cziscience.com/e/<dataset id>.cxg/`) | That dataset's `.h5ad` | `cellxgene:<dataset id>` |
-| A GEO series (`GSE123456`) or sample (`GSM1234567`), its accession page, or a supplementary file link | The one dataset among its supplementary files: an `.h5ad`, a gzipped R object (`.rds.gz`, `.rda.gz`, `.RData.gz`) or another file Cellucid opens, or a MatrixMarket sample (`GSM…_matrix.mtx.gz` with its `_features`/`_genes` and `_barcodes` files), named by its matrix | `geo:GSE123456`, `geo:GSE123456/<file>` or `geo:GSE123456/<GSM…_matrix.mtx.gz>` |
+| A Census copy's own address (`s3://cellxgene-census-public-us-west-2/cell-census/<build>/h5ads/<dataset id>.h5ad`, as the Census documentation gives it, or any HTTPS address of it) | That copy, at the build it names; the same dataset as `cellxgene:<dataset id>`, so sessions, annotations and what this browser keeps of it carry over | `cellxgene:census/<build>/<dataset id>` |
+| A GEO series (`GSE123456`) or sample (`GSM1234567`), its accession page, or a supplementary file link | The one dataset among its supplementary files: an `.h5ad`, a gzipped `.h5ad` (`.h5ad.gz`, read whole once: see *What to expect* below), a gzipped R object (`.rds.gz`, `.rda.gz`, `.RData.gz`) or another file Cellucid opens, or a MatrixMarket sample (`GSM…_matrix.mtx.gz` with its `_features`/`_genes` and `_barcodes` files), named by its matrix | `geo:GSE123456`, `geo:GSE123456/<file>` or `geo:GSE123456/<GSM…_matrix.mtx.gz>` |
 | A Zenodo record link, file link, DOI (`10.5281/zenodo.<id>`) or `zenodo:<record>` | The record's one file Cellucid opens (`.h5ad`, `.zip`, `.rds`, `.h5mu`, …) or the file the link names; a concept DOI opens the latest version | `zenodo:<record>[/<file>]` |
 | A Figshare item page (`figshare.com/articles/<type>/<name>/<id>[/<version>]`, also on an institution's `*.figshare.com` portal), a Figshare DOI (`10.6084/m9.figshare.<id>[.v<n>]`), any DOI that resolves to a Figshare item, or `figshare:<id>` | The item's one file Cellucid opens (or the file the link names, by name or by `?file=<file id>`); a link without a version opens the latest | `figshare:<id>[v<version>][/<file>]` |
 | A Google Drive file link (`drive.google.com/file/d/<id>/…`, `…/open?id=<id>`, `…/uc?id=<id>`) | That file, read through Google's Drive API; a private file after **Sign in to Google** ({doc}`16_private_drive_onedrive`); folder links are refused | `gdrive:<id>` |
 | A OneDrive or SharePoint file share link (`1drv.ms/…`, `onedrive.live.com/…`, `<tenant>-my.sharepoint.com/:u:/…`) | That file, after **Sign in with Microsoft** ({doc}`16_private_drive_onedrive`); folder links are refused | `onedrive:<drive>/<item>` once opened |
-| A Hugging Face dataset link (`huggingface.co/datasets/<user>/<repo>/…`) or `hf:<user>/<repo>[@<revision>][/<path>]` | A dataset catalog folder, or one file Cellucid opens; pinned to the commit the branch points at | `hf:<user>/<repo>[@<revision>][/<path>]` |
+| A Hugging Face dataset link (`huggingface.co/datasets/<user>/<repo>/…`) or `hf:<user>/<repo>[@<revision>][/<path>]` | A dataset catalog folder, or one file Cellucid opens; pinned to the commit that last wrote it on the branch | `hf:<user>/<repo>[@<revision>][/<path>]` |
 | A Dropbox file link | That file, read from Dropbox's content host (folder links need a Dropbox sign-in and are refused) | `dropbox:<share link>` (`https://www.dropbox.com/…`, without `dl=`) |
 | A GitHub repository path (`owner/repo/folder`, read from the default branch, or `owner/repo@branch/folder`), a `github.com/.../tree/...`, `.../blob/...` or `.../raw/...` link, or a `raw.githubusercontent.com` link (the **Raw** button's `refs/heads/<branch>` form included) | The dataset catalog in that folder ({doc}`11_custom_dataset_repository`), the Zarr store folder (`….zarr`) or the one file the path names ({doc}`15_host_on_github`); a file stored with Git LFS is read from GitHub's media host | `gh:owner/repo/folder`, `gh:owner/repo/path/atlas.zarr`, `gh:owner/repo/path/file.h5ad` |
 | A web address ending in `/`, or its `datasets.json` | The dataset catalog in that folder ({doc}`07_file_format_expectations`) | the address itself |
 | A web address of a Zarr store folder (`…/name.zarr/`, Zarr v2 or v3, with consolidated metadata as anndata writes it): a bucket, a lab server, GitHub raw or a Hugging Face `resolve` folder | That store, its chunks read as views need them | the address itself |
+| An object storage address, `s3://<bucket>/<key>` or `gs://<bucket>/<key>` | The same object at its HTTPS address (Amazon S3's `https://<bucket>.s3.amazonaws.com/<key>`, Google Cloud Storage's `https://storage.googleapis.com/<bucket>/<key>`); the bucket must allow other sites to read it (CORS) | the HTTPS address |
 | A web address of a file Cellucid opens (an `.h5ad`, a Zarr `.zip`, an `.rds`, …): a bucket, a lab server, a Hugging Face file link (`huggingface.co/datasets/<user>/<repo>/resolve/main/<file>`), or a Zenodo API file link (`zenodo.org/api/records/<id>/files/<file>/content`; Zenodo's ordinary download link cannot be read by other sites) | That file | the address itself |
 
 A link that holds several datasets (a catalog) opens on the dataset its
@@ -134,8 +147,10 @@ carries the link (`?data=…`), so it is also what you would share.
 "Opening reads" is how much of the file Cellucid fetched to show its first
 view, measured on 2026-10-22 (the R object and MatrixMarket rows on
 2026-10-24, the Google Drive and OneDrive rows on 2026-10-25); the rest is read only when a view needs it (showing a gene,
-switching an embedding). An R object or a MatrixMarket matrix is read whole,
-once, and kept in this browser: opened again, it reads nothing. The tag names the ecosystem whose tools write the file: **Python** for
+switching an embedding). An R object is read whole, once, and kept in this
+browser; a MatrixMarket sample's cells are drawn from its lists and tables,
+then its matrix is read once for the cells genes are read for: opened again,
+either reads nothing. The tag names the ecosystem whose tools write the file: **Python** for
 AnnData `.h5ad`, **R** for a Seurat object; a Zarr store, written by either,
 has none. Hosts change: if a link stops
 working, the [link checker](#open-from-link-checking) says which.
@@ -159,16 +174,19 @@ opens the first row.
 | Pancreas, harmonized across studies | Python | 121,916 | 915 MB | 14 MB | [Open](https://www.cellucid.com/?data=cellxgene:31f657dc-1875-4c4b-a5ca-ce63b3ef3a82) |
 
 A CELLxGENE file lists its genes by Ensembl id, with the symbols in
-`var['feature_name']`: Cellucid names the genes by those symbols and keeps
-each id searchable beside its symbol (see
-[Gene names](13_data_mapping.md)). Its matrix is stored cell by cell (CSR),
+`var['feature_name']`: the genes open named by their ids, and choosing
+`feature_name` under **Data mapping › Gene names** names them by their
+symbols (see [Gene names](13_data_mapping.md)). Its matrix is stored cell by cell (CSR),
 so the first gene reads every cell's entries; its notification says how much
 before it starts, and can be cancelled. For an atlas such as the Human Lung
 Cell Atlas
 ([`cellxgene:9f222629-9e39-47d0-b83f-e08d610c7479`](https://www.cellucid.com/?data=cellxgene:9f222629-9e39-47d0-b83f-e08d610c7479):
 2,282,447 cells, 4.0 billion stored values, 21.9 GB) that is several
 gigabytes of indices; a subsample of the cells reads a share of them (see
-{doc}`../n_benchmarking_performance/06_edge_cases_performance`).
+{doc}`../n_benchmarking_performance/06_edge_cases_performance`). What is
+downloaded is kept in this browser under the Census build, so opening the
+same link again downloads none of it, and opens more cells within the same
+first-gene time ({doc}`21_subsampled_loading`).
 
 ### Zenodo
 
@@ -343,29 +361,54 @@ catalog.
   shows at the version in that release. The browser remembers the release it
   read last and looks for the file there while it reads the current release
   list, so a link usually opens one round trip sooner; when a newer release
-  is out, the file is looked up again in it. A dataset published or updated after
+  is out, the file is looked up again in it. The version of what is kept of
+  it is the Census build it is read from, a folder that never changes, and
+  the release list is read at every opening. A dataset published or updated after
   the release cannot be opened from a link: download its `.h5ad` from
   CELLxGENE and open the file with **Open… › File…** instead. CELLxGENE data
   is CC BY 4.0; the Dataset box names the source and links to it.
 - **GEO.** The supplementary files of a series or a sample, read from NCBI's
   file host. A series' files are read from two listings fetched together: its
   supplementary folder and its `filelist.txt`, which names every file of the
-  series' `_RAW.tar` with its exact size. Each of those files is read from
-  its sample's own folder, so a sample opens without the archive and without
-  a request to learn its size. A dataset is one file Cellucid opens (an
+  series' `_RAW.tar`. Each of those files is read from its sample's own
+  folder, so a sample opens without the archive. Neither listing names a
+  file's content, so the files a dataset opens are probed together, in one
+  round trip, for their sizes and the dates that version them. A dataset is one file Cellucid opens (an
   `.h5ad`, a `.loom`, an R object, which GEO stores gzipped as `.rds.gz` and
   read once as it downloads) or a **MatrixMarket sample**: a matrix and the
   feature and barcode lists that share its prefix, such as
   `GSM5008737_RNA_3P-matrix.mtx.gz`, `GSM5008737_RNA_3P-features.tsv.gz` and
   `GSM5008737_RNA_3P-barcodes.tsv.gz` (`_genes.tsv.gz` in Cell Ranger 2's
-  naming). Lists under a shorter shared prefix serve every matrix below it
+  naming; `_gene`/`_cell` lists, and a matrix named by any last word, such
+  as `GSE158055_covid19_counts.mtx.gz`; a sci-RNA-seq3 upload's
+  `_gene_count.mtx.gz` or `.txt.gz` with its `_cell_annotate.csv.gz` and
+  `_gene_annotate.csv.gz` tables, as GSE119945's 2.06 million cells). Lists under a shorter shared prefix serve every matrix below it
   (`GSE1_barcodes.tsv.gz` for `GSE1_RNA_matrix.mtx.gz` and
   `GSE1_ADT_matrix.mtx.gz`), and tables of the sample's cells with the same
   prefix are read with it for the embedding. A series with several datasets
   names each one's link, so you can open one: a sample by its matrix,
   `geo:GSE164378/GSM5008742_HTO_5P-matrix.mtx.gz`. Most GEO count matrices
   have no embedding and are then refused with the lines that compute one
-  ({doc}`17_open_r_objects`).
+  ({doc}`17_open_r_objects`): told from the first lines of the sample's
+  tables, before its lists or matrix are read (GSE158055, 1.46M cells and an
+  8.2 GB matrix with a table of cell types only: about 2 s and under 1 MB).
+  An `.rds.gz` whose object is not a Seurat object or a
+  SingleCellExperiment (a data frame of counts) is refused from its first
+  bytes too. Two kinds of file are refused by name, before any byte is read,
+  each with the steps that make it open:
+  - **A matrix stored as text**, every gene of every cell written out
+    (GSE131907's `…_raw_UMI_matrix.txt.gz`). No part of it can be read
+    without reading all of it. Download it and read it in Python with
+    `adata = sc.read_text(path)` (`sc.read_csv` for a `.csv`; take
+    `adata.T` when its rows are genes), or in R with
+    `counts <- as.matrix(data.table::fread(path), rownames = 1)` and
+    `Seurat::CreateSeuratObject(counts)`. Compute an embedding, save it with
+    `cellucid.prepare(path, format="h5ad", data=adata)` or
+    `cellucid::cellucid_prepare(path, data = obj)`, and open the file it
+    writes.
+  - **An archive** (`.tar`, `.tar.gz`, `.zip`) other than a series'
+    `_RAW.tar`, whose files GEO keeps in each sample's own folder. Download
+    and unpack it, then open the folder it holds with **Open… › Folder…**.
 - **Zenodo.** The record's file API, which allows other sites to read files;
   the website's own download links do not. Zenodo limits anonymous requests
   per minute, so the record listing supplies each file's size and checksum
@@ -390,12 +433,50 @@ catalog.
   download address, which is read with plain range requests; when it expires,
   Graph is asked for a new one, once for all the reads waiting on it.
 - **Hugging Face.** The Hub's file addresses, which redirect to a CDN that
-  allows range reads. The link is pinned to one commit when it opens, so the
-  files cannot change under an open dataset.
+  allows range reads. Only the path the link names is asked of the Hub (with
+  the commit that last wrote it), never the repository's whole listing,
+  which for a large repository is megabytes (6.9 MB and 4.6 s for one,
+  measured; a few hundred bytes and one round trip now). The link is pinned
+  to that commit when it opens, so the files cannot change under an open
+  dataset.
+- **GitHub.** A single file is read at the commit that last wrote it on
+  its branch, which GitHub's API names at every opening (one request, before
+  the file's own; GitHub allows a browser without a sign-in 60 an hour, and
+  does not count one it answers unchanged). Its bytes at that commit never
+  change, and the commit, or a Git LFS object's hash, is its version. When
+  the API does not answer (the hourly limit is reached), the file is read at
+  its branch with no version, and nothing kept of it is used. A link that
+  names a commit (`owner/repo@<commit>/path`) asks the API nothing.
+- **Dropbox.** The share link's content host (`dl.dropboxusercontent.com`),
+  which serves range reads but states no version a page can read (no
+  `Last-Modified`, and its `ETag` is not exposed to other sites): nothing of
+  a Dropbox file is kept for a later visit, which reads what it needs again
+  (measured: a 185 MB file's revisit read its 1 MB opening and its genes
+  again). Within a tab, what was read stays in memory.
 - **GitHub and any web address.** The host itself. It must allow other sites
   to read its files (CORS). A single file is read in place when the host
   answers range requests; a host that only sends whole files has its file
   downloaded once into memory, with its progress shown, and then opened.
+- **Hosts that limit requests.** Zenodo answers 133 requests a minute from
+  one address, every range read counted; GitHub's API 60 an hour without a
+  sign-in; Hugging Face 500 API requests and 3,000 file resolutions per five
+  minutes. Where a host says how many requests it has left and when they
+  refill, Cellucid paces its requests by it, and waits for the refill
+  instead of failing: a long read of a large file from Zenodo goes on after
+  the minute resets. The opening and a gene's notification say **Waiting for
+  the host** and when the next requests go; nothing is wrong, and **Cancel**
+  stops it. A host may block a network well within what its headers allow
+  (Zenodo showed this machine an "unusual traffic" page after about 550
+  range reads in a few minutes; CELLxGENE's S3 after about a gigabyte in a
+  quarter of an hour): after such a block, Cellucid sends
+  that host at most half the requests of the minute that met it, remembers
+  that pace for the host in this browser (cleared with the hosts' speeds in
+  the Stored dialog), and starts every later visit at it, so it never sends
+  that burst again. A read the block meets part way (a graph's edges, genes
+  for all cells) waits it out instead of failing: it says that the host
+  stopped answering, asks again after a second, doubling up to a minute,
+  keeps what it read, and goes on at the slower pace once the host answers;
+  **Cancel** stops it.
 
 ## What to expect
 
@@ -408,9 +489,10 @@ catalog.
   made again shows as *Retrying…* with why. **Cancel** stops it where it is;
   the dataset on screen stays. How it ended (opened, and how long it took; or
   what failed) is kept in the notification center.
-- **Opening it again** in the same page (after **Disconnect**, or when a
-  session reopens its dataset) asks the provider nothing: what it said the
-  first time, and the file's first bytes, are kept until the page closes.
+- **Opening it again** (after **Disconnect**, or when a session reopens its
+  dataset) asks the provider and the host again, as the first opening did:
+  a link always opens the version its source holds now, and only what this
+  browser kept of that version is used.
 - **Opening** reads the file's structure, its cell metadata, its gene names
   and the default embedding, nothing else. On a typical connection this takes
   a few seconds for a small file and up to about half a minute for a large
@@ -420,6 +502,19 @@ catalog.
   does so for GEO's `.rds` files) leaves no part of it readable on its own.
   Cellucid notices, downloads the whole file once, and says so in the
   notification.
+- **A compressed copy** (`.h5ad.gz`, `.loom.gz`, `.h5.gz`, `.h5mu.gz`, as GEO
+  ships many `.h5ad` files) has no index a part could be found by, so it is
+  read whole once, from its start: decompressed as it arrives (on a worker of
+  its own, at the speed of the download; a dropped connection goes on from
+  where it stopped, never from the start), into this browser's storage, and
+  then read in parts from there like the file it copies. Its first view comes
+  once it has arrived (an `.h5ad` keeps its embedding after its matrix, so no
+  earlier picture is possible); opening it again later asks only its version
+  and reads nothing more. When the host also has the uncompressed file, that
+  one opens instead, read in parts. A copy picked from this computer
+  (**Open… › File…**) is decompressed into this browser's storage the same
+  way, once. `cellucid serve` and `cellucid_serve()` refuse a compressed copy
+  with how to decompress it: a served file is read in parts.
 - **The first gene** of an `.h5ad` whose matrix is stored by cell (CSR, the
   usual layout) needs the matrix's index read once, because one gene's values
   are spread over all of it. Over a typical internet connection that happens
@@ -432,10 +527,13 @@ catalog.
   embedding opens on a best guess ({doc}`13_data_mapping`). Add an embedding
   (for example `sc.tl.umap(adata)` in Scanpy), save the file, and open it
   again.
-- **A session** saved while linked data is open records the link, so loading
-  the session opens the same data again. A link that carries its own access
-  key (a Dropbox link) is then in the session file too: share such a session
-  only with people who may open the data.
+- **A session** saved while linked data is open records the link in its public
+  form, so loading the session opens the same data again. A key the link
+  carries to grant access (a Dropbox `rlkey`, a signature, a token) is never in
+  the session file ({ref}`link-access-keys`): with a session of such a link,
+  open the link itself first (it is still in the address bar of the tab it was
+  opened in), then load the session, which then applies to the dataset that is
+  open.
 
 ```{figure} ../../../_static/screenshots/data_loading/opening-failed.png
 :alt: The panel over the empty viewer after a linked file could not be opened: "The data could not be opened", one sentence saying why (the file was not found at its host, HTTP 404) and what to do, a folded Details, and the buttons Open without this link, focused, and Try again.
@@ -450,9 +548,10 @@ the empty viewer, the error under **Details**, with **Open without this link**
 ## How much has been read
 
 While linked data is open, the **Dataset** box says where it is read from
-(its format and host) and how much has been read so far, for example
-"5.5 MB read in 43 requests"; the line reads "Reading…" while bytes are
-arriving. **Details** in the same box lists the file, its size when the host
+(its format and host) and how much has been read so far, against the file's
+size when the host states it, for example "12 MB of 828 MB read in 90
+requests": only the parts the views need are read; the line reads
+"Reading…" while bytes are arriving. **Details** in the same box lists the file, its size when the host
 states it, and the rest of what the dataset holds. Each read is also written to
 the browser console as `[cellucid:transfer]`. A request that fails for a moment
 and is made again is said once, in a notification that closes when bytes
@@ -463,9 +562,10 @@ when the dataset closes. What is saved to this browser's storage is the gene
 index of a matrix stored cell by cell (most atlases), built from the open
 cells and kept so the same cells show genes at once next time
 ({doc}`21_subsampled_loading`). A file that cannot be read in parts (an R object, a MatrixMarket sample) and any file on a host that
-sends whole files are the exceptions: read whole once into this browser's
-storage and kept there for next time, until **Clear** under **Session › Open
-data** ({ref}`which-formats-are-read-in-parts`). Nothing is saved to your
+sends whole files are the exceptions: read once into this browser's
+storage (a MatrixMarket sample's matrix only for the cells genes are read
+for) and kept there for next time, until you remove it under **Session ›
+Open data › Stored › Manage…** ({ref}`stored-in-this-browser`). Nothing is saved to your
 Downloads folder unless you export a file.
 
 ```{figure} ../../../_static/screenshots/data_loading/dataset-box-details.png
@@ -490,10 +590,14 @@ with the kinds of link it opens.
 | Message | Cause | What to do |
 |---|---|---|
 | Cellucid does not recognise … | The text is not a link or id it knows | Paste one of the forms in the table above |
-| `<host>` did not let this site read … (CORS) … | The host does not let other sites read its files, or could not be reached | Use a host that allows it, or download the file and open it with **Open… › File…** |
+| `<host>` does not let other websites read its files, so this site cannot read … | The host answers, but without the headers (CORS) that let another website read what it sends | Download the file and open it with **Open… › File…**, or use a host that allows it. A 10x `.h5` says both at once: downloaded alone it would be refused too (it holds no embedding), so the message points to the `outs/` folder beside it (**Open… › Folder…**) or says how to make one |
+| `<host>` could not be reached … | The address is mistyped, this computer is offline, or a network in between blocks the host | Check the address and the connection |
+| `<host>` does not give … to this site: the file is private, or the link has expired | The host refused (HTTP 401 or 403) before it ever answered this site | Ask the owner for a public link |
+| `<host>` is refusing requests from this network for now … | A host that answered this site refuses it now (often after many requests from one network) | Try again later |
+| … was not found at `<host>` … | Nothing is published at that address (HTTP 404 or 410; the status is under **Details**) | Check the link, or ask its owner whether it moved |
+| Zenodo (zenodo.org) did not answer this site … / `<host>` stopped answering this site, which it answered before … | No answer a web page may read came: this computer's connection dropped, the host is failing, or it refuses requests from your network for a while. Zenodo, and Google for Drive downloads, answer a network that sent them many requests with an "unusual traffic" page that a web page cannot read. Cellucid asks each request once more, then leaves the file (or the store folder: every object of a Zarr folder counts as one) alone for a second, doubling up to a minute, instead of asking for every part of it. A read of a file or folder that already answered this read's requests waits it out instead (what was read is kept) | Try again later, or let a long read wait; from another network it may open at once |
 | … is not in the Census release … | The CELLxGENE dataset is newer than the Census copy | Download it from CELLxGENE and open the file |
 | A CELLxGENE collection holds several datasets … | You pasted a collection link | Open the collection, choose a dataset, paste its **Explore** link |
-| GEO … ships its data only gzip-compressed | A gzipped `.h5ad` or other range-read file cannot be read in place (a gzipped R object can: `.rds.gz` is read once as it downloads) | Download and decompress it, then open the decompressed file |
 | GEO … has `GSM…_matrix.mtx.gz`, but no `GSM…_barcodes.tsv.gz` for it … | The sample's feature or barcode list is missing from GEO, or under another name | Download the files from the GEO page, put the three side by side, and open the folder with **Open… › Folder…** |
 | GEO … has `GSM…_features.tsv.gz` and `GSM…_genes.tsv.gz` for … | Two feature lists share the matrix's prefix; which names its rows cannot be told from the names | Download the matrix, its barcodes and the list you mean into a folder of their own and open it with **Open… › Folder…** |
 | … is not a dataset Cellucid opens on its own | The link names a sample's feature or barcode list | Open the sample by its matrix (the message names the link) |
@@ -517,7 +621,7 @@ with the kinds of link it opens.
 | … holds no datasets.json, so it is not a dataset catalog | A folder link that points at a web page or the wrong folder | Link to the folder that holds `datasets.json`, to a Zarr store folder, or to one file |
 | … answers, but it is not a Cellucid server … | A server address (a port, or `localhost:8000/…` without `http://`) where a web host serves a folder, not `cellucid serve` | Type the address of the folder's `datasets.json`, or start the server with `cellucid serve` |
 | Invalid datasets.json: the catalog must contain exactly: datasets, default, schema (missing: schema) | A `datasets.json` without `"schema"` | Its publisher writes `"schema": 2`, `"default"` and `"datasets"` |
-| This .h5ad file uses something the browser cannot read: … filter … | A compression filter the browser has no decoder for (Blosc, Zstandard, LZ4, bitshuffle, bzip2, SZIP) | Save it again with gzip: `adata.write_h5ad(new_path, compression="gzip")` |
+| This .h5ad file uses something the browser cannot read: … filter … | A compression filter the browser has no decoder for (bzip2, SZIP, scale-offset, Blosc2) | Save it again with gzip: `adata.write_h5ad(new_path, compression="gzip")` |
 
 Each refusal can be seen on real published data; paste one of these into the
 **Link or server** bar:

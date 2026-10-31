@@ -59,10 +59,11 @@ def _validate_fingerprint(
     The order is the viewer's: identity and cell count first, then the data
     mapping -- every key it names must exist on ``adata`` -- and then the gene
     count of the axis that mapping reads. ``cellOrder`` is validated for shape
-    only. Its digest is taken over the normalized coordinates the viewer drew,
-    and this bridge applies a session to an AnnData whose row order the caller
-    controls, so re-deriving it would compare against coordinates the caller
-    never asked to be drawn; enforcing that identity is the viewer's job.
+    only. Its digest is the viewer's check, taken over the stored coordinates
+    of the cells it opens when it restores a session, and this bridge applies
+    a session to an AnnData whose rows and embeddings the caller controls (an
+    embedding computed again changes the digest, not the cells); enforcing
+    that identity is the viewer's job.
     """
     try:
         fp = _validate_bundle_fingerprint(fingerprint)
@@ -165,7 +166,10 @@ def _build_uns(
     if session is not None and not isinstance(session, dict):
         raise TypeError("adata.uns['cellucid']['session'] must be a dictionary if present")
     next_session: dict[str, Any] = {
-        "manifest": copy.deepcopy(bundle.manifest),
+        # Without ``source``: where the viewer opened the dataset (a link, a
+        # server address, a local file name) is not part of the object, and
+        # would travel with every file written from it.
+        "manifest": {key: copy.deepcopy(value) for key, value in bundle.manifest.items() if key != "source"},
         "dataset_fingerprint": fingerprint,
         "applied": {
             "expected_dataset_id": expected_dataset_id,
@@ -402,7 +406,8 @@ def apply_cellucid_session_to_anndata(
     include_deleted_user_defined_fields : bool
         Also add user-defined fields that were deleted in the session.
     store_uns : bool
-        Record the manifest, dataset fingerprint, and added columns in
+        Record the manifest (without ``source``, where the viewer opened the
+        dataset), dataset fingerprint, and added columns in
         ``adata.uns['cellucid']['session']``.
     return_summary : bool
         Also return an ``ApplySummary`` listing the added ``obs`` columns.

@@ -149,7 +149,8 @@ Related docs:
 ## Edge case: integrated GPU or low VRAM (context loss risk)
 
 ### What you see
-- “WebGL context lost. Reload required…”
+- “Graphics reset by the browser” (they are restored by themselves; Reload is
+  offered only if that fails, with the session saved first)
 - The plot area becomes blank after a heavy action.
 - The app repeatedly crashes on large datasets.
 

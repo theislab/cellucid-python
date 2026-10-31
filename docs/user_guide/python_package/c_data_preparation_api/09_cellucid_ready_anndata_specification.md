@@ -35,9 +35,9 @@ names itself.
 | `X` | The gene expression, cells × genes, **gene-major**: a `csc_matrix` when sparse, a dense array otherwise. `float32`; `float64` only for integer counts above 2^24, which `float32` cannot hold exactly (below). Every stored value finite; a sparse `X` has no stored zeros. Absent when the dataset has no expression. |
 | `obs` | One row per cell: in {ref}`priority order <priority-order>`, `obs['cellucid_original_position']` (`<u4`) holding each row's original position, or in the order given with `priority_seed=None`. The index (`_index`) holds unique cell names. Text columns whose values repeat or are missing are `categorical` (categories in code-point order, missing = code -1); other text columns are `string-array`; categoricals stay categoricals; numbers stay numbers in their own dtype (no infinities; NaN is missing); booleans stay booleans; integer and boolean columns with missing values are `nullable-integer` / `nullable-boolean`. |
 | `var` | One row per column of `X`. The index holds unique gene names (usually gene ids); a gene-symbol column, when present, is named by `uns['cellucid']['defaults']['geneIdColumn']`. |
-| `obsm/<key>` | Embeddings: dense `float32`, two-dimensional, one row per cell, every column of the input at its own coordinates (the viewer selects columns and normalizes). The latent space for outlier measurement is one of them. |
-| `obsm/<field>_<basis>` | A vector field, dense `float32`, one row per cell and exactly as many columns as the embedding `obsm['X_<basis>']` it is named for (scVelo's naming: `velocity_umap` over `X_umap`, `velocity_branches` over `X_branches`). The viewer reads it as the field `<field>` drawn over that embedding: the vector-field key rule below. |
-| `obsp/connectivities` | The neighbour graph, when present: `csr_matrix`, `float32`, cells × cells, exactly symmetric, finite non-negative weights, zero diagonal, no stored zeros. |
+| `obsm/<key>` | Embeddings: dense `float32`, two-dimensional, one row per cell, every column of the input at its own coordinates (the viewer selects columns and normalizes). The latent space for outlier measurement is one of them. A row holding `NaN` (or an infinity) is a cell the embedding does not place (one computed on some of the cells, a MuData modality that did not measure the cell): it is written as given; the viewer draws it in no view of that embedding and says how many such cells there are, naming the first; other embeddings, filters and analyses keep it. Every other value is finite and within the `float32` range, and at least one cell is placed. |
+| `obsm/<field>_<basis>` | A vector field, dense `float32`, one row per cell and exactly as many columns as the embedding `obsm['X_<basis>']` it is named for (scVelo's naming: `velocity_umap` over `X_umap`, `velocity_branches` over `X_branches`). The viewer reads it as the field `<field>` drawn over that embedding: the vector-field key rule below. A `NaN` row is a cell without a vector: drawn without an arrow. |
+| `obsp/connectivities` | The neighbour graph, when present: `csr_matrix`, `float32`, cells × cells, exactly symmetric, finite non-negative weights, zero diagonal, no stored zeros. The writers leave a given graph's diagonal out (a self-loop is no edge: Seurat's `RNA_snn` has 1 there) and refuse a directed one (`RNA_nn`, `distances`); from an object without `connectivities` they write the graph the viewer's default rule opens with: Seurat's `<assay>_snn` of the default assay, else the first other `*_snn`. A reader ignores a diagonal the same way. |
 | `varm` | Present; empty, except `varm['cellucid_prefix_counts']` beside a sparse `X` of a file in priority order ({ref}`priority order <priority-order>`). |
 | `varp`, `layers` | Present and empty. |
 | `uns['title']` | The dataset name, so tools that read a file's title (every CELLxGENE file carries one) show it too. |
@@ -59,8 +59,15 @@ normative: the web app (`parseVectorFieldKey`), the Python package
 (`cellucid.data_mapping.parse_vector_field_key`) and the R package apply
 it identically.
 
-1. **`X_` names an embedding.** An `obsm` key that starts with `X_` is never a
-   vector field.
+0. **One namespace at a time.** A MuData modality's arrays are named
+   `<modality>:<key>` (the viewer's MuData view, and §7), and each modality's
+   names are its own: the rules below apply to the part after the first `:`,
+   and the embedding a key names is in the same namespace. `rna:velocity_umap`
+   is the field `rna:velocity` over `rna:X_umap`, never over the dataset's
+   `X_umap`; `rna:X_umap` is an embedding. A key without `:` is the dataset's
+   own.
+1. **`X_` names an embedding.** An `obsm` key (its part after the namespace)
+   that starts with `X_` is never a vector field.
 2. **Split.** Any other key is split at one `_` into a non-empty `<field>` and
    a non-empty `<basis>`. A split qualifies when `X_<basis>` is a key of the
    same object's `obsm`. Matching is exact and case-sensitive.
@@ -79,6 +86,7 @@ it identically.
 | `velocity_branches`, `X_branches` | `velocity` | `X_branches` |
 | `velocity_pca`, `X_pca` | `velocity` | `X_pca` |
 | `velocity_umap_2d`, `X_umap` (no `X_umap_2d`) | none: an ordinary array | — |
+| `rna:velocity_umap`, `rna:X_umap`, `X_umap` | `rna:velocity` | `rna:X_umap` |
 
 **Column count.** A vector field is bound when the dataset opens only when it
 and its embedding are usable dense arrays with the **same number of columns**,
@@ -196,7 +204,7 @@ the viewer's own choice. The names are the web app's
 | `knn` | text (an `obsp` key) | The neighbour graph drawn. (Not written by `prepare()`; the viewer's own rule finds `obsp['connectivities']`.) | — |
 | `modality` | text (a modality: a `mod/<name>` of a Cellucid-ready MuData, §5) | The modality the viewer opens on; `geneIdColumn` then names a column of its `var`. Only a MuData has one. Absent: the first gene-expression modality (`rna`, `gex`, `gene expression`, `gene_expression`, `sct`, any case), else the first in `mod-order`. | `modality` |
 | `expression` | `'X'`, `'raw/X'` or `'layers/<name>'` | The matrix genes are read from. (Not written by `prepare()`, which stores only `X`.) | — |
-| `geneIdColumn` | text (a `var` column) | The column whose values name the genes. Absent: the `var` index, unless it holds database identifiers (at least 90% Ensembl-, FlyBase-, WormBase-style accessions or numbers) and a `var` column holds their symbols (by content; `feature_name`, `gene_symbols`, `symbol`, … first), which then names them, the identifiers staying searchable. | `var_gene_id_column` |
+| `geneIdColumn` | text (a `var` column) | The column whose values name the genes. Absent: the `var` index. | `var_gene_id_column` |
 | `latentKey` | text (an `obsm` key) | The latent space the outlier filter measures in (never a 2D/3D layout). | `latent_key` |
 | `vectorFieldDefault` | text (a field id, `<field>` of an `obsm['<field>_<basis>']` key: `velocity`) | The vector field the overlay opens on. | `vector_field_default` |
 | `obsKeys` | list of text | The obs columns the viewer lists, in this order. | `obs_keys` |
@@ -237,8 +245,11 @@ lies at its distance from the category's centre in the latent space, or closer
 3. its quantile is the number of the category's cells at that distance or
    closer divided by the cell count, both as `float32`.
 
-Only categories with at least `minPoints` cells are measured; every other cell
-(a missing value, a smaller category) is `NaN`.
+A cell whose latent row is not finite (`NaN` in any column: a cell the latent
+space does not place) is left out as a cell with a missing value is: it adds
+nothing to its category's centre or count. Only categories with at least
+`minPoints` such placed cells are measured; every other cell (a missing value,
+an unplaced cell, a smaller category) is `NaN`.
 
 | Key | Type | Meaning |
 |---|---|---|
@@ -258,8 +269,9 @@ the 54 MB of its 24-column latent space read whole for every computation).
 The web app uses them when the latent space in use is `latentKey`, its own
 fewest-cells rule is `minPoints`, the array has one value per cell, and the
 values fit the field's categories as the file holds them now: in every scored
-category of `n` cells each value is `r / n` for a whole `r` from 1 to `n`,
-exactly `r` cells have a rank of at most `r`, and every other cell is `NaN`.
+category, whose `n` cells with a value are its placed cells (at least
+`minPoints`), each value is `r / n` for a whole `r` from 1 to `n`, exactly `r`
+cells have a rank of at most `r`, and every other cell is `NaN`.
 Otherwise (another latent space, a file whose obs was changed after it was
 written) the web app computes them from the latent space, with the same bytes.
 Other AnnData tools ignore the mapping, as they ignore all of `uns['cellucid']`.
@@ -471,6 +483,14 @@ package writes no HDF5.
 
 An array shorter than its chunk size is one chunk of exactly its length; an
 empty array has chunks of 1.
+
+A store a server presents for data it holds (`serve_anndata`, `show_anndata`,
+`cellucid_serve`, `cellucid_view`) is not a file: it holds the same arrays,
+uncompressed, chunked alike except an expression matrix's `data` and `indices`,
+which it serves in chunks of 262,144 values (2^18): over loopback a request
+costs more than a chunk of 2^14 values moves, and a viewer reads an
+uncompressed chunk in part (a `Range`), so a gene or a subsample's first
+entries of one read no more than with smaller chunks.
 
 ### Codecs
 

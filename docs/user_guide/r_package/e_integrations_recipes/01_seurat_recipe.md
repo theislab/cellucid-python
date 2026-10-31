@@ -61,7 +61,20 @@ session saved on the `.rds` in the browser applies to the prepared store and to
 Seurat v5 split layers (`counts.1`, `data.ctrl`, after `split()`) are joined on
 a copy; your object is not changed. `scale.data` is not read: it is dense, holds
 only the variable genes, and is derived from `data`. Layers kept on disk by
-BPCells are read into memory block by block.
+BPCells stay on disk: `cellucid_prepare()` and `cellucid_view()` read them a
+block at a time (whole cells, or whole genes for a matrix stored by genes) and
+never hold the matrix, or one `dgCMatrix` of it, in memory. One pass counts each
+gene's values (a value that cannot be stored is refused here), then each value
+is placed at its gene's position and each gene sorted by cell. A pass places at
+most a quarter of the machine's memory of values (8 bytes a stored value, 12 for
+float64 counts) and reads only those genes' rows; a larger matrix takes one pass
+per quarter, twice when it is written (the values are written before the
+cells). There is no limit on the
+number of stored values: a million cells of 2.2 billion values were prepared
+from BPCells in about 7 minutes at a 7.3 GB peak on a 16 GB laptop.
+`cellucid_view()` lays the matrix out before the viewer opens (400 million
+values: 18 s), into scratch files of 8 bytes a stored value in R's temporary
+folder (removed when the viewer stops).
 
 ## Choices and variants
 

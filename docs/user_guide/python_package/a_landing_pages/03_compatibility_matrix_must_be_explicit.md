@@ -79,8 +79,8 @@ Recipes: {doc}`../d_viewing_apis/12_remote_servers_ssh_tunneling_and_cloud` and
   `https://www.cellucid.com` inside a notebook output; the output says the app
   did not load. Host a copy and pass `web_source_url=`.
 - **Port collisions** (browser-tab viewers only): `AnnDataViewer` without
-  `port=` takes 8765 or the next free port and prints a note (Google sign-in
-  works only on 8765); an explicit busy port fails; `port=0` asks the
+  `port=` takes 8765 or the next free port and prints a note (Google Drive
+  files open only on 8765); an explicit busy port fails; `port=0` asks the
   operating system for one.
 - **Showing one widget twice**: the newest output takes the viewer over; the
   older one says it was opened elsewhere.

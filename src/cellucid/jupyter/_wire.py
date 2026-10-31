@@ -157,7 +157,7 @@ _INBOUND_EVENT_FIELDS: dict[str, frozenset[str]] = {
     "session_bundle": frozenset({"type", "requestId", "status", "bytes", "path"}),
     "command_error": frozenset({"type", "command", "reason"}),
     "data_mapping": frozenset({"type", "requestId", "origin", "mapping"}),
-    "color_by": frozenset({"type", "field", "source", "label"}),
+    "color_by": frozenset({"type", "field", "source", "symbol", "cells_read"}),
     "result_removed": frozenset({"type", "epoch", "revision", "kind", "id"}),
     "results": frozenset({"type", "epoch", "dataset", "revision", "nObs", "items"}),
 }
@@ -727,8 +727,10 @@ def _require_result_meta(kind: str, meta: object) -> dict[str, Any]:
             raise TypeError("gene set result description must be text")
         _require_text_list(meta["genes"], label="gene set result genes", nonempty=False, whitespace=False)
         symbols = meta["symbols"]
-        if type(symbols) is not list or len(symbols) != len(meta["genes"]) or any(type(symbol) is not str for symbol in symbols):
-            raise ValueError("gene set result symbols must name each of its genes, in order")
+        if symbols is not None and (
+            type(symbols) is not list or len(symbols) != len(meta["genes"]) or any(type(symbol) is not str for symbol in symbols)
+        ):
+            raise ValueError("gene set result symbols must name each of its genes, in order, or be null")
     elif kind == "subset":
         digest = meta["digest"]
         if type(digest) is not str or len(digest) != 16 or any(c not in "0123456789abcdef" for c in digest):
@@ -916,14 +918,22 @@ def _require_inbound_jupyter_event(message: object) -> tuple[str, dict[str, Any]
             _require_exact_message_text(item["id"], label=f"results items[{index}] id", allow_whitespace=True)
             _require_positive_revision(item["revision"], label=f"results items[{index}] revision")
     elif event_type == "color_by":
-        field, source, shown = message["field"], message["source"], message["label"]
-        if (field is None) != (source is None) or (field is None) != (shown is None):
-            raise ValueError("color_by names a field, its source and its label, or none")
+        field, source, symbol = message["field"], message["source"], message["symbol"]
+        if (field is None) != (source is None):
+            raise ValueError("color_by names a field and its source, or neither")
         if field is not None:
             _require_exact_message_text(field, label="color_by field", allow_whitespace=True)
-            _require_exact_message_text(shown, label="color_by label", allow_whitespace=True)
             if source not in {"obs", "var"}:
                 raise ValueError("color_by source must be 'obs' or 'var'")
+        if symbol is not None:
+            if source != "var":
+                raise ValueError("color_by names a symbol only for a gene")
+            _require_exact_message_text(symbol, label="color_by symbol", allow_whitespace=True)
+        # A gene read for a sample of the open cells: the first ``cells_read`` of them.
+        if message["cells_read"] is not None:
+            if source != "var":
+                raise ValueError("color_by names the cells read only for a gene")
+            _require_nonnegative_event_integer(message["cells_read"], label="color_by cells_read")
     elif event_type == "ready":
         _require_nonnegative_event_integer(message["n_cells"], label="ready n_cells")
         _require_nonnegative_event_integer(message["n_obs"], label="ready n_obs")

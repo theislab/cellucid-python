@@ -130,8 +130,9 @@ See {doc}`09_viewer_state_and_wait_for_event`.
 
 `show_anndata(...)` does not open your data in Python while the viewer runs:
 the viewer reads the file or folder itself, and the chunks of an in-memory
-AnnData are made from its arrays when the viewer asks for them (a MuData is
-written once to a temporary `.h5mu`). The `adata` your callbacks touch is
+AnnData or MuData are made from a snapshot of its arrays when the viewer asks
+for them (its expression matrices laid out gene-major in the background, the
+arrays they are read from read-only until then). The `adata` your callbacks touch is
 therefore only yours — but callbacks run on the viewer channel's thread, not
 your notebook's, and
 if you opened that object backed (`anndata.read_h5ad(..., backed="r")`),

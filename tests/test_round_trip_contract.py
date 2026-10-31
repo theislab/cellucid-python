@@ -151,7 +151,7 @@ class FakeViewer:
         elif message["type"] == "setGeneSet":
             self.viewer._handle_frontend_message(
                 _result("geneSet", "gene_set_1", {"name": message["name"], "description": message["description"],
-                                                  "genes": message["genes"], "symbols": message["genes"],
+                                                  "genes": message["genes"], "symbols": None,
                                                   "origin": "notebook"},
                         cells=[], request_id=message["requestId"], revision=51)
             )
@@ -371,9 +371,17 @@ def test_selection_subset_and_gene_sets(connected) -> None:
     assert list(viewer.subset(adata, "visible").obs_names) == ["cell-0", "cell-1", "cell-2"]
     with pytest.raises(ValueError, match="names 0 highlight groups.*highlight_1 \\(Lasso selection\\)"):
         viewer.subset(adata, "nothing")
-    # By identifier (the var index, Ensembl in a CELLxGENE dataset), or by the symbols shown.
+    # By identifier (the var index), or by the names shown: here those of a
+    # var column (feature_name) the viewer's data mapping names the genes by.
     assert viewer.gene_sets() == {"T": ["ENSG00000198851"]}
     assert viewer.gene_sets(symbols=True) == {"T": ["CD3E"]}
+    # Named by the var index, the viewer sends no symbols: the names shown
+    # are the identifiers.
+    viewer._handle_frontend_message(_result("geneSet", "markers:B", {
+        "name": "B", "description": "Marker genes", "genes": ["ENSG00000156738"], "symbols": None, "origin": "markers",
+    }, cells=[], revision=40))
+    assert viewer.gene_sets()["B"] == ["ENSG00000156738"]
+    assert viewer.gene_sets(symbols=True)["B"] == ["ENSG00000156738"]
 
 
 def _pushed(viewer: Any, result_id: str) -> Any:

@@ -24,6 +24,8 @@ from .._console import console_print
 from .._contracts import _require_display_text
 from .._non_finite import describe_non_finite
 from .._plural import plural
+from .._scratch import Scratch
+from .._source_arrays import is_lazy_sparse, sparse_source
 from ..data_mapping import (
     EMBEDDING_KEY_PREFIX,
     column_gene_names,
@@ -31,15 +33,8 @@ from ..data_mapping import (
     parse_vector_field_key,
     unique_names_note,
 )
+from ._gene_major import FLOAT32_MAX, GeneMajor, GeneMajorLayout, stored_dtype
 from ._store import ZARR_METADATA_NAMES
-
-#: The largest integer float32 holds exactly. Integer counts above it are
-#: stored as float64, so every count reads back as it was given.
-FLOAT32_EXACT_INTEGER_LIMIT = 2**24
-
-_FLOAT32_MAX = float(np.finfo(np.float32).max)
-#: Values tested at a time for being whole numbers (:func:`_exact_dtype`).
-_INTEGRAL_BLOCK = 1 << 20
 
 # Characters that cannot appear in a file name on every platform, plus the
 # path separators and control characters.
@@ -152,7 +147,7 @@ def _require_finite_float32(values: np.ndarray, label: str, *, positions: bool =
         within = True
     else:
         low, high = float(values.min()), float(values.max())
-        within = bool(np.isfinite(low) and np.isfinite(high) and max(-low, high) <= _FLOAT32_MAX)
+        within = bool(np.isfinite(low) and np.isfinite(high) and max(-low, high) <= FLOAT32_MAX)
     if not within:
         raise ValueError(
             f"{label} must hold finite numbers within the float32 range. "
@@ -160,10 +155,55 @@ def _require_finite_float32(values: np.ndarray, label: str, *, positions: bool =
         )
 
 
+#: Rows of a per-cell array checked at a time when some are not placed, so
+#: the check's temporaries stay a slab, never a copy of the whole array.
+_PLACED_CHECK_ROWS = 1 << 20
+
+
+def _require_placed_float32(values: np.ndarray, label: str) -> None:
+    """Each cell (row) placed -- finite in every column and within the float32
+    range -- or not placed: a row holding NaN or an infinity is a cell the
+    array has no value for (an embedding computed on some of the cells, a
+    modality that did not measure the cell), stored as given and not drawn
+    by the viewer in that embedding. At least one cell is placed.
+
+    The happy path is :func:`_require_finite_float32`'s: decided from the
+    smallest and largest value alone. Otherwise the rows are checked a slab
+    at a time.
+    """
+    if values.size == 0 or values.dtype.kind == "b":
+        return
+    low, high = float(values.min()), float(values.max())
+    if np.isfinite(low) and np.isfinite(high) and max(-low, high) <= FLOAT32_MAX:
+        return
+    placed = 0
+    beyond = False
+    for start in range(0, values.shape[0], _PLACED_CHECK_ROWS):
+        rows = values[start : start + _PLACED_CHECK_ROWS]
+        finite = np.isfinite(rows).all(axis=1)
+        placed += int(finite.sum())
+        kept = rows[finite]
+        beyond = beyond or (kept.size > 0 and max(-float(kept.min()), float(kept.max())) > FLOAT32_MAX)
+    if placed == 0:
+        raise ValueError(
+            f"{label}: every cell's values are missing (NaN or infinite). A cell whose row "
+            "holds NaN is a cell the array has no value for; at least one cell needs finite values."
+        )
+    if beyond:
+        # Counted over the placed cells only: their values are the defect.
+        only_placed = np.where(np.isfinite(values).all(axis=1)[:, None], values, 0)
+        raise ValueError(
+            f"{label} must hold numbers within the float32 range. "
+            + describe_non_finite(only_placed, label)
+        )
+
+
 def cell_matrix(values: object, label: str) -> np.ndarray:
     """One per-cell array of real numbers as float32, two-dimensional.
 
     A plain ``(n_cells,)`` vector is one column. Sparse input is densified.
+    A row holding NaN or an infinity is a cell the array does not place
+    (:func:`_require_placed_float32`); it is kept as given.
     """
     if values is None:
         raise ValueError(f"{label} has no values.")
@@ -175,8 +215,9 @@ def cell_matrix(values: object, label: str) -> np.ndarray:
         array = array.reshape(-1, 1)
     if array.ndim != 2:
         raise ValueError(f"{label} must be a 2-D array or a vector, got shape {array.shape}.")
-    _require_finite_float32(array, label)
-    return np.ascontiguousarray(array, dtype=np.float32)
+    _require_placed_float32(array, label)
+    with np.errstate(over="ignore", invalid="ignore"):
+        return np.ascontiguousarray(array, dtype=np.float32)
 
 
 # =============================================================================
@@ -395,6 +436,44 @@ def _frame_column(series: pd.Series, label: str) -> Any:
     )
 
 
+def _has_encoding(series: pd.Series) -> bool:
+    """Whether :func:`_frame_column` stores this column (an AnnData encoding
+    Cellucid writes), decided from its type alone (and the values of an object
+    column: text only)."""
+    dtype = series.dtype
+    if isinstance(dtype, pd.CategoricalDtype):
+        kind = dtype.categories.dtype.kind
+        return all(isinstance(value, str) for value in dtype.categories) if kind == "O" else kind in "iufb"
+    if isinstance(
+        dtype,
+        pd.BooleanDtype | pd.core.arrays.integer.IntegerDtype | pd.core.arrays.floating.FloatingDtype | pd.StringDtype,
+    ):
+        return True
+    if isinstance(dtype, np.dtype) and dtype.kind in "biuf":
+        return True
+    if isinstance(dtype, np.dtype) and dtype.kind == "O":
+        return pd.api.types.infer_dtype(series, skipna=True) in ("string", "empty")
+    return False
+
+
+def storable_columns(frame: Any, what: str) -> tuple[Any, str | None]:
+    """An object's data frame with the columns Cellucid stores, and a note
+    naming every other one (a date, a time span, text mixed with numbers): a
+    column of an object given as ``data=`` is left out with a note, as
+    cellucid-r's ``.storable_columns()`` leaves it out; one given as ``obs=``
+    or ``var=`` is refused, saying how to convert it (:func:`_frame_column`)."""
+    if not isinstance(frame, pd.DataFrame):
+        return frame, None
+    skipped = [column for column in frame.columns if not _has_encoding(frame[column])]
+    if not skipped:
+        return frame, None
+    note = (
+        f"{what}: not stored, no AnnData encoding Cellucid writes: {[str(column) for column in skipped]} "
+        "(convert them to text or numbers to keep them)."
+    )
+    return frame.drop(columns=skipped), note
+
+
 def _frame_columns(frame: pd.DataFrame, what: str) -> dict[str, Any]:
     return {
         str(column): _frame_column(frame[column], f"{what} column {column!r}")
@@ -443,31 +522,11 @@ def resolve_obs(obs: object, n_cells: int) -> tuple[np.ndarray, dict[str, Any]]:
 # =============================================================================
 
 
-def _exact_dtype(values: np.ndarray) -> type[np.floating[Any]]:
-    """float32, unless the values are integer counts float32 cannot hold exactly."""
-    if values.size == 0:
-        return np.float32
-    if values.dtype.kind in {"i", "u"}:
-        integral = True
-    elif values.dtype.kind == "f" and values.dtype.itemsize > 4:
-        # In blocks, so the test's temporaries stay small beside the values.
-        flat = values.reshape(-1)
-        integral = all(
-            bool(np.all(np.floor(block) == block))
-            for block in (flat[start : start + _INTEGRAL_BLOCK] for start in range(0, flat.size, _INTEGRAL_BLOCK))
-        )
-    else:
-        return np.float32
-    if integral and max(-float(values.min()), float(values.max())) > FLOAT32_EXACT_INTEGER_LIMIT:
-        return np.float64
-    return np.float32
-
-
-def expression_dtype(values: np.ndarray) -> type[np.floating[Any]]:
+def expression_dtype(values: np.ndarray) -> np.dtype:
     """The type an expression matrix's values are stored in: float32, or
     float64 for integer counts above 2^24 (what ``prepare()`` writes, and what
     a server presents for an object; :func:`stored_expression`)."""
-    return _exact_dtype(values)
+    return stored_dtype(values)
 
 
 def require_expression_values(values: np.ndarray, label: str) -> None:
@@ -476,135 +535,45 @@ def require_expression_values(values: np.ndarray, label: str) -> None:
     _require_finite_float32(values, label, positions=False)
 
 
-def _canonical_in_place(matrix: Any) -> None:
-    """Sorted, unique indices and no stored zero, a duplicate coordinate summed
-    in stored order (scipy's own sort orders a coordinate's values by value, and
-    a sum of three or more can then differ in its last bit from the one R's
-    Matrix gives and the browser takes: a stable sort keeps stored order)."""
-    if not matrix.has_sorted_indices and matrix.nnz > 0:
-        lengths = np.diff(matrix.indptr)
-        lines = np.repeat(np.arange(len(lengths), dtype=np.int64), lengths)
-        order = np.lexsort((matrix.indices, lines))
-        matrix.indices = matrix.indices[order]
-        matrix.data = matrix.data[order]
-        matrix.has_sorted_indices = True
-    matrix.sum_duplicates()
-    matrix.eliminate_zeros()
-    matrix.sort_indices()
-
-
-def _in_type(matrix: Any, dtype: Any) -> Any:
-    """``matrix``'s values in ``dtype``; a value nearer zero than the type holds becomes no value."""
-    if matrix.data.dtype == dtype:
-        return matrix
-    stored = matrix.data.astype(dtype)
-    typed = type(matrix)((stored, matrix.indices, matrix.indptr), shape=matrix.shape)
-    if not np.all(stored):
-        typed = type(matrix)((stored, matrix.indices.copy(), matrix.indptr.copy()), shape=matrix.shape)
-        typed.eliminate_zeros()
-    return typed
-
-
-def canonical_block(block: Any, dtype: Any) -> Any:
-    """Rows (CSR) or genes (CSC) of an expression matrix, a copy, as ``prepare()``
-    stores them (:func:`canonical_csc` then :func:`stored_expression`): duplicate
-    coordinates summed, stored zeros dropped, indices sorted, values in ``dtype``."""
-    matrix = block.copy()
-    _canonical_in_place(matrix)
-    return _in_type(matrix, dtype)
-
-
-def canonical_csc(value: Any) -> sparse.csc_matrix:
-    """``value`` as a CSC matrix with sorted, unique indices and no stored zero.
-
-    The caller's matrix is never changed. ``csc_matrix()`` of a CSC input
-    shares its ``data``/``indices``/``indptr``, and the canonicalising steps
-    work in place on those arrays, so a CSC input that needs any of them is
-    copied first; one that is already canonical is used as it is (no copy),
-    and any other format is converted into new arrays.
-    """
-    matrix = sparse.csc_matrix(value)
-    shared = sparse.issparse(value) and value.format == "csc"
-    if shared and (not matrix.has_canonical_format or not np.all(matrix.data)):
-        matrix = matrix.copy()
-    _canonical_in_place(matrix)
-    return matrix
-
-
 def _is_backed_sparse(value: object) -> bool:
     """An AnnData opened with ``backed="r"``: its ``X`` is anndata's on-disk sparse dataset."""
     return type(value).__module__.startswith("anndata") and getattr(value, "format", None) in ("csr", "csc")
 
 
-#: Rows read from a backed CSR matrix at a time while it is turned gene-major
-#: (:func:`_backed_csc`): a scheduling choice that keeps each block small
-#: beside the gene-major result, not a limit on the matrix.
-_BACKED_ROWS_PER_BLOCK = 1 << 16
+def _is_lazy(value: object) -> bool:
+    """A dask array (anndata's lazily read ``X``): a dense one is computed
+    where it is stored, a sparse one read block by block (:func:`resolve_expression`)."""
+    return hasattr(value, "compute") and hasattr(value, "dask") and not sparse.issparse(value)
 
 
-def _backed_csc(dataset: Any) -> sparse.csc_matrix:
-    """A backed AnnData's ``X`` as an in-memory CSC matrix, the file read twice by row blocks.
+def resolve_expression(gene_expression: object, n_cells: int) -> Any:
+    """X, cells by genes, checked: a sparse matrix as given (scipy, any format,
+    a backed AnnData's on-disk matrix, or a dask array of sparse blocks), or a
+    dense array.
 
-    A CSR matrix on disk is turned gene-major without ever being held whole
-    in memory: one pass counts each gene's values, the next places each block's
-    values at their genes' next free positions. Memory holds the CSC result
-    and one block, where reading the CSR matrix first would hold both whole.
-    """
-    if dataset.format == "csc":
-        return sparse.csc_matrix(dataset.to_memory())
-    n_rows, n_columns = (int(extent) for extent in dataset.shape)
-    blocks = [(start, min(n_rows, start + _BACKED_ROWS_PER_BLOCK)) for start in range(0, n_rows, _BACKED_ROWS_PER_BLOCK)]
-    counts = np.zeros(n_columns, dtype=np.int64)
-    dtype: np.dtype[Any] | None = None
-    for start, stop in blocks:
-        block = sparse.csr_matrix(dataset[start:stop])
-        counts += np.bincount(block.indices, minlength=n_columns)
-        dtype = block.data.dtype
-    indptr = np.zeros(n_columns + 1, dtype=np.int64)
-    np.cumsum(counts, out=indptr[1:])
-    nnz = int(indptr[-1])
-    index_dtype = np.int64 if max(n_rows, nnz) > np.iinfo(np.int32).max else np.int32
-    data = np.empty(nnz, dtype=dtype if dtype is not None else np.float32)
-    indices = np.empty(nnz, dtype=index_dtype)
-    following = indptr[:-1].copy()
-    for start, stop in blocks:
-        block = sparse.csr_matrix(dataset[start:stop])
-        block.sort_indices()
-        rows = np.repeat(np.arange(start, stop, dtype=index_dtype), np.diff(block.indptr))
-        order = np.argsort(block.indices, kind="stable")
-        columns = block.indices[order]
-        per_column = np.bincount(block.indices, minlength=n_columns)
-        first = np.cumsum(per_column) - per_column
-        positions = following[columns] + (np.arange(columns.size) - first[columns])
-        data[positions] = block.data[order]
-        indices[positions] = rows[order]
-        following += per_column
-    return sparse.csc_matrix((data, indices, indptr), shape=(n_rows, n_columns))
-
-
-def resolve_expression(gene_expression: object, n_cells: int) -> sparse.csc_matrix | np.ndarray:
-    """X, cells by genes, gene-major: CSC when sparse, dense otherwise.
-
-    The values keep the type they were given; :func:`stored_expression` gives
-    them the type they are stored in once ``gene_identifiers`` has chosen the
-    genes. A stored zero is no value and is dropped.
+    A dask array of sparse blocks (anndata's lazily read X) stays lazy: the
+    layout decodes it block by block into a scratch folder, never whole in
+    memory (:func:`cellucid._source_arrays.sparse_source`). A dense dask array
+    is computed (a dense X is written from memory). A sparse matrix's values
+    are checked as they are laid out (:func:`stored_expression`): real, finite
+    within the float32 range; a dense one's here.
     """
     label = "gene_expression"
-    if _is_backed_sparse(gene_expression):
-        gene_expression = _backed_csc(gene_expression)
-    if sparse.issparse(gene_expression):
-        matrix = canonical_csc(gene_expression)
-        _require_real(matrix.data, label)
-        _require_finite_float32(matrix.data, label, positions=False)
+    if gene_expression is None:
+        raise ValueError(f"{label} has no values.")
+    if _is_lazy(gene_expression) and not is_lazy_sparse(gene_expression):
+        gene_expression = cast(Any, gene_expression).compute()
+    if sparse.issparse(gene_expression) or _is_backed_sparse(gene_expression) or is_lazy_sparse(gene_expression):
+        matrix: Any = gene_expression
+        _require_real(np.empty(0, dtype=matrix.dtype), label)
+        if len(matrix.shape) != 2:
+            raise ValueError(f"{label} must be a 2-D cells x genes matrix, got shape {matrix.shape}.")
     else:
-        if gene_expression is None:
-            raise ValueError(f"{label} has no values.")
-        array = np.asarray(gene_expression)
-        _require_real(array, label)
-        if array.ndim != 2:
-            raise ValueError(f"{label} must be a 2-D cells x genes matrix, got shape {array.shape}.")
-        _require_finite_float32(array, label)
-        matrix = array
+        matrix = np.asarray(gene_expression)
+        _require_real(matrix, label)
+        if matrix.ndim != 2:
+            raise ValueError(f"{label} must be a 2-D cells x genes matrix, got shape {matrix.shape}.")
+        _require_finite_float32(matrix, label)
     if matrix.shape[0] != n_cells:
         raise ValueError(
             f"{label} has {matrix.shape[0]:,} {_plural(matrix.shape[0], 'row', 'rows')}, but the "
@@ -614,35 +583,57 @@ def resolve_expression(gene_expression: object, n_cells: int) -> sparse.csc_matr
     return matrix
 
 
-def stored_expression(expression: sparse.csc_matrix | np.ndarray) -> sparse.csc_matrix | np.ndarray:
-    """X in the type it is stored in: float32, or float64 for integer counts above 2^24.
+def stored_expression(
+    expression: Any,
+    *,
+    genes: np.ndarray | None,
+    order: np.ndarray | None,
+    new_row: np.ndarray | None,
+    levels: np.ndarray | None,
+    label: str = "gene_expression",
+) -> GeneMajor | np.ndarray:
+    """X as it is stored, from :func:`resolve_expression`'s matrix.
 
-    Decided on the genes that are stored -- after ``gene_identifiers`` has
-    chosen them -- so a large count in a gene left out does not widen the
-    genes kept. Every count of the stored genes reads back as it was given.
+    ``genes`` are the columns stored (:func:`resolve_genes`; None: every one),
+    ``order``/``new_row`` the file's row order (``CellPriority.rows_moved``;
+    None: rows as given), ``levels`` the prefix levels counted (None: none).
+    A sparse matrix is laid out gene-major by the one layout pass
+    (:class:`._gene_major.GeneMajorLayout`): canonical, its values float32, or
+    float64 for integer counts above 2^24 -- decided on the genes stored, so a
+    large count in a gene left out does not widen the genes kept -- with its
+    prefix counts. A dense one keeps its layout, in that type. A compressed
+    matrix read from a file is decoded once into a scratch folder, removed
+    when the layout is done.
     """
-    values = np.asarray(expression.data if sparse.issparse(expression) else expression)
-    dtype = _exact_dtype(values)
-    if values.dtype == dtype:
-        return expression
-    if isinstance(expression, sparse.csc_matrix):
-        # Only the values change type: the new matrix shares the index arrays
-        # (scipy's astype() would copy them too), which may be the caller's
-        # own, unless a value nearer zero than the smallest float32 became
-        # zero, which is no value and is dropped, on index arrays of its own.
-        result: sparse.csc_matrix = _in_type(expression, dtype)
-        return result
-    return expression.astype(dtype)
+    if isinstance(expression, np.ndarray):
+        selected = expression if genes is None else expression[:, genes]
+        dtype = stored_dtype(selected)
+        placed = selected if order is None else selected[order]
+        return placed.astype(dtype, copy=False)
+    scratch = Scratch()
+    try:
+        layout = GeneMajorLayout(
+            sparse_source(expression, scratch),
+            order=order,
+            new_row=new_row,
+            label=label,
+            genes=genes,
+            levels=levels,
+        )
+        return layout.run()
+    finally:
+        scratch.close()
 
 
 def resolve_genes(
-    expression: sparse.csc_matrix | np.ndarray,
+    n_genes: int,
     var: object,
     var_gene_id_column: str | None,
     gene_identifiers: Sequence[str] | None,
-) -> tuple[sparse.csc_matrix | np.ndarray, np.ndarray, dict[str, Any]]:
-    """The genes: X narrowed to ``gene_identifiers``, and the var index and columns."""
-    n_genes = int(expression.shape[1])
+) -> tuple[np.ndarray | None, np.ndarray, dict[str, Any]]:
+    """The genes of a matrix of ``n_genes`` columns: the columns stored
+    (``gene_identifiers``' positions, in their order; None for every one),
+    and the var index and columns."""
     if var is None:
         frame = pd.DataFrame(index=pd.RangeIndex(n_genes))
     else:
@@ -692,9 +683,6 @@ def resolve_genes(
                 "(var_gene_id_column, or the var index), after repeated names were made unique."
             )
         positions = np.asarray([position[name] for name in wanted], dtype=np.int64)
-        expression = expression[:, positions]
-        if sparse.issparse(expression):
-            expression = sparse.csc_matrix(expression)
         frame = frame.iloc[positions]
 
     if var_gene_id_column is not None:
@@ -710,7 +698,7 @@ def resolve_genes(
         if note is not None:
             console_print(f"Gene names from var column {var_gene_id_column!r}: {note}")
     index = np.asarray(frame.index.tolist(), dtype=object)
-    return expression, index, _frame_columns(frame, "var")
+    return (None if gene_identifiers is None else positions), index, _frame_columns(frame, "var")
 
 
 # =============================================================================
@@ -721,8 +709,13 @@ def resolve_genes(
 def resolve_connectivities(connectivities: object, n_cells: int) -> sparse.csr_matrix:
     """``obsp['connectivities']``: a symmetric CSR float32 cells x cells matrix.
 
-    Weights are finite and non-negative, the diagonal is zero, and the matrix
-    is exactly symmetric; a stored zero is not an edge and is dropped.
+    Weights are finite and non-negative, and the matrix is exactly symmetric;
+    a stored zero is not an edge and is dropped, and so is the diagonal: a
+    self-loop is no edge anyone can draw (Seurat's ``FindNeighbors`` counts
+    each cell among its own neighbours, so its ``<assay>_snn`` has 1 on the
+    diagonal). The web app and cellucid-r apply the same rule. A directed
+    graph (Seurat's ``<assay>_nn``, Scanpy's ``distances``) is refused: the
+    viewer draws an undirected neighbour graph.
     """
     label = "connectivities"
     if sparse.issparse(connectivities):
@@ -747,11 +740,14 @@ def resolve_connectivities(connectivities: object, n_cells: int) -> sparse.csr_m
         )
     if (graph.data < 0).any():
         raise ValueError("Connectivity weights must all be non-negative.")
+    graph.setdiag(0)
     graph.eliminate_zeros()
-    if graph.diagonal().any():
-        raise ValueError("Connectivity diagonal values must all be exactly zero.")
     if (graph != graph.T).nnz:
-        raise ValueError("Connectivity matrix must be exactly symmetric.")
+        raise ValueError(
+            "Connectivity matrix must be exactly symmetric: a directed neighbour graph (Seurat's "
+            "'<assay>_nn', Scanpy's 'distances') is not one the viewer draws; pass a symmetric one "
+            "(obsp['connectivities'], or Seurat's '<assay>_snn')."
+        )
     _require_finite_float32(graph.data, label, positions=False)
     graph = graph.astype(np.float32)
     graph.sort_indices()

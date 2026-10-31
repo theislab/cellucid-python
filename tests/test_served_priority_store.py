@@ -38,8 +38,14 @@ from _mapped_files import mapped_files
 from scipy import sparse
 from zarr.core.buffer import default_buffer_prototype
 
+from cellucid import _served_store
 from cellucid._anndata_files import classify_anndata_path
-from cellucid._served_store import SERVED_PRIORITY_SEED, PriorityStore, file_order
+from cellucid._served_store import (
+    SERVED_ENTRY_CHUNK_ELEMENTS,
+    SERVED_PRIORITY_SEED,
+    PriorityStore,
+    file_order,
+)
 from cellucid.anndata_server import AnnDataServer
 from cellucid.prepare_data._priority import (
     ORIGINAL_POSITION_COLUMN,
@@ -92,7 +98,8 @@ def _adata(n: int = 600, m: int = 9, *, form: str = "csr", seed: int = 3) -> ad.
 
 
 def _read(store: PriorityStore) -> tuple[ad.AnnData, dict[str, bytes]]:
-    """Every key of a served store, and the AnnData anndata reads from them."""
+    """Every key of a served store, once its matrices are laid out, and the AnnData anndata reads from them."""
+    store.laid_out()
     keys = {key: store.get(key) for key in store.stored_keys()}
     assert all(value is not None for value in keys.values())
     memory = {key: default_buffer_prototype().buffer.from_bytes(value) for key, value in keys.items()}
@@ -181,6 +188,55 @@ def test_an_object_is_served_in_priority_order_bit_for_bit(form: str) -> None:
     finally:
         store.close()
     assert source.X.format == "csr" if form == "csr" else True
+
+
+def test_a_lazily_read_sparse_x_is_served_as_the_same_matrix_in_memory() -> None:
+    """A dask array of sparse blocks as X (and a layer) is decoded block by
+    block into the store's scratch folder, never computed whole: every key
+    of the store holds the bytes the same matrices in memory give."""
+    da = pytest.importorskip("dask.array")
+    source = _adata()
+    lazy = source.copy()
+    lazy.X = da.from_array(source.X, chunks=(97, source.n_vars), asarray=False)
+    lazy.layers["counts"] = da.from_array(source.layers["counts"].tocsr(), chunks=(150, source.n_vars), asarray=False)
+    source.layers["counts"] = source.layers["counts"].tocsr()
+    expected = PriorityStore.of_anndata(source)
+    actual = PriorityStore.of_anndata(lazy)
+    try:
+        _, expected_keys = _read(expected)
+        _, actual_keys = _read(actual)
+    finally:
+        expected.close()
+        actual.close()
+    assert sorted(actual_keys) == sorted(expected_keys)
+    assert [key for key in expected_keys if actual_keys[key] != expected_keys[key]] == []
+
+
+def test_a_text_column_is_served_as_prepare_stores_it() -> None:
+    """An object-dtype text column (as obs holds one before Scanpy first plots
+    it) is served as ``prepare()`` stores it: a categorical in code-point
+    order when a value repeats or is missing, else a string array -- never
+    left to anndata's string array, which the browser would code itself."""
+    source = _adata()
+    rng = np.random.default_rng(5)
+    source.obs["donor"] = np.asarray(rng.choice(["d10", "d2", "\U0001f600", "Ä"], source.n_obs), dtype=object)
+    source.obs["sample"] = pd.array([None if i % 7 == 0 else f"s{i % 3}" for i in range(source.n_obs)], dtype="string")
+    store = PriorityStore.of_anndata(source)
+    try:
+        served, _ = _read(store)
+    finally:
+        store.close()
+    donor = served.obs["donor"]
+    assert isinstance(donor.dtype, pd.CategoricalDtype)
+    assert list(donor.cat.categories) == ["d10", "d2", "Ä", "\U0001f600"]
+    order = served.obs[ORIGINAL_POSITION_COLUMN].to_numpy().astype(np.int64)
+    assert list(donor.astype(object)) == list(source.obs["donor"].to_numpy()[order])
+    sample = served.obs["sample"]
+    assert isinstance(sample.dtype, pd.CategoricalDtype) and sample.isna().sum() == source.obs["sample"].isna().sum()
+    # Unique names stay text.
+    assert not isinstance(served.obs["name"].dtype, pd.CategoricalDtype)
+    # The object served is not changed.
+    assert source.obs["donor"].dtype == object
 
 
 def test_the_object_is_not_changed_and_its_own_order_names_the_cells() -> None:
@@ -278,9 +334,11 @@ def test_a_cell_keeps_the_original_position_prepare_gives_it_on_every_path(tmp_p
         assert [positions[name] for name in restored.obs_names] == list(range(source.n_obs))
 
 
-def test_long_genes_span_chunks_and_are_sorted_once() -> None:
+def test_long_genes_span_chunks_and_are_sorted_once(monkeypatch: pytest.MonkeyPatch) -> None:
     """A gene with more values than a chunk holds is read across chunks, the
     same entries as one sort of the whole gene."""
+    # Chunks of prepare()'s length, so a gene of 70,000 values spans several.
+    monkeypatch.setattr(_served_store, "SERVED_ENTRY_CHUNK_ELEMENTS", 2**14)
     n = 70_000
     rng = np.random.default_rng(1)
     column = sparse.csc_matrix(rng.random((n, 2)).astype(np.float32))
@@ -319,18 +377,17 @@ def test_a_file_is_served_in_priority_order_from_the_file(tmp_path: Path, layout
     try:
         served, _ = _read(store)
         _check(served, ad.read_h5ad(path) if layout.startswith("h5ad") else source)
-        # On disk, each matrix keeps its form: a cell-major X is read by its rows.
-        assert served.X.format == ("csc" if layout == "h5ad-csc" else "csr")
-        if served.X.format == "csc":
-            _check_prefix_counts(served)
-        else:
-            assert PREFIX_COUNTS_KEY not in served.varm
+        # Every expression matrix is served gene-major, so the browser reads a
+        # gene as one range: a cell-major one laid out by the worker (its values
+        # as stored), a gene-major one renumbered as it is read.
+        assert served.X.format == "csc"
+        _check_prefix_counts(served)
         # Arrays stored in chunks are decoded once each, as they are first read,
         # into the scratch folder (rows in priority order are one fancy index
-        # of the decoded copy); nothing else of the file is written.
+        # of the decoded copy); the layouts are written beside them.
         folder = store._folder.folder
         if folder is not None:
-            assert {path.name.split("-")[0] for path in folder.iterdir()} <= {"owner", "source"}
+            assert {path.name.split("-")[0] for path in folder.iterdir()} <= {"owner", "source", "X", "layers", "raw"}
     finally:
         store.close()
     assert folder is None or not folder.exists()
@@ -398,13 +455,17 @@ def test_a_prefix_of_every_per_cell_array_lies_in_its_first_chunks() -> None:
 
 
 def test_served_bytes_of_a_prefix_grow_with_k(tmp_path: Path) -> None:
-    """Over HTTP: reading the first ``k`` rows of an embedding and of a
-    cell-major X (as the viewer's prefix path does) transfers the chunks of
-    the prefix alone -- at most one partly used chunk per array -- where the
-    same subsample of the file in its own order touches every chunk."""
-    n, m = 200_000, 20
+    """Over HTTP: reading the first ``k`` rows of an embedding, and the first
+    entries of every gene of a cell-major X laid out gene-major (as the
+    viewer's prefix path does: a ``Range`` of each chunk, the store's chunks
+    being uncompressed), transfers the prefix's bytes alone, where the same
+    subsample of the file in its own order touches every chunk of 2^14
+    entries. A key of X asked for before its layout is done is answered 503
+    with Retry-After, and the store's other keys at once."""
+    # Genes of many of prepare()'s chunks each (2^14 entries a chunk), as an atlas's are.
+    n, m = 400_000, 4
     rng = np.random.default_rng(0)
-    x = sparse.random(n, m, density=0.25, format="csr", dtype=np.float32, random_state=0)
+    x = sparse.random(n, m, density=0.5, format="csr", dtype=np.float32, random_state=0)
     source = ad.AnnData(
         X=x,
         obs=pd.DataFrame(index=[f"c{i}" for i in range(n)]),
@@ -415,46 +476,65 @@ def test_served_bytes_of_a_prefix_grow_with_k(tmp_path: Path) -> None:
     server = AnnDataServer(path, host="127.0.0.1", port=0, quiet=True, serve_web_ui=False,
                            dataset_id="bytes", dataset_name="Bytes")
     server.start_background()
+    waited: list[str] = []
     try:
         assert server._server is not None
         host, port = server._server.server_address[:2]
         base = "/_cellucid/anndata/bytes.zarr"
 
-        def get(key: str) -> bytes:
-            connection = http.client.HTTPConnection(host, port, timeout=60)
-            try:
-                connection.request("GET", f"{base}/{key}")
-                response = connection.getresponse()
-                assert response.status == 200, key
-                return response.read()
-            finally:
-                connection.close()
+        def get(key: str, span: tuple[int, int] | None = None) -> bytes:
+            while True:
+                connection = http.client.HTTPConnection(host, port, timeout=60)
+                try:
+                    headers = {} if span is None else {"Range": f"bytes={span[0]}-{span[1] - 1}"}
+                    connection.request("GET", f"{base}/{key}", headers=headers)
+                    response = connection.getresponse()
+                    body = response.read()
+                    if response.status == 503:
+                        assert "laid out gene-major" in body.decode()
+                        # Always a wait the viewer can read: whole seconds, at least one.
+                        assert int(response.headers["Retry-After"]) >= 1
+                        waited.append(key)
+                        threading.Event().wait(min(0.05, float(response.headers.get("Retry-After") or 0.05)))
+                        continue
+                    assert response.status == (200 if span is None else 206), key
+                    return body
+                finally:
+                    connection.close()
 
         metadata = json.loads(get(".zmetadata"))["metadata"]
         pointers = metadata["X/indptr/.zarray"]
-        indptr = np.concatenate([
-            np.frombuffer(get(f"X/indptr/{i}"), dtype=pointers["dtype"])
-            for i in range(-(-(n + 1) // pointers["chunks"][0]))
-        ])[: n + 1]
+        indptr = np.frombuffer(get("X/indptr/0"), dtype=pointers["dtype"])[: m + 1].astype(np.int64)
+        levels = prefix_levels(n)
+        level = int(np.searchsorted(levels, n // 100))
+        counts = np.frombuffer(get(f"varm/{PREFIX_COUNTS_KEY}/0.{level}"), dtype="<u4")[:m].astype(np.int64)
 
-        def prefix_bytes(k: int) -> int:
+        def prefix_bytes(k: int, ends: np.ndarray) -> int:
             total = sum(len(get(f"obsm/X_umap/{chunk}.0")) for chunk in _chunks_of(metadata["obsm/X_umap/.zarray"], k))
             for part in ("indices", "data"):
-                total += sum(len(get(f"X/{part}/{chunk}")) for chunk in _chunks_of(metadata[f"X/{part}/.zarray"], int(indptr[k])))
+                size = metadata[f"X/{part}/.zarray"]["chunks"][0]
+                item = np.dtype(metadata[f"X/{part}/.zarray"]["dtype"]).itemsize
+                for g in range(m):
+                    # Each chunk a gene's entries reach, read for the entries in it.
+                    for chunk in range(int(indptr[g]) // size, -(-int(ends[g]) // size)):
+                        first, last = max(int(indptr[g]), chunk * size), min(int(ends[g]), (chunk + 1) * size)
+                        if last > first:
+                            span = ((first - chunk * size) * item, (last - chunk * size) * item)
+                            total += len(get(f"X/{part}/{chunk}", span))
             return total
 
-        k = n // 100
-        small, whole = prefix_bytes(k), prefix_bytes(n)
-        one_chunk_each = sum(
-            np.dtype(metadata[f"{a}/.zarray"]["dtype"]).itemsize * int(np.prod(metadata[f"{a}/.zarray"]["chunks"]))
-            for a in ("obsm/X_umap", "X/indices", "X/data")
+        k = int(levels[level])
+        small, whole = prefix_bytes(k, indptr[:-1] + counts), prefix_bytes(n, indptr[1:])
+        one_chunk_each = np.dtype(metadata["obsm/X_umap/.zarray"]["dtype"]).itemsize * int(
+            np.prod(metadata["obsm/X_umap/.zarray"]["chunks"])
         )
-        prefix_values = k * 2 * 4 + int(indptr[k]) * 8
+        prefix_values = k * 2 * 4 + int(counts.sum()) * 8
         assert small <= prefix_values + one_chunk_each
         assert small < whole / 5
-        # The same cells of the file in its own order lie in every chunk of its X.
+        # The same cells of the file in its own order lie in every chunk of
+        # 2^14 entries of its X (as prepare() would chunk it).
         kept = np.sort(CellPriority.of(n, SERVED_PRIORITY_SEED).order[:k])  # type: ignore[union-attr]
-        entries_chunk = metadata["X/indices/.zarray"]["chunks"][0]
+        entries_chunk = 2**14
         own = np.unique(np.asarray(x.indptr)[kept] // entries_chunk)
         assert len(own) == -(-x.nnz // entries_chunk)
     finally:
@@ -487,7 +567,9 @@ def test_the_served_arrays_are_the_ones_prepare_writes(tmp_path: Path) -> None:
             ours, theirs = served[key], prepared[key]
             assert ours.dtype == theirs.dtype, key
             assert ours.shape == theirs.shape, key
-            assert ours.chunks == theirs.chunks, key
+            # The expression entries in a served chunk's length (SERVED_ENTRY_CHUNK_ELEMENTS).
+            entries = key in ("X/indices", "X/data")
+            assert ours.chunks == ((min(ours.shape[0], SERVED_ENTRY_CHUNK_ELEMENTS),) if entries else theirs.chunks), key
             np.testing.assert_array_equal(ours[...], theirs[...], err_msg=key)
     finally:
         store.close()
@@ -496,6 +578,72 @@ def test_the_served_arrays_are_the_ones_prepare_writes(tmp_path: Path) -> None:
 # =============================================================================
 # The server
 # =============================================================================
+
+
+def test_a_range_of_a_served_chunk_is_made_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A served matrix's entries come in chunks of ``SERVED_ENTRY_CHUNK_ELEMENTS``
+    (a request over loopback costs more than a small chunk moves), and a
+    ``Range`` of one -- a gene, a subsample's first entries of a gene -- makes
+    only the entries it covers, the same bytes as the chunk's, over HTTP and
+    through the widget's ``answer_request`` alike; the last chunk's bytes
+    past the array are its padding, zeros. A chunk of a matrix not laid out
+    yet is answered 503 for a range as for the whole chunk."""
+    monkeypatch.setattr(_served_store, "SERVED_ENTRY_CHUNK_ELEMENTS", 4096)
+    source = _adata(n=3_000, m=40, seed=11)
+    server = AnnDataServer(source, host="127.0.0.1", port=0, quiet=True, serve_web_ui=False)
+    server.start_background()
+    try:
+        store = server._served.priority
+        assert store is not None
+        store.laid_out()
+        metadata = json.loads(store.get(".zmetadata"))["metadata"]
+        nnz = metadata["X/data/.zarray"]["shape"][0]
+        assert metadata["X/data/.zarray"]["chunks"] == [min(nnz, 4096)]
+        last = (nnz - 1) // 4096
+        assert last >= 2
+        laid = store._planned["X/data"].matrix
+        asked: list[tuple[int, int]] = []
+        entries = laid.entries
+        monkeypatch.setattr(laid, "entries", lambda part, start, end, chunk: (asked.append((start, end)), entries(part, start, end, chunk))[1])
+        assert server._server is not None
+        host, port = server._server.server_address[:2]
+        for part in ("indices", "data"):
+            for chunk, (a, b) in [(1, (6, 401)), (0, (0, 4)), (last, (0, 4096 * 4 - 1)), (1, (4093 * 4, 4096 * 4 - 1))]:
+                key = f"X/{part}/{chunk}"
+                whole = store.get(key)
+                assert whole is not None and len(whole) == 4096 * 4
+                asked.clear()
+                status, headers, body = server.answer_request("GET", f"_cellucid/anndata/served.zarr/{key}", f"bytes={a}-{b}")
+                assert (status, body, headers["Content-Range"]) == (206, whole[a : b + 1], f"bytes {a}-{b}/{len(whole)}"), key
+                # Only the entries the bytes cover, never past the array.
+                base = chunk * 4096
+                assert asked == [(base + a // 4, min(nnz, base + -(-(b + 1) // 4)))], (key, asked)
+                connection = http.client.HTTPConnection(host, port, timeout=30)
+                try:
+                    connection.request("GET", f"/_cellucid/anndata/served.zarr/{key}", headers={"Range": f"bytes={a}-{b}"})
+                    response = connection.getresponse()
+                    assert (response.status, response.read()) == (206, whole[a : b + 1]), key
+                finally:
+                    connection.close()
+        tail = store.get(f"X/data/{last}")
+        assert tail is not None and not np.frombuffer(tail, dtype="<f4")[nnz - last * 4096 :].any()
+    finally:
+        server.stop()
+    # Not counted yet (only a file's matrix, counted by the worker: where
+    # each gene's values go is not known): a range of a chunk waits as the
+    # whole chunk does.
+    store = PriorityStore.of_anndata(source)
+    try:
+        array = store._planned["X/data"]
+        array.matrix.layout.ready = lambda end: False  # type: ignore[method-assign]
+        array.matrix.job.finished.clear()
+        array.matrix.layout.counted.clear()
+        body = store.body("X/data/0")
+        assert body is not None and body.size == 4096 * 4
+        with pytest.raises(_served_store.NotReady):
+            body.read(0, 8)
+    finally:
+        store.close()
 
 
 def test_the_server_publishes_the_store_and_the_widget_reads_the_same_keys(tmp_path: Path) -> None:
@@ -527,9 +675,11 @@ def test_the_server_publishes_the_store_and_the_widget_reads_the_same_keys(tmp_p
 def test_the_served_chunks_are_the_ones_prepare_writes(tmp_path: Path) -> None:
     """Every array the served store and ``prepare()`` both hold is chunked alike,
     by the one set of constants (:mod:`cellucid.prepare_data._store`): per-cell
-    arrays by ``CELL_CHUNK_ELEMENTS``, sliced expression entries by
-    ``SLICED_CHUNK_ELEMENTS``, anything read whole by ``WHOLE_CHUNK_ELEMENTS``
-    -- on a dataset whose per-cell arrays span several chunks."""
+    arrays by ``CELL_CHUNK_ELEMENTS``, anything read whole by
+    ``WHOLE_CHUNK_ELEMENTS`` -- on a dataset whose per-cell arrays span several
+    chunks -- except the expression entries, which a server serves in chunks
+    of ``SERVED_ENTRY_CHUNK_ELEMENTS`` (a request over loopback costs more than
+    a file's chunk of 2^14 values moves)."""
     from cellucid.prepare_data import prepare
     from cellucid.prepare_data._store import CELL_CHUNK_ELEMENTS
 
@@ -571,7 +721,10 @@ def test_the_served_chunks_are_the_ones_prepare_writes(tmp_path: Path) -> None:
 
             ours, theirs = arrays(served[area], area), arrays(prepared[area], area)
             for key in sorted(set(ours) & set(theirs)):
-                assert ours[key].chunks == theirs[key].chunks, key
+                if key in ("X/data", "X/indices"):
+                    assert ours[key].chunks == (min(ours[key].shape[0], SERVED_ENTRY_CHUNK_ELEMENTS),), key
+                else:
+                    assert ours[key].chunks == theirs[key].chunks, key
                 compared.append(key)
         for key in (f"obs/{ORIGINAL_POSITION_COLUMN}", "obs/score", "obs/cell_type/codes", "obsm/X_umap", "X/data", "X/indices"):
             assert key in compared, key
@@ -590,6 +743,7 @@ def test_an_object_is_served_from_a_snapshot_edits_after_never_mix_in(form: str)
     before = source.copy()
     store = PriorityStore.of_anndata(source)
     try:
+        store.laid_out()
         values = source.X.data if sparse.issparse(source.X) else source.X
         np.log1p(values, out=values)
         source.layers["dense"] += 100
@@ -600,6 +754,76 @@ def test_an_object_is_served_from_a_snapshot_edits_after_never_mix_in(form: str)
     order = served.obs[ORIGINAL_POSITION_COLUMN].to_numpy().astype(np.int64)
     _same(sparse.csr_matrix(served.X), sparse.csr_matrix(before.X)[order])
     _same(served.layers["dense"], before.layers["dense"][order])
+    _same(served.obsm["X_umap"], before.obsm["X_umap"][order])
+
+
+@pytest.mark.parametrize("form", ["csr", "csc", "dense"])
+def test_an_object_s_matrices_are_read_only_while_the_worker_lays_them_out(form: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The store is made at once, its matrices laid out by the worker after:
+    while the worker reads an array of the object it is read-only, so an
+    in-place change is refused by numpy rather than mixed into what is
+    served; a key of a matrix not laid out yet -- its entries, its prefix
+    counts, a dense strip -- is made at once from that snapshot, the bytes the
+    layout then holds, and every other key answered at once; once laid out,
+    the arrays are writeable again and the snapshot is the object as it was
+    shown. An ``obsm`` array is copied (its snapshot) by the same worker,
+    under the same rule."""
+    from cellucid import _served_store
+    from cellucid.prepare_data._gene_major import GeneMajorLayout
+
+    gate = threading.Event()
+    real_place, real_dense = GeneMajorLayout.place, _served_store._DenseGeneMajor.lay_out
+    real_copy = _served_store._DenseSnapshot.copy
+
+    def held_copy(snapshot: Any) -> None:
+        gate.wait(30)
+        real_copy(snapshot)
+
+    def held_place(layout: GeneMajorLayout) -> Any:
+        gate.wait(30)
+        return real_place(layout)
+
+    def held_dense(laid: Any) -> None:
+        gate.wait(30)
+        real_dense(laid)
+
+    monkeypatch.setattr(GeneMajorLayout, "place", held_place)
+    monkeypatch.setattr(_served_store._DenseGeneMajor, "lay_out", held_dense)
+    monkeypatch.setattr(_served_store._DenseSnapshot, "copy", held_copy)
+    source = _adata(n=900, m=7, form=form, seed=8)
+    before = source.copy()
+    store = PriorityStore.of_anndata(source)
+    try:
+        values = source.X.data if sparse.issparse(source.X) else source.X
+        with pytest.raises(ValueError, match="read-only"):
+            np.log1p(values, out=values)
+        umap = source.obsm["X_umap"]
+        with pytest.raises(ValueError, match="read-only"):
+            umap[:] = -1
+        # A key of a matrix not laid out yet is made at once from the
+        # snapshot, the bytes the layout will hold (and a range of it, only
+        # its bytes); an obsm array not copied yet likewise; the first
+        # view's keys wait for nothing either.
+        keys = ["X/data/0", "X/indices/0", f"varm/{PREFIX_COUNTS_KEY}/0.0"] if form != "dense" else ["X/0.0"]
+        keys.append("obsm/X_umap/0.0")
+        during = {key: store.get(key) for key in keys}
+        assert all(value is not None for value in during.values())
+        ranged = store.body(keys[0])
+        assert ranged is not None and ranged.read(4, 12) == during[keys[0]][4:12]
+        for key in (".zmetadata", "obs/_index/0"):
+            assert store.get(key) is not None
+        gate.set()
+        store.laid_out()
+        assert {key: store.get(key) for key in keys} == during
+        assert values.flags.writeable and umap.flags.writeable
+        np.log1p(values, out=values)
+        umap[:] = -1
+        served, _ = _read(store)
+    finally:
+        gate.set()
+        store.close()
+    order = served.obs[ORIGINAL_POSITION_COLUMN].to_numpy().astype(np.int64)
+    _same(sparse.csr_matrix(served.X), sparse.csr_matrix(before.X)[order])
     _same(served.obsm["X_umap"], before.obsm["X_umap"][order])
 
 
@@ -643,24 +867,24 @@ def test_an_object_s_matrix_is_stored_as_prepare_stores_it() -> None:
 
 
 def test_a_killed_process_s_scratch_folder_is_removed_by_the_next_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from cellucid import _served_store
+    from cellucid import _scratch
 
-    monkeypatch.setattr(_served_store.tempfile, "tempdir", str(tmp_path))
-    dead = tmp_path / "cellucid-served-dead"
+    monkeypatch.setattr(_scratch.tempfile, "tempdir", str(tmp_path))
+    dead = tmp_path / "cellucid-scratch-dead"
     dead.mkdir()
     (dead / "owner").write_text("999999999")
     (dead / "X-data.npy").write_bytes(b"x" * 100)
-    alive = tmp_path / "cellucid-served-alive"
+    alive = tmp_path / "cellucid-scratch-alive"
     alive.mkdir()
-    (alive / "owner").write_text(str(_served_store.os.getppid()))
-    unnamed = tmp_path / "cellucid-served-unnamed"
+    (alive / "owner").write_text(str(_scratch.os.getppid()))
+    unnamed = tmp_path / "cellucid-scratch-unnamed"
     unnamed.mkdir()
     store = PriorityStore.of_anndata(_adata(n=50, m=4))
     try:
         assert not dead.exists()
         assert alive.exists() and unnamed.exists()
         mine = store._folder.folder
-        assert mine is not None and (mine / "owner").read_text() == str(_served_store.os.getpid())
+        assert mine is not None and (mine / "owner").read_text() == str(_scratch.os.getpid())
     finally:
         store.close()
     assert not mine.exists()
@@ -673,13 +897,14 @@ def test_every_file_a_store_maps_is_let_go_however_it_ends(tmp_path: Path, monke
     made, it lets every mapping go before its folder is removed (Windows
     removes no mapped file, and lets no program replace one), and the source
     file it read can be replaced."""
-    from cellucid import _served_store
+    from cellucid import _scratch
+    from cellucid.prepare_data._gene_major import GeneMajorLayout
 
-    monkeypatch.setattr(_served_store.tempfile, "tempdir", str(tmp_path))
+    monkeypatch.setattr(_scratch.tempfile, "tempdir", str(tmp_path))
     adata = _adata(n=50, m=4)
 
     def scratch_folders() -> list[Path]:
-        return sorted(tmp_path.glob("cellucid-served-*"))
+        return sorted(tmp_path.glob("cellucid-scratch-*"))
 
     # Closed.
     store = PriorityStore.of_anndata(adata)
@@ -711,16 +936,39 @@ def test_every_file_a_store_maps_is_let_go_however_it_ends(tmp_path: Path, monke
     shutil.copy2(source, replacement)
     replacement.replace(source)
 
-    # Failing while it is made, its layout's files mapped in the frames the error passed through.
+    # Failing while it is made (the counting pass of an object's matrix runs
+    # as the store is made), its source arrays writeable again.
+    real_count = GeneMajorLayout.count
+
     def fail(*_args: object) -> None:
         raise RuntimeError("layout failed")
 
-    monkeypatch.setattr(_served_store._GeneMajor, "_finished", fail)
+    monkeypatch.setattr(GeneMajorLayout, "count", fail)
     with pytest.raises(RuntimeError, match="layout failed") as raised:
         PriorityStore.of_anndata(adata)
     # The error is alive (as it is while the store is closed): it holds no mapping.
     assert raised.value.__traceback__ is not None
     assert mapped_files(tmp_path) == [] and scratch_folders() == []
+    assert adata.X.data.flags.writeable
+    monkeypatch.setattr(GeneMajorLayout, "count", real_count)
+
+    # Failing in the worker, its output files mapped in the frames the error passed through.
+    real_place = GeneMajorLayout.place
+
+    def fail_placing(layout: GeneMajorLayout) -> None:
+        layout._outputs(int(layout.indptr[-1]))  # type: ignore[index]
+        raise RuntimeError("placing failed")
+
+    monkeypatch.setattr(GeneMajorLayout, "place", fail_placing)
+    store = PriorityStore.of_anndata(adata)
+    with pytest.raises(RuntimeError, match="placing failed"):
+        store.laid_out()
+    with pytest.raises(RuntimeError, match="could not be laid out for the viewer: placing failed"):
+        store.get("X/data/0")
+    assert adata.X.data.flags.writeable
+    store.close()
+    assert mapped_files(tmp_path) == [] and scratch_folders() == []
+    monkeypatch.setattr(GeneMajorLayout, "place", real_place)
 
 
 def test_a_dense_file_matrix_in_whole_row_chunks_is_laid_out_once(tmp_path: Path) -> None:
@@ -744,7 +992,7 @@ def test_a_dense_file_matrix_in_whole_row_chunks_is_laid_out_once(tmp_path: Path
     store = PriorityStore.of_file(classify_anndata_path(path))
     try:
         reads = []
-        source = store._layouts[0].array
+        source = store._planned["X"].array  # type: ignore[attr-defined]
         original = type(source).__getitem__
 
         class Counting(type(source)):  # type: ignore[misc]
@@ -774,7 +1022,8 @@ def test_rows_in_any_order_are_one_take_from_the_decoded_or_mapped_source(
     so the files can be removed and replaced on every system."""
     import h5py
 
-    from cellucid._served_store import _Rows, _Scratch, _Vector
+    from cellucid._scratch import Scratch
+    from cellucid._source_arrays import Rows, Vector
 
     # h5py names the default driver "windows" on Windows (HDF5's Windows
     # driver is the sec2 driver there): an array is mapped by what its file's
@@ -795,11 +1044,9 @@ def test_rows_in_any_order_are_one_take_from_the_decoded_or_mapped_source(
         file.create_dataset("m", data=matrix, **options)
         file.create_dataset("v", data=vector, **options)
         arrays = (file["m"], file["v"])
-    closers: list = []
-    layouts: list = []
-    scratch = _Scratch(closers, threading.Event(), layouts)
-    rows_of_matrix = _Rows(arrays[0], scratch)
-    rows_of_vector = _Vector(arrays[1], scratch)
+    scratch = Scratch(threading.Event())
+    rows_of_matrix = Rows(arrays[0], scratch)
+    rows_of_vector = Vector(arrays[1], scratch)
     picks = rng.integers(0, 5003, 3000)
     picks[:10] = picks[0]
     np.testing.assert_array_equal(rows_of_matrix.take(picks), matrix[picks])
@@ -812,10 +1059,58 @@ def test_rows_in_any_order_are_one_take_from_the_decoded_or_mapped_source(
     copied = scratch.folder is not None and any(path.name.startswith("source-") for path in scratch.folder.iterdir())
     assert copied == (stored != "contiguous")
     assert mapped_files(tmp_path) != []
-    scratch.release()
-    for close in closers:
-        close()
+    folder = scratch.folder
+    scratch.close()
     assert mapped_files(tmp_path) == []
-    assert scratch.folder is None or not scratch.folder.exists()
+    assert folder is None or not folder.exists()
     with pytest.raises(RuntimeError, match="closed"):
         rows_of_matrix.take(picks)
+
+
+def test_obs_of_every_encoding_is_cut_straight_in_served_order() -> None:
+    """``obs`` is written without a copy in served order: anndata writes the
+    frame's empty head (encodings, column order, categories) and each per-cell
+    array -- the index under its own name, a numeric or boolean column, a
+    categorical's codes (8- and 16-bit), a nullable column's values and mask, a
+    string array -- is cut straight from the column in priority order, in
+    ``CELL_CHUNK_ELEMENTS`` chunks, the position column last. anndata reads it
+    back as the frame in served order, value for value."""
+    from cellucid._served_store import _served_obs
+    from cellucid.prepare_data._store import CELL_CHUNK_ELEMENTS
+
+    n = CELL_CHUNK_ELEMENTS + 777
+    rng = np.random.default_rng(13)
+    missing = rng.random(n) < 0.1
+    obs = pd.DataFrame(
+        {
+            "small": pd.Categorical(rng.choice(["a", "b", "c"], n), categories=["c", "b", "a"], ordered=True),
+            "wide": pd.Categorical.from_codes(rng.integers(0, 300, n), [f"t{i:03d}" for i in range(300)]),
+            "score": rng.normal(size=n),
+            "count": rng.integers(0, 1000, n).astype(np.int32),
+            "keep": rng.random(n) < 0.5,
+            "maybe": pd.array(np.where(missing, None, rng.integers(0, 9, n)), dtype="Int64"),
+            "flag": pd.array(np.where(missing, None, rng.random(n) < 0.5), dtype="boolean"),
+            "unique": np.array([f"u{i}" for i in range(n)], dtype=object),
+            "repeated": pd.array(np.where(missing, None, rng.choice(["x", "y"], n)), dtype="string"),
+        },
+        index=pd.Index([f"cell-{i}" for i in range(n)], dtype=object, name="barcode"),
+    )
+    source = ad.AnnData(X=sparse.random(n, 3, density=0.2, format="csr", dtype=np.float32, random_state=1), obs=obs)
+    store = PriorityStore.of_anndata(source)
+    try:
+        served, keys = _read(store)
+        documents = {key[: -len("/.zarray")]: json.loads(value) for key, value in keys.items() if key.startswith("obs/") and key.endswith("/.zarray")}
+    finally:
+        store.close()
+    order = served.obs[ORIGINAL_POSITION_COLUMN].to_numpy().astype(np.int64)
+    expected = _served_obs(obs, "obs").iloc[order]
+    assert list(served.obs.columns) == [*obs.columns, ORIGINAL_POSITION_COLUMN]
+    assert served.obs.index.name == "barcode"
+    assert served.obs.index.tolist() == expected.index.tolist()
+    pd.testing.assert_frame_equal(served.obs.drop(columns=[ORIGINAL_POSITION_COLUMN]), expected, check_index_type=False)
+    assert sorted(order.tolist()) == list(range(n)) and order.tolist() != list(range(n))
+    per_cell = {path: document for path, document in documents.items() if document["shape"] == [n]}
+    # The index, each column (a categorical's codes; a nullable one's values and mask) and the positions.
+    assert len(per_cell) == 1 + 9 + 2 + 1
+    assert all(document["chunks"] == [CELL_CHUNK_ELEMENTS] for document in per_cell.values())
+    assert documents["obs/wide/codes"]["dtype"] == "<i2" and documents["obs/small/codes"]["dtype"] == "|i1"

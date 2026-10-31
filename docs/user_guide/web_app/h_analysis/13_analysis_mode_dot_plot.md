@@ -20,6 +20,14 @@ One dot per gene and group:
 - its **size** is the fraction of the group’s cells that express the gene
   (value above the cutoff, 0 by default).
 
+A cell with no value of a gene — a MuData modality that did not measure it
+(CITE-seq protein on some cells, a multiome cell without ATAC), a layer holding
+`NaN` — is left out of that gene’s mean, fraction and violin, as differential
+expression and marker genes leave it out: they are over the group’s cells
+**with a value**. A `cells without a value left out` chip says when a gene has
+such cells, the hover names a group’s cells and how many hold a value, and the
+expanded view’s summary counts them.
+
 A dot plot answers “which groups express these genes, and how uniformly?” —
 the usual way to check a marker panel against clusters. **Matrix plot** shows
 the same means as colored cells, without the sizes; **Stacked violin** shows
@@ -117,7 +125,9 @@ On a phone the plot keeps its size and its frame scrolls.
   gene set.
 - **Expanded view** (⤢): the plot at full size, with a summary of the run.
 - **CSV** (in the expanded view): `dot_plot.csv`, one row per group and gene:
-  `group, gene, gene_group, mean, fraction_expressing, n_cells` (unscaled means).
+  `group, gene, gene_group, mean, fraction_expressing, n_cells, n_measured`
+  (unscaled means; `n_measured` the group’s cells with a value of the gene, which
+  the mean and the fraction are over).
 
 ```{figure} ../../../_static/screenshots/analysis/dotplot-expanded.png
 :alt: The expanded Dot plot of the eight pancreatic markers across the eight clusters: one row per cluster, dot colour the mean expression and dot size the fraction of cells expressing it, with its colour bar and size legend, Export, and a summary table below.

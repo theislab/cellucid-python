@@ -153,7 +153,9 @@ This is the “most useful” mapping because it makes interactive groups explic
 ### 3) Metadata stored under `adata.uns`
 
 If `store_uns=True` (default), the apply step stores:
-- `adata.uns["cellucid"]["session"]["manifest"]`
+- `adata.uns["cellucid"]["session"]["manifest"]` (without `source`, where the
+  viewer opened the dataset: a link, a server address or a local file name is
+  not part of the object, and would travel with every file written from it)
 - `adata.uns["cellucid"]["session"]["dataset_fingerprint"]`
 - `adata.uns["cellucid"]["session"]["applied"]` (apply options)
 - some decoded JSON chunks for debugging
@@ -192,13 +194,13 @@ Any mismatch raises `ValueError` before Cellucid mutates the target object.
 
 ### The two records: `cellOrder` and `dataMapping`
 
-The current session fingerprint (format 2) has exactly six required fields:
+The current session fingerprint (format 3) has exactly six required fields:
 the three scalars (`datasetId`, `cellCount`, `varCount`), the dataset's display
 `name` (or null, informational), `cellOrder`, and `dataMapping`.
 
 `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
-16-character lowercase hexadecimal `digest` of the coordinates of that
-embedding. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
+16-character lowercase hexadecimal `digest` of that embedding's stored
+coordinates, each cell named by its original position. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
 columns that were read, one per dimension. It ties the session to one cell
 ordering, which the scalars cannot do: they all survive a rewrite of the
 same dataset from re-sorted input.
@@ -213,10 +215,11 @@ on that axis — through the mapping's gene names, made unique with the shared
 rule — and its values are read from the mapping's expression matrix.
 
 Both readers require both records. Python validates `cellOrder`'s shape, never
-its digest: the digest is over coordinates the viewer drew, and this API targets
-an `AnnData` whose row order the caller controls. Enforcing that identity is the
-viewer's job, so a bundle this reader accepts may still be refused by the web
-app. Treat that as normal, not as a bug in either reader.
+its digest: the digest is the viewer's check, taken on the cells it opens, and
+this API targets an `AnnData` whose rows and embeddings the caller controls.
+Enforcing that identity is the viewer's job, so a bundle this reader accepts
+may still be refused by the web app. Treat that as normal, not as a bug in
+either reader.
 
 ### Critical constraint: cells are named by original position
 

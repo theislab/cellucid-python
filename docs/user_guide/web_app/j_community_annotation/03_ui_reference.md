@@ -74,7 +74,10 @@ This modal is a 4-step wizard:
 Notes:
 
 - This uses a GitHub App OAuth flow (no token paste).
-- Tokens are stored only in `sessionStorage` (closing the tab signs you out).
+- The token expires after 8 hours and is stored only in this tab's
+  `sessionStorage` (closing the tab signs you out; a reload does not).
+  **Sign out** revokes it at GitHub; if GitHub cannot be reached, a
+  notification says the token stays valid until it expires.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-02-signin.png
 :alt: Step 1 of 4 of the GitHub sync wizard: a header showing the dataset with GitHub and Repo both not connected, the four steps Sign in, Install app, Choose repository and Sync with Sign in current, the line "Cellucid gets no repository access until you install its GitHub App on repositories you choose.", and a Continue with GitHub button.
@@ -348,7 +351,7 @@ Two different clears exist (they do different things):
 The annotation “session” above is separate from Cellucid's portable
 `.cellucid-session` files. Community Annotation is intentionally excluded from
 the ordinary bundles **Save** and **Load** handle. GitHub tokens remain tab-scoped in
-`sessionStorage`; annotation intent and pulled-file caches retain their own
+`sessionStorage` and expire after 8 hours; annotation intent and pulled-file caches retain their own
 dataset/repo/branch/user scope. See
 {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 

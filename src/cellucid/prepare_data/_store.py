@@ -70,7 +70,8 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
-from ._priority import ORIGINAL_POSITION_COLUMN, PREFIX_COUNTS_KEY, prefix_counts
+from ._gene_major import GeneMajor
+from ._priority import ORIGINAL_POSITION_COLUMN, PREFIX_COUNTS_KEY
 
 #: Elements per chunk of an array the viewer reads by slices: the data and
 #: indices of the expression matrix, read one gene's range at a time (or, in
@@ -148,7 +149,9 @@ class Elements:
     boolean array, or a pandas nullable integer or boolean array.
     """
 
-    x: sparse.csc_matrix | np.ndarray | None
+    #: Gene-major (:class:`._gene_major.GeneMajor`; in priority order it
+    #: carries ``varm['cellucid_prefix_counts']``), or dense.
+    x: GeneMajor | np.ndarray | None
     obs_index: np.ndarray
     obs: dict[str, Any]
     var_index: np.ndarray
@@ -156,10 +159,6 @@ class Elements:
     obsm: dict[str, np.ndarray]
     obsp: dict[str, sparse.csr_matrix]
     uns: dict[str, Any]
-    #: The rows below each prefix level, ascending, when the cells are in
-    #: priority order (``_priority``): a sparse ``X`` is then written with
-    #: ``varm['cellucid_prefix_counts']``. None: the cells are as given.
-    prefix_levels: np.ndarray | None = None
 
 
 class StoreContent(Protocol):
@@ -558,7 +557,7 @@ class _Writer:
         self,
         parent: Any,
         key: str,
-        matrix: sparse.csc_matrix | sparse.csr_matrix,
+        matrix: GeneMajor | sparse.csc_matrix | sparse.csr_matrix,
         *,
         opening: bool = False,
     ) -> Any:
@@ -579,7 +578,7 @@ class _Writer:
         return group
 
     def sparse_entries(
-        self, group: Any, matrix: sparse.csc_matrix | sparse.csr_matrix, *, sliced: bool
+        self, group: Any, matrix: GeneMajor | sparse.csc_matrix | sparse.csr_matrix, *, sliced: bool
     ) -> None:
         """A sparse matrix's ``data`` and ``indices``.
 
@@ -622,9 +621,9 @@ class _Writer:
         for key, matrix in elements.obsp.items():
             self.sparse_entries(self.sparse_pointers(obsp, key, matrix), matrix, sliced=False)
         varm = self.dict_group(root, "varm")
-        if x_group is not None and elements.prefix_levels is not None:
+        if isinstance(x, GeneMajor) and x.prefix_counts is not None:
             # One column per level, each read whole when a subsample opens.
-            counts = prefix_counts(x, elements.prefix_levels)
+            counts = x.prefix_counts
             self.array(varm, PREFIX_COUNTS_KEY, counts, (max(1, min(counts.shape[0], WHOLE_CHUNK_ELEMENTS)), 1))
         self.dict_group(root, "varp")
         self.dict_group(root, "layers")
@@ -716,12 +715,12 @@ def _write_chunks_in_parallel(dataset: Any, values: Any) -> bool:
     return True
 
 
-def _index_dtype(matrix: sparse.csc_matrix | sparse.csr_matrix) -> type[np.signedinteger[Any]]:
+def _index_dtype(matrix: GeneMajor | sparse.csc_matrix | sparse.csr_matrix) -> type[np.signedinteger[Any]]:
     """``indptr``: int32 unless the matrix holds 2^31 stored values or more."""
     return np.int64 if matrix.nnz >= 2**31 else np.int32
 
 
-def _position_dtype(matrix: sparse.csc_matrix | sparse.csr_matrix) -> type[np.signedinteger[Any]]:
+def _position_dtype(matrix: GeneMajor | sparse.csc_matrix | sparse.csr_matrix) -> type[np.signedinteger[Any]]:
     """``indices``: int32 unless the axis they index (a CSC matrix's rows) has 2^31 entries.
 
     Decided by the axis, not by the stored-value count: a matrix of more than
@@ -875,11 +874,35 @@ def _remove(path: Path) -> None:
         path.unlink()
 
 
+def _remove_stale_staging(target: OutputTarget) -> None:
+    """What a writer killed before it finished (its process gone) left beside
+    the target, removed, as cellucid-r's writer removes it: its staging
+    (``.<name>.<pid>.partial``), and the target it had moved aside
+    (``.<name>.<pid>.replaced``) when the target is there again -- when it is
+    not, the moved-aside copy is the only one, and it is left."""
+    import re
+
+    from .._scratch import _process_alive
+
+    pattern = re.compile(rf"^\.{re.escape(target.path.name)}\.([0-9]+)\.(partial|replaced)$")
+    for entry in target.path.parent.iterdir():
+        found = pattern.match(entry.name)
+        if found is None:
+            continue
+        pid = int(found.group(1))
+        if pid == os.getpid() or _process_alive(pid):
+            continue
+        if found.group(2) == "replaced" and not (target.path.exists() or target.path.is_symlink()):
+            continue
+        _remove(entry)
+
+
 @contextmanager
 def _staged(target: OutputTarget) -> Iterator[Path]:
     """A temporary sibling of the target, moved into place once complete."""
     parent = target.path.parent
     parent.mkdir(parents=True, exist_ok=True)
+    _remove_stale_staging(target)
     tag = f".{target.path.name}.{os.getpid()}"
     staging = parent / f"{tag}.partial"
     replaced = parent / f"{tag}.replaced"

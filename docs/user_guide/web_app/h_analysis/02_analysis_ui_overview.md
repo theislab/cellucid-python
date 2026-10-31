@@ -146,8 +146,8 @@ a quarter of a second:
   long is left;
 - a progress bar, and **Cancel**.
 
-A job that takes longer than 0.7 s also shows one progress notification with
-the same line and its own cancel button (×). It is the run's only
+A job that takes longer than a second also shows one progress notification with
+the same line and its own **Cancel** button. It is the run's only
 notification: the gene reads it makes are not announced again by the general
 read notifications -- neither is a gene a view started reading before the run
 needed it too, which the run takes as its own read from then on -- and it
@@ -164,6 +164,12 @@ unbiased preview of the final answer. A line under the progress box says which
 cells the shown result used:
 `First pass: each group's cells in a uniform sample of 4.2% of the open cells (about 420,000 of 10,000,000) · refining on every cell…`,
 then `Every cell: computed on all cells of its groups (10,000,000 open cells).`
+When genes are read for a sample of the open cells (below), the line says
+that instead of *every cell*: `Gene sample: computed on each group's cells
+among the 6,320 of 584,944 open cells that genes are read for (202 of its groups'
+19,737 cells). Read for all cells, in a gene's legend, then run again to use
+every cell.` (a first pass says `… among the 6,320 that genes are read for ·
+refining on every cell that genes are read for…`).
 The final result is exactly what a single run on every cell gives, bit for
 bit; it is the one saved in sessions and exported.
 
@@ -182,6 +188,26 @@ takes as many cells as fit in about a second, and never fewer than the square
 root of the number of open cells. A first pass the sample cannot carry (a
 group with fewer than two of its cells in the sample) is skipped. The
 measurements are kept in this browser (they are a convenience, never needed).
+
+**Genes on a sample of the open cells.** A large dataset stored cell by cell
+opens every cell on the map and reads a gene for a sample of them, the first
+cells of their order
+({ref}`genes-on-a-sample-of-the-cells`); the other cells have no gene value
+yet, which is not 0. An analysis that reads genes (Differential expression,
+Marker genes, Gene signature, Dot plot, and Detailed or Correlation on a
+gene) then computes on each group's cells among that sample: its chip says
+so (*Genes read for 40,000 of 455,000 cells*, or *… · genes on 40,000* beside
+a subsample's method), with each group's share in its tooltip, the line under the progress box
+says how many of its groups' cells that is (*Gene sample: …*), and a group
+with fewer than two cells among the sample is named with how many it has.
+Marker genes counts each group among the sample: a group with fewer than
+**Min cells per group** of its cells there is skipped, and the chip says why
+(*15 skipped: too few sampled cells*, each group's cells among the sample of
+its cells in its tooltip).
+Per-cell gene scores have no value on the other cells, and the gene means a
+module score bins and a z-score divides by are over the sample's cells.
+**Read for all cells**, in a gene's legend, reads the rest; results that
+read genes are then marked **Stale · Run**, and run again use every cell.
 
 **Cancel.** Cancelling stops the job where it is: its gene reads stop in the
 file reader (a remote file stops downloading), and its computations stop in
@@ -413,7 +439,10 @@ session and forgotten when another dataset opens.
 ### On a phone
 
 On a screen 720 px wide or less, analysis windows are bottom sheets: full
-width, at 40%, 75% or all of the screen. Drag the grip above the header to
+width, at 40%, 75% or all of the screen. While the panel is closed, a sheet
+stands on the panel's bar at the foot of the screen, no taller than the screen
+above it, so the bar always opens the panel; every other window is kept above
+the bar too. Drag the grip above the header to
 change the height (it settles on the nearest of the three), tap the grip to
 step through them, or use the arrow keys on it. A tap on the header collapses
 the sheet to its header. One sheet shows at a time; with several open, a tab

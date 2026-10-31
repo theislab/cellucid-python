@@ -24,8 +24,9 @@ file or folder Cellucid reads ({doc}`02_loading_routes`), or an in-memory
 requests where the format allows it; the server serves its bytes. An in-memory
 AnnData, and an AnnData, MuData, Loom or 10x file not in priority order, are
 served as a store in priority order made as the viewer reads it, so a
-subsample transfers only its cells; a MuData object is written once to a temporary `.h5mu`, removed when the
-server stops.
+subsample transfers only its cells; so is a MuData object. An object's
+expression matrices, and a cell-major `X` of a file, are laid out gene-major
+in the background, so the viewer opens at once.
 
 ```python
 from cellucid import serve_anndata
@@ -40,8 +41,9 @@ serve_anndata(
 
 This starts a local server and opens the viewer in your default browser
 (unless `open_browser=False`). A file written by `cellucid.prepare()` declares
-its own name and id in `uns['cellucid']`, so `dataset_name` and `dataset_id`
-are needed only for other AnnData.
+its own name and id in `uns['cellucid']`; any other AnnData is named after
+its file (or, in memory, as `AnnData (N cells)`), and the id made so is
+printed. `dataset_name` and `dataset_id` name it otherwise.
 
 ```{note}
 `serve_anndata(...)` blocks while serving and returns its closed
@@ -217,11 +219,12 @@ Both rules in full:
 ## Edge cases (high-signal)
 
 - **Remote machine**: prefer an SSH tunnel over binding to `0.0.0.0` (see {doc}`12_remote_servers_ssh_tunneling_and_cloud`).
-- **Huge `AnnData` in memory**: its arrays are copied once, before the call
-  returns, into memory-mapped files on disk (never a second copy in memory;
-  about two seconds per 100 million stored values), so later edits to the
-  object do not show; open a subsample in the viewer (Session › Open data) to
-  read only some of the cells.
+- **Huge `AnnData` in memory**: the viewer opens at once; its expression
+  matrices are laid out gene-major into memory-mapped files on disk in the
+  background (never a second copy in memory; about two seconds per 100 million
+  stored values), read-only until they are, so later edits to the object do not
+  show; open a subsample in the viewer (Session › Open data) to read only some
+  of the cells.
 - **Gene IDs not found**: set `gene_id_column` if `var.index` is not what you search by.
 
 ## Troubleshooting
