@@ -33,7 +33,7 @@ python -m sphinx -W --keep-going -b html docs docs/_build/html
 python -m pip install "build==1.5.0" "twine==6.2.0"
 SOURCE_DATE_EPOCH=315532800 python -m build
 python scripts/normalize_sdist.py dist
-python scripts/validate_release.py --tag v0.9.6 --sdist dist  # CELLUCID_VERSION
+python scripts/validate_release.py --tag v0.9.6 --sdist dist --match-recipe-digest  # CELLUCID_VERSION
 python -m twine check --strict dist/*
 ```
 
@@ -45,7 +45,9 @@ pull request:
 
 1. verify the version and runtime requirements equal the Python package;
 2. require the normalized candidate digest to equal `source.sha256` before
-   publication;
+   publication (`--match-recipe-digest` above, the same check the publish
+   workflow makes: update `source.sha256` whenever the source distribution
+   changes, before the tag);
 3. download the published source distribution;
 4. require its SHA-256 digest to equal the already-gated `source.sha256`;
 5. run the recipe import, `pip check`, version, and CLI tests; and
