@@ -94,8 +94,8 @@ def test_python_command_helpers_reject_coercion_before_publication(
         ("<u4", [1, 4]),
     ]
     assert published == [
-        {"type": "highlight", "color": "#00ff00"},
-        {"type": "highlight", "color": "#0000ff"},
+        {"type": "highlight", "color": "#00ff00", "label": None},
+        {"type": "highlight", "color": "#0000ff", "label": None},
         {"type": "setColorBy", "field": "cell_type"},
         {"type": "setVisibility", "visible": False},
         {"type": "setVisibility", "visible": True},
@@ -103,18 +103,17 @@ def test_python_command_helpers_reject_coercion_before_publication(
     ]
 
 
-def test_the_notebook_output_is_one_iframe_and_no_script() -> None:
-    # The viewer opens its own channel; the output carries no code, so it is
-    # the same in every front end, trusted or not.
+def test_a_browser_tab_viewer_shows_a_link_to_its_tab_and_no_frame() -> None:
+    # Inside a notebook cell the viewer is the widget (cellucid.jupyter.Widget);
+    # this viewer runs in a tab of its own, and its output only links to it.
     viewer = _undisplayed_viewer()
-    viewer.height = 600
     viewer._client_server_url = "https://viewer.example"
 
-    html = viewer._generate_viewer_html()
+    html = viewer._repr_html_()
     assert "<script" not in html
-    assert "postMessage" not in html
-    assert html.count("<iframe") == 1
-    assert 'src="https://viewer.example/?viewer=true&amp;viewerId=viewer-1&amp;' in html
+    assert "<iframe" not in html
+    assert 'href="https://viewer.example/?viewer=true&amp;viewerId=viewer-1&amp;' in html
+    assert 'target="_blank"' in html
 
 
 def test_the_viewer_page_address_uses_the_shared_protocols_keys() -> None:
@@ -197,6 +196,7 @@ def test_debug_connection_reports_the_commands_the_viewer_rejected(
         {
             "type": "ready",
             "n_cells": 3,
+            "n_obs": 3,
             "dimensions": 2,
         }
     )

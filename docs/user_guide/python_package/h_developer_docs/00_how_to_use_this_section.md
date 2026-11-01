@@ -57,17 +57,21 @@ Start reading: {doc}`07_prepare_writer_architecture` →
   answers, and states the launch choices in `/_cellucid/datasets`.
 - The web app's own readers read the data in place (with range requests where
   the format allows it, once from the start for an R object or a MatrixMarket
-  folder). An in-memory object is first written once to a temporary `.h5ad` or
+  folder). An in-memory AnnData, and an AnnData file not in priority order,
+  are served as a store in priority order made as the viewer reads it
+  (`_served_store.py`); an in-memory MuData is first written to a temporary
   `.h5mu`.
 
 Start reading: {doc}`09_server_mode_architecture_endpoints_and_security` → {doc}`01_codebase_architecture`
 
-### 3) **Notebook embedding mode** (Jupyter iframe + hooks/events)
+### 3) **Notebook mode** (a widget + hooks/events)
 
-- A server runs (serving one dataset).
-- The notebook displays an iframe pointed at that server.
-- The iframe opens one WebSocket to the server (the viewer channel): Python's
-  commands go to the viewer and the viewer's events come back on it.
+- No server runs: `show_anndata()` shows an anywidget whose output frames the
+  app from `https://www.cellucid.com`.
+- The app reads the dataset's bytes from the kernel through the widget, over
+  the notebook's own connection (a Jupyter comm).
+- The viewer channel rides on the same connection: Python's commands go to the
+  viewer and the viewer's events come back on it.
 
 Start reading: {doc}`10_jupyter_embedding_architecture` → {doc}`11_hooks_events_protocol_and_schema`
 

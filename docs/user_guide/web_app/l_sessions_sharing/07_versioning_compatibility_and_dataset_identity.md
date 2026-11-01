@@ -24,12 +24,18 @@ fails, the transaction rolls back and reports the exact failure.
 
 ## Format version
 
-Every session file starts with the signature `CELLUCID_SESSION/2`: the file
-kind and the session format version. This release reads format 2 only. Any
-file that does not start with that signature is refused before anything is
-read:
+Every session file starts with the signature `CELLUCID_SESSION/3`: the file
+kind and the session format version. This release reads format 3 only. A
+session saved by an earlier Cellucid (format 2) recorded its cell check over
+coordinates as they were drawn, which this version cannot recompute, so it is
+refused before anything is read:
 
-> This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).
+> This session was saved by an earlier version of Cellucid (session format 2): the check that it marks the same cells cannot be verified, so it was not opened. Re-create it in this version of Cellucid.
+
+A session saved by a newer Cellucid is refused naming its format, and any other
+file with:
+
+> This file is not a Cellucid session file of format 3 (it does not start with CELLUCID_SESSION/3).
 
 ## Exact fingerprint
 
@@ -37,7 +43,9 @@ The session stores six fields:
 
 - `datasetId`: the dataset's identity id (`uns['cellucid']['id']` in the file,
   else the id its route gives it, such as `cellxgene:<dataset id>` for a link,
-  or `<format>_<name>` for a file or folder, `h5ad_atlas` for `atlas.h5ad`);
+  or, for a file or folder on your computer, `<format>_<name>_<structure>`:
+  its format, its name and eight hexadecimal digits of its cell and gene counts
+  and gene names, `h5ad_atlas_1bd42f4e` for an `atlas.h5ad`);
 - `name`: the dataset's display name, or `null`. It is not compared; messages
   use it to name the dataset (`"<name>" (id "<id>")`);
 - `cellCount`: the number of observations;
@@ -46,14 +54,18 @@ The session stores six fields:
   against, with exactly three members; and
 - `dataMapping`: which stored arrays the dataset was shown with.
 
-`cellOrder.digest` is 16 lowercase hexadecimal characters computed over every
-cell coordinate of one embedding in dataset row order. `cellOrder.embedding`
-names that embedding — the embedding the live view showed when the session was
-saved — as an `obsm` key with the 0-based columns plotted
-(`{"key": "X_pca", "columns": [0, 1]}`). `cellOrder.dimension` is its dimension,
-exactly 1, 2, or 3. The embedding is part of the record because every embedding
-is a separate payload normalized on its own, so a digest only means anything
-within one of them.
+`cellOrder.digest` is 16 lowercase hexadecimal characters computed over the
+stored coordinates of one embedding, each cell named by its original position
+(its row in the dataset's own order), for the cells the session was saved on.
+How those cells were opened does not change it: whole, grown step by step, a
+share raised or lowered with **Apply**, or a file that stores its cells in
+priority order. `cellOrder.embedding` names that embedding — the embedding the
+live view showed when the session was saved — as an `obsm` key with the
+0-based columns plotted (`{"key": "X_pca", "columns": [0, 1]}`).
+`cellOrder.dimension` is its dimension, exactly 1, 2, or 3. The embedding is
+part of the record because a digest only means anything within one
+embedding's columns. The digest is specified in
+{doc}`../p_developer_docs/10_sessions_persistence_and_serialization`.
 
 `dataMapping` names the embeddings that are turned on and each dimension's
 default, the vector-field bindings in use, the neighbour graph, the modality (a
@@ -76,16 +88,17 @@ newly saved session.
 
 The first three fields say *which* dataset. They cannot say which ordering,
 because all three survive writing the same dataset again from re-sorted input.
-Sessions store selections as row numbers, so without `cellOrder` a republication
-under an unchanged identity would silently re-point every lasso, KNN, proximity,
-and annotation selection at different cells. That is the failure `cellOrder`
+Sessions name cells by their original position, so without `cellOrder` a
+republication under an unchanged identity would silently re-point every lasso,
+KNN, proximity, and annotation selection at different cells. That is the failure `cellOrder`
 exists to catch.
 
-Restoring is *verify, then apply*: the counts and identity, then the data
-mapping, then the digest of the very embedding the session names are all
-checked before anything changes on screen. The named embedding is loaded for the
-check whichever one is on screen, so a session saved in 2D opens while 3D is
-shown.
+Restoring is *verify, then apply*: the cells the session was saved on are
+opened, then the counts and identity, the data mapping, and the digest of the
+very embedding the session names are all checked before anything changes on
+screen. The named embedding is checked whichever one is on screen (its stored
+values; it is not loaded for display), so a session saved in 2D opens while 3D
+is shown.
 
 ## Fields the session uses
 
@@ -112,7 +125,8 @@ added to the dataset since the session was saved does not matter.
 | Same id and same cell and gene counts, but the dataset stores its cells in a different order | complete rejection; the message says the coordinates differ from the ones the session was saved against, names both causes a digest cannot tell apart — a different order, or the same cells written again from a re-computed embedding — and asks you to load the version the session was saved on, or re-create the selections here |
 | The dataset lacks an observation field or gene the session uses | complete rejection; the message names every missing key |
 | A highlight saved as a whole category, or part of one, whose category no longer holds the same cells | complete rejection: "The category this selection was saved relative to no longer holds the same cells." |
-| A file that does not start with `CELLUCID_SESSION/2` | complete rejection before anything is read, with the message above |
+| A session saved by an earlier Cellucid (`CELLUCID_SESSION/2`) or a newer one | complete rejection before anything is read, naming its format, with the message above |
+| A file that does not start with `CELLUCID_SESSION/3` | complete rejection before anything is read, with the message above |
 | Missing, extra, duplicate, aliased, reordered, or noncanonical chunk | complete rejection before success |
 | Corrupt/truncated framing, dishonest byte count, or invalid gzip/JSON/binary payload | complete rejection, bounded decode, rollback |
 | Newer load starts or the user presses **Cancel** | older restore aborts and its progress is dismissed without a red product error |
@@ -125,9 +139,10 @@ shown in the footer and keep the dataset publication revision with the session.
 
 ## Identity is a guard, not a content hash
 
-The fingerprint is still deliberately small. `cellOrder` digests the coordinates
-of one embedding; it does not cover expression values, observation or variable
-fields, categories, cell identifiers, or the embeddings that are not on screen.
+The fingerprint is still deliberately small. `cellOrder` digests the stored
+coordinates of one embedding; it does not cover expression values, observation
+or variable fields, categories, cell identifiers, or the embeddings that are not
+on screen.
 You can therefore still defeat the guard by republishing changed *values* under
 the same dataset id and sizes while leaving the coordinates alone.
 
@@ -152,11 +167,11 @@ It checks the data mapping against the `AnnData` it applies the session to — t
 `varCount` on the mapped gene axis. The exact shapes are in
 {doc}`../../python_package/e_jupyter_hooks/11_session_bundles_apply_session_to_anndata`.
 
-Python validates `cellOrder`'s shape and never its digest: the digest is taken
-over coordinates the viewer drew, and `apply_cellucid_session_to_anndata()`
-targets an `AnnData` whose row order the caller controls, so there is nothing on
-that side to check it against. Enforcing cell-order identity is the web app's
-job.
+Python validates `cellOrder`'s shape and never its digest: the digest is the
+viewer's check, taken when it restores a session on the cells it opened, and
+`apply_cellucid_session_to_anndata()` targets an `AnnData` whose rows the
+caller controls. Enforcing cell-order identity is the web app's job; R's
+`cellucid_apply_session()` does the same.
 
 The practical consequence is one-directional: a bundle Python accepts may still
 be refused by the app. That is not an inconsistency to report. See
@@ -173,10 +188,14 @@ choose **Load**.
 ### Shared dataset file
 
 Distribute one unchanged file or folder (an `.h5ad`, `.zarr.zip` or `.zarr`
-folder, or any other format Cellucid reads) and the session together, with a stable id in `uns['cellucid']['id']`. Everyone opens
+folder, or any other format Cellucid reads) and the session together, with a stable id in `uns['cellucid']['id']`
+(`prepare()` and `cellucid_prepare()` write one). Everyone opens
 it with **Open…** or by dropping it; how it was opened does
 not matter. Re-zipping without changing the store is fine; writing it again
-from changed data, or changing its id, is a new publication.
+from changed data, or changing its id, is a new publication. A file without
+its own id is named by its format, its name, its cell and gene counts and its
+gene names: the same data written again (an observation column added) keeps
+its id, and two files of one name holding other data are two datasets.
 
 ### Shared remote or Jupyter server
 

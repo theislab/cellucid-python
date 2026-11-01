@@ -32,6 +32,7 @@ from cellucid._anndata_files import (
     read_anndata_contents,
     read_cellucid_identity,
 )
+from cellucid._file_versions import path_version
 from cellucid.anndata_server import AnnDataServer
 from cellucid.cli import _detect_data_format
 
@@ -62,6 +63,10 @@ def _tenx_h5(path: Path) -> Path:
         matrix.create_dataset("indices", data=np.array([0, 1], dtype=np.int64))
         matrix.create_dataset("indptr", data=np.array([0, 1, 2], dtype=np.int64))
         matrix.create_dataset("shape", data=np.array([2, 2], dtype=np.int32))
+        features = matrix.create_group("features")
+        features.create_dataset("id", data=np.array([b"ENSG1", b"ENSG2"]))
+        features.create_dataset("name", data=np.array([b"G1", b"G2"]))
+        features.create_dataset("feature_type", data=np.array([b"Gene Expression", b"Gene Expression"]))
     return path
 
 
@@ -216,8 +221,15 @@ def test_the_folder_rule_is_the_web_apps(tmp_path: Path) -> None:
     assert folder_format_of_paths(["f/matrix.mtx"]) == "mtx"
     assert folder_format_of_paths(["f/GSM1_matrix.mtx.gz", "f/GSM1_barcodes.tsv.gz"]) == "mtx"
     assert folder_format_of_paths(["f/GSM1-matrix.mtx.gz", "f/GSM1-features.tsv.gz"]) == "mtx"
-    # A prefixed marker alone, with nothing else sharing its prefix, is not a folder.
-    assert folder_format_of_paths(["f/GSM1_matrix.mtx.gz", "f/GSM2_barcodes.tsv.gz"]) is None
+    # Any .mtx file, whatever its producer named it, compared without case.
+    assert folder_format_of_paths(["f/GSE158055_covid19_counts.mtx.gz", "f/GSE158055_covid19_features.tsv.gz"]) == "mtx"
+    assert folder_format_of_paths(["f/cells_x_genes.MTX"]) == "mtx"
+    assert folder_format_of_paths(["f/notes.mtx.txt", "f/.mtx"]) is None
+    # A sci-RNA-seq3 matrix under a .txt name (GEO GSE119945), as the web app
+    # tells it on this computer and from a link; any other .txt is no matrix.
+    assert folder_format_of_paths(["f/GSE119945_gene_count.txt.gz", "f/GSE119945_cell_annotate.csv.gz"]) == "mtx"
+    assert folder_format_of_paths(["f/GSE1_gene_count.run_13.TXT"]) == "mtx"
+    assert folder_format_of_paths(["f/GSE131907_Lung_Cancer_raw_UMI_matrix.txt.gz"]) is None
     assert folder_format_of_paths(["f/notes.txt"]) is None
 
 
@@ -262,6 +274,7 @@ def test_an_r_object_is_served_as_its_bytes_with_ranges_and_null_counts(tmp_path
             "kind": "rds",
             "layout": "file",
             "size": path.stat().st_size,
+            "etag": path_version(path)[1],
         }
         health = json.loads(_get(host, port, "/_cellucid/health")[2])
         assert health["format"] == "rds"
@@ -280,44 +293,52 @@ def test_a_matrix_market_folder_lists_its_files_and_serves_each(tmp_path: Path, 
         assert file["url"] == "_cellucid/anndata/served/"
         assert (file["kind"], file["layout"]) == ("mtx", "folder")
         assert file["files"] == [
-            {"path": name, "size": (folder / name).stat().st_size}
+            {"path": name, "size": (folder / name).stat().st_size, "etag": path_version(folder / name)[1]}
             for name in sorted(path.name for path in folder.iterdir())
         ]
         for entry in file["files"]:
-            status, _headers, body = _get(host, port, f"/{file['url']}{entry['path']}")
+            status, headers, body = _get(host, port, f"/{file['url']}{entry['path']}")
             assert status == 200
             assert body == (folder / entry["path"]).read_bytes()
+            # Each file's bytes are answered with the validator listed for it.
+            assert headers["ETag"] == entry["etag"]
         assert _get(host, port, f"/{file['url']}../served/x")[0] == 404
         assert _get(host, port, f"/{file['url']}missing.tsv.gz")[0] == 404
 
 
-def test_a_cell_ranger_outs_folder_is_served_with_its_subfolders(tmp_path: Path) -> None:
+def test_a_cell_ranger_outs_folder_is_served_with_its_analysis_in_priority_order(tmp_path: Path) -> None:
     outs = tmp_path / "outs"
     _tenx_h5(outs / "filtered_feature_bc_matrix.h5")
-    projection = _write(outs / "analysis" / "umap" / "2_components" / "projection.csv", b"Barcode,UMAP-1,UMAP-2\nAAAC-1,0,1\n")
-    with _serving(outs) as (_server, host, port):
+    _write(outs / "analysis" / "umap" / "2_components" / "projection.csv", b"Barcode,UMAP-1,UMAP-2\nAAAC-1,0,1\n")
+    with _serving(outs) as (server, host, port):
         file = json.loads(_get(host, port, "/_cellucid/datasets")[2])["datasets"][0]["anndata"]["file"]
-        assert file["kind"] == "tenx-outs"
-        paths = [entry["path"] for entry in file["files"]]
-        assert "analysis/umap/2_components/projection.csv" in paths
-        status, _headers, body = _get(host, port, f"/{file['url']}analysis/umap/2_components/projection.csv")
-        assert (status, body) == (200, projection.read_bytes())
+        # The matrix and its analysis, as the browser presents the folder, cells in priority order
+        # (tests/test_served_foreign_formats.py checks every value).
+        assert (file["kind"], file["layout"]) == ("zarr", "folder")
+        assert server.contents is not None and "X_umap" in server.contents.obsm
+        status, _headers, body = _get(host, port, f"/{file['url']}obsm/X_umap/.zarray")
+        assert status == 200 and json.loads(body)["shape"] == [2, 2]
 
 
 def test_a_mudata_names_itself_and_is_served_with_its_counts(tmp_path: Path) -> None:
     path = _mudata_h5mu(tmp_path / "cite.h5mu")
     server = AnnDataServer(path, host="127.0.0.1", port=0, quiet=True, serve_web_ui=False)
     assert (server.dataset_id, server.dataset_name) == ("cite-demo", "CITE demo")
+    # Not written by prepare(): served as a MuData Zarr store in priority order.
     assert server._datasets_document()["datasets"][0]["anndata"]["file"]["url"] == (
-        "_cellucid/anndata/cite-demo.h5mu"
+        "_cellucid/anndata/cite-demo.zarr/"
     )
     assert (server.server_info["n_cells"], server.server_info["n_genes"]) == (6, 4)
-    assert server.server_info["format"] == "h5mu"
+    assert server.server_info["format"] == "mudata-zarr"
+    server.stop()
 
 
-def test_a_format_python_cannot_read_must_be_named(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="dataset_name and dataset_id are required"):
-        AnnDataServer(_rds(tmp_path / "pbmc.rds"), host="127.0.0.1", port=0, quiet=True, serve_web_ui=False)
+def test_a_format_python_cannot_read_is_named_after_its_file(tmp_path: Path) -> None:
+    server = AnnDataServer(_rds(tmp_path / "pbmc.rds"), host="127.0.0.1", port=0, quiet=True, serve_web_ui=False)
+    try:
+        assert (server.dataset_id, server.dataset_name) == ("pbmc", "pbmc.rds")
+    finally:
+        server.stop()
 
 
 def test_a_zipped_mudata_zarr_is_named_by_its_root(tmp_path: Path) -> None:
@@ -329,7 +350,11 @@ def test_a_zipped_mudata_zarr_is_named_by_its_root(tmp_path: Path) -> None:
     assert (store.kind, store.layout, store.zip_root) == ("mudata-zarr", "zip", "cite.zarr")
 
 
-def test_an_in_memory_mudata_is_served_from_a_temporary_cellucid_ready_h5mu() -> None:
+def test_an_in_memory_mudata_is_served_from_a_snapshot_in_priority_order() -> None:
+    """A MuData object is served as its file would be (a MuData Zarr store in
+    priority order), from a snapshot, as an AnnData object is: nothing
+    written to disk but the layouts in the store's scratch folder, removed
+    with the server."""
     import mudata
     rng = np.random.default_rng(5)
     names = pd.Index([f"c{i}" for i in range(8)], dtype=object)
@@ -350,12 +375,16 @@ def test_an_in_memory_mudata_is_served_from_a_temporary_cellucid_ready_h5mu() ->
         modality="prot",
     )
     try:
-        temporary = server.store.path
-        assert (server.store.kind, temporary.suffix) == ("h5mu", ".h5mu")
-        assert (server.server_info["n_cells"], server.server_info["format"]) == (8, "h5mu")
+        store = server._served.priority
+        assert store is not None and store.layout == "mudata"
+        assert (server._served.kind, server._served.layout) == ("mudata-zarr", "folder")
+        assert (server.server_info["n_cells"], server.server_info["format"]) == (8, "mudata-zarr")
         assert server.defaults["modality"] == "prot"
-        contents = read_anndata_contents(server.store)
+        contents = store.contents()
         assert contents is not None and set(contents.modalities or {}) == {"rna", "prot"}
+        store.laid_out()
+        folder = store._folder.folder
+        assert folder is not None and folder.exists()
     finally:
         server.stop()
-    assert not temporary.exists()
+    assert not folder.exists()

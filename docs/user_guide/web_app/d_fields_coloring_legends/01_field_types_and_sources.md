@@ -123,6 +123,9 @@ field, just from the var axis instead of the obs axis.
 The (i) beside each colour-mapping toggle answers two questions this page
 would otherwise need paragraphs for:
 
+- **Gray for zero** (a gene with no negative value): Off, a 0 takes the colour
+  scale's lowest colour; On, the cells where the gene is 0 are gray beneath
+  the expressing ones ({ref}`gray-for-zero`).
 - **Log color scale**: zero, negative and missing values have no logarithm and
   take the None color.
 - **Rescale to range**: On, the colour map stretches across the visible range;

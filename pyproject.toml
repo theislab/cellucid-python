@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cellucid"
-version = "0.9.5"  # CELLUCID_VERSION
+version = "0.9.6"  # CELLUCID_VERSION
 description = "Interactive Single-Cell Data Visualization"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
@@ -36,7 +36,10 @@ dependencies = [
     "zarr>=3.1.4,<4",
     "numcodecs>=0.16.3,<0.17",
     "ipython>=7.23",
-    "jupyter-server-proxy>=4.1",
+    # The notebook widget (cellucid.Widget, show_anndata): its front end is
+    # an anywidget module, shown by JupyterLab, Notebook 7, VS Code, Colab,
+    # marimo and Databricks without a port or a proxy.
+    "anywidget>=0.9",
 ]
 
 classifiers = [
@@ -108,7 +111,7 @@ Citation = "https://github.com/theislab/cellucid-python/blob/main/CITATION.cff"
 where = ["src"]
 
 [tool.setuptools.package-data]
-cellucid = ["py.typed", "input_formats.json"]
+cellucid = ["py.typed", "input_formats.json", "jupyter/static/widget.js", "jupyter/static/widget.css"]
 
 [tool.ruff]
 line-length = 100

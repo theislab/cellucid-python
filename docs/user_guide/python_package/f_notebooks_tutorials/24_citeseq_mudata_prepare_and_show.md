@@ -115,8 +115,8 @@ protein (`CD3_TotalSeqB`, `CD19_TotalSeqB`) to colour the cells by it; marker
 genes and the dot plot then compare proteins
 ({doc}`../../web_app/b_data_loading/19_multimodal_mudata`).
 
-The in-memory MuData shows the same way, written once to a temporary `.h5mu`;
-it names itself only once prepared, so give it a name and an id. `modality=`
+The in-memory MuData shows the same way, served as a MuData store made from
+it; it names itself only once prepared, so give it a name and an id. `modality=`
 opens it on the proteins:
 
 ```python

@@ -15,6 +15,7 @@ check and build the description only when it fails.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import cast
 
@@ -135,6 +136,28 @@ def describe_non_finite(
     if counted is None:
         return ""
     counts, shape = counted
+    return _worded(counts, shape, subject, positions=positions)
+
+
+def describe_non_finite_blocks(blocks: Iterable[np.ndarray], subject: str) -> str:
+    """:func:`describe_non_finite` of a sparse matrix's stored values, given
+    block by block (a matrix laid out a block at a time is never whole in
+    memory): the same counts, over every block."""
+    totals = dict.fromkeys(("total", "nan", "positive_infinity", "negative_infinity", "float32_overflow", "float32_underflow"), 0)
+    for block in blocks:
+        counted = _count_non_finite(block)
+        if counted is None:
+            totals["total"] += int(np.asarray(block).size)
+            continue
+        for key in totals:
+            totals[key] += getattr(counted[0], key)
+    counts = _NonFiniteCounts(**totals, examples=())
+    if counts.offending == 0:
+        return ""
+    return _worded(counts, (counts.total,), subject, positions=False)
+
+
+def _worded(counts: _NonFiniteCounts, shape: tuple[int, ...], subject: str, *, positions: bool) -> str:
     scope = "values" if positions else "stored non-zero values"
     where = ""
     if positions:

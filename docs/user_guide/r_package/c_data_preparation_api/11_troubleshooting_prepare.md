@@ -90,8 +90,10 @@ Pass `embeddings = list(X_umap = umap)`.
 **`All embeddings must have one row per cell: 'X_umap' has 3 rows and 'X_b' has 2.`**
 Every embedding must describe the same cells in the same order.
 
-**`Embedding 'X_umap' must contain only finite values. ... of 6 values, 1 NA. First affected position: [2, 1]. ...`**
-Remove or impute the cells with missing coordinates in every input.
+**`Embedding 'X_umap': every cell's values are missing (NaN or infinite). ...`**
+No row of the embedding is finite. Pass the embedding computed over the cells;
+a row of `NA` in an otherwise finite embedding is a cell it does not place,
+which is written as given and not drawn in that embedding.
 
 **`Embedding 'X/umap' contains a character that cannot appear in a file name on every platform ...`**
 Rename it; the message shows how. See the path rules in
@@ -155,11 +157,10 @@ A repeated gene is addressed by its unique name (`"CD3E-1"`); see
 
 **`connectivities must be 3 x 3 (one row and one column per cell), got 2 x 2.`**
 
-**`Connectivity matrix must be exactly symmetric.`**
-Symmetrize it, for example `(knn + Matrix::t(knn)) / 2`.
-
-**`Connectivity diagonal values must all be exactly zero.`**
-Remove self-loops: `Matrix::diag(graph) <- 0`.
+**`Connectivity matrix must be exactly symmetric: a directed neighbour graph ...`**
+Pass a symmetric graph (Seurat's `RNA_snn`, not `RNA_nn`), or symmetrize it,
+for example `(knn + Matrix::t(knn)) / 2`. A diagonal is left out, never
+refused.
 
 **`Connectivity weights must all be non-negative.`** /
 **`Connectivity weights must all be finite.`**

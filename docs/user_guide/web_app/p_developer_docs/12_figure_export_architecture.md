@@ -92,8 +92,11 @@ Every per-cell pass and every encode runs in the export worker
 
 Each rendered file opens a worker session: a typed array is copied to the
 worker once per session, and closing the session releases it. An export that is
-cancelled rejects its pending requests at once; the worker's late answers are
-discarded.
+cancelled (**Cancel export**, the button's label while an export runs; or
+closing the panel) rejects its pending requests at once. The worker hears the
+session's `cancel` ahead of its queue and skips every request of that session
+still queued. The pass already running ends (one synchronous draw) and its late
+answer is discarded.
 
 ### Where the point pass is drawn
 
@@ -117,6 +120,15 @@ rasterizer and no setting: the placement follows the measured capability.
 `setFigureExportWorkerWebgl2(false)` states the answer for tests, and
 `CELLUCID_FIGURE_EXPORT_POINT_PASS=page` runs a browser suite with every
 point pass on the page.
+
+Both placements draw the same pixels only where their two contexts are the
+same: `rasterContext` (a point-pass operation, so it runs where the passes
+run) describes the context of a placement (`describeRasterContext`: the
+renderer and vendor, the attributes the browser granted, the drawing buffer's
+samples). `figure-export.spec.mjs` compares the two descriptions before the
+two rasters, and attaches both with the differing pixels when either
+differs: macOS Firefox once drew 7 of 15,346 pixels up to 3 levels apart on
+antialiased rims (nightly run 41269083996), with nothing recorded to say why.
 
 The PNG exporter also embeds metadata via UTF-8 PNG `iTXt` chunks:
 - `Software`, `Website`, `Creation Time`, `Dataset`, `Dataset ID`, `Color Field`,

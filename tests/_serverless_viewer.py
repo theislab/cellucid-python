@@ -18,7 +18,6 @@ from cellucid.jupyter import AnnDataViewer
 def serverless_viewer(
     *,
     port: int | None = None,
-    height: int = 600,
     client_server_url: str | None = None,
     web_source_url: str = CELLUCID_WEB_URL,
     web_cache_dir: str | Path | None = None,
@@ -28,10 +27,13 @@ def serverless_viewer(
     viewer = object.__new__(AnnDataViewer)
     viewer._init_state(
         port=port,
-        height=height,
         client_server_url=client_server_url,
         web_source_url=web_source_url,
         web_cache_dir=web_cache_dir,
         allowed_hosts=allowed_hosts,
     )
+    # What it shows: nothing this process holds, so no obs names (a test
+    # names the data, or the names, when it matters).
+    viewer.data = None
+    viewer._obs_names_cache = None
     return viewer

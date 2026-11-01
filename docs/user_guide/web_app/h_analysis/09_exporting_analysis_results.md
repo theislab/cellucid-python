@@ -97,7 +97,8 @@ This section is deliberately explicit so you can build downstream tooling.
   - Filename: `detailed-analysis-data.csv`
   - Columns:
     - `page`: the page name
-    - `cell_index`: the dataset row index for that value (0-based)
+    - `cell_index`: the cell's row in the whole dataset in its original order
+      (0-based), also when a subsample is open
     - `<variable>`: the exported value: the number, or the category label for
       a categorical variable (empty for a missing value)
 
@@ -140,7 +141,10 @@ The exported CSV statistics (`r`, `p_value`, `n`) are computed on the full paire
 - **CSV export:** one row per gene — every gene tested or not, whatever the filters.
   - Filename: `differential_expression.csv`
   - Columns (scanpy’s `rank_genes_groups_df` names where one exists):
-    - `names` (the gene)
+    - `names` (the gene's identifier: the var index, what `adata.var_names`
+      holds — Ensembl ids for a CELLxGENE file)
+    - `symbols` (the name the viewer shows; only when it differs from the
+      identifier for some gene)
     - `scores` (Wilcoxon z, or Welch’s t)
     - `logfoldchanges` (as **Fold change from** chose)
     - `pvals`, `pvals_adj` (Benjamini–Hochberg or Bonferroni)
@@ -162,10 +166,15 @@ Record them yourself (file rename, notes, or session).
   - Columns:
     - `page`
     - `set` (the gene set’s name)
-    - `cell_index` (the dataset row, 0-based)
+    - `cell_index` (the cell's row in the whole dataset in its original
+      order, 0-based)
     - `score` (as computed: **Rescale** changes the plot, not the file)
 
-`cell_index` joins the scores back to `adata.obs` (row `cell_index`).
+`cell_index` joins the scores back to `adata.obs` (row `cell_index`) of the
+whole dataset in its original order, and each page's rows ascend by it: with
+a subsample open it names rows of every cell, and a file Cellucid wrote
+(stored in priority order) is read back in that order with
+`cellucid.restore_original_order()` (R: `cellucid_restore_original_order()`).
 
 ### Marker Genes (Genes Panel)
 
@@ -173,12 +182,12 @@ From the expanded view:
 
 - **CSV** — the markers shown, one row per group and marker.
   - Filename: `marker_genes.csv`
-  - Columns: `group`, `rank`, `names`, `scores`, `logfoldchanges`, `pvals`,
+  - Columns: `group`, `rank`, `names`, (`symbols`), `scores`, `logfoldchanges`, `pvals`,
     `pvals_adj`, `pct_nz_group`, `pct_nz_reference`, `auroc`, `small_group`
 - **All genes CSV** — every gene of every group, whatever the filters, in dataset
   gene order.
   - Filename: `marker_genes_all.csv`
-  - Columns: `group`, `names`, `scores`, `logfoldchanges`, `pvals`, `pvals_adj`,
+  - Columns: `group`, `names`, (`symbols`), `scores`, `logfoldchanges`, `pvals`, `pvals_adj`,
     `pct_nz_group`, `pct_nz_reference`, `auroc`, `small_group`, `tested`
   - `tested` is `false` for a skipped group and for the reference group; their
     statistics are empty. A gene not tested in a tested group has empty
@@ -188,7 +197,12 @@ From the expanded view:
   - One line per group: the group name, `Cellucid marker genes`, then its genes,
     tab-separated (MSigDB’s format; Gene signature and Dot plot import it).
 
-The column names are scanpy’s `rank_genes_groups_df`; `pct_nz_group` and
+`names` is each gene's identifier, as scanpy's `names` and every other place
+Cellucid hands a gene back (sessions, gene sets, the notebook) name it, so the
+table joins to `adata.var_names`; `symbols`, the names the viewer shows, is
+written beside it only when the two differ (a CELLxGENE file: Ensembl ids in
+the var index, symbols shown). The column names are scanpy’s
+`rank_genes_groups_df`; `pct_nz_group` and
 `pct_nz_reference` are fractions (0–1). `group` is the category name exactly as
 the heatmap and the group picker show it. `small_group` is `true` for a group
 with fewer cells than **Min cells per group** (a pool of small groups counts as

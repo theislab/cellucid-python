@@ -3,8 +3,9 @@
 This page documents how your notebook Python code can **control** the embedded Cellucid viewer.
 
 Under the hood:
-- the viewer opens one authenticated WebSocket to the data server (the viewer
-  channel, {doc}`05_architecture_viewer_channel`);
+- the viewer opens one authenticated channel to Python (the viewer channel,
+  {doc}`05_architecture_viewer_channel`): over the notebook widget's comm, or
+  a WebSocket to a browser-tab viewer's server;
 - Python sends each command on it as one JSON text frame, and a command that
   names cells (`highlight`, `setVisibility`) as one binary frame;
 - a command sent before the viewer has connected waits and is sent, in order,
@@ -56,10 +57,12 @@ A command sent before the viewer has connected waits in Python and is sent as
 soon as the viewer connects; the viewer applies it once its dataset is open.
 `viewer.send_message(...)` returns `True` when the command went out at once and
 `False` when it is waiting. After `viewer.stop()` it raises `RuntimeError`.
-To act only once the viewer shows the data:
+To act only once the viewer shows the data, register a hook:
 
 ```python
-viewer.wait_for_ready(timeout=60)
+@viewer.on_ready
+def _ready(event):
+    viewer.set_color_by("cell_type")
 ```
 ```
 
@@ -115,14 +118,16 @@ All of these are methods on the `viewer` object returned by `show_anndata(...)`.
 | `viewer.set_visibility(cell_indices=None, visible=True)` | Hide/show specific cells (or all) | `"setVisibility"` |
 | `viewer.reset_view()` | Reset camera | `"resetCamera"` |
 | `viewer.set_data_mapping(**fields)` | Change what the viewer plots and reads, and wait for it to apply | `"setDataMapping"` |
+| `viewer.push(values, key=None)` | Show a column (labels, clusters, a score) as a field | `"setField"` |
+| `viewer.push_gene_set(name, genes, description="")` | Give the viewer a gene set (Gene signature, Dot plot: "From notebook") | `"setGeneSet"` |
 
 Diagnostics / utilities (also useful for debugging):
 
 | Python method | Purpose | Frontend message type |
 |---|---|---|
 | `viewer.debug_connection()` | End-to-end connectivity report | `"ping"`, `"debug_snapshot"` (internal) |
-| `viewer.get_session_bundle()` | Request a session bundle upload | `"requestSessionBundle"` |
-| `viewer.stop()` | Freeze the view, stop the server, unregister hooks, and report any failure | `"freeze"` |
+| `viewer.request_session_bundle()` | Request a session bundle upload (collected with `request.result()`) | `"requestSessionBundle"` |
+| `viewer.stop()` | Freeze the view, stop answering it (a browser-tab viewer: stop its server), unregister hooks, and report any failure | `"freeze"` |
 
 ## Message schema (what actually crosses the boundary)
 
@@ -148,7 +153,7 @@ once; Python sorts them once and writes them straight into the frame.
 with their cells under `"cells"`:
 
 ```python
-viewer.send_message({"type": "highlight", "cells": [0, 10, 42], "color": "#ff00ff"})
+viewer.send_message({"type": "highlight", "cells": [0, 10, 42], "color": "#ff00ff", "label": None})
 ```
 
 ### `highlight`
@@ -156,12 +161,15 @@ viewer.send_message({"type": "highlight", "cells": [0, 10, 42], "color": "#ff00f
 Header, then the cells:
 
 ```json
-{ "type": "highlight", "color": "#ff00ff" }
+{ "type": "highlight", "color": "#ff00ff", "label": null }
 ```
 
 Notes:
-- `cells` (in `send_message`, or `cell_indices`) are 0-based integer indices,
-  at least one.
+- `cells` (in `send_message`, or `cell_indices`) are 0-based rows of `obs`
+  (original positions, whatever subsample the viewer opened), at least one;
+  `viewer.highlight_cells()` also takes obs names.
+- `label` names the highlight group in the viewer; `null` names it by its
+  cell count.
 - `color` must be a hex string (`#RRGGBB`); invalid colors are rejected.
 
 ### `clearHighlights`
@@ -200,7 +208,7 @@ Notes:
 { "type": "resetCamera" }
 ```
 
-### `requestSessionBundle` (internal, used by `viewer.get_session_bundle()`)
+### `requestSessionBundle` (internal, used by `viewer.request_session_bundle()`)
 
 ```json
 { "type": "requestSessionBundle", "requestId": "..." }
@@ -221,13 +229,15 @@ this one is answered: the viewer replies with a `data_mapping` event of origin
 
 `viewer.set_data_mapping(**fields)` replaces the named top-level fields of the
 mapping the viewer last reported (`embeddings`, `vectorFields`, `geneNames`,
-`knn`, `expression`, `log1p`, `highlyVariable`, `latent`; never `kind`, which
-is always `"anndata"`),
-validates the result, sends it, and returns the mapping the viewer reports
-back. It raises `RuntimeError` before sending when the viewer has not reported
-a mapping yet, `TypeError` for an unknown field, `ValueError` for an invalid
-value, `RuntimeError` with the viewer's reason when the viewer refuses it, and
-`TimeoutError` when no answer arrives within `timeout` seconds (30 by default).
+`knn`, `expression`, `log1p`, `highlyVariable`, `latent`, `modality`; never
+`kind`, which is always `"anndata"`), validates the result and sends it,
+waiting for nothing: a notebook widget hears the viewer only between cells.
+Called before the viewer reported a mapping (a notebook run top to bottom),
+it sends once the viewer does. It raises `TypeError` for an unknown field and
+`ValueError` for an invalid value (nothing is sent); the viewer's answer
+becomes `viewer.data_mapping` in a later cell, and a mapping it refuses -- or
+one that waited and does not fit the reported mapping -- arrives as a
+`command_error` naming `setDataMapping` (printed unless a hook handles it).
 
 ```python
 viewer.set_data_mapping(
@@ -263,32 +273,30 @@ viewer.set_data_mapping(
   indices against the dataset cell count before sending them.
 - **Viewer not displayed yet**: commands wait and are sent when it connects.
 - **Viewer stopped**: `viewer.send_message(...)` raises `RuntimeError`.
-- **Multiple viewers**: make sure you are sending commands to the same `viewer` instance that rendered the iframe you are looking at.
+- **Multiple viewers**: make sure you are sending commands to the same `viewer` instance whose output you are looking at.
 
 ## Troubleshooting
 
 If “nothing happens” when sending commands:
 
-1. Confirm the viewer is displayed and ready:
+1. Confirm the viewer is displayed and ready (in a new cell):
    ```python
-   viewer.wait_for_ready(timeout=60)
+   viewer.state.ready      # None until the dataset has opened
    ```
 2. Run:
    ```python
    viewer.debug_connection()
    ```
-   - If ping/pong fails, you have a connectivity/proxy problem.
+   - `channel_connected` False: the viewer has not opened its channel (for a
+     browser-tab viewer the report also runs a ping/pong).
 3. Check whether the viewer rejected the command rather than ignoring it:
    ```python
    viewer.debug_connection()["recent_events"]["command_errors"]
    ```
-4. If ping/pong succeeds and no command was rejected, but a specific command
-   is ignored:
-   - Re-establish the exact configured source generation:
-     ```python
-     viewer.clear_web_cache()
-     ```
-   - Re-run the cell to create a fresh viewer.
+4. If the channel is connected and no command was rejected, but a specific
+   command is ignored: re-run the cell to create a fresh viewer (for a
+   browser-tab viewer, `viewer.clear_web_cache()` first re-establishes the app
+   build).
 5. Use the full guide: {doc}`14_troubleshooting_hooks`
 
 ## Next steps

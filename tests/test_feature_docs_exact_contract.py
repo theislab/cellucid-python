@@ -201,13 +201,14 @@ def test_community_annotation_docs_publish_current_network_and_repository_contra
         "from urllib.parse import unquote",
         "`/auth/login`",
         "`/auth/callback`",
+        "`/auth/revoke`",
         "`/auth/user`",
         "`/auth/installations`",
         "`/auth/installation-repos`",
         "`/cap/lookup-cells`",
         "`/api/repos/*`",
         "`ALLOWED_ORIGINS`, `GITHUB_CLIENT_ID`, and `GITHUB_CLIENT_SECRET`",
-        '`{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":1,',
+        '`{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":2,',
         "1,000,000 decoded UTF-8 bytes",
         "A Pull has no limit on how many user files there are or on their total size",
         "streaming the cache one file at a time",
@@ -393,8 +394,8 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
     developer_normalized = " ".join(developer.split())
 
     for exact in (
-        # Session format 2: the version is part of the signature.
-        "`CELLUCID_SESSION/2\\n`",
+        # Session format 3: the version is part of the signature.
+        "`CELLUCID_SESSION/3\\n`",
         "`createdAt`, `datasetFingerprint`, `source`, `requires`, and `chunks`",
         # The fingerprint carries six fields: the viewer records a `cellOrder`
         # digest so a dataset republished re-sorted under an unchanged identity
@@ -458,8 +459,10 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
         "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have.",
         "The session names another graph, modality, gene names, expression matrix, latent space or vector bindings, ones this dataset can use",
         "stores its cells in a different order",
-        "A file that does not start with `CELLUCID_SESSION/2`",
-        "This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).",
+        "A file that does not start with `CELLUCID_SESSION/3`",
+        "This file is not a Cellucid session file of format 3 (it does not start with CELLUCID_SESSION/3).",
+        # A format-2 file's cell check is over drawn coordinates: refused naming its format.
+        "This session was saved by an earlier version of Cellucid (session format 2): the check that it marks the same cells cannot be verified, so it was not opened. Re-create it in this version of Cellucid.",
         "The dataset lacks an observation field or gene the session uses",
         # The Python reader requires the same fingerprint and never verifies
         # the digest; the page must say both.

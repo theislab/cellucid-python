@@ -125,6 +125,18 @@ def _create_common_server_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--cache-bytes",
+        type=int,
+        default=None,
+        dest="cache_bytes",
+        metavar="BYTES",
+        help=(
+            "Bytes a store served in priority order keeps of what it makes "
+            "(renumbered genes), least recently used first out; 0 keeps nothing "
+            "(default: a 64th of the machine's memory)"
+        ),
+    )
+    parser.add_argument(
         "--no-browser",
         action="store_true",
         help="Don't open browser automatically",
@@ -199,13 +211,14 @@ Formats (detected, by the input format registry the web app reads):
     - .h5ad files; AnnData Zarr store folders (v2 or v3) and zipped stores (.zip)
     - .h5mu files and MuData Zarr stores
     - .loom files; 10x Cell Ranger .h5 files and outs/ folders
-    - MatrixMarket folders (matrix.mtx.gz, or GEO's GSM..._matrix.mtx.gz naming)
+    - MatrixMarket folders (a .mtx[.gz] file of any name, such as GEO's GSM..._matrix.mtx.gz)
     - R objects: .rds, .rda, .RData, gzipped or not (.rds.gz from GEO)
     The browser reads every one itself; the server serves the bytes. An
     h5Seurat file is not opened: in R, read it with SeuratDisk::LoadH5Seurat()
     and save it with saveRDS(), then serve the .rds. A store
-    written by cellucid.prepare() names itself (uns['cellucid']), so
-    --dataset-name and --dataset-id are needed only for other data.
+    written by cellucid.prepare() names itself (uns['cellucid']); any other is
+    named after its file (its id the file's name without the extension), unless
+    --dataset-name and --dataset-id name it.
 
 Examples:
     # Serve an h5ad file (auto-detected)
@@ -282,14 +295,14 @@ Examples:
         type=str,
         default=None,
         metavar="NAME",
-        help="Dataset name (default: the store's uns['cellucid']['name'], required without it)",
+        help="Dataset name (default: the store's uns['cellucid']['name'], else the file's name)",
     )
     serve_parser.add_argument(
         "--dataset-id",
         type=str,
         default=None,
         metavar="ID",
-        help="Stable dataset identifier (default: the store's uns['cellucid']['id'], required without it)",
+        help="Stable dataset identifier (default: the store's uns['cellucid']['id'], else the file's name without its extension)",
     )
     serve_parser.add_argument(
         "--obs-key",
@@ -372,7 +385,8 @@ Examples:
         metavar="X|raw|layer:NAME",
         help=(
             "Where AnnData gene expression is read: X, raw, or layer:NAME "
-            "(default: X when present, else raw or a layer, reported as guessed)"
+            "(default: raw when it holds more genes than X or X is scaled, as Scanpy "
+            "reads genes, else X; without X, raw or a layer, reported as guessed)"
         ),
     )
 
@@ -454,6 +468,7 @@ def _run_serve(args: argparse.Namespace) -> None:
         web_source_url=args.web_source_url,
         web_cache_dir=args.web_cache_dir,
         allowed_hosts=args.allowed_host,
+        cache_bytes=args.cache_bytes,
         latent_key=args.latent_key,
         gene_id_column=args.gene_id_column,
         normalize_embeddings=args.normalize_embeddings,
@@ -521,14 +536,6 @@ def _operating_system_message(error: OSError, args: argparse.Namespace) -> str:
     return str(error)
 
 
-#: Every declared dependency whose import name differs from the name that
-#: installs it. Advising the import name would name a package that does not
-#: exist on PyPI, which is worse than no advice at all.
-_DISTRIBUTION_NAME_BY_IMPORT_NAME: Final = {
-    "jupyter_server_proxy": "jupyter-server-proxy",
-}
-
-
 def _required_python_range() -> str:
     """Return the Python range this installation declares, as it declares it.
 
@@ -580,21 +587,20 @@ def _import_error_message(error: ImportError) -> str:
             f"Cellucid could not read a name it needs from the installed {name!r}"
             f"{location}: {error.msg}. The installed version of that package is not "
             "one this Cellucid can use. Upgrade it in this environment and run the "
-            f"command again: pip install --upgrade {_DISTRIBUTION_NAME_BY_IMPORT_NAME.get(top_level, top_level)}"
+            f"command again: pip install --upgrade {top_level}"
         )
 
     if name != top_level:
         return (
             f"Cellucid needs {name!r}, and the installed {top_level!r} does not "
             f"provide it. Upgrade it in this environment and run the command again: "
-            f"pip install --upgrade {_DISTRIBUTION_NAME_BY_IMPORT_NAME.get(top_level, top_level)}"
+            f"pip install --upgrade {top_level}"
         )
 
-    distribution = _DISTRIBUTION_NAME_BY_IMPORT_NAME.get(name, name)
     return (
         f"Cellucid needs the {name!r} package to read this input and it is not "
         "installed in this environment. Install it and run the command again: "
-        f"pip install {distribution}"
+        f"pip install {name}"
     )
 
 

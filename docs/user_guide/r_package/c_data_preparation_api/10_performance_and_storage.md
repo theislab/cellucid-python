@@ -74,9 +74,12 @@ See {doc}`../d_viewing_loading/02_host_stores_for_sharing`.
 The store is laid out for the viewer's reads:
 
 - **gene-major expression:** one gene's values are one contiguous range, in
-  chunks of 65,536 values, so showing a gene reads that gene and not the
+  chunks of 16,384 values, so showing a gene reads that gene and not the
   matrix;
-- **whole-row embedding chunks:** an embedding is read in a few large chunks;
+- **cells in priority order:** every array with one row per cell (obs
+  columns, embeddings, masks) is chunked in 65,536 values, so a subsample —
+  the first rows of every array — reads little beyond its own cells, and a
+  gene's first values are its values on those cells;
 - **byte shuffle and deflate,** which browsers decompress natively (the
   shuffle puts the similar high bytes of neighbouring values together; the
   expression values themselves compress best unshuffled);

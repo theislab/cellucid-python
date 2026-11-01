@@ -98,10 +98,11 @@ The cause phrase tells you which class of failure it was:
 
 | The sentence says | Meaning | Go to |
 |---|---|---|
-| “nothing is published at that address” | 404 — the path is wrong | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
-| “the server refused access” | 401 or 403 — it exists but you cannot read it | Check that the data is shared publicly, or that you are signed in |
+| “… was not found at `<host>` (HTTP 404 …)” or “nothing is published at that address” | 404 — the path is wrong | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
+| “`<host>` refused … (HTTP 403 …) … the link's permissions” or “the server refused access” | 401 or 403 — it exists but you cannot read it | Check that the data is shared publicly, or that you are signed in |
 | “the server rejected the request” | Some other 4xx | Check the address |
-| “the server reported a problem of its own” | 5xx — not your fault | Wait and retry |
+| “`<host>` is not answering (HTTP 5xx …): a problem on `<host>`'s side” or “the host is not answering” | 5xx — not your fault | Wait and retry |
+| “`<host>` is limiting requests from this network (HTTP 429)” | The host's rate limit | Wait the time it names, then retry |
 | “larger than Cellucid opens in a browser” | The browser could not allocate the memory the data needs | Serve it with `cellucid serve`, or publish a smaller file; {doc}`../b_data_loading/04_server_tutorial` |
 | “not in a format Cellucid can read” | The bytes arrived but are not in a format Cellucid reads | Check the format list, then write it again (for example with anndata or `cellucid.prepare()`); {doc}`../b_data_loading/07_file_format_expectations` |
 | “nothing readable came back” | Offline, DNS failure, **CORS**, or an address that does not hold Cellucid data | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
@@ -122,7 +123,8 @@ metadata load at any size. What remains are the limits of
 the browser itself, and each is reported by name rather than as a crash:
 
 - **An array the browser cannot allocate** is refused as too large, naming the
-  bytes it needed. Close other tabs, or use
+  bytes it needed; Cellucid then keeps less in its caches until memory allows
+  more ({ref}`memory-budgets`). Close other tabs, or use
   {doc}`../b_data_loading/04_server_tutorial`, where Python holds the data and
   the browser receives only what it asks for.
 - **A metadata document longer than the browser's longest text** (about half a
@@ -157,7 +159,7 @@ hit; turning off level of detail makes every cell hittable.
 
 | The message | Meaning | Go to |
 |---|---|---|
-| **“WebGL Context Lost”** dialog, “WebGL context lost. Reload required to continue.”, with a **Reload** button | The GPU dropped the context, usually from memory pressure. A reload is genuinely required — the viewer does not resume from a restored context | {doc}`../n_benchmarking_performance/07_troubleshooting_performance` |
+| **“Graphics reset by the browser”** dialog, restoring, with **Save session** (and **Reload** only if restoring failed) | The GPU dropped the context, usually from memory pressure or a driver reset. The viewer rebuilds every GPU object from the page when the browser gives it back, keeping filters, selections, kept views and analyses; the session was saved in the page first | {doc}`../n_benchmarking_performance/07_troubleshooting_performance` |
 | “WebGL context restored, but Cellucid requires a reload…” | Your browser handed the context back; Cellucid still needs a reload | Reload |
 | “Volumetric smoke isn't available on this device: …” (titled **Volumetric smoke unavailable**) | This browser's graphics driver lacks something the smoke cloud needs, most often float blending (iPhone/iPad Safari, many Android browsers); the view stays in Points | {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` |
 | “Volumetric smoke could not be built. Points rendering works as usual.” / “Volumetric smoke stopped rendering, so the view is back in Points.” | A smoke build or frame failed; the view is in Points and the technical detail is in the browser console | {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` |
@@ -172,7 +174,9 @@ hit; turning off level of detail makes every cell hittable.
 |---|---|---|
 | **“No gene matches”**, followed by your query and a count of how many gene names the dataset publishes | The gene is not in *this dataset*. The count is the point: a dataset often carries a chosen subset of the source data, so a real gene can be legitimately absent | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | “This dataset publishes no gene expression fields, so no gene panel can be built.” | There is no expression data at all here, so no marker or gene analysis is possible | {doc}`../h_analysis/08_analysis_mode_genes_panel` |
-| `<gene> is not in the expression matrix shown` (after choosing a gene in an analysis result) | The result was computed from another expression matrix than the one **Session › Data mapping › Genes** shows | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
+| `<gene> is not a gene in this dataset.` (after Enter in **Gene expression**, or choosing a gene in an analysis result) | No gene of the gene list in use has that name. For an analysis result, it was computed from another gene list than the one **Session › Data mapping › Genes** shows | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
+| `Gene names are still being read: <gene> can be chosen once they are listed.` | The dataset's gene names are read right after its first view; choose the gene again once **Gene expression** can be typed in | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
+| `<field> is not shown: a saved view is being restored.` / `… the view is being saved.` (or `the gene list changed while it was read … and no longer has it`) | A field or gene was chosen while a session or a sample's saved view was being restored or saved, or while the gene list was replaced by one without that gene. Choose it again when that has ended | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
 | **“Gene cannot be shown”**, a multi-line notification naming the gene, counting its `+Infinity` / `-Infinity` / `NaN` values and listing the first affected cells | The values arrived and cannot be placed on a colour scale. The active field never changed. This is a values problem, not a transport one — repair the data at the source | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | `Field "X" has no value in any of N cells, so it has no colour scale.` | Every value in that column is `NaN`, so there is nothing to scale — usually a column that was never computed | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | “Failed to load field: …” | A field could not be loaded. Read the rest of the line: if it counts non-finite values it is the case above, otherwise the data could not be fetched | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends`, then {doc}`../b_data_loading/08_troubleshooting_data_loading` |
@@ -198,7 +202,7 @@ dataset publishes no gene expression fields…”*.
 | “Export failed: …” | Figure export could not complete | {doc}`../k_figure_export/07_troubleshooting_figure_export` |
 | “Exact point export requires WebGL2…” / “…requires camera matrices…” | A capability the exact-point renderer needs is missing right now | {doc}`../k_figure_export/03_export_formats_and_renderers` |
 | A notification titled **Analysis error** (“… failed: &lt;reason&gt;”), or a failed run in the analysis window's status | An analysis could not run; the reason is the rest of the line | {doc}`../h_analysis/10_troubleshooting_analysis` |
-| “High memory usage detected. Some cached data may need to be reloaded.” / “Memory optimization in progress…” | The analysis layer is shedding cached work | {doc}`../h_analysis/10_troubleshooting_analysis` |
+| “Memory was running short, so Cellucid let go of …. They are read again when needed.” | The browser refused an allocation: Cellucid lowered what it lets itself keep, and the caches named gave memory back (cached copies, field data and layouts no view shows, decoded chunks, page values of analyses). Nothing open was stopped or closed; what went is read again when needed, and the limit comes back as memory allows | {ref}`memory-budgets` |
 
 ---
 
@@ -222,7 +226,7 @@ dataset publishes no gene expression fields…”*.
 |---|---|---|
 | **“Notebook command failed”** — “The notebook &lt;type&gt; command did not run: … The viewer is unchanged; correct the notebook cell and run it again.” | A command sent from Python was rejected by the viewer. Nothing changed, so re-running a corrected cell is safe | {doc}`../b_data_loading/05_jupyter_tutorial` |
 | **“Viewer stopped”** — “The notebook or R session that opened this viewer stopped (its server no longer answers). The last complete view stays as it is.” | The kernel, R session or server went away. What you see is the last good state, not live | {doc}`../b_data_loading/05_jupyter_tutorial` |
-| **“Viewer disconnected”** — “The notebook or R session is running, but this viewer cannot open its channel (…). A proxy between this page and the host must pass WebSockets…” | The viewer channel (one WebSocket, `/_cellucid/ws`) is blocked by a proxy | {doc}`../b_data_loading/05_jupyter_tutorial` |
+| **“Viewer disconnected”** — “The notebook or R session is running, but this viewer cannot open its channel (…). A proxy between this page and the host must pass WebSockets…” | A browser-tab viewer's channel (one WebSocket, `/_cellucid/ws`) is blocked by a proxy (a notebook widget has no WebSocket) | {doc}`../b_data_loading/05_jupyter_tutorial` |
 | **“Viewer opened elsewhere”** | The same viewer was opened in another page; this one stops following the notebook | {doc}`../b_data_loading/05_jupyter_tutorial` |
 | “Selection was saved locally, but Python notification failed…” | The selection is real in the browser; Python was not told | {doc}`../b_data_loading/05_jupyter_tutorial` |
 
@@ -244,9 +248,11 @@ readers announce this, and each control is described by that line.
 So:
 
 - **Greyed out for a moment on a slow start** — expected. Wait. They open as
-  soon as the dataset catalog has been read; they do not wait for the first
-  dataset to load, and anything you choose while it loads replaces it (see
-  {ref}`changing-dataset-while-loading`).
+  soon as the interface is built, before the sample catalog has answered
+  (only a data server or a link the address names is read first); they do
+  not wait for the first dataset to load. A file, link or sample you choose
+  while the catalog answers is what opens, and anything you choose while the
+  default sample loads replaces it (see {ref}`changing-dataset-while-loading`).
 - **A click that did nothing at all** — this should no longer be reproducible.
   If it happens, it is a bug worth reporting.
 - **Never becomes ready** — that is a startup failure. Look for the full-screen
@@ -334,7 +340,7 @@ Use this section when Cellucid doesn’t start, your environment blocks required
 1) Use a current stable Chrome, Edge, Firefox, or Safari release.
 2) Confirm WebGL2 works: {doc}`../a_orientation/02_system_requirements`  
 3) Try a private window (rules out extensions and stale cached state).  
-4) If embedded in an iframe/Jupyter, open Cellucid in a standalone tab (iframes can block file access, pointer lock, fullscreen).  
+4) If embedded in an iframe or a notebook output, open Cellucid in a standalone tab (iframes can block file access, pointer lock, fullscreen).  
 
 **Capabilities Cellucid requires, and what happens without them**
 
@@ -351,8 +357,10 @@ Use this section when Cellucid doesn’t start, your environment blocks required
 Cellucid does **not** use the File System Access API's file pickers or
 `SharedArrayBuffer`, so a browser or policy that blocks those is not the cause
 of your problem. Where the browser offers the origin-private file system
-(OPFS), Cellucid keeps a large gene index and the converted copy of an R object
-there; without it they stay in memory. Figure export (PNG and Hybrid SVG) draws
+(OPFS), Cellucid keeps a large gene index, the converted copy of an R object
+or MatrixMarket folder (across visits, until removed under Session › Open
+data › Stored › Manage…) and a file downloaded whole there; without it they stay in memory for
+the tab. Figure export (PNG and Hybrid SVG) draws
 its points on an `OffscreenCanvas`.
 
 **If you’re running locally (developer / power user)**

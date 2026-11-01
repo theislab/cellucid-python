@@ -2,15 +2,15 @@
 
 **Audience:** everyone  
 **Time:** 5–15 minutes (depending on your setup)  
-**Goal:** install Cellucid for R, verify version 0.9.5, and choose the correct <!-- CELLUCID_VERSION -->
+**Goal:** install Cellucid for R, verify version 0.9.6, and choose the correct <!-- CELLUCID_VERSION -->
 source for current registry availability
 
 :::{note}
-**Active package version: 0.9.5.** Version 0.9.5 is the CRAN submission
+**Active package version: 0.9.6.** Version 0.9.6 is the CRAN submission
 release. The
 [CRAN package index](https://cran.r-project.org/web/packages/available_packages_by_name.html)
 is authoritative for registry availability. Use the CRAN command below when
-the index lists `cellucid` 0.9.5; otherwise install the active source from the
+the index lists `cellucid` 0.9.6; otherwise install the active source from the
 official GitHub repository.
 :::
 
@@ -20,7 +20,9 @@ official GitHub repository.
 - **Hard dependencies:** `jsonlite`, and for the viewer `httpuv`, `later` and `curl`
 - **Optional:** `Matrix` (sparse expression matrices and neighbour graphs; recommended),
   `SeuratObject` and `SingleCellExperiment` / `SummarizedExperiment` (each only
-  to read its own objects), `DelayedArray` (assays kept on disk)
+  to read its own objects), `DelayedArray` (assays kept on disk, such as
+  HDF5Array), `BPCells` (matrices kept on disk; from
+  <https://bnprks.r-universe.dev>, not CRAN)
 - **Source builds:** Rtools on Windows, the Xcode Command Line Tools on macOS,
   or a C toolchain plus the R and zlib development headers on Linux (for
   example `r-base-dev`, which brings `zlib1g-dev`, on Debian and Ubuntu)
@@ -33,16 +35,16 @@ they are not.
 
 ## Install Cellucid
 
-### From CRAN when version 0.9.5 is listed
+### From CRAN when version 0.9.6 is listed
 <!-- CELLUCID_VERSION -->
 
-When the CRAN package index lists `cellucid` 0.9.5, install it with: <!-- CELLUCID_VERSION -->
+When the CRAN package index lists `cellucid` 0.9.6, install it with: <!-- CELLUCID_VERSION -->
 
 ```r
 install.packages("cellucid")
 ```
 
-If the index does not list version 0.9.5 yet, use the official source <!-- CELLUCID_VERSION -->
+If the index does not list version 0.9.6 yet, use the official source <!-- CELLUCID_VERSION -->
 installation below.
 
 ### From the official source repository
@@ -77,7 +79,7 @@ packageVersion("cellucid")
 
 You should see:
 - No error on `library(cellucid)`
-- Version `0.9.5` from `packageVersion` <!-- CELLUCID_VERSION -->
+- Version `0.9.6` from `packageVersion` <!-- CELLUCID_VERSION -->
 
 ## Optional dependencies (recommended)
 

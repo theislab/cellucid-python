@@ -11,12 +11,18 @@ server's whole data contract is:
   encoding; a Zarr folder key by key, with 404 for an absent key and
   consolidated metadata built when the store has none;
 - HTTP/1.1 keep-alive, answered by a thread per connection.
+
+A file in priority order (``prepare()``'s layout) is served as it is, so the
+files here are put in priority order first (:func:`_in_priority_order`); an
+object, and a file in any other order, are served as a store in priority
+order (``test_served_priority_store.py``).
 """
 
 from __future__ import annotations
 
 import http.client
 import json
+import os
 import shutil
 import threading
 import zipfile
@@ -35,9 +41,10 @@ from cellucid._anndata_files import (
     browser_undecodable,
     classify_anndata_path,
     read_anndata_contents,
-    write_temporary_h5ad,
 )
+from cellucid._file_versions import path_version
 from cellucid.anndata_server import AnnDataServer
+from cellucid.prepare_data._priority import ORIGINAL_POSITION_COLUMN, CellPriority, prefix_levels
 
 FIXTURES = Path(__file__).parent / "fixtures" / "older_anndata"
 
@@ -67,6 +74,16 @@ def _adata() -> ad.AnnData:
     adata.layers["counts"] = adata.X.copy()
     adata.raw = adata.copy()
     return adata
+
+
+def _in_priority_order(adata: ad.AnnData) -> ad.AnnData:
+    """``adata`` with its cells in priority order and the records saying so (served as it is)."""
+    priority = CellPriority.of(adata.n_obs, 0)
+    assert priority is not None
+    placed = adata[priority.order].copy()
+    placed.obs[ORIGINAL_POSITION_COLUMN] = priority.original.astype(np.uint32)
+    placed.uns["cellucid"] = {"priority": priority.record(prefix_levels(adata.n_obs))}
+    return placed
 
 
 @contextmanager
@@ -131,11 +148,11 @@ def test_the_catalog_names_the_dataset_its_store_and_nothing_private(tmp_path: P
                 "id": "store-contract",
                 "name": "Store contract",
                 "anndata": {
+                    # Not in priority order: served as a store in priority order.
                     "file": {
-                        "url": "_cellucid/anndata/store-contract.h5ad",
-                        "kind": "h5ad",
-                        "layout": "file",
-                        "size": private.stat().st_size,
+                        "url": "_cellucid/anndata/store-contract.zarr/",
+                        "kind": "zarr",
+                        "layout": "folder",
                     },
                     # Nothing was chosen at launch: the viewer takes the
                     # store's own uns['cellucid'] defaults, else its rules.
@@ -149,7 +166,7 @@ def test_the_catalog_names_the_dataset_its_store_and_nothing_private(tmp_path: P
     assert set(health) == {"status", "type", "version", "format", "n_cells", "n_genes"}
     assert (health["type"], health["format"], health["n_cells"], health["n_genes"]) == (
         "anndata",
-        "h5ad",
+        "zarr",
         12,
         5,
     )
@@ -311,7 +328,8 @@ def test_a_store_that_names_itself_needs_no_identity_at_launch(tmp_path: Path, w
     server = AnnDataServer(data, port=0, quiet=True, serve_web_ui=False)
     try:
         assert (server.dataset_id, server.dataset_name) == ("declared-id", "Declared name")
-        assert server.file_route == "_cellucid/anndata/declared-id.h5ad"
+        # Served in priority order: a Zarr store named by the declared id.
+        assert server.file_route == "_cellucid/anndata/declared-id.zarr/"
         # What the store declares is read by the viewer; launch options override it.
         assert server.defaults == {}
     finally:
@@ -325,13 +343,26 @@ def test_a_store_that_names_itself_needs_no_identity_at_launch(tmp_path: Path, w
         named.stop()
 
 
-def test_a_store_without_identity_must_be_named(tmp_path: Path) -> None:
+def test_a_store_without_identity_is_named_as_cellucid_r_names_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     source = tmp_path / "anonymous.h5ad"
     _adata().write_h5ad(source)
-    with pytest.raises(ValueError, match=r"dataset_name and dataset_id are required.*uns\['cellucid'\]"):
-        AnnDataServer(source, port=0, quiet=True, serve_web_ui=False)
-    with pytest.raises(ValueError, match="dataset_id is required"):
-        AnnDataServer(_adata(), port=0, quiet=True, serve_web_ui=False, dataset_name="Only a name")
+    # A file: its name, and its name without the extension as its id.
+    server = AnnDataServer(source, port=0, serve_web_ui=False)
+    try:
+        assert (server.dataset_id, server.dataset_name) == ("anonymous", "anonymous.h5ad")
+        # The id it was given is said, with how to set it: sessions are kept under it.
+        assert "anonymous (sessions are kept under it; name it with dataset_id=" in capsys.readouterr().out
+    finally:
+        server.stop()
+    # An object: what it is and how many cells, and an id from that.
+    adata = _adata()
+    server = AnnDataServer(adata, port=0, quiet=True, serve_web_ui=False, dataset_name="Only a name")
+    try:
+        assert (server.dataset_id, server.dataset_name) == (f"AnnData-{adata.n_obs}-cells", "Only a name")
+    finally:
+        server.stop()
     adata = _adata()
     adata.uns["cellucid"] = {"schema": 1, "id": "bad/id", "name": "Name"}
     with pytest.raises(ValueError, match=r"uns\['cellucid'\]\['id'\]"):
@@ -345,7 +376,7 @@ def test_a_store_without_identity_must_be_named(tmp_path: Path) -> None:
 
 def test_a_file_is_read_with_exact_ranges(tmp_path: Path) -> None:
     source = tmp_path / "x.h5ad"
-    _adata().write_h5ad(source)
+    _in_priority_order(_adata()).write_h5ad(source)
     data = source.read_bytes()
     size = len(data)
     route = "/_cellucid/anndata/store-contract.h5ad"
@@ -389,23 +420,94 @@ def test_a_file_is_read_with_exact_ranges(tmp_path: Path) -> None:
 
 
 def test_a_file_that_changes_on_disk_names_its_new_version(tmp_path: Path) -> None:
+    """The dataset list states the validator the file's bytes are answered
+    with -- the version the viewer files what it keeps of the file under
+    (its byte cache, a kept gene index, a converted store) -- read from the
+    file when the list is asked for: grown, rewritten in place with its size
+    and modification time kept, or replaced by a copy moved over it, the file
+    is a new version."""
     source = tmp_path / "x.h5ad"
-    _adata().write_h5ad(source)
+    _in_priority_order(_adata()).write_h5ad(source)
     route = "/_cellucid/anndata/store-contract.h5ad"
+
+    def listed() -> dict:
+        return _json(host, port, "/_cellucid/datasets")["datasets"][0]["anndata"]["file"]
+
     with _serving(source) as (_server, host, port):
+        first = listed()
         before = _request(host, port, "HEAD", route)[1]["ETag"]
+        assert first["etag"] == before == path_version(source)[1]
+        assert first["size"] == source.stat().st_size
+        assert listed() == first
         with source.open("ab") as file:
             file.write(b"\0")
         after = _request(host, port, "HEAD", route)[1]
-    assert after["ETag"] != before
-    assert after["Content-Length"] == str(source.stat().st_size)
+        assert after["ETag"] != before
+        assert after["Content-Length"] == str(source.stat().st_size)
+        assert listed() == {**first, "size": source.stat().st_size, "etag": after["ETag"]}
+
+        # In place, the same size, the modification time put back.
+        grown = listed()["etag"]
+        status = source.stat()
+        with source.open("r+b") as file:
+            head = file.read(8)
+            file.seek(0)
+            file.write(head[::-1])
+        os.utime(source, ns=(status.st_atime_ns, status.st_mtime_ns))
+        assert source.stat().st_size == status.st_size and source.stat().st_mtime_ns == status.st_mtime_ns
+        rewritten = listed()["etag"]
+        assert rewritten != grown
+        assert _request(host, port, "HEAD", route)[1]["ETag"] == rewritten
+
+        # Replaced by a copy moved over it, its times copied with it.
+        copy = tmp_path / "copy.h5ad"
+        shutil.copy2(source, copy)
+        os.replace(copy, source)
+        assert listed()["etag"] not in (grown, rewritten)
+
+        # Gone: not listed as if it were there.
+        source.unlink()
+        status, _, body = _request(host, port, "GET", "/_cellucid/datasets")
+        assert (status, body) == (404, b"x.h5ad is no longer readable")
+
+
+def test_the_listed_version_is_read_from_the_open_file_as_its_bytes_are(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The validator the dataset list states and the one the file's bytes are
+    answered with are read the same way, from the file opened: on Windows a
+    path's ``os.stat`` reports the creation time as ``st_ctime`` and an open
+    file's ``os.fstat`` the change time (Python 3.12 on), so a tag read from
+    the path would name another version than the bytes' tag, and the viewer
+    would refuse the file. Here a path's status reports another status-change
+    time, as Windows' does."""
+    source = tmp_path / "x.h5ad"
+    _in_priority_order(_adata()).write_h5ad(source)
+    path_status = Path.stat
+
+    def as_windows(self: Path, *args: object, **kwargs: object) -> os.stat_result:
+        status = path_status(self, *args, **kwargs)  # type: ignore[arg-type]
+        if self.name != source.name:
+            return status
+        fields = list(status)
+        return os.stat_result(fields, {"st_ctime_ns": status.st_ctime_ns - 1, "st_mtime_ns": status.st_mtime_ns,
+                                       "st_atime_ns": status.st_atime_ns})
+
+    with _serving(source) as (_server, host, port):
+        monkeypatch.setattr(Path, "stat", as_windows)
+        assert source.stat().st_ctime_ns != os.stat(source).st_ctime_ns
+        listed = _json(host, port, "/_cellucid/datasets")["datasets"][0]["anndata"]["file"]
+        route = "/_cellucid/anndata/store-contract.h5ad"
+        assert listed["etag"] == _request(host, port, "HEAD", route)[1]["ETag"]
+        assert listed["etag"] == _request(host, port, "GET", route, {"Range": "bytes=0-7"})[1]["ETag"]
+        assert listed["etag"] == path_version(source)[1]
 
 
 def test_a_browser_reuses_the_bytes_it_kept_of_an_unchanged_file(tmp_path: Path) -> None:
     """Store bytes are cacheable by validation: a reload revalidates (304) and
     transfers nothing it has; a changed file is never mixed with kept bytes."""
     source = tmp_path / "x.h5ad"
-    _adata().write_h5ad(source)
+    _in_priority_order(_adata()).write_h5ad(source)
     data = source.read_bytes()
     route = "/_cellucid/anndata/store-contract.h5ad"
     with _serving(source) as (_server, host, port):
@@ -441,7 +543,7 @@ def test_file_bytes_are_sent_by_the_kernel_without_delaying_small_answers() -> N
 
 def test_connections_are_kept_alive_and_answered_concurrently(tmp_path: Path) -> None:
     source = tmp_path / "x.h5ad"
-    _adata().write_h5ad(source)
+    _in_priority_order(_adata()).write_h5ad(source)
     data = source.read_bytes()
     route = "/_cellucid/anndata/store-contract.h5ad"
     with _serving(source) as (_server, host, port):
@@ -478,7 +580,7 @@ def test_connections_are_kept_alive_and_answered_concurrently(tmp_path: Path) ->
 
 def _zarr_folder(tmp_path: Path, *, consolidated: bool) -> Path:
     folder = tmp_path / "local.zarr"
-    _adata().write_zarr(folder)
+    _in_priority_order(_adata()).write_zarr(folder)
     if not consolidated:
         (folder / ".zmetadata").unlink()
     return folder
@@ -527,7 +629,7 @@ def test_a_zarr_v2_folder_without_consolidated_metadata_gets_it_built(tmp_path: 
 def test_a_zarr_v3_folder_without_consolidated_metadata_gets_it_inline(tmp_path: Path) -> None:
     folder = tmp_path / "v3.zarr"
     with ad.settings.override(zarr_write_format=3):
-        _adata().write_zarr(folder)
+        _in_priority_order(_adata()).write_zarr(folder)
     root = json.loads((folder / "zarr.json").read_text())
     root.pop("consolidated_metadata", None)
     (folder / "zarr.json").write_text(json.dumps(root))
@@ -549,7 +651,7 @@ def test_a_zipped_zarr_store_is_one_file(tmp_path: Path) -> None:
     with _serving(archive) as (_server, host, port):
         file = _json(host, port, "/_cellucid/datasets")["datasets"][0]["anndata"]["file"]
         assert file == {"url": "_cellucid/anndata/store-contract.zarr.zip", "kind": "zarr",
-                        "layout": "zip", "size": archive.stat().st_size}
+                        "layout": "zip", "size": archive.stat().st_size, "etag": path_version(archive)[1]}
         status, _, body = _request(host, port, "GET", "/_cellucid/anndata/store-contract.zarr.zip",
                                    {"Range": "bytes=0-3"})
     assert (status, body) == (206, b"PK\x03\x04")
@@ -564,53 +666,58 @@ def test_a_zip_that_holds_no_zarr_store_is_refused(tmp_path: Path) -> None:
         classify_anndata_path(archive)
 
 
+def test_a_compressed_copy_is_refused_with_how_to_serve_it(tmp_path: Path) -> None:
+    # GEO ships many .h5ad files gzipped: the web app reads such a copy whole,
+    # but a served file is read in parts, which a gzip stream has none of.
+    import gzip
+
+    copy = tmp_path / "GSE1_cite.h5ad.gz"
+    copy.write_bytes(gzip.compress(b"\x89HDF\r\n\x1a\n" + bytes(64)))
+    with pytest.raises(ValueError, match=r"gzip-compressed copy of AnnData \(\.h5ad\).*gunzip GSE1_cite\.h5ad\.gz"):
+        classify_anndata_path(copy)
+    # A format read as one stream names its compressed endings itself.
+    rds = tmp_path / "object.rds.gz"
+    rds.write_bytes(gzip.compress(gzip.compress(b"X\n")))
+    assert classify_anndata_path(rds).kind == "rds"
+
+
 # =============================================================================
 # Objects, and stores the browser cannot decode
 # =============================================================================
 
 
-def test_an_object_is_written_column_major_and_reads_back_identically() -> None:
-    adata = _adata()
-    path = write_temporary_h5ad(adata, dataset_id="snapshot")
-    try:
-        assert path.name == "snapshot.h5ad"
-        with h5py.File(path, "r") as file:
-            for key in ("X", "layers/counts", "raw/X"):
-                assert file[key].attrs["encoding-type"] == "csc_matrix", key
-                assert file[f"{key}/data"].compression is None, key
-        back = ad.read_h5ad(path)
-        assert (back.X != adata.X).nnz == 0
-        assert (back.layers["counts"] != adata.layers["counts"]).nnz == 0
-        assert (back.raw.X != adata.raw.X).nnz == 0
-        pd.testing.assert_frame_equal(back.obs, adata.obs)
-        pd.testing.assert_frame_equal(back.var, adata.var)
-        np.testing.assert_array_equal(back.obsm["X_pca"], adata.obsm["X_pca"])
-        assert (back.obsp["connectivities"] != adata.obsp["connectivities"]).nnz == 0
-        # The caller's object is not changed.
-        assert adata.X.format == "csr"
-    finally:
-        shutil.rmtree(path.parent)
-
-
-def test_an_hdf5_filter_the_browser_cannot_undo_is_served_from_a_decodable_copy(
-    tmp_path: Path,
-) -> None:
+def test_an_hdf5_filter_the_browser_cannot_undo_is_decoded_on_the_kernel(tmp_path: Path) -> None:
+    """A file in priority order with an array the browser cannot decode is
+    served through the store in priority order, in the file's own order."""
     source = tmp_path / "scaleoffset.h5ad"
-    _adata().write_h5ad(source)
+    placed = _in_priority_order(_adata())
+    placed.write_h5ad(source)
     with h5py.File(source, "r+") as file:
         values = file["obsm/X_pca"][...]
         attrs = dict(file["obsm/X_pca"].attrs)
         del file["obsm/X_pca"]
         dataset = file["obsm"].create_dataset("X_pca", data=values, scaleoffset=6, chunks=(4, 6))
         dataset.attrs.update(attrs)
+    with h5py.File(source, "r") as file:
+        values = file["obsm/X_pca"][...]
     store = classify_anndata_path(source)
     assert browser_undecodable(store) == ["obsm/X_pca (scaleoffset)"]
     with _serving(source) as (server, host, port):
-        copy = server._temporary_file
-        assert copy is not None and copy != source
-        assert browser_undecodable(server.store) == []
-        assert _json(host, port, "/_cellucid/datasets")["datasets"][0]["anndata"]["file"]["size"] == copy.stat().st_size
-    assert not copy.parent.exists()
+        assert server._served.priority is not None
+        assert _json(host, port, "/_cellucid/datasets")["datasets"][0]["anndata"]["file"] == {
+            "url": "_cellucid/anndata/store-contract.zarr/", "kind": "zarr", "layout": "folder",
+        }
+        metadata = json.loads(_request(host, port, "GET", "/_cellucid/anndata/store-contract.zarr/obsm/X_pca/.zarray")[2])
+        assert (metadata["compressor"], metadata["filters"]) == (None, None)
+        chunk = _request(host, port, "GET", "/_cellucid/anndata/store-contract.zarr/obsm/X_pca/0.0")[2]
+        rows = metadata["chunks"][0]
+        decoded = np.frombuffer(chunk, dtype=metadata["dtype"]).reshape(metadata["chunks"])[: placed.n_obs]
+        np.testing.assert_array_equal(decoded, values[:rows])
+        # The file's own order and records, as stored.
+        positions = _request(host, port, "GET", f"/_cellucid/anndata/store-contract.zarr/obs/{ORIGINAL_POSITION_COLUMN}/0")[2]
+        np.testing.assert_array_equal(
+            np.frombuffer(positions, dtype=np.uint32)[: placed.n_obs], placed.obs[ORIGINAL_POSITION_COLUMN]
+        )
     assert source.exists()
 
 
@@ -618,10 +725,15 @@ def test_zarr_codecs_the_browser_cannot_decode_are_named(tmp_path: Path) -> None
     folder = _zarr_folder(tmp_path, consolidated=True)
     zarray = folder / "obsm" / "X_pca" / ".zarray"
     meta = json.loads(zarray.read_text())
-    meta["compressor"] = {"id": "bz2", "level": 1}
+    meta["compressor"] = {"id": "snappy"}
     meta["filters"] = [{"id": "delta", "dtype": "<f4"}]
     zarray.write_text(json.dumps(meta))
-    assert browser_undecodable(classify_anndata_path(folder)) == ["obsm/X_pca (bz2, delta)"]
+    assert browser_undecodable(classify_anndata_path(folder)) == ["obsm/X_pca (snappy, delta)"]
+    # bz2 and lzma the browser decodes (formats/zarr/codecs/pipeline.js): no copy for them.
+    meta["compressor"] = {"id": "bz2", "level": 1}
+    meta["filters"] = None
+    zarray.write_text(json.dumps(meta))
+    assert browser_undecodable(classify_anndata_path(folder)) == []
 
 
 def test_a_browser_decodable_store_needs_no_copy(tmp_path: Path) -> None:
@@ -634,6 +746,24 @@ def test_a_browser_decodable_store_needs_no_copy(tmp_path: Path) -> None:
     assert browser_undecodable(classify_anndata_path(lzf)) == []
     folder = _zarr_folder(tmp_path, consolidated=True)
     assert browser_undecodable(classify_anndata_path(folder)) == []
+
+
+def test_hdf5plugin_filters_the_browser_decodes_need_no_copy(tmp_path: Path) -> None:
+    """hdf5plugin's Blosc, LZ4, Zstandard and bitshuffle are undone in the
+    browser (formats/hdf5/filters.js, the WebAssembly decoders)."""
+    hdf5plugin = pytest.importorskip("hdf5plugin")
+    adata = _adata()
+    for name, compression in {
+        "blosc": hdf5plugin.Blosc(cname="lz4"),
+        "lz4": hdf5plugin.LZ4(),
+        "zstd": hdf5plugin.Zstd(),
+        "bitshuffle-lz4": hdf5plugin.Bitshuffle(cname="lz4"),
+        "bitshuffle-zstd": hdf5plugin.Bitshuffle(cname="zstd"),
+        "bitshuffle": hdf5plugin.Bitshuffle(cname="none"),
+    }.items():
+        source = tmp_path / f"{name}.h5ad"
+        adata.write_h5ad(source, compression=compression)
+        assert browser_undecodable(classify_anndata_path(source)) == [], name
 
 
 # =============================================================================

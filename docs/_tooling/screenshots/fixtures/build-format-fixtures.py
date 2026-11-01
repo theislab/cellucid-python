@@ -55,6 +55,10 @@ OBS = ["clusters_coarse", "clusters", "S_score", "G2M_score"]
 def pancreas() -> ad.AnnData:
     adata = ad.read_zarr(DATASETS / "anndata" / "pancreas.zarr")
     adata.X = sp.csr_matrix(adata.X, dtype=np.float32)
+    # The store's own record of its cells' order (prepare()'s position column,
+    # beside uns['cellucid']['priority']) is not part of a file another tool
+    # writes, and alone it names no order: the app would say so on every file.
+    adata.obs = adata.obs.drop(columns=["cellucid_original_position"], errors="ignore")
     return adata
 
 

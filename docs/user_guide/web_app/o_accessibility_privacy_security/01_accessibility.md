@@ -416,7 +416,8 @@ Related:
 **Fix**
 1) Press `Esc` to dismiss the overlay or dialog (this also exits pointer lock).
 2) Click the canvas or an empty area of the page, then try again.
-3) If embedded in a notebook, open the viewer in a new browser tab (see {doc}`../b_data_loading/05_jupyter_tutorial`).
+3) If embedded in a notebook, open the viewer in a new browser tab with
+   `cellucid.AnnDataViewer(...)` (see {doc}`../b_data_loading/05_jupyter_tutorial`).
 
 ---
 

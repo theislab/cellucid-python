@@ -7,7 +7,7 @@ These tutorials are optimized for:
 They use the simplest possible approach first (`show_anndata(...)`), then explain the “why” behind it.
 
 ```{important}
-If you are running Cellucid in a notebook for the first time, read {doc}`00_start_here` first. It explains the Python-server + iframe mental model and the fastest troubleshooting checklist.
+If you are running Cellucid in a notebook for the first time, read {doc}`00_start_here` first. It explains the notebook-widget mental model (the viewer is heard between cells) and the fastest troubleshooting checklist.
 ```
 
 ## Recommended order

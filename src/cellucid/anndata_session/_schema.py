@@ -70,6 +70,9 @@ _CATEGORY_FIELD_KEYS = _FIELD_COMMON_KEYS | {
     "uncoveredLabel",
 }
 _CONTINUOUS_FIELD_KEYS = _FIELD_COMMON_KEYS
+# A continuous field that holds its own values (a column a notebook pushed)
+# names their length and type; they are the chunk ``user-defined/values/<id>``.
+_STORED_CONTINUOUS_FIELD_KEYS = _FIELD_COMMON_KEYS | {"valuesLength", "valuesType"}
 _OVERLAP_STRATEGIES = {"first", "last", "overlap-label", "intersections"}
 _CHUNK_META_KEYS = {
     "id",
@@ -175,6 +178,8 @@ _CURRENT_EXACT_CHUNK_CONTRIBUTORS = {
 _CONTRIBUTOR_ORDER = (
     "field-overlays",
     "user-defined-codes",
+    "user-defined-values",
+    "gene-sets",
     "cinematic-camera",
     "core-state",
     "dockable-layout",
@@ -189,3 +194,14 @@ _CONTRIBUTOR_INDEX = {
 }
 _HIGHLIGHT_CELLS_PREFIX = "highlights/cells/"
 _USER_DEFINED_CODES_PREFIX = "user-defined/codes/"
+_USER_DEFINED_VALUES_PREFIX = "user-defined/values/"
+#: The gene sets a notebook pushed to the viewer, written only when there are some.
+_GENE_SETS_CHUNK_PROFILE = {
+    "id": "gene-sets/notebook",
+    "contributorId": "gene-sets",
+    "priority": "eager",
+    "kind": "json",
+    "codec": "gzip",
+    "label": "Notebook gene sets",
+    "datasetDependent": False,
+}

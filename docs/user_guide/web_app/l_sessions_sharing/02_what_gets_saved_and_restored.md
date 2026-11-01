@@ -32,6 +32,12 @@ Saved/restored (typical):
   geometry)
 - Figure Export settings
 - Camera Path settings and keyframes, including an explicitly empty path
+- which cells were open: a session saved on a share of the cells records
+  those cells (compactly), how they were chosen and their digest; loading it
+  opens exactly them, reading the dataset again first if it is open with
+  others. A session saved on every cell opens every cell
+  ({doc}`../b_data_loading/21_subsampled_loading`)
+- columns and gene sets a notebook pushed into the viewer
 
 Not saved/restored (typical):
 - the dataset itself (points, obs, gene expression)
@@ -42,6 +48,8 @@ Not saved/restored (typical):
 - Antialiasing (a property of the machine drawing the view)
 - Benchmarking state
 - ephemeral UI like toasts, in-progress selections, hover state
+- an analysis result marked **Stale · Run** (its cells, settings or
+  highlights changed since it ran): it is saved again once it is run again
 
 If the dataset fingerprint differs, the complete operation is rejected and
 rolled back; see {doc}`07_versioning_compatibility_and_dataset_identity`.
@@ -105,6 +113,11 @@ Restored early so you see the correct view quickly:
   - many checkboxes/selects/sliders are captured “by id”, including the
     background, point and lighting settings, and the app theme (light/dark),
     which a restore applies exactly as a choice made by hand
+  - the connectivity **Max edges** slider records the number of edges you
+    asked for (250,000 until you move it), not the count it shows: its range
+    is the graph's visible edges, read only once edges are shown, so a
+    restore keeps your number and the slider shows as much of it as the
+    graph allows
   - accordion open/closed state for many sections
 - **Centroids**
   - whether each view shows centroid points and centroid labels
@@ -182,7 +195,8 @@ Filters are restored as “modified-only” deltas to keep session files small.
 Common things that restore:
 - categorical category visibility toggles (legend checkboxes)
 - continuous filter ranges (Min/Max sliders)
-- continuous color ranges and log-scale toggles (when present)
+- continuous color ranges, log-scale and Gray for zero toggles (when changed:
+  Gray for zero is saved only when it is on)
 - outlier filter enable/threshold on categorical fields, restored by getting
   their quantiles (stored in the file, or computed with progress and Cancel);
   a notification names each threshold that could not be restored
@@ -267,7 +281,10 @@ categories by name, numeric columns as their raw values), so they come back
 without being run again. A restored result naming a gene or category the open
 dataset lacks is refused. Both reopen only after the highlight pages they refer
 to have been restored, so an analysis comparing saved pages opens on those
-pages even in a fresh tab.
+pages even in a fresh tab. A restored result is the analysis's own as soon as
+it is loaded; its plot is drawn when its panel is shown (a closed analysis,
+a closed window or a tab in the background draws nothing until then), and
+the load never waits for that.
 
 The per-cell gene values analyses read are not stored: they are re-read from
 the dataset when needed.

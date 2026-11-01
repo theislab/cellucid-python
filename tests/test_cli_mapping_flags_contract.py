@@ -100,7 +100,8 @@ def test_omitted_mapping_flags_select_the_defaults(tmp_path: Path) -> None:
     assert kwargs["embedding_keys"] is None
     assert kwargs["knn_key"] is None
     assert kwargs["gene_id_column"] is None
-    # None: X when present, else raw or a layer, reported as guessed.
+    # None: the viewer's default rule (raw when it holds more genes than X or X
+    # is scaled, else X; without X, raw or a layer, reported as guessed).
     assert kwargs["expression_source"] is None
 
 

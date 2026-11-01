@@ -151,6 +151,8 @@ def test_jupyter_none_port_requests_8765_and_the_next_free_port(monkeypatch) -> 
             servers.append(self)
             self.host = kwargs["host"]
             self.port = 43123
+            self.dataset_id = "demo"
+            self.server_info = {"n_cells": 3}
 
         @property
         def url(self) -> str:

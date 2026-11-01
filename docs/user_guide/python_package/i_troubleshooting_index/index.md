@@ -25,7 +25,7 @@ in `prepare()`.
 :link: 03_viewer_embedding_issues
 :link-type: doc
 
-Notebook display, iframe reachability, asset delivery, and browser errors.
+Notebook widget display, the app loading, browser-tab reachability, and browser errors.
 :::
 
 :::{grid-item-card} Server mode

@@ -91,10 +91,20 @@ Its relevant controls are:
   view is idle. `Sculpted` is not the default; `Full` is.
 - **Performance:** `Level of detail (LOD)` draws a coarser subset of the
   cells when you are zoomed out; `Frustum culling` skips cells the camera is not
-  pointing at. Both are checkboxes and **both start off**. Ticking
-  `Level of detail (LOD)` reveals a `Force LOD level` slider directly beneath
-  it — that row is hidden entirely while the checkbox is clear, which is the
-  usual reason people cannot find it. The slider sits at its lowest position,
+  pointing at. Both are checkboxes; **both start off, and turn on by
+  themselves** when a frame drawing every cell is measured slower than 33 ms
+  (30 frames a second) on this device, once per opening, and stay on only if
+  the frames drawn with them are then measured faster; otherwise they go off
+  again until the view moves (the Performance tip says what was measured). A small dataset stays under it on ordinary
+  hardware, and below 1,000 cells level of detail stays off whatever is
+  measured (every level would be every cell); culling is tried only where some
+  cells lie outside the view, so a small dataset shown whole is not measured
+  at all. Turning either
+  off yourself is a choice that stands for the page. Ticking
+  `Level of detail (LOD)` makes the `Force LOD level` slider directly beneath
+  it usable; while the checkbox is clear the row stays where it is, greyed out
+  (it does not appear and disappear, so nothing under it moves when the page
+  turns level of detail on or off by itself). The slider sits at its lowest position,
   reading `Auto`, until you move it. `Auto` follows the camera at every dataset
   size, down to a floor of `min(2,000,000, cells ÷ 8)` points; an explicitly
   forced level is not held to that floor and can go coarser.

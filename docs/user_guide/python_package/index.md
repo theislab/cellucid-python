@@ -4,11 +4,11 @@ This guide documents the **`cellucid` Python package**: how to prepare Cellucid-
 
 If you’re looking for the end-user web UI docs (loading data, filtering, analysis, annotation), start with {doc}`../web_app/index`.
 
-:::{admonition} Active package version — 0.9.5
+:::{admonition} Active package version — 0.9.6
 :class: note
 <!-- CELLUCID_VERSION -->
 
-Version **0.9.5** is the current Cellucid Python source and documentation <!-- CELLUCID_VERSION -->
+Version **0.9.6** is the current Cellucid Python source and documentation <!-- CELLUCID_VERSION -->
 version and the current PyPI release. The
 [PyPI package page](https://pypi.org/project/cellucid/) is authoritative for
 registry availability. Check an installed environment with
@@ -22,6 +22,7 @@ registry availability. Check an installed environment with
 - “I have an AnnData, a MuData or another dataset file and want to view it” → {doc}`d_viewing_apis/index` (and {doc}`../web_app/b_data_loading/05_jupyter_tutorial`)
 - “I want the fastest web viewing” → {doc}`c_data_preparation_api/index` (a Cellucid-ready AnnData via `prepare`)
 - “I want notebook embedding + programmatic control” → {doc}`d_viewing_apis/index` + {doc}`e_jupyter_hooks/index`
+- “I want what I make in the viewer back in my AnnData (and my clusters in the viewer)” → {doc}`f_notebooks_tutorials/06_cellucid_in_your_pipeline_python_and_r` (runnable notebooks, Colab badges, R twins)
 - “I’m new and want a guided path” → {doc}`a_landing_pages/index`
 - “Something failed” → {doc}`i_troubleshooting_index/index`
 

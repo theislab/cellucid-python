@@ -99,7 +99,7 @@ Only the arguments you left out are listed.
 | `Embedding '<key>' must be a real numeric matrix or vector.` | Pass numbers. |
 | `Embedding '<key>' has no columns.` | Pass at least one column. |
 | `All embeddings must have one row per cell: '<a>' has <n> rows and '<b>' has <m>.` | Align the cells. |
-| `Embedding '<key>' must contain only finite values. Embedding '<key>' cannot be stored: of <n> values, 1 NA, 1 +Inf. First affected positions: [2, 1], [1, 2]. Coordinates, expression values, vectors and graph weights must be finite numbers: a missing value or an infinity has no position on a plot and no place on a colour scale.` | Remove or fix those cells. |
+| `Embedding '<key>': every cell's values are missing (NaN or infinite). A cell whose row holds NaN is a cell the array has no value for; at least one cell needs finite values.` | Pass the embedding computed over the cells. A row of `NA`/`NaN` alone is not refused: that cell is written as given and not drawn in that embedding. |
 | `Embedding '<key>' holds values beyond the float32 range (magnitude above 3.4e38), which would be stored as infinities.` | Rescale. |
 
 ## Names that become paths
@@ -136,11 +136,12 @@ subject:
 | Message | Fix |
 |---|---|
 | `var describes the genes of gene_expression, and no gene_expression was supplied.` (also for `gene_identifiers`, `var_gene_id_column`) | Pass `gene_expression`, or drop the argument. |
-| `gene_expression must be a real numeric matrix or a Matrix::Matrix.` | Pass a numeric matrix or a `Matrix` sparse matrix. |
+| `gene_expression must be a real numeric matrix, a Matrix::Matrix, or a matrix held outside R's memory (BPCells, DelayedArray).` | Pass a numeric matrix, a `Matrix` sparse matrix, or a BPCells / DelayedArray matrix. |
 | `gene_expression must hold numbers, not a pattern of non-zeros.` | Convert a pattern matrix (`ngCMatrix`) to numbers. |
 | `gene_expression has <n> rows, but the embeddings have <m> cells. gene_expression is cells x genes; transpose a genes x cells matrix with t().` | Usually `Matrix::t(expr)`. |
 | `gene_expression must contain only finite values. gene_expression cannot be stored: of <n> stored non-zero values, 1 +Inf. ...` | Remove `NA`, `NaN`, `Inf`. |
 | `gene_expression holds values beyond the float32 range (magnitude above 3.4e38), which would be stored as infinities.` | Rescale. |
+| `Gene <i> holds more values than were counted: the matrix changed while it was read.` / `... fewer values ...` | A matrix held outside R's memory (BPCells, DelayedArray) changed on disk between its passes; keep it unchanged while `cellucid_prepare()` or `cellucid_view()` reads it. |
 | `var must be a data.frame with one row per gene.` | Pass a `data.frame`. |
 | `var has <n> rows, but gene_expression has <m> genes (columns).` | One `var` row per column of `gene_expression`. |
 | `rownames(var) and colnames(gene_expression) disagree at gene <i> ('<x>' and '<y>'). var must describe the columns of gene_expression in their order.` | Reorder `var`. |
@@ -158,8 +159,7 @@ subject:
 | `connectivities must be a real numeric or logical matrix or a Matrix::Matrix sparse matrix.` | Pass a matrix. |
 | `connectivities must be <n> x <n> (one row and one column per cell), got <a> x <b>.` | Pass the cells x cells graph. |
 | `Connectivity weights must all be finite.` / `Connectivity weights must all be non-negative.` | Fix the weights. |
-| `Connectivity diagonal values must all be exactly zero.` | `Matrix::diag(graph) <- 0`. |
-| `Connectivity matrix must be exactly symmetric.` | Symmetrize, for example `(graph + Matrix::t(graph)) / 2` (`pmax()` makes a large sparse matrix dense). |
+| `Connectivity matrix must be exactly symmetric: a directed neighbour graph ...` | A directed graph (Seurat's `RNA_nn`): pass a symmetric one (`RNA_snn`), or symmetrize, for example `(graph + Matrix::t(graph)) / 2` (`pmax()` makes a large sparse matrix dense). A diagonal is left out, never refused. |
 | `The Matrix package is required to store connectivities.` | `install.packages("Matrix")`. |
 
 ## `vector_fields`

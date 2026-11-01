@@ -20,22 +20,21 @@ finds it without configuration.
 - **Shape:** exactly cells x cells.
   `connectivities must be 3 x 3 (one row and one column per cell), got 2 x 2.`
 - **Weights:** finite and non-negative.
-- **No self-loops:** the diagonal must be exactly zero.
-  `Connectivity diagonal values must all be exactly zero.`
+- **Self-loops are left out:** a cell joined to itself is no edge anyone can
+  draw, so the diagonal is dropped (Seurat's `RNA_snn` has 1 there), as the
+  viewer and `prepare()` drop it.
 - **Exactly symmetric** in topology and weight (an undirected graph).
-  `Connectivity matrix must be exactly symmetric.`
+  `Connectivity matrix must be exactly symmetric: a directed neighbour graph (Seurat's '<assay>_nn', ...) is not one the viewer draws; ...`
 - A stored zero is not an edge and is dropped (`Matrix::drop0()`).
 
-With `data =`, the object's graph is chosen and its diagonal removed for you
-(Seurat's `<active assay>_snn`, a SingleCellExperiment `colPair` named
-`connectivities` or like `snn`; {doc}`../e_integrations_recipes/index`).
-Graphs you pass yourself from common tools often need one step first:
+With `data =`, the object's graph is chosen for you by the viewer's default
+rule: one named `connectivities`, else Seurat's `<active assay>_snn`, else
+another shared-nearest-neighbour graph (`<assay>_snn` or `SNN`, a
+SingleCellExperiment `colPair` the same); {doc}`../e_integrations_recipes/index`.
+Seurat's `seu@graphs[["RNA_snn"]]` can also be passed as it is. A directed
+graph needs one step first:
 
 ```r
-# Seurat: the shared-nearest-neighbour graph links each cell to itself.
-graph <- seu@graphs[["RNA_snn"]]
-Matrix::diag(graph) <- 0
-
 # A directed k-nearest-neighbour graph: make it symmetric (stays sparse).
 graph <- (knn + Matrix::t(knn)) / 2
 ```

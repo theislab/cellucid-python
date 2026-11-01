@@ -29,7 +29,8 @@ From top to bottom:
 
 - **The value the view is coloured by**, beside a dot in the cell's own colour.
   For a category it is the category label; for a gene or a continuous field it
-  is the number, to four significant figures. The field's name is under it.
+  is the number, to six significant figures (a count up to 999,999 is
+  written whole). The field's name is under it.
 - **Where that value sits on the colour scale**, for a continuous field or a
   gene: the active colour map with a marker at the cell's value and the scale's
   ends below it. A log colour scale is placed on the log axis.
@@ -66,8 +67,9 @@ The card is designed to cost nothing you can see, even on millions of cells:
   and no card. It returns when the camera settles.
 - **The index is built in the background.** On a view of 250,000 cells or
   more the lookup walks a spatial index. It is built in a worker, off the main
-  thread, so the page never pauses for it (on ten million cells the first hover
-  answers in about a millisecond and the card appears once the index is ready).
+  thread, so the page never pauses for it. The first hover starts it (as a
+  click does) and the card reads *Preparing cell lookup…* until it is ready,
+  then names the cell under the pointer without another move.
   Level of detail, frustum culling and the selection tools use the same index.
   The worker receives the positions in slices, so the page never holds a second
   full copy of them, at any size. On a smaller view the lookup scans its cells

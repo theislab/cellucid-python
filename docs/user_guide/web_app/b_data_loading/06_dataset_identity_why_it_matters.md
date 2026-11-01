@@ -43,14 +43,25 @@ served by Python. A session saved on one route restores on the others.
 
 | Route | Dataset id |
 |---|---|
-| **Open…** or a drop (`.h5ad`) | `h5ad_<file name without .h5ad>` |
-| **Open…** or a drop (`.zarr.zip`, `.zarr` folder) | `zarr_<store name without .zarr / .zip>` |
-| **Open…** or a drop, any other format | `<format id>_<name without its ending>`: `loom_atlas`, `h5mu_citeseq`, `rds_pbmc`, `tenx-h5_sample`, `mtx_<folder name>` |
+| **Open…** or a drop (`.h5ad`) | `h5ad_<file name without .h5ad>_<structure>` |
+| **Open…** or a drop (`.zarr.zip`, `.zarr` folder) | `zarr_<store name without .zarr / .zip>_<structure>` |
+| **Open…** or a drop, any other format | `<format id>_<name without its ending>_<structure>`: `loom_atlas_…`, `h5mu_citeseq_…`, `rds_pbmc_…`, `tenx-h5_sample_…`, `mtx_<folder name>_…` |
 | A link in the **Link or server** bar, one file or store | the link's own stable id (from the address or the record) |
 | A dataset catalog (`datasets.json`) | the catalog entry's `id` |
 
+`<structure>` is eight hexadecimal digits of what the file holds: its cell
+count, its gene count and its gene names (the var index), for example
+`h5ad_atlas_1bd42f4e`. So two different files that happen to share a name
+(`data.h5ad`) are two datasets, with their own sessions and community
+annotations, and the same data written again (an observation column added,
+the file saved anew) keeps its id. The id names the dataset, not a version of
+the file: two files with the same name, cell and gene counts and gene list
+are one dataset to Cellucid (sessions still tell their cells apart by their
+coordinates), and share annotations, unless they carry their own id.
+
 A file without an id therefore has a different id on each route; write one into
-it to make sessions and annotations portable.
+it (`prepare()` and `cellucid_prepare()` do) to make sessions and annotations
+portable.
 
 ### 3) A dataset catalog (sample datasets, linked folders)
 
@@ -73,10 +84,12 @@ Exact behavior:
   letters, digits, `.`, `_`, or `-`, with no trailing `.` or reserved Windows
   device name.
 - Both default to what the store declares, `uns['cellucid']['name']` and
-  `uns['cellucid']['id']`. A store that declares neither needs both
-  `dataset_name` and `dataset_id` (`--dataset-name` and `--dataset-id` for
-  `cellucid serve <path>`); without them startup stops with
-  `dataset_name and dataset_id are required: this AnnData declares no Cellucid identity of its own (uns['cellucid']['id'] and ['name']).`
+  `uns['cellucid']['id']`. A store that declares neither is named as the R
+  package names it: a file by its file name, its ID the file name without the
+  extension; an in-memory object as `AnnData (<n> cells)`, its ID made from
+  that. The ID is printed in one line. Pass `dataset_name` and `dataset_id`
+  (`--dataset-name` and `--dataset-id` for `cellucid serve <path>`) for an ID
+  that does not change when the file is renamed.
 - The server's id and name are the dataset's: a server that names an id the
   file does not state serves the file under the server's id.
 - `dataset_name`, `dataset_description`, and the `source_*` strings are shown
@@ -153,15 +166,17 @@ is open; a saved session records its id in its fingerprint.
 
 ### AnnData server / Jupyter
 
-If you have a Python handle, print the viewer URL and/or inspect the server’s `/_cellucid/datasets` endpoint, which names the dataset's `id` and `name`.
+If you have a Python handle, `viewer.debug_connection()["dataset"]` names the
+dataset's `id`; a server's `/_cellucid/datasets` endpoint names its `id` and
+`name`.
 
-Example (server/Jupyter):
+Example (Jupyter):
 
 ```python
 from cellucid import show_anndata
 
 viewer = show_anndata("data.h5ad", dataset_id="pbmc_10k", dataset_name="PBMC 10k")
-print(viewer.viewer_url)
+viewer.debug_connection()["dataset"]   # {'id': 'pbmc_10k', 'format': 'h5ad'}
 ```
 
 ---
@@ -198,10 +213,10 @@ print(viewer.viewer_url)
 **How to confirm**
 - Compare the current dataset id to the saved one:
   - the file: check `uns['cellucid']['id']`
-  - a server: check the `dataset_id` passed to `show_anndata()`,
+  - a server or notebook: check the `dataset_id` passed to `show_anndata()`,
     `serve_anndata()`, or `cellucid serve`, else the store's
-    `uns['cellucid']['id']`; `server_url + "/_cellucid/datasets"` shows the one
-    in use
+    `uns['cellucid']['id']`; a server's `/_cellucid/datasets` (or a notebook
+    viewer's `debug_connection()["dataset"]`) shows the one in use
 
 **Fix**
 - If you intended to keep identity: write the id into the file (`prepare(..., dataset_id=...)`, or `adata.uns["cellucid"]["id"]`), or pass the same `dataset_id=...` to the server.

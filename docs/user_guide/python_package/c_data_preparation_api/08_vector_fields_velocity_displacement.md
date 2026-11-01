@@ -82,8 +82,9 @@ Rules (each refused before writing when broken):
 - The embedding key is one of `embeddings` and starts with `X_` (`X_<basis>`);
   any other key is refused ("needs an 'X_<basis>' key").
 - An array has exactly as many columns as its embedding (any number: 50 for a
-  50-column `X_pca`), one row per cell, finite float32-range values. A plain
-  `(n_cells,)` vector is one column.
+  50-column `X_pca`), one row per cell, float32-range values; a row of NaN
+  is a cell without a vector, drawn without an arrow. A plain `(n_cells,)`
+  vector is one column.
 - No two arrays may be stored under the same key, and no stored key may collide
   with an embedding key.
 - Every stored key must read back as its own field and embedding by the

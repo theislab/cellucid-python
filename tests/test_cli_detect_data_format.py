@@ -45,21 +45,6 @@ def test_cli_reports_a_directory_that_is_not_a_store(tmp_path: Path, capsys) -> 
     assert "Unable to detect format" in capsys.readouterr().err
 
 
-def test_cli_requires_an_identity_a_store_does_not_declare(tmp_path: Path) -> None:
-    from cellucid.cli import _run_serve, create_parser
-
-    store = _write_zarr_store(tmp_path / "fixture.zarr")
-    args = create_parser().parse_args(["serve", str(store), "--quiet"])
-
-    # Both are named in one message; reporting only the first would send
-    # someone who supplied neither back to the terminal twice for one mistake.
-    with pytest.raises(
-        ValueError,
-        match=r"dataset_name and dataset_id are required.*--dataset-name/--dataset-id",
-    ):
-        _run_serve(args)
-
-
 def test_cli_passes_exact_identity_without_backed_state_to_zarr(
     tmp_path: Path,
 ) -> None:
@@ -97,6 +82,7 @@ def test_cli_passes_exact_identity_without_backed_state_to_zarr(
         web_source_url="https://www.cellucid.com",
         web_cache_dir=None,
         allowed_hosts=None,
+        cache_bytes=None,
         latent_key=None,
         normalize_embeddings=None,
         centroid_min_points=None,
@@ -286,3 +272,16 @@ def test_cli_reports_an_unsupported_allowed_host_without_serving(
 
     assert status == 1
     assert "wildcard" in capsys.readouterr().err
+
+
+def test_cli_forwards_cache_bytes_to_the_anndata_server(tmp_path: Path) -> None:
+    """``--cache-bytes`` is ``serve_anndata(cache_bytes=)``; none given keeps the default."""
+    from cellucid.cli import _run_serve, create_parser
+
+    store = _write_zarr_store(tmp_path / "fixture.zarr")
+    args = create_parser().parse_args(["serve", str(store), "--quiet", "--cache-bytes", "0"])
+
+    with mock.patch("cellucid.anndata_server.serve_anndata") as serve:
+        _run_serve(args)
+
+    assert serve.call_args.kwargs["cache_bytes"] == 0

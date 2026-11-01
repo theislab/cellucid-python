@@ -61,6 +61,8 @@ CELLUCID_PYTHON=/path/to/venv/bin/python \
 ```
 
 Run both whenever you change what the store holds, in either writer.
+`test-served-cross-language.R` does the same for what `cellucid_view()` and
+Python's `show_anndata()` serve, with the same `CELLUCID_PYTHON`.
 
 ## What the suite covers
 
@@ -74,12 +76,13 @@ Run both whenever you change what the store holds, in either writer.
 | `test-data-mapping-conformance.R` | The make-unique rule and its note, the vector-field key rule and the default modality against the conformance fixture shared, byte for byte, with `cellucid-python` and the web app |
 | `test-current-contract.R` | Required files in a checkout and in the built tarball, no retired wording, README links, workflow branches, `DESCRIPTION` agreeing with every in-repo version site, pkgdown navigation, and each hand-written `man/` page's `\usage` matching the real formals of every function it documents |
 | `test-dataset-from.R` | `cellucid_prepare(data = )` with Seurat (SeuratObject 4 and 5; v5 split layers joined on a copy; several assays as a MuData), SingleCellExperiment (reducedDims, altExps, colPairs, size factors, a DelayedArray assay read block by block) and SummarizedExperiment objects; the object's own record; arguments replacing components; every refusal with its fix |
+| `test-backed-matrix.R` | A matrix held outside R's memory (BPCells by cells and by genes, DelayedArray over a sparse and over a dense backend) written and served byte for byte as its `dgCMatrix` (folder and `.zarr.zip`, priority order or not, kept genes), with blocks of a few cells and passes of a few values; the passes counted (count, then one or two a share, each over its genes' rows; never the whole matrix); float64 counts decided on the genes kept; `NaN`, `NA`, infinities and out-of-range values refused at counting, on every Bioconductor release; a cells x genes backed `gene_expression`; a Seurat v5 BPCells layer; a matrix changed between passes refused (skipped without BPCells or DelayedArray) |
 | `test-plan-robustness.R` | The plan where an object departs from the simple case: an assay holding its cells in another order or only some of them, a factor with an `NA` level, a dense genes x cells assay, a matrix held outside R's memory read in many blocks |
-| `test-apply-session.R` | `cellucid_apply_session()` against the session file the web app's own encoders wrote (`fixtures/session_format2/`, a byte-identical copy of cellucid-python's), so both packages are held to one session and one expected result; every refusal |
+| `test-apply-session.R` | `cellucid_apply_session()` against the session file the web app's own encoders wrote (`fixtures/session_format3/`, a byte-identical copy of cellucid-python's), so both packages are held to one session and one expected result; every refusal |
 | `test-served-store.R` | The store `cellucid_view()` serves from memory is the prepared store, key for key and byte for byte, for explicit inputs, Seurat, MuData and SingleCellExperiment; an object's genes x cells matrix stored as the same cells x genes matrix; an object changed after serving leaves the served bytes unchanged |
 | `test-mudata-interop.R` | Python's mudata reads R's Cellucid-ready MuData, value for value (`CELLUCID_MUDATA_PYTHON`) |
 | `test-viewer-protocol.R` | The viewer channel's declarations against the shared fixture `fixtures/viewer_protocol.json` (the web app's `data/viewer-protocol.js`, SHA-256 pinned in all three repositories): every example event accepted, every example command produced, refusals, a two-million-cell selection decoded at once |
-| `test-viewer-server.R` | The server end to end on free loopback ports: routes and documents, the web build, every store key against the prepared store, exact ranges (206, 416, suffix, `If-Range`, 304), the chunk cache budget, the `Host` (421) and `Origin` (403) checks, `allowed_hosts`, the channel's hello/welcome, 4401, 4409, 1008 and 1001, commands queued until the viewer connects, events to hooks, a million-cell selection, session bundles, stop and restart on the same port, several viewers, a taken port, files and folders by path |
+| `test-viewer-server.R` | The server end to end on free loopback ports: routes and documents, the web build, every store key against the prepared store, exact ranges (206, 416, suffix, `If-Range`, 304), the chunk cache budget, the layouts' scratch files let go when the viewer stops, the `Host` (421) and `Origin` (403) checks with each refused socket closed (1008), `allowed_hosts`, the channel's hello/welcome, 4401, 4409, 1008 and 1001, commands queued until the viewer connects, events to hooks, a million-cell selection, session bundles, stop and restart on the same port, several viewers, a taken port, files and folders by path, a file's listed size and `ETag` (the one its bytes are answered with) and a new one once it is rewritten in place (its modification time put back), replaced or gone |
 | `test-viewer-robustness.R` | The server and channel off the happy path: `HEAD` answers, long ranges, stale answers, cell indices out of range, sockets that never say hello or keep sending after a violation, the package unloading, the random credentials |
 | `test-web-cache.R` | SHA-256 against FIPS 180-4 vectors; the inventory schema; the build id; a cache checked file by file; a build downloaded from a local source, kept, replaced, refused when a file is wrong, and used offline |
 | `test-input-formats.R` | The packaged registry `inst/input_formats.json` against the SHA-256 pinned in the three repositories; paths classified as the web app classifies them |
@@ -87,6 +90,16 @@ Run both whenever you change what the store holds, in either writer.
 | `test-native-encoding.R` | An R session whose native encoding is not UTF-8, as Windows R before 4.2 is (`LC_CTYPE` switched to `C` for a block): the same store bytes and notes as a UTF-8 session, exact condition text, every condition raised as an object (checked in the parsed sources), repeated names, JSON and browser frames read as UTF-8, a memory store's keys, an object's column named in Greek served; in any session, file names handed to httpuv in UTF-8, code-point order of categories, and the sizes the C code refuses before they could wrap a 32-bit `R_xlen_t` |
 | `test-size-limit-allowlist.R` | Every size constant in `R/` and `src/` is a real format or platform limit, with its reason |
 | `test-minimum-r-version.R` | Every base R function the package, its tests, `inst/CITATION` and the vignettes call existed in the oldest R `DESCRIPTION` admits (`fixtures/r-4.1-api.txt`, written by R 4.1), and no syntax is newer (the pipe placeholder `_` is R 4.2) |
+| `test-priority-order.R` | The priority order (`R/priority.R`): cells stored by ascending rank under the file's seed with every per-cell element, prefix levels stepping down by 3/4 as cellucid-python's, a genes x cells assay counted by cell, `priority_seed = NULL`, the record, a record that does not describe the cells, a file prepared again keeping its original positions, and `cellucid_restore_original_order()` |
+| `test-subsample-conformance.R` | `cellucid_subsample_cells()` against the shared fixture `fixtures/subsample_conformance.json` (the web app's, SHA-256 pinned in all three repositories): ranks, sizes, a fraction's shortest decimal (ties to the even digit, subnormals, powers of two), every case's cells and digest, the session encoding of a cell set, nesting, code-point category order, and an object in a file's stored order refused until restored |
+| `test-round-trip.R` | `cellucid_pull()`, `cellucid_push()` and subsets against a viewer played by a WebSocket client in this process: every highlight, label and score onto a Seurat object, pruning, a new page's results, another dataset's refused, an object whose cells are not the viewer's in order refused, a subsampled viewer's unopened cells left `NA`, and the web app's exports pulled onto a data frame |
+| `test-round-trip-widget.R` | The same round trip in a Jupyter notebook against stand-in comms: nothing waits for the viewer, and a session asked in one cell is collected in a later one |
+| `test-viewer-widget.R` | The viewer in a notebook (`viewer-widget.R`) against stand-in comms: the anywidget model with no server and no credentials, the document and store reads by range, the channel over the comm, a cell that cannot wait, a second output replacing the first, and the widget's front end byte for byte cellucid-python's |
+| `test-viewer-rerun.R` | A notebook cell run again stops the viewer it showed before (its matrices and chunk cache released), unless another cell shows it; without a cell id, showing a dataset again stops its earlier viewer and says so; a served store keeps a 64th of the machine's memory by default, as cellucid-python's |
+| `test-served-priority.R` | The store `cellucid_view()` and `cellucid_serve()` serve holds its cells in priority order, the arrays `cellucid_prepare()` writes; each cell keeps its original position; the expression matrix and the neighbour graph are served in priority order without a copy |
+| `test-served-cross-language.R` | The same object served by R and by Python holds the same bytes in every array both serve, metadata and every chunk, with float64 values, stored zeros and duplicate coordinates stored alike (`CELLUCID_PYTHON`) |
+| `test-privacy-claims.R` | No R surface repeats a privacy claim the code contradicts: community annotation signs in on www.cellucid.com, a server on 127.0.0.1 is readable by every user of a shared machine, a session applied to an object records no `source` |
+| `test-count-noun-agreement.R` | A count and its noun agree in every message: `.plural()`, and the package's parsed sources refused where a plural noun follows a count |
 
 ## CI
 
@@ -104,13 +117,91 @@ the Bioconductor stack would build RCurl from source without curl headers, and
 Matrix 1.6-5 has no R 4.1 arm64 binary and does not link from source there; the
 suggested-package paths are covered at R 4.1 on Ubuntu. The R 4.1 and 4.2
 Ubuntu jobs pin Matrix 1.6-5, the last release for R older than 4.4, which
-SeuratObject 5 needs. The Ubuntu release job installs cellucid-python, anndata
-and mudata, so the cross-writer and interoperability tests run there; elsewhere
-they skip, naming what is missing.
+SeuratObject 5 needs. The Ubuntu release job installs anndata, mudata and cellucid-python at the
+commit `CELLUCID_PYTHON_COMMIT` names (in the workflow's job `env`), so the
+cross-writer, served cross-language and interoperability tests run there;
+elsewhere they skip, naming what is missing. The two packages write and serve
+the same bytes only at matching commits, so the job never installs
+cellucid-python's `main` or a PyPI release: when a change touches what both
+write or serve, push the cellucid-python commit first and set
+`CELLUCID_PYTHON_COMMIT` to it in the same cellucid-r commit (a commit not on
+GitHub fails the install step by name).
 Bioconductor packages come from bioconductor.org (`R_BIOC_MIRROR`): pak's
 default mirror, bioconductor.posit.co, keeps only Bioconductor 3.19 and later,
 and R 4.1, 4.2 and 4.3 need 3.14, 3.16 and 3.18.
 
+### What CI sees that a local run does not
+
+The run of 2026-10-31 (run 41212101986) failed on 8 of
+12 jobs while `testthat` and `R CMD check --as-cran` passed on a current
+macOS. Each failure came from a difference between the machines, and each
+is now covered where a local run can reach it:
+
+- **Old Bioconductor.** Up to Bioconductor 3.18 (R 4.1 to 4.3), DelayedArray's
+  coercion of a block to a `dgCMatrix` went through a dense block and
+  `which(block != 0)`, which drops `NA` and `NaN`: a missing value in an
+  HDF5Array or other DelayedArray assay was written as a zero, and the test
+  that expects it refused failed on those jobs only. A block is now read with
+  `DelayedArray::read_block()` (sparse when its backend is) and converted
+  without that step. To run the suite on those releases, make an Intel
+  conda environment (Apple silicon runs it under Rosetta), for example
+  `CONDA_SUBDIR=osx-64 mamba create -p ./r41 --platform osx-64 -c conda-forge -c bioconda "r-base=4.1" "bioconductor-delayedarray=0.20.0" bioconductor-singlecellexperiment r-testthat r-jsonlite r-httpuv r-later r-curl r-matrix`
+  (`r-base=4.3` with `bioconductor-delayedarray=0.28.0` for Bioconductor
+  3.18), install testthat 3.2.1 or later from CRAN into it, and install the
+  package with `SDKROOT` set to `xcrun --show-sdk-path` and `MAKE` running
+  `/usr/bin/make` as arm64 (`arch -arm64`), since the Intel `make` launcher
+  cannot load Xcode's arm64-only `libxcrun`.
+- **Windows' C library.** Its `printf` breaks a decimal tie as it likes: the
+  subsample size of a fraction came from its shortest decimal, found with
+  `snprintf()`, and 2^-25 was written `…313` instead of the even `…312`, so
+  2^-25 of 50,331,648 cells came out 2. The shortest decimal is now found in
+  exact integer arithmetic (`src/subsample.c`), checked against Python's
+  `repr()` on about 50,000 doubles (every power of two in (0, 1] and its
+  neighbours, subnormals, short decimals, random bit patterns).
+- **Windows' files.** An open file keeps its name there, so the layouts'
+  scratch files (`FILE_FLAG_DELETE_ON_CLOSE`) are listed in the session folder
+  until the viewer stops; the test asserted the Linux and macOS behaviour
+  everywhere.
+- **R 4.1 on Windows.** Rtools 4.0's toolchains declare no Windows API newer
+  than XP by default, so `GetTickCount64()` did not link in the 32-bit build;
+  the layouts' clock is now the performance counter. Every C file can be
+  compiled for 32- and 64-bit Windows at that API level from any machine with
+  `zig cc -target x86-windows-gnu -D_WIN32_WINNT=0x0502` (and
+  `x86_64-windows-gnu`), with the R and zlib headers on the include path.
+- **httpuv.** After `onHeaders` answers a WebSocket handshake (403, 421),
+  httpuv writes its own 101 and opens the socket all the same; the server now
+  closes such a socket as it opens (`.on_server_ws_open()`). A test that
+  closed its client before that open ran made httpuv skip the open but still
+  deliver the close, whose handler warns "object '…' not found" in whichever
+  test turns the event loop next (seen on Windows); the tests now wait for
+  the server's close.
+- **httpuv's writes.** httpuv sends a frame as a header, a payload and an
+  empty last buffer, and libuv leaves a write whose last buffer is empty
+  unfinished until the next turn of its loop; a frame sent right after
+  another waits for that turn, and stopping the server first drops it.
+  `cellucid_stop()` sent the freeze and the close together and stopped at
+  once: the page got the freeze, then the connection's end with no close
+  (macOS release; every time under Rosetta, where it reproduces locally).
+  It now waits for the page to answer the close (`.viewer_close_seconds`,
+  one second, bounds a page that never answers) before stopping.
+- **cellucid-python's `main`.** The job installed cellucid-python from `main`,
+  which did not yet hold the served store's `SERVED_ENTRY_CHUNK_ELEMENTS`
+  that cellucid-r's push of 2026-10-31 was written against; it now installs the pinned
+  commit (above).
+
+Two warnings in those runs are not the package's: loading
+SummarizedExperiment warns "replacing previous import
+'S4Arrays::makeNindexFromArrayViewport' by
+'DelayedArray::makeNindexFromArrayViewport'" with the Bioconductor binaries
+those jobs install (R 4.3 with S4Arrays 1.2.1 and DelayedArray 0.28.0, and on
+oldrel-1, release and devel), in the first test that loads it; DelayedArray
+re-exports that function from S4Arrays, and S4Arrays 1.2.0 with DelayedArray
+0.28.0 (R 4.3), or 1.12.1 with 0.38.2 (R 4.5), load without the warning. The
+server's log line
+"a request for /assets/app.js failed: Web asset 'assets/app.js' byte length
+is 9" is the test that tampers with the web build on purpose.
+
 `release.yaml` builds the source tarball and runs `R CMD check --as-cran` on it
-for a published release; see {doc}`03_release_process` and
+for a published release, then attaches it to the release and submits it to
+CRAN; see {doc}`03_release_process` and
 `cellucid-r/publishing.md`.

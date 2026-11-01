@@ -163,6 +163,11 @@ shorter legend.
   endpoints). Keep that line in the figure: without it a reader interpolates the
   two endpoint labels linearly and reads off values that are wrong by orders of
   magnitude.
+- A gene whose zeros are drawn gray (**Gray for zero** on in its legend, or a
+  log scale) is exported the same way, and the colorbar says `Gray: 0` (with
+  a gene read for a sample of the cells, `Gene read for … cells. Faded: not
+  read · gray: 0`); with Gray for zero off its zeros take the scale's lowest
+  colour, and a gene sample's note says only `Faded: not read`.
 
 ### Colorblindness preview (high value, low effort)
 

@@ -30,6 +30,17 @@ file ({doc}`14_open_from_link`). Files written by mudata 0.2 and later open,
 | `mod/<name>` | one modality each, in the file's `mod-order` |
 | the masks mudata keeps of which cells each modality measured | fields `<modality>:measured` |
 
+A `<modality>:<column>` field reads as the global column of its kind does,
+with the cells the modality did not measure missing: a categorical keeps its
+categories, a text or boolean column (plain or nullable) shows categories with
+those cells under **Missing**, an integer column (plain or nullable) stays an
+exact integer column with no value there, and a float column is NaN there.
+
+A modality's graph (`rna:connectivities`) joins the cells that modality
+measured; it is read from the modality as it is stored, a slab of cells at a
+time for the edges and by row for the KNN drag tool, and is never copied
+whole onto the dataset's cells.
+
 mudata 0.4 and later keep each modality's columns in the modality only; the
 `<modality>:<column>` fields show them, so a recent file's clusters appear as
 they do in a file written by mudata 0.3. A MuData whose modalities share

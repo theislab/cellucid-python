@@ -17,8 +17,7 @@ This page focuses on the second style, which is often easier for notebook workfl
 Example:
 
 ```python
-viewer.wait_for_ready(timeout=60)
-print(viewer.state.ready)
+print(viewer.state.ready)       # None until the dataset has opened
 
 print("Last selection:", viewer.state.selection)
 print("Last hover:", viewer.state.hover)
@@ -32,6 +31,17 @@ When to use `viewer.state`:
 - you want to debug whether events are arriving at all.
 
 ## `viewer.wait_for_event(...)`: block until the *next* event arrives
+
+```{important}
+A notebook widget (what `show_anndata()` returns) hears the viewer only
+**between cells**: nothing the viewer says can arrive while the cell that
+waits is running. So in a notebook `wait_for_event()` and `wait_for_ready()`
+(unless the viewer is ready already) raise at once and say what to do
+instead: register a hook, or read `viewer.state` in a later cell. They block
+as described here for a browser-tab viewer ({class}`~cellucid.AnnDataViewer`),
+and on a thread of your own in a notebook (the viewer answers it as soon as
+the cell ends).
+```
 
 Signature (simplified):
 
@@ -96,10 +106,11 @@ Options:
 If `timeout` is too small and you don’t interact quickly, you’ll get `TimeoutError`.
 Use `timeout=None` when you want an interactive “wait until the user does it” cell.
 
-### Multiple viewers / stale iframes
+### Multiple viewers / stale outputs
 
 If you have multiple viewers, make sure you call `wait_for_event` on the correct one.
-If you restarted the kernel but didn’t re-run the viewer cell, the iframe may be stale.
+If you restarted the kernel but didn’t re-run the viewer cell, the output is stale
+(it keeps its last view and says the notebook stopped it).
 
 Fix: re-run the cell that creates `viewer`.
 
@@ -112,4 +123,4 @@ If waiting never returns:
 ## Next steps
 
 - Event payloads: {doc}`07_frontend_to_python_events`
-- Session bundles: {doc}`10_session_bundles_get_session_bundle`
+- Session bundles: {doc}`10_session_bundles_request_session_bundle`

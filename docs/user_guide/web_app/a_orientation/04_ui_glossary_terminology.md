@@ -35,8 +35,9 @@ how many of the dataset's cells are currently drawn.
 
 - **Welcome overlay**: the modal shown on every ordinary bundled or catalog
   startup. Its dismissal is not remembered for the next ordinary load.
-  **Choose a dataset** opens the data controls; {kbd}`Escape` dismisses it for
-  the current load. A startup whose address already names its data (a Python
+  **Start exploring**, {kbd}`Escape` or a click outside the card dismisses it
+  for the current load; your own data opens from **Session › Open data** (see
+  {doc}`../b_data_loading/01_loading_options_overview`). A startup whose address already names its data (a Python
   or R viewer, a `cellucid serve` server, or a `?data=` link) skips it.
 - **Suo**: the sample catalog default. It may finish loading behind the welcome
   overlay before you choose another source, and opens in 3D on its default
@@ -167,7 +168,9 @@ what alpha means in practice for that mode.
   embeddings that are turned on and the default of each dimension; under
   **Genes** the modality (of a MuData or a multi-assay object), the expression
   matrix, gene names, values and highly variable genes; the neighbour graph,
-  the latent space and the vector fields. Set under **Session › Data mapping**
+  the latent space and the vector fields. Set under **Session › Data mapping**,
+  a section collapsed by default whose header says what is mapped in one
+  line ("3 embeddings · UMAP 2D")
   ({doc}`../b_data_loading/13_data_mapping`).
 - **Best guess**: the default embeddings a file without a UMAP opens on, marked
   *guessed* in the Data mapping checklist.
@@ -185,8 +188,11 @@ Every word here appears on a button, a label, or a page in
 {doc}`../b_data_loading/index`. Read the short definition; the linked page owns
 the detail.
 
-**What the Session panel calls things** (**`Dataset`** comes first; the next
-three sit under **`Open data`**)
+**What the Session panel calls things**, top to bottom: **`Dataset`**;
+**`Open data`** (the next three); **`Stored`**; **`Session file`**;
+**`Subsampling`** and **`Data mapping`**, two sections collapsed by default
+whose header says what they hold in one line (click it to open; whether each
+is open is remembered in this browser, never in a session or the address)
 
 - **`Dataset`**: the box at the top of the panel that describes the dataset
   that is open, and only that one: its name, its cells and genes, its format
@@ -219,8 +225,19 @@ three sit under **`Open data`**)
   something is connected, one line under the bar reads **`Server`** or
   **`Link`**, the address and **`Disconnect`**
   ({doc}`../b_data_loading/14_open_from_link`).
+- **`Stored`**: what this browser keeps for later visits, in one line beside
+  **`Manage…`** ("1 dataset · 99 MB · 2 more"; every kind on hover, listed
+  and removed in Manage…). Hidden while nothing is kept
+  ({ref}`stored-in-this-browser`).
 - **`Session file`**: the **`Save`** and **`Load`** buttons, which download
   and restore a `.cellucid-session` bundle.
+- **`Subsampling`**: how much of the dataset is read, its header saying it
+  while collapsed ("100 % cells · genes 6 %"). It holds **`Cells to open`**
+  (which of the dataset's cells are on the map: every one, or a seeded
+  subsample) and **`Genes read for`** (of the open cells, how many each gene
+  is read for, for a file stored cell by cell; 100 % is every open cell),
+  with their **`Details`** ({doc}`../b_data_loading/21_subsampled_loading`).
+- **`Data mapping`**: which stored arrays the dataset is drawn from (above).
 
 **What the data itself is called**
 

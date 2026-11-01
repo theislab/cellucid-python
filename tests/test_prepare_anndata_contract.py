@@ -27,7 +27,7 @@ import pytest
 import zarr
 from scipy import sparse
 
-from cellucid import prepare
+from cellucid import prepare, restore_original_order
 from cellucid._anndata_files import (
     browser_undecodable,
     classify_anndata_path,
@@ -36,6 +36,7 @@ from cellucid._anndata_files import (
 from cellucid.anndata_server import AnnDataServer
 from cellucid.data_mapping import parse_vector_field_key
 from cellucid.prepare_data import _store
+from cellucid.prepare_data._outliers import latent_outlier_quantiles
 
 N_CELLS = 40
 N_GENES = 12
@@ -107,6 +108,12 @@ def _write(
 
 
 def _read(path: Path) -> ad.AnnData:
+    """The written AnnData in the order its cells were given (``restore_original_order``)."""
+    return restore_original_order(_stored(path))
+
+
+def _stored(path: Path) -> ad.AnnData:
+    """The written AnnData as stored: its cells in priority order."""
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         if path.suffix == ".h5ad":
@@ -241,10 +248,11 @@ def test_stored_zeros_are_dropped_and_values_kept(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("layout", ["csr", "csc"])
 def test_a_backed_anndata_is_prepared_from_disk(tmp_path: Path, layout: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    """``adata.X`` of a backed AnnData is anndata's on-disk matrix, read by row blocks."""
-    from cellucid.prepare_data import _inputs as inputs_module
+    """``adata.X`` of a backed AnnData is anndata's on-disk matrix, laid out by blocks
+    (:mod:`cellucid.prepare_data._gene_major`), never read whole."""
+    from cellucid.prepare_data import _gene_major
 
-    monkeypatch.setattr(inputs_module, "_BACKED_ROWS_PER_BLOCK", 7)  # several blocks over 40 cells
+    monkeypatch.setattr(_gene_major, "PASS_ENTRIES", 50)  # several blocks over 40 cells
     inputs = _inputs()
     counts = inputs["gene_expression"].asformat(layout)
     source = tmp_path / "source.h5ad"
@@ -256,6 +264,30 @@ def test_a_backed_anndata_is_prepared_from_disk(tmp_path: Path, layout: str, mon
     backed.file.close()
     written = _read(path)
     np.testing.assert_array_equal(written.X.toarray(), counts.toarray())
+
+
+def test_a_lazily_read_sparse_x_is_prepared_block_by_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A dask array of sparse blocks (anndata's lazily read X) is never computed
+    whole: it is decoded block of rows by block of rows into the layout's
+    scratch folder, and written byte for byte as the same matrix in memory."""
+    da = pytest.importorskip("dask.array")
+    inputs = _inputs()
+    counts = inputs["gene_expression"].tocsr()
+    lazy = da.from_array(counts, chunks=(7, N_GENES), asarray=False)
+    computed: list[tuple[int, ...]] = []
+    real_compute = type(lazy).compute
+
+    def compute(self: Any, **kwargs: Any) -> Any:
+        computed.append(tuple(int(extent) for extent in self.shape))
+        return real_compute(self, **kwargs)
+
+    monkeypatch.setattr(type(lazy), "compute", compute)
+    expected = _write(tmp_path / "memory", "data.zarr", "zarr", 2, gene_expression=counts)
+    actual = _write(tmp_path / "lazy", "data.zarr", "zarr", 2, gene_expression=lazy)
+    assert computed and all(shape[0] <= 7 for shape in computed)
+    files = sorted(str(path.relative_to(expected)) for path in expected.rglob("*") if path.is_file())
+    assert files == sorted(str(path.relative_to(actual)) for path in actual.rglob("*") if path.is_file())
+    assert [name for name in files if (expected / name).read_bytes() != (actual / name).read_bytes()] == []
 
 
 @pytest.mark.parametrize("kind", ["csc_matrix", "csc_array"])
@@ -299,6 +331,7 @@ def test_h5ad_chunks_and_filters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     # Small chunk targets so the toy arrays span several chunks.
     monkeypatch.setattr(_store, "SLICED_CHUNK_ELEMENTS", 16)
     monkeypatch.setattr(_store, "WHOLE_CHUNK_ELEMENTS", 32)
+    monkeypatch.setattr(_store, "CELL_CHUNK_ELEMENTS", 24)
     path = _write(tmp_path, "data.h5ad", "h5ad", None)
     with h5py.File(path) as file:
         assert dict(file.attrs) == {"encoding-type": "anndata", "encoding-version": "0.1.0"}
@@ -314,10 +347,14 @@ def test_h5ad_chunks_and_filters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         assert not file["obs/is_doublet"].shuffle
         assert file["X/indptr"].chunks == (N_GENES + 1,)
         assert file["X/indices"].dtype == np.int32
-        assert file["obs/score"].chunks == (32,)
-        # An embedding chunk holds every column of a block of rows.
-        assert file["obsm/X_pca"].chunks == (32 // 6, 6)
-        assert file["obsm/X_umap"].chunks == (16, 2)
+        # Every array with one row per cell in chunks of CELL_CHUNK_ELEMENTS
+        # values; an embedding chunk holds every column of a block of rows.
+        assert file["obs/score"].chunks == (24,)
+        assert file["obs/_index"].chunks == (24,)
+        assert file["obs/cellucid_original_position"].chunks == (24,)
+        assert file["obsm/X_pca"].chunks == (24 // 6, 6)
+        assert file["obsm/X_umap"].chunks == (12, 2)
+        # The rest (var, the graph) in chunks of WHOLE_CHUNK_ELEMENTS.
         assert file["obsp/connectivities/data"].chunks == (32,)
         # File format 1.10 (superblock 3), and every object's header in the
         # metadata block at the start of the file, before any array's values.
@@ -371,8 +408,12 @@ def test_h5ad_opening_reads_lie_before_every_other_value(tmp_path: Path) -> None
             dict(file.attrs)
             file["var/_index"][...]
             file["X/indptr"][...]
+            # Every value of uns but the outlier quantiles: its scalars, and
+            # the priority's levels.
             file["uns"].visititems(
-                lambda name, item: item[()] if isinstance(item, h5py.Dataset) and item.ndim == 0 else None
+                lambda name, item: item[()]
+                if isinstance(item, h5py.Dataset) and "outlierQuantiles" not in name
+                else None
             )
             labels = [
                 f"obs/{key}/categories" for key in file["obs"] if file["obs"][key].attrs["encoding-type"] == "categorical"
@@ -384,7 +425,11 @@ def test_h5ad_opening_reads_lie_before_every_other_value(tmp_path: Path) -> None
             bulk: list[int] = []
 
             def first_chunk(name: str, item: Any) -> None:
-                opened = name in ("var/_index", "X/indptr") or name.endswith("/categories")
+                opened = (
+                    name in ("var/_index", "X/indptr")
+                    or name.endswith("/categories")
+                    or (name.startswith("uns/") and "outlierQuantiles" not in name)
+                )
                 if isinstance(item, h5py.Dataset) and item.chunks is not None and item.id.get_num_chunks() and not opened:
                     bulk.append(item.id.get_chunk_info(0).byte_offset)
 
@@ -491,6 +536,7 @@ _V3_DTYPES = {
     "int16": "<i2",
     "int32": "<i4",
     "int64": "<i8",
+    "uint32": "<u4",
     "float32": "<f4",
     "float64": "<f8",
     "string": "|O",
@@ -686,10 +732,11 @@ def test_a_zarr_v3_chunk_carries_no_time(tmp_path: Path) -> None:
         key = chunk.relative_to(path).as_posix().split("/c/")[0]
         if json.loads((path / key / "zarr.json").read_text())["codecs"][-1]["name"] == "blosc":
             array = root[key]
-            index = int(chunk.name)
+            coords = [int(part) for part in chunk.relative_to(path / key / "c").parts]
             raw = np.zeros(array.chunks, dtype=array.dtype)
-            values = np.asarray(array[index * array.chunks[0] : (index + 1) * array.chunks[0]])
-            raw[: len(values)] = values
+            box = tuple(slice(at * size, (at + 1) * size) for at, size in zip(coords, array.chunks, strict=True))
+            values = np.asarray(array[box])
+            raw[tuple(slice(0, extent) for extent in values.shape)] = values
             _assert_blosc_frame(data, raw.tobytes(), array.dtype.itemsize)
             framed += 1
             continue
@@ -864,7 +911,8 @@ REFUSALS = [
     pytest.param({"embeddings": {}}, ValueError, "at least one embedding", id="no-embeddings"),
     pytest.param({"embeddings": {"X/umap": np.zeros((N_CELLS, 2))}}, ValueError, "cannot appear in a file name", id="slash-key"),
     pytest.param({"embeddings": {"X_umap": np.zeros((N_CELLS, 2)), "x_UMAP": np.zeros((N_CELLS, 2))}}, ValueError, "differ only in letter case", id="case-collision"),
-    pytest.param({"embeddings": {"X_umap": np.full((N_CELLS, 2), np.nan)}}, ValueError, "finite numbers", id="nan-embedding"),
+    pytest.param({"embeddings": {"X_umap": np.full((N_CELLS, 2), np.nan)}}, ValueError, "every cell's values are missing (NaN or infinite)", id="no-cell-placed"),
+    pytest.param({"embeddings": {"X_umap": np.where(np.arange(N_CELLS)[:, None] == 3, [np.nan, 0.0], [1e39, 1.0])}}, ValueError, "within the float32 range", id="placed-cell-beyond-float32"),
     pytest.param({"embeddings": {"X_umap": np.zeros((N_CELLS + 1, 2))}, "vector_fields": None}, ValueError, "obs has 40 rows, but the embeddings have 41", id="row-mismatch"),
     pytest.param({"obs": pd.DataFrame({"_index": range(N_CELLS)})}, ValueError, "'_index' is reserved", id="index-column"),
     pytest.param({"obs": pd.DataFrame({"x": [np.inf] * N_CELLS})}, ValueError, "infinite", id="infinite-obs"),
@@ -876,7 +924,6 @@ REFUSALS = [
     pytest.param({"var": None}, ValueError, "genes have no names", id="unnamed-genes"),
     pytest.param({"gene_identifiers": ["NOPE"]}, ValueError, "not found in var", id="unknown-gene"),
     pytest.param({"connectivities": sparse.csr_matrix(np.triu(np.ones((N_CELLS, N_CELLS)), 1))}, ValueError, "exactly symmetric", id="asymmetric-graph"),
-    pytest.param({"connectivities": sparse.identity(N_CELLS, format="csr")}, ValueError, "diagonal", id="graph-diagonal"),
     pytest.param({"connectivities": -sparse.csr_matrix(np.ones((N_CELLS, N_CELLS)) - np.eye(N_CELLS))}, ValueError, "non-negative", id="negative-graph"),
     pytest.param({"vector_fields": {"velocity": {"X_pca": np.zeros((N_CELLS, 2))}}}, ValueError, "has 2 columns, and 'X_pca' has 6", id="vectors-narrower-than-embedding"),
     pytest.param({"vector_fields": {"velocity": {"X_tsne": np.zeros((N_CELLS, 2))}}}, ValueError, "'X_tsne' is not one of the embeddings", id="vectors-on-unknown-embedding"),
@@ -892,6 +939,44 @@ REFUSALS = [
     pytest.param({"var_gene_id_column": "nope"}, ValueError, "var_gene_id_column names var['nope']", id="unknown-gene-column"),
     pytest.param({"force": 1}, TypeError, "force", id="non-bool-force"),
 ]
+
+
+def test_a_cell_an_embedding_does_not_place_is_written_as_given_and_gets_no_outlier_quantile(tmp_path: Path) -> None:
+    """A row holding NaN is a cell the array has no value for (an embedding
+    computed on some of the cells): written as given, not drawn by the viewer
+    in that embedding, and, in the latent space, given no outlier quantile;
+    the other cells are measured without it."""
+    rng = np.random.default_rng(3)
+    umap = rng.normal(size=(N_CELLS, 2))
+    umap[[2, 7]] = np.nan
+    latent = rng.normal(size=(N_CELLS, 4))
+    latent[5, 1] = np.nan
+    obs = pd.DataFrame({"group": pd.Categorical(["a", "b"] * (N_CELLS // 2))})
+    adata = _read(
+        _write(
+            tmp_path, "data.h5ad", "h5ad", None,
+            embeddings={"X_umap": umap, "X_latent": latent}, vector_fields=None, obs=obs,
+            latent_key="X_latent", centroid_min_points=2,
+        )
+    )
+    written = np.asarray(adata.obsm["X_umap"])
+    assert np.isnan(written[[2, 7]]).all()
+    assert np.array_equal(written[~np.isnan(umap).any(axis=1)], umap[~np.isnan(umap).any(axis=1)].astype(np.float32))
+    quantiles = np.asarray(adata.uns["cellucid"]["outlierQuantiles"]["fields"]["group"])
+    expected = latent_outlier_quantiles(latent.astype(np.float32), obs["group"].cat.codes.to_numpy(), 2, 2)
+    assert np.isnan(quantiles[5]) and np.array_equal(quantiles, expected, equal_nan=True)
+
+
+def test_a_self_loop_is_no_edge_seurat_snn_is_written_without_its_diagonal(tmp_path: Path) -> None:
+    """Seurat's ``FindNeighbors`` counts each cell among its own neighbours: its
+    ``<assay>_snn`` graph has 1 on the diagonal. A self-loop is no edge anyone can
+    draw, so the diagonal is left out (as the web app and cellucid-r leave it
+    out), never the graph refused."""
+    ring = sparse.diags([np.ones(N_CELLS - 1), np.ones(N_CELLS - 1)], [-1, 1], format="csr") * 0.5
+    snn = (ring + sparse.identity(N_CELLS, format="csr")).tocsr()
+    written = _read(_write(tmp_path, "data.h5ad", "h5ad", None, connectivities=snn)).obsp["connectivities"]
+    assert written.diagonal().sum() == 0
+    assert (written != ring.astype(np.float32)).nnz == 0
 
 
 @pytest.mark.parametrize(("overrides", "error", "match"), REFUSALS)
@@ -1037,3 +1122,59 @@ def test_sparse_positions_are_sized_by_their_axis_and_pointers_by_the_values() -
     wide = SimpleNamespace(format="csr", shape=(10, 2**31), nnz=5)
     assert _store._index_dtype(wide) is np.int32
     assert _store._position_dtype(wide) is np.int64
+
+
+def test_what_an_object_holds_and_prepare_does_not_write_is_named(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """``data=``: a column with no AnnData encoding Cellucid writes (a date)
+    is left out with a note, as cellucid-r leaves it out, and so are layers,
+    ``raw``, other graphs and obsm tables, each named; the same column given
+    as ``obs=`` is refused with the conversion that keeps it."""
+    inputs = _inputs()
+    adata = ad.AnnData(
+        X=inputs["gene_expression"],
+        obs=pd.DataFrame(
+            {"when": pd.to_datetime(["2026-01-01"] * N_CELLS), "kept": np.arange(N_CELLS)},
+            index=[f"c{i}" for i in range(N_CELLS)],
+        ),
+        var=pd.DataFrame(index=[f"g{i}" for i in range(N_GENES)]),
+        obsm={"X_umap": inputs["embeddings"]["X_umap"], "table": pd.DataFrame({"a": np.arange(N_CELLS)}, index=[f"c{i}" for i in range(N_CELLS)])},
+        layers={"counts": inputs["gene_expression"]},
+        obsp={"distances": sparse.csr_matrix((N_CELLS, N_CELLS))},
+    )
+    adata.raw = adata.copy()
+    path = prepare(tmp_path / "o.zarr", format="zarr", data=adata, dataset_id="o", dataset_name="O")
+    said = capsys.readouterr().out
+    assert "obs: not stored, no AnnData encoding Cellucid writes: ['when']" in said
+    assert "obsm['table'] holds no numeric coordinates and was not read." in said
+    assert "layers not read: ['counts']" in said and "raw not read" in said
+    assert "obsp ['distances'] not read" in said
+    written = ad.read_zarr(path)
+    assert "when" not in written.obs and "kept" in written.obs
+    # An explicit obs= replaces data's: nothing is said of data's columns, and its date is refused.
+    with pytest.raises(TypeError, match="no AnnData encoding"):
+        prepare(tmp_path / "e.zarr", format="zarr", data=adata, obs=adata.obs, dataset_id="o", dataset_name="O")
+    assert "obs: not stored" not in capsys.readouterr().out
+
+
+def test_what_a_killed_writer_left_is_removed_by_the_next_one(tmp_path: Path) -> None:
+    """A ``prepare()`` killed before it finished leaves its staging beside the
+    target (``.<name>.<pid>.partial``); the next one removes it, and the
+    target a killed writer had moved aside when the target is there again --
+    never a moved-aside copy that is the only one, nor a running writer's."""
+    import os
+
+    target = tmp_path / "out.zarr"
+    dead = 999999999
+    (tmp_path / f".out.zarr.{dead}.partial").mkdir()
+    (tmp_path / f".out.zarr.{os.getppid()}.partial").mkdir()  # a running process's
+    prepare(target, format="zarr", **_inputs())
+    assert not (tmp_path / f".out.zarr.{dead}.partial").exists()
+    assert (tmp_path / f".out.zarr.{os.getppid()}.partial").exists()
+    (tmp_path / f".out.zarr.{dead}.replaced").mkdir()
+    prepare(target, format="zarr", force=True, **_inputs())
+    assert not (tmp_path / f".out.zarr.{dead}.replaced").exists()
+    # The target gone: the moved-aside copy is the only one, and it stays.
+    other = tmp_path / "other.zarr"
+    (tmp_path / f".other.zarr.{dead}.replaced").mkdir()
+    prepare(other, format="zarr", **_inputs())
+    assert (tmp_path / f".other.zarr.{dead}.replaced").exists()

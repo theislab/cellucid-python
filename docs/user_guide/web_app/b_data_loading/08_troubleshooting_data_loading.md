@@ -63,12 +63,21 @@ and GitHub paths take the shape:
 
 and the middle clause is the one that identifies the layer:
 
+When the host answered with a status (a 404, a 403, a 5xx, a 429), the
+cause clause is the host's answer said by whose problem it is, the same
+sentence every source uses ([When a data host is down](#troubleshooting-host-failing)):
+"… was not found at `<host>` (HTTP 404, not found)", "`<host>` refused …
+(HTTP 403, forbidden): … the link's permissions", "`<host>` is not answering
+(HTTP 503, service unavailable) …: a problem on `<host>`'s side",
+"`<host>` is limiting requests from this network (HTTP 429) …". Without
+a host's status, the clause is one of these:
+
 | The message says | It means | Look at |
 |---|---|---|
 | nothing is published at that address (the server answered "not found") | The address resolved, but there is nothing there | Your path, folder, or branch |
 | the server refused access | Reached, but not public | Repository visibility |
 | the server rejected the request | Reached, but the request was malformed | Your address |
-| the server reported a problem of its own | Reached; the far side failed | Wait, then retry |
+| the host is not answering: a problem on its side, not with the address or with Cellucid | Reached; the far side failed | Wait, then retry |
 | what is published there is larger than Cellucid opens in a browser | Reached, readable, valid — and more than this browser could allocate | The file size and the machine's memory. Serve it instead ({doc}`04_server_tutorial`), open it on a machine with more memory, or publish a smaller file. The ceilings are tabulated in {doc}`../q_troubleshooting_index/index` |
 | what is published there is not in a format Cellucid can read | Reached and readable, but not an AnnData file Cellucid reads | Write it again with anndata (or `cellucid.prepare()`) |
 | nothing readable came back — the connection may have failed, or that address may not hold Cellucid data | Ambiguous: no usable response arrived | Your network *and* your address |
@@ -106,9 +115,10 @@ defect inside Cellucid.
 
 Every failure notification keeps the raw error text folded under its
 **Details** (and in the browser console), never in the sentence. A dataset you
-chose from the list that does not open is said once, as *Could not open
-"`<name>`".*, while the explanation and **Try again** stay next to the
-selector. Quote the **Details** if you report the problem.
+chose from the list that does not open is said once: with its host's
+answer when there is one (*"`<name>`" could not be opened: `<file>` was
+not found at `<host>` (HTTP 404, not found) …*), else as *Could not open
+"`<name>`".*; the explanation and **Try again** stay next to the selector. Quote the **Details** if you report the problem.
 
 Local file failures use neither shape. They quote the specific defect instead —
 for example `The selected file is not a valid HDF5 file, so it cannot be an AnnData (.h5ad) file…` or
@@ -160,8 +170,25 @@ progress notice shows how far that is.
 
 No request waits for ever: a request the host answers as busy or failing
 (HTTP 429, 503, ...), whose connection fails, or that stops receiving bytes is
-asked again a few times, each repeat logged in the console as a
-`[cellucid:transfer]` warning naming its URL, and then reported. When a
+asked again, with waits that double from the link's own timeout, each repeat
+logged in the console as a `[cellucid:transfer]` warning naming its URL, and
+then reported. A host that answers with errors before it has delivered
+anything (a sample catalog, a provider's details, the first reads of a file
+or folder) is asked again three times, a few seconds in all, and then the
+error is shown with **Try again**; a read the host has already delivered to
+is asked again for at least 100 seconds before it is reported.
+
+A wait the host names is not a failure. A host that says how many requests
+it answers (Zenodo: 133 a minute; GitHub's API: 60 an hour) is asked no
+faster than that, and when its budget is spent the opening says **Waiting
+for the host** and when the next requests go. A server preparing what was
+asked for (`cellucid serve` counting a large cell-major matrix of a file,
+the first part of laying it out for the viewer; once counted, a gene is
+answered at once) answers "not yet, ask again in N s" with how far it is;
+the gene's notification shows that line ("Reading gene CD3E: X is being laid
+out gene-major for the viewer (37% done, about 12 s left).") and the gene
+appears once it is ready. Neither is retried as an error or taken for a
+stall; **Cancel** stops either. When a
 dataset opens at startup and nothing at all arrives for 60 s, Cellucid stops
 waiting and starts without it: the panel over the empty viewer says the data
 could not be opened, and its **Details** read `Startup stalled while opening
@@ -213,8 +240,8 @@ waits for answers. Include that console line when you report a hang.
 
 An `.h5ad` or Zarr store without a UMAP — selected in the browser, opened from
 a link, or served from Python — is not refused: it opens on a best guess (see
-{doc}`13_data_mapping`). Only a file with no drawable `obsm` array at all is
-refused, with this message:
+{doc}`13_data_mapping`). A file whose `obsm` holds dense numeric arrays of which
+none can be drawn is refused, with this message:
 
 ```text
 Cellucid found nothing to plot. It needs an obsm array with one row per cell
@@ -225,13 +252,16 @@ data again.
 
 The list names every `obsm` entry with its shape and, for a dense array, why it
 was not used: `X_df (table)`, `X_sparse (sparse 10,000 × 5)`,
-`spatial (10,000 × 2, NaN at cell 17)`. A file with an empty `obsm` reads
-`obsm holds: nothing.`
+`spatial (10,000 × 2, not representable as float32 at cell 17)`. A file whose
+`obsm` holds no dense numeric array at all (an empty `obsm`, or only tables and
+sparse arrays) is refused sooner, before any cell is read, as having no cell
+embedding ({ref}`no-cell-embedding`).
 
 **Likely causes**
-- AnnData has no dense numeric `obsm` array with one row per cell, or every
-  such array holds a NaN, an infinity, a value too large for 32-bit floats, or
-  the same coordinates for every cell.
+- Every dense numeric `obsm` array has another row count than the cells,
+  places no cell (every row holds NaN or an infinity), holds a value too large
+  for 32-bit floats, or gives every cell the same coordinates. (A NaN row only
+  leaves that cell unplaced in that view.)
 
 **How to confirm**
 - AnnData (Python):
@@ -253,19 +283,31 @@ was not used: `X_df (table)`, `X_sparse (sparse 10,000 × 5)`,
 ### Symptom: “… has no cell embedding, and Cellucid draws cells at embedding coordinates”
 
 A count matrix with nothing to draw it with: a 10x Cell Ranger `.h5` opened
-alone, or a Loom file without embedding attributes (a velocyto output). The
-message names the file and what to do:
+alone, a Loom file without embedding attributes (a velocyto output), an `.rds`
+object without a reduction, or an AnnData or MuData file (`.h5ad`, Zarr,
+`.h5mu`) whose `obsm` holds no dense numeric array -- an empty `obsm`, or only
+tables and sparse arrays (refused from its metadata, before any cell is read;
+the message then names what `obsm` holds). The message names the file and what
+to do:
 
 ```text
 filtered_feature_bc_matrix.h5 is a 10x Cell Ranger count matrix that has no
-cell embedding, and Cellucid draws cells at embedding coordinates. Cell Ranger
-writes UMAP and t-SNE projections beside it: open the whole outs/ folder
-(Open… › Folder…), which holds this file and analysis/. Or compute one and open
-the result: in Python, sc.pp.normalize_total(adata); sc.pp.log1p(adata);
-sc.pp.pca(adata); sc.pp.neighbors(adata); sc.tl.umap(adata), then
-adata.write_h5ad(path); in R, Seurat::NormalizeData(), FindVariableFeatures(),
-ScaleData(), RunPCA() and RunUMAP(), then cellucid::cellucid_prepare(path, data = obj).
+cell embedding, and Cellucid draws cells at embedding coordinates (it does not
+compute them). Cell Ranger writes UMAP and t-SNE projections beside it: open
+the whole outs/ folder (Open… › Folder…), which holds this file and analysis/.
+Or compute one and open the result: in Python, sc.pp.normalize_total(adata);
+sc.pp.log1p(adata); sc.pp.pca(adata); sc.pp.neighbors(adata); sc.tl.umap(adata),
+then adata.write_h5ad(path) or cellucid.prepare(path, format="h5ad", data=adata);
+in R, Seurat::NormalizeData(), FindVariableFeatures(), ScaleData(), RunPCA() and
+RunUMAP() (or scater::runUMAP()), then cellucid::cellucid_prepare(path, data = obj).
+Coordinates you already have (a UMAP table) go in as they are:
+prepare(…, embeddings={'X_umap': coordinates}) or
+cellucid_prepare(…, embeddings = list(X_umap = coordinates)).
 ```
+
+Neither `prepare()` nor `cellucid_prepare()` computes an embedding: each
+writes the one the data holds (or the one passed as `embeddings`), and refuses
+data without one.
 
 Opened from a link, the middle sentence says what a link allows instead: the
 `outs/` folder "a link to one file cannot bring along: download the whole
@@ -321,10 +363,19 @@ The message names the object or file and the R line that fixes it
   save the object to open on its own with `saveRDS()`.
 - **"… compressed with zstd"**, **"saved as text"**, **"in R's native binary
   form"**: save it again with `saveRDS(obj, file)` and its defaults.
-- **"This browser's storage has room for …"**: a compressed file is read into
-  the browser's storage first. Free space, or write the object once as a
-  Cellucid-ready AnnData with `cellucid_prepare()` (R) or `cellucid.prepare()`
-  (Python), which is read in place.
+- **"This browser's storage has room for …"** or **"This browser's storage
+  for this site is full …"**: a compressed file is read into
+  the browser's storage first, and the files kept from earlier openings that
+  no tab has open were already removed to make room (least recently opened
+  first). In a private window the storage is small: open it in a normal
+  window. Chromium's private windows keep only part of what a page writes
+  once their share is spent, while they still report gigabytes free: every
+  write is checked against what the file holds, so a large object (a
+  10-million-cell Seurat object) is refused here with this message instead of
+  being read back short. Otherwise close other tabs that have a file read whole open, free
+  space on the disk, or write the object once as a Cellucid-ready AnnData with
+  `cellucid_prepare()` (R) or `cellucid.prepare()` (Python), which is read in
+  place.
 - **"This MatrixMarket matrix is symmetric"** (or complex, or a dense array):
   it is not a count matrix.
 - **"… has no `…_barcodes.tsv.gz` beside it"** (or no features or genes
@@ -343,23 +394,27 @@ The message names the object or file and the R line that fixes it
 
 **Likely causes (ordered)**
 1) WebGL/GPU issue (context lost, unsupported browser/GPU).
-2) Embedding contains NaN/Inf or extreme values.
+2) Every row of the embedding holds NaN/Inf (no cell has a position), or it holds extreme values.
 3) All points are filtered/hidden (rare on first load, but possible with a saved session).
 
 **How to confirm**
 - Try a demo dataset.
 - Open browser console and look for WebGL/context errors.
-- For data sanity, check embeddings for NaN/Inf (Python):
+- For data sanity, count the cells the embedding places (Python):
 
   ```python
   import numpy as np
   X = adata.obsm["X_umap_2d"]
-  print(np.isfinite(X).all(), X.min(), X.max())
+  placed = np.isfinite(X).all(axis=1)
+  print(placed.sum(), "of", len(X), "cells placed;", X[placed].min(), X[placed].max())
   ```
+
+  A cell whose row holds NaN is not drawn in that embedding (a notice counts
+  such cells when it opens); every other view keeps it.
 
 **Fix**
 - WebGL issues → see {doc}`../a_orientation/02_system_requirements`
-- NaN/Inf → clean/recompute embeddings and write the file again.
+- No placed cell → recompute the embedding over the cells and write the file again.
 
 ---
 
@@ -476,6 +531,60 @@ Compare your repository with the known-good reference repository in
 
 ---
 
+(troubleshooting-host-failing)=
+### When a data host is down
+
+A link's data lives on someone else's host (CELLxGENE's Census bucket, NCBI
+GEO, Zenodo, Figshare, Hugging Face, GitHub, Dropbox, Google Drive,
+OneDrive, any web address), the sample catalog on GitHub Pages, and a
+served dataset on `cellucid serve` or a notebook's server. When the host
+does not give what was asked for, Cellucid says **whose** problem it is,
+names the provider and its host, and gives the status, in the same words
+wherever you meet it (the panel over the empty viewer, a notification, the
+sample list's notice). Over the empty viewer it offers **Try again**
+first where asking again may help; when another dataset stays on screen,
+the notification says the same and **Open** in the **Link or server** bar
+asks again. The requests it made, each asked again before it gave up, are
+under **Details**.
+
+| The message starts | Whose problem | What to do |
+|---|---|---|
+| `<provider>` (`<host>`) is not answering (HTTP 500, 502, 503, 504 or 408) … a problem on `<provider>`'s side | The host fails on its own side: an outage | Nothing on your side changes it: **Try again** later |
+| … is limiting requests from this network (HTTP 429) … Try again in 30 s, as `<provider>` asks | The host's own rate limit for your network (on a shared network, others' requests count too) | Wait the time it names (or a few minutes), then **Try again** |
+| … is refusing requests from this network for now (HTTP 403) …, which it gives everyone | A host that serves everyone (GEO, the CELLxGENE Census), or one that answered you before, now refuses: an outage, or a block after many requests | **Try again** later; from another network it may open at once |
+| `<host>` refused … (HTTP 401 or 403): it is private or deleted, or the link has expired | The link's permissions, not a fault | Ask its owner for a public link (or sign in, for Google Drive and OneDrive) |
+| … was not found at `<host>` (HTTP 404 or 410) | The link or record does not exist, or it moved | Check the link, or ask its owner |
+| This computer is offline … the connection on this side | Your connection | Connect, then **Try again** |
+| `<host>` gave no answer …, and neither did the other hosts asked in the last minute: most likely this computer's connection | Hosts of unrelated sites that answered before all went silent at once, and none answered since | Check the connection (or the network in between: a VPN, a proxy), then **Try again** |
+| `<provider>` (`<host>`) is not answering this site: no answer arrived | No answer a web page may read: the host's outage, a block of your network, or your connection | **Try again** later, or from another network |
+
+Any other message is Cellucid's own refusal of what it read (a format it
+does not read, a file with nothing to plot) and says what to do; quote
+its **Details** if you report it.
+
+**How to check a host yourself.** Open the address the message names (or
+the provider's status page) in a tab: the same error there is the host's.
+
+**GEO/NCBI outages.** NCBI's file service behind GEO
+(`ftp.ncbi.nlm.nih.gov/geo/`) fails now and then for minutes to hours. On
+2026-10-31 it answered HTTP 500 for every file under `/geo/` from 16:47 CET,
+then came and went for hours, while its folder listings still answered,
+with no files or only some. Cellucid asks NCBI before it says a GEO file is
+missing (the series' `filelist.txt`, or one byte of `geo/README.txt`), so
+an outage is said as NCBI's:
+
+```text
+NCBI GEO (ftp.ncbi.nlm.nih.gov) is not answering (HTTP 500, a server error) for
+GSE350831_Flex_pilot_paper_annotated_bbknn.h5ad: a problem on NCBI GEO's side, not with
+the link or with Cellucid. It usually passes; try again later.
+```
+
+To confirm, open `https://ftp.ncbi.nlm.nih.gov/geo/README.txt`: a page
+reading "Server error!" (HTTP 500), or any 5xx or 403, means NCBI's file
+service is down; the README's text means NCBI answers again.
+
+---
+
 ### Symptom: “Google or Microsoft sign-in does not open, or does not finish”
 
 The sign-in step sits under the **Link or server** bar and in a notification
@@ -492,9 +601,9 @@ The sign-in step sits under the **Link or server** bar and in a notification
   8765."** Google answers only the addresses Cellucid registered, port
   included, for public and private files. Start `cellucid serve` without
   `--port`, or open the file on www.cellucid.com.
-- **"Google Drive works in a notebook viewer only on port 8765."** A notebook
-  viewer serves on 8765 unless another server holds it, and then on the next
-  free port (it prints a note). Stop the server holding 8765 (an earlier
+- **"Google Drive works in a notebook viewer only on port 8765."** A
+  browser-tab viewer from Python (`AnnDataViewer`) serves on 8765 unless
+  another server holds it, and then on the next free port (it prints a note). Stop the server holding 8765 (an earlier
   viewer: `viewer.stop()`; `cellucid serve`) and show the data again, or open
   the file on www.cellucid.com.
 - **"Google Drive works on www.cellucid.com, not on …"** The page is on
@@ -560,7 +669,7 @@ The sign-in step sits under the **Link or server** bar and in a notification
 ### Symptom: “Remote server connect fails / CORS blocked / mixed content”
 
 ```{figure} ../../../_static/screenshots/data_loading/fail-remote-server-unreachable.png
-:alt: A Cellucid notification saying the Cellucid server could not be reached at a loopback address, and what to check.
+:alt: A Cellucid notification saying the Cellucid server could not be reached because nothing readable came back, that the connection may have failed or the address may not hold Cellucid data, and what to check.
 :width: 760px
 
 Connecting to a port with nothing listening on it. Cellucid deliberately names

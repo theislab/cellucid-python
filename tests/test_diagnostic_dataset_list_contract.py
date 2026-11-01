@@ -57,7 +57,7 @@ def test_debug_connection_probes_every_listed_store(
     document = _served_entry(tmp_path)
     responses: dict[str, object] = {
         "http://127.0.0.1:8765/_cellucid/health": {"status": "ok"},
-        "http://127.0.0.1:8765/_cellucid/info": {"version": "0.9.5"},
+        "http://127.0.0.1:8765/_cellucid/info": {"version": "0.9.6"},
         "http://127.0.0.1:8765/_cellucid/datasets": document,
     }
     probed: list[str] = []

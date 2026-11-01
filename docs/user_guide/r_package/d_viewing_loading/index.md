@@ -5,8 +5,9 @@ with `cellucid_prepare()` — how do I view it, and how do I share it?”
 
 `cellucid_view(object)` opens a Seurat, SingleCellExperiment or
 SummarizedExperiment object (or any file the web app reads) in the RStudio or
-Positron Viewer pane or a browser, with no file written and no Python;
-`cellucid_serve()` serves it to a browser elsewhere.
+Positron Viewer pane, a browser, or -- in a Jupyter notebook -- the cell's
+output, with no file written and no Python; `cellucid_serve()` serves it to a
+browser elsewhere.
 
 `cellucid_prepare()` writes a **Cellucid-ready AnnData**: a standard AnnData Zarr
 store, either a `.zarr` folder (`format = "zarr"`) or one `.zarr.zip` file (`format = "zarr.zip"`). The
@@ -56,6 +57,13 @@ Read the store back in R and in Python's anndata, and diagnose loading failures.
 :link-type: doc
 
 `cellucid_view(seu)`: the object in the Viewer pane, from memory.
+:::
+
+:::{grid-item-card} {octicon}`code-square;1.5em;sd-mr-1` View in a Jupyter Notebook
+:link: 08_view_in_jupyter_notebooks
+:link-type: doc
+
+`cellucid_view(seu)` in IRkernel: the viewer in the cell's output, no port.
 :::
 
 :::{grid-item-card} {octicon}`server;1.5em;sd-mr-1` Serve from a Cluster or over SSH

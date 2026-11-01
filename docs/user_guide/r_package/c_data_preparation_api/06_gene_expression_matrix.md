@@ -53,7 +53,7 @@ with one column per gene, so each gene's values are one contiguous range.
 - `X/indptr`: int32 offsets, one per gene plus one
 
 (indices and offsets become int64 only if a matrix ever held 2^31 or more
-stored values.) `data` and `indices` are chunked at 65,536 values, so reading
+stored values.) `data` and `indices` are chunked at 16,384 values, so reading
 one gene fetches little more than that gene. A stored zero is no value and
 is dropped (as `Matrix::drop0()` drops it); the matrix stays sparse.
 

@@ -54,11 +54,18 @@ cellucid/
 └── assets/
     ├── css/                       # Design system + themes
     ├── external/                  # Vendored third-party libraries, served from
-    │                              #   this origin (plotly, gl-matrix).
+    │                              #   this origin (plotly, gl-matrix, and
+    │                              #   fflate-0.8.2/, the ES module the readers'
+    │                              #   inflater imports, unchanged, licence and
+    │                              #   digest pinned: tests/wasm-codecs-contract).
     │                              #   Nothing is loaded from a CDN; the page CSP
     │                              #   would block it. plotly.min.js carries one
     │                              #   local, test-pinned patch (violin density;
     │                              #   see its header) to re-apply on upgrade.
+    ├── wasm/                      # codecs.wasm: zstd, lz4 and c-blosc decoders,
+    │                              #   built from pinned release tarballs by
+    │                              #   scripts/build-wasm-codecs.mjs (sources in
+    │                              #   scripts/wasm-codecs/); LICENSES/ beside it.
     ├── fonts/  img/               # Static assets
     └── js/
         ├── analytics/             # Google Analytics helpers. Inert unless the
@@ -88,7 +95,7 @@ cellucid/
         │                          #   the Benchmark panel. Lazily
         │                          #   imported; never on the product render path.
         ├── rendering/             # WebGL viewer + shaders + overlays (smoke, highlight, etc.)
-        ├── utils/                 # Shared utilities (debug, theme, style manager, exact records)
+        ├── utils/                 # Shared utilities (debug, theme, style manager, exact records; cancellation abort.js, failures errors.js and error-wire.js)
         └── workers/               # worker-script.js: where each worker starts from
                                    #   (its source on this machine, its bundle elsewhere)
     └── workers/                   # Generated, never edited: one bundle per worker
@@ -121,7 +128,9 @@ It is the bootstrap orchestrator and intentionally contains *no* per-frame logic
   script origins allowed are Google’s tag manager and, for Google Drive files
   only, Google's sign-in and picker (`accounts.google.com`,
   `apis.google.com`). Adding a CDN dependency means editing this policy, which
-  is the intended friction.
+  is the intended friction. It grants `'wasm-unsafe-eval'`, so the readers can
+  compile the WebAssembly decoders (`assets/wasm/codecs.wasm`), and no
+  JavaScript evaluation.
 - The `<canvas id="glcanvas">` used by the WebGL renderer.
 - The sidebar markup (accordion sections, inputs, buttons). Data-source,
   renderer and benchmark controls are authored **disabled** and are enabled
@@ -156,10 +165,13 @@ It also exposes dev-friendly globals:
 
 ### 3) `cellucid/assets/js/app/ui/core/ui-coordinator.js` (UI coordinator)
 
-`initUI()` is a thin orchestrator that:
+`initUI()` (about 850 lines of wiring) does three things:
 - collects DOM references once (`ui/core/dom-cache.js`)
 - initializes UI modules (`ui/modules/*`)
 - wires callbacks across modules without creating tight coupling
+
+New features go into a module of their own under `ui/modules/`, not into the
+coordinator.
 
 ### 4) `cellucid/assets/js/app/state/core/data-state.js` (state coordinator)
 
@@ -177,15 +189,35 @@ The public API is assembled from manager mixins (see `app/state/managers/*`).
 
 ## “Where do I look for…?” (common developer questions)
 
+Each folder of `cellucid/assets/js/` that is edited often has a short
+`README.md` (what it owns, entry points, invariants, tests):
+`formats/`, `formats/io/`, `data/`, `data/anndata/`, `data/sources/`,
+`rendering/`, `utils/`, `app/`. `assets/js/ARCHITECTURE.md` holds the
+layers, the glossary (one word per concept) and the full "where to change X"
+index; {doc}`20_read_path_architecture` follows one read from a source to
+the pixels, naming the module that owns each step; the decision records
+({doc}`21_decisions_decoders_and_codecs` to {doc}`28_decisions_rendering_layers`)
+say why each subsystem is built the way it is.
+
 | If you’re looking for… | Start with | Then |
 |---|---|---|
 | “How does the app decide what dataset to load?” | `cellucid/assets/js/data/data-source-manager.js` | `cellucid/assets/js/app/main.js` |
 | “Which files and folders does the app open?” | `cellucid/assets/js/data/input-formats.js` (the format registry) | `cellucid/assets/js/data/anndata/views/` (HDF5/Zarr layouts read in place), `cellucid/assets/js/data/anndata/transcode/` (R objects, MatrixMarket), {doc}`09_data_loading_pipeline_and_caching` |
+| “How are reads turned into requests, and how is the link measured?” | `cellucid/assets/js/formats/io/byte-reader.js` | `formats/io/link.js`, `formats/io/byte-source.js`, `formats/io/hosts.js`, {doc}`20_read_path_architecture` |
+| “Which cells does a dataset open with (subsample, auto-fit, block size)?” | `cellucid/assets/js/data/anndata/subsample-plan.js` | `data/subsample.js`, `data/anndata/views/cell-subset.js`, {doc}`19_subsampling_specification` |
+| “How is a gene read, priced and sampled?” | `cellucid/assets/js/data/anndata/matrix-access.js` | `data/anndata/subsample-plan.js` (`geneSampleOf`), `data/sparse-column-index.js`, `data/anndata/prefix-column-index.js`, `app/state/managers/field/gene-sample.js` |
+| “What is kept in this browser across visits?” | `cellucid/assets/js/data/anndata/transcode/space.js` | `formats/io/kept-parts.js`, `data/anndata/kept-column-index.js`, `app/ui/modules/kept-stores-dialog.js` |
+| “How much memory may the app use?” | `cellucid/assets/js/data/memory-budget.js` | `data/memory-census.js`, `app/page-memory.js` |
+| “Where are the codecs and decode workers?” | `cellucid/assets/js/formats/io/decode-pool.js` | `formats/io/decoder-choice.js`, `formats/io/wasm-codecs.js` |
+| “Where is a link provider (Zenodo, GEO, CELLxGENE, …)?” | `cellucid/assets/js/data/sources/providers/` | `data/sources/registry.js` |
+| “How does the Python or R viewer talk to the page?” | `cellucid/assets/js/data/viewer-protocol.js` | `data/viewer-channel.js`, `data/viewer-host-source.js`, `app/viewer-host-*.js` |
 | “Where are filters implemented?” | `cellucid/assets/js/app/state/managers/filter-manager.js` | `cellucid/assets/js/app/ui/modules/filter-controls.js` |
 | “Where does color-by happen?” | `cellucid/assets/js/app/state/managers/color-manager.js` | `cellucid/assets/js/app/ui/modules/legend-renderer.js` |
+| “How are unread, zero and coloured cells drawn?” | `cellucid/assets/js/rendering/alpha-visibility.js` | `rendering/read-cell-layer.js`, `rendering/high-perf-renderer.js` |
 | “Where do highlights live?” | `cellucid/assets/js/app/state/managers/highlight-manager.js` | `cellucid/assets/js/app/ui/modules/highlight-controls.js` |
 | “Where is multi-view (‘Keep view’) handled?” | `cellucid/assets/js/app/state/managers/view-manager.js` | `cellucid/assets/js/app/ui/modules/view-controls.js` |
 | “Where are sessions saved/loaded?” | `cellucid/assets/js/app/session/session-serializer.js` | {doc}`10_sessions_persistence_and_serialization` |
+| “Where is analysis computed?” | `cellucid/assets/js/app/analysis/` | {doc}`11_analysis_architecture` |
 | “Where is figure export implemented?” | `cellucid/assets/js/app/ui/modules/figure-export/README.md` | {doc}`12_figure_export_architecture` |
 | “Where is community annotation?” | `cellucid/assets/js/app/ui/modules/community-annotation-controls.js` | `cellucid/assets/js/app/community-annotations/REPO_SETUP.md` |
 

@@ -18,17 +18,17 @@ If you prefer learning by doing, you can skim this chapter and jump to:
 
 Cellucid is a **web app** (the viewer UI). `cellucid-python` is a helper toolkit that:
 - prepares data for the viewer (`prepare(...)`),
-- serves data to the viewer (`cellucid serve`, `serve_anndata(...)`, `show_anndata(...)`),
+- hands data to the viewer (`show_anndata(...)` in a notebook; `cellucid serve`, `serve_anndata(...)` for a browser tab),
 - and optionally lets Python and the browser talk to each other (hooks/events, sessions).
 
 In notebooks, a “viewer object” is just a **Python handle** for a running viewer instance.
 
 ```text
-Python (kernel) ──starts──▶ local HTTP server ──serves──▶ web viewer (iframe/browser)
-     ▲                                   │                     │
-     │                                   │ fetch()             │ UI interactions
-     │                                   ▼                     │
-     └──── commands ⇄ events: one WebSocket, /_cellucid/ws ─────┘
+Notebook:     Python kernel ◀── the notebook's connection ──▶ widget output (app from www.cellucid.com)
+                 reads answered · commands ⇄ events on one viewer channel
+
+Browser tab:  Python ──starts──▶ local HTTP server ◀── fetch() (Range) ── web viewer (browser tab)
+                 commands ⇄ events: one WebSocket, /_cellucid/ws
 ```
 
 ---

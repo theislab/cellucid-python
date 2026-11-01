@@ -71,6 +71,10 @@ If a category has `0 available` cells, its checkbox and color picker are
 disabled, the row is greyed out, and hovering it shows
 `No cells available in this category after other filters`.
 
+On a subsample the counts are of the open cells, and a line above them says
+so: *Counted on the 240 of 1,200 cells open.*
+({doc}`../b_data_loading/21_subsampled_loading`).
+
 ```{figure} ../../../_static/screenshots/filtering/legend-category-unavailable.png
 :alt: The clusters legend under a narrow S_score range filter: Alpha, Ductal, Ngn3 high EP and Ngn3 low EP stay ticked with small counts, while Beta, Delta, Epsilon and Pre-endocrine are greyed out with disabled checkboxes and read 0 cells.
 :width: 488px
@@ -102,6 +106,14 @@ Unchecking a category:
 This is why hiding categories is a powerful workflow tool (not just cosmetic).
 
 ---
+
+### Cells without a category (Missing)
+When some cells have no category (an unlabelled cell, a classifier that gave
+none), a **Missing** row under the categories counts them (`visible /
+available`) and shows or hides them with its checkbox. They are drawn in the
+neutral “None” grey. Hiding them is a filter like hiding a category: listed
+under **Filters**, applied whatever is coloured, saved in sessions. The row is
+absent when every cell has a category.
 
 ## Editing category labels (rename, merge, delete)
 
@@ -174,6 +186,13 @@ At the top, you’ll see:
 
 Click the gradient bar to open the **colormap menu**, then click a palette to apply it.
 
+The numbers under the bar are the scale's ends, written as every measured
+value in the app is: three significant figures, in scientific notation below
+0.01 and from 10,000 (`0.0123`, `1230`, `1.23e4`), the notation chosen after
+rounding (`9999.6` is `1e4`, never `10.0e3`). Exported figures write their
+colour bars and axis ticks by the same rule (ticks with as many figures as
+tell them apart).
+
 ```{figure} ../../../_static/screenshots/web_app/legend-colormap-menu-open.png
 :alt: The colormap list open under the S_score colour bar: seven named gradients, Viridis, Plasma, Inferno, Magma, Cividis, Turbo and Twilight, with Viridis marked as the active one.
 :width: 488px
@@ -186,6 +205,37 @@ palette without opening the menu.
 Practical guidance:
 - Prefer **Viridis** / **Cividis** for scientific readability (especially colorblind-friendly workflows).
 - Use diverging palettes (e.g., **RdBu**) only when your values have a meaningful “center” (like 0).
+  A diverging palette (Coolwarm, Blue-Red, Spectral, RdYlBu, RdBu, PiYG,
+  PRGn, BrBG, Seismic) on a linear scale whose range spans 0 is **centred at
+  0**: the scale runs from −m to m, m the larger of |minimum| and |maximum|,
+  so 0 is drawn in its neutral middle (z-scores, scores, fold changes). The
+  legend says *Centred at 0* under the bar, and exported figures note it
+  under theirs. Over data of one sign, or with a sequential palette, the scale
+  spans the data's own range.
+
+(gray-for-zero)=
+### Gray for zero
+
+**Gray for zero** sits above **Log color scale**, with an (i) that explains
+it. It is shown for a gene with no negative value (a scaled layer has none of
+this, nor has an obs field: a zero there is a value).
+
+- **Off** (the default): a gene's 0 is a value like any other and is drawn in
+  the colour scale's lowest colour.
+- **On**: the cells where the gene is 0 are drawn in the theme's neutral gray
+  (made from the background: a step darker than a light one, a step lighter
+  than a dark one), beneath the cells that express it, so the colours show
+  only where the gene is expressed.
+- On a **log scale** a 0 has no logarithm and is gray either way; the switch is
+  then greyed out and says so on hover.
+
+It is per field, like the log scale and Rescale to range: each gene keeps its
+own setting, kept views and multiview keep the setting of the view it was set
+in, and a `.cellucid-session` saves it (only when it is on). Everything that
+draws the colouring follows it: 2D and 3D, smoke, kept and compared views,
+the cell info card's swatch, and exported figures (PNG, SVG and hybrid). A
+figure whose zeros are gray says **Gray: 0** under its colour bar (with a gene
+sample, **Faded: not read · gray: 0**).
 
 ### Log scale toggle
 
@@ -211,14 +261,20 @@ On is best for bringing out contrast in a filtered subset; Off is best for consi
 
 Under **Visible range** you’ll see:
 - **Live filtering** toggle
-- **Minimum** slider and **Maximum** slider
-- **Filter** and **Reset** buttons
+- **Minimum** and **Maximum**, each on one row: its label, a slider and a
+  number box, the two rows aligned in columns. Type an exact bound, or drag
+  (thousandths of the range; log-spaced on a log colour scale). Only the bound
+  you change moves. The box shows the bound in as many figures as fit it (at
+  most seven characters: `5.65685` of 5.656854249492381, `1.23e11`), never cut
+  off; hovering it shows the exact bound applied, and a bound you type is
+  applied exactly as typed.
+- **Reset**, and **Filter** beside it while Live filtering is off
 
 Behavior summary:
-- With Live filtering on, visibility updates as you drag sliders — and **Filter
-  is greyed out and unclickable**, with the tooltip
-  `Turn off Live filtering to use Filter`. There is nothing for it to do.
-- With Live filtering off, you drag first, then click Filter to apply.
+- With Live filtering on, visibility updates as you drag sliders, and there is
+  no **Filter** button: there would be nothing for it to do.
+- With Live filtering off, **Filter** appears: you drag first, then click
+  Filter to apply.
 - Reset works in both states and restores the full numeric range for that field.
 
 Filtering notes:

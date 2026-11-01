@@ -11,18 +11,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#session-section +6px",
-      "captured_css": "258x576",
-      "native_px": "516x1152",
-      "emitted_px": "516x1152",
+      "captured_css": "266x628",
+      "native_px": "532x1256",
+      "emitted_px": "532x1256",
+      "format": "png",
       "cursor": "hover on #dataset-select",
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "d741f131717266092bb1327598efb792769aecdfc7fc986822673d061e6af076",
-      "web_repository_revision": "c177e77ce4ce5b5687e831c98c02f610e9606d72",
+      "sha256": "32a46bafc7303c3217427b68cb30d3e0ed71afcd16e70b17c8ad8fe946ccdc7e",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-08-01T18:13:42Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "orientation-welcome-first-run": {
       "id": "orientation-welcome-first-run",
@@ -247,19 +248,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#legend .legend-filter +6px",
-      "captured_css": "244x199",
-      "native_px": "488x398",
-      "emitted_px": "488x398",
+      "captured_css": "244x163",
+      "native_px": "488x326",
+      "emitted_px": "488x326",
       "format": "png",
       "cursor": "hover on #legend .legend-filter .btn-primary",
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "595d401cd8131f74bed6a4a1c41145e30cc1756ff71c6449651136483a02f55d",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "88d12e1ab6a6ea60d066cec14ea4ef0bf1635040aa88f91e48b56f11aba05c40",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "filtering-legend-category-unavailable": {
       "id": "filtering-legend-category-unavailable",
@@ -304,10 +305,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "afc5adc02cd0354580aa22e12409f840b139248efec4d41bd269d0fff1ac3ce6",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "490dda35acba74fd3fe14698d249b0b407bb76b8b1c8407440c69320edc70167",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "filtering-window-zero-visible": {
       "id": "filtering-window-zero-visible",
@@ -669,30 +670,6 @@
       "browser": "chromium 151.0.7922.34",
       "captured_at": "2026-10-25T15:53:21Z"
     },
-    "filtering-button-disabled-live-on": {
-      "id": "filtering-button-disabled-live-on",
-      "topic": "filtering",
-      "name": "filter-button-disabled-live-on",
-      "describes": "The same Visible range block with Live filtering on: the Filter button is greyed out under the pointer, beside an enabled Reset button.",
-      "dataset": "pancreas",
-      "theme": "light",
-      "viewport": "1440x1000",
-      "device_scale_factor": 2,
-      "crop": "#legend .legend-filter +6px",
-      "captured_css": "244x199",
-      "native_px": "488x398",
-      "emitted_px": "488x398",
-      "format": "png",
-      "cursor": "hover on #legend .legend-filter .btn-primary",
-      "rings": [],
-      "settled": true,
-      "uses_timeout": false,
-      "page_errors": [],
-      "sha256": "514752ea258003325b09bcab2e380fe8fc8fcf91c64aab5c0c2fe67133951429",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
-      "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
-    },
     "filtering-window-continuous-range": {
       "id": "filtering-window-continuous-range",
       "topic": "filtering",
@@ -813,30 +790,6 @@
       "browser": "chromium 151.0.7922.34",
       "captured_at": "2026-10-25T15:53:21Z"
     },
-    "filtering-window-gene-range-scope-lost": {
-      "id": "filtering-window-gene-range-scope-lost",
-      "topic": "filtering",
-      "name": "window-gene-range-scope-lost",
-      "describes": "The same window after switching the active field to clusters: every cell is drawn again, the Ins1 row has left the Filters block, and the count line reads Showing all 3,696 cells.",
-      "dataset": "pancreas",
-      "theme": "light",
-      "viewport": "1440x1000",
-      "device_scale_factor": 2,
-      "crop": "full window",
-      "captured_css": "1440x1000",
-      "native_px": "2880x2000",
-      "emitted_px": "1440x1000",
-      "format": "png",
-      "cursor": null,
-      "rings": [],
-      "settled": true,
-      "uses_timeout": false,
-      "page_errors": [],
-      "sha256": "bedf16a342e8e91eb0e6b7b7e6da38fcd21cae0105c7b40bb1df0474b9f350b6",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
-      "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
-    },
     "fields-selector-rows": {
       "id": "fields-selector-rows",
       "topic": "web_app",
@@ -895,19 +848,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#legend +6px",
-      "captured_css": "244x306",
-      "native_px": "488x612",
-      "emitted_px": "488x612",
+      "captured_css": "244x271",
+      "native_px": "488x542",
+      "emitted_px": "488x542",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "da35ae14247f10a06b79096d8a333219441d25a70f2ebe66d5c1c9b272db6f3b",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "1a8f2c16107ce9b48729bafbe0654fb969e551344bd15dad420efb5678a59a4b",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "fields-colormap-menu": {
       "id": "fields-colormap-menu",
@@ -919,19 +872,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#legend +6px",
-      "captured_css": "244x306",
-      "native_px": "488x612",
-      "emitted_px": "488x612",
+      "captured_css": "244x271",
+      "native_px": "488x542",
+      "emitted_px": "488x542",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "36ac8b97baceda49f49ea320940da511a3243694615a5f31fe80d63b6d3faada",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "b29cedc8b1fc6a40c24702a264255c7d899a54ebc8b9ab69c39eb79409360864",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "fields-gene-search-open": {
       "id": "fields-gene-search-open",
@@ -976,10 +929,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "0823c6956983c5f0eecaae277fb965c88ba440654b13dfff046ce845505bfcd0",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "a43d7f368e56a033a5b25c6e050359027e5a1e70425d471ffe2f384a21321ffc",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "fields-window-centroids": {
       "id": "fields-window-centroids",
@@ -1159,19 +1112,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "label[for=\"render-mode\"] ∪ #depth-controls +8px",
-      "captured_css": "248x293",
-      "native_px": "496x586",
-      "emitted_px": "496x586",
+      "captured_css": "248x76",
+      "native_px": "496x152",
+      "emitted_px": "496x152",
       "format": "png",
       "cursor": "press on #render-mode",
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "d204c8831fa331bdef85303b9a51f506bfff6b9dd49e098943d3cc5a6ce09f8f",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "f2a46e9b7e1357c886704c08fac2572a8caa2ce5a0d9545ef06b678c66a914e6",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "orientation-window-map": {
       "id": "orientation-window-map",
@@ -1225,7 +1178,7 @@
       "id": "sessions-refusal-not-a-session-file",
       "topic": "sessions_sharing",
       "name": "refusal-02-not-a-session-file",
-      "describes": "A Cellucid notification reading \"This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).\", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load.",
+      "describes": "A Cellucid notification reading \"This file is not a Cellucid session file of format 3 (it does not start with CELLUCID_SESSION/3).\", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load.",
       "dataset": "pancreas",
       "theme": "light",
       "viewport": "1440x1000",
@@ -1240,10 +1193,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "74b336e292d54b6576ec371630bbbb6ae880c2e310971344c02447dd530705b7",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "72cc23bee69d4099b6975f15f3afe74437f742076465c5d4fcdff893076cbd21",
+      "web_repository_revision": "622b097035d64a4b5c00e6391fd90cea26d430c2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-10-31T15:05:22Z"
     },
     "sessions-refusal-different-dataset": {
       "id": "sessions-refusal-different-dataset",
@@ -1279,19 +1232,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#session-section +8px",
-      "captured_css": "270x699",
-      "native_px": "540x1398",
-      "emitted_px": "540x1398",
+      "captured_css": "270x632",
+      "native_px": "540x1264",
+      "emitted_px": "540x1264",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "843231e3cb4de00e251e2883f216bfcd2217d143ef2f718962121ecee712c195",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "d1a5029de569b9eea960265565c0ecdf56319dc503108f8c7c6fb4e8d55d3d54",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "sessions-save-restore-02-save-state-action": {
       "id": "sessions-save-restore-02-save-state-action",
@@ -1327,19 +1280,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#renderer-controls ∪ #render-performance-controls +8px",
-      "captured_css": "248x335",
-      "native_px": "496x670",
-      "emitted_px": "496x670",
+      "captured_css": "248x101",
+      "native_px": "496x202",
+      "emitted_px": "496x202",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "7e623bfe644ffc4393d428503022b6ab9c381eb33dd3da0a133d6be7042e40ca",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "d07887c73c6fd947c037a0ecbf6ae48fe060a9ff5f9c0bdc1795b4ac762a48c8",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "sessions-renderer-controls-changed": {
       "id": "sessions-renderer-controls-changed",
@@ -1360,10 +1313,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "9234a7458047d11df40e77f447eb4e1b0a2b89f88e4bd316dc11eb1d330eb2f1",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "2aa579fadf06b6f63ae4ffddfe14bca88d626e75636eae6a16eb01be59734207",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "sessions-renderer-controls-restored": {
       "id": "sessions-renderer-controls-restored",
@@ -1375,19 +1328,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#renderer-controls ∪ #render-performance-controls +8px",
-      "captured_css": "248x375",
-      "native_px": "496x750",
-      "emitted_px": "496x750",
+      "captured_css": "248x101",
+      "native_px": "496x202",
+      "emitted_px": "496x202",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "cd31ab6d23a395512d760b536c07fa76076aa30e32647871cbe16ef1d80f3a28",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "66300acd33cc543a63f32a156eba7c5c94d434b397a705301abd472cda791b3a",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "sessions-official-sample-state-applied": {
       "id": "sessions-official-sample-state-applied",
@@ -1648,10 +1601,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "e86497e58928f727c5eec2b896551fa343a747973e47e13d086c4ebe95cb0090",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "c5a6d9c88050fbd1d49adba135ccd84f5f530717db4a9ed1bf055db8b8931bf1",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:14:05Z"
     },
     "analysis-detailed-expanded": {
       "id": "analysis-detailed-expanded",
@@ -1962,10 +1915,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "eb02c9bc27098ac708a941296e36da7b0ae4168348bfc8f4670d2456f8e17a0c",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "e3ac30848eba61e8e4c348ac9465486bc6b08dee427a9da2eb7997f026178eb8",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-choose-mode": {
       "id": "highlighting-choose-mode",
@@ -1977,9 +1930,9 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#highlighted-cells-section +6px",
-      "captured_css": "266x326",
-      "native_px": "532x652",
-      "emitted_px": "532x652",
+      "captured_css": "266x320",
+      "native_px": "532x640",
+      "emitted_px": "532x640",
       "format": "png",
       "cursor": "hover on #highlight-mode-lasso",
       "rings": [
@@ -1988,10 +1941,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "887451ab8ee5cae2ba41ada2a392fd77be20a116a2ba90c4942a622561933a81",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "aad08d4cfaa1e2d3cc95a2b610f5789f65ab3afbfbd45a33573abaddfa894964",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-lasso-draw": {
       "id": "highlighting-lasso-draw",
@@ -2012,10 +1965,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "6a164e0baa994d032844150cf6224b0b83eed60adede578622c02e2e067fc3d4",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "a0712ab51fade99af242c3aaf358c95bcdb995c11a69c332061eb1722106a3f8",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-lasso-step": {
       "id": "highlighting-lasso-step",
@@ -2027,9 +1980,9 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#highlighted-cells-section +6px",
-      "captured_css": "266x386",
-      "native_px": "532x772",
-      "emitted_px": "532x772",
+      "captured_css": "266x380",
+      "native_px": "532x760",
+      "emitted_px": "532x760",
       "format": "png",
       "cursor": "hover on #lasso-confirm-btn",
       "rings": [
@@ -2038,10 +1991,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "6b038a67d600addf7487ad2eb3c0f717aa2c1ee0e2b61ed61c00c27376ef9e0b",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "a9c96bcc68b485978e30ef4adc80f570acff7af5d741ec873bf954be9395e9ad",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-lasso-confirmed": {
       "id": "highlighting-lasso-confirmed",
@@ -2053,9 +2006,9 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#highlighted-cells-section +6px",
-      "captured_css": "266x352",
-      "native_px": "532x704",
-      "emitted_px": "532x704",
+      "captured_css": "266x370",
+      "native_px": "532x740",
+      "emitted_px": "532x740",
       "format": "png",
       "cursor": null,
       "rings": [
@@ -2064,10 +2017,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "7fef0abe9835f8be6b3ae203f0a8472158f3d887870528d69a80115b8621db58",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "680c41ece21a72fb5590c29de4ba23c464047f53252ad42785baf4591866307c",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-lasso-result-window": {
       "id": "highlighting-lasso-result-window",
@@ -2088,10 +2041,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "584f32ccb4abca516da50c289f12c476f770d9429ef2e8ff38db0530c2518c94",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "cd4d9b74816bd916a56be9d35390cd3c434b63716ca2c4962a81183026a5cbf3",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-annotation-click": {
       "id": "highlighting-annotation-click",
@@ -2112,10 +2065,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "3be5547a48699eaa737145b1a4779c1fd0906ee73c136ce37a070bbd245cc391",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "2ec0f93b3982cacb587b7d110e87192558870e621074af00e8203270f2e9c532",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-proximity-drag": {
       "id": "highlighting-proximity-drag",
@@ -2136,10 +2089,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "41ec9021bd83d468cda2de7ff8ee31dd3b52df0cfcfa26b59d2aff762ce6e745",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "e1648dd4a7b8922ab9a6a8bbd5e80ce6e3af300ca9fca8ba1b232090c1953511",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-knn-drag": {
       "id": "highlighting-knn-drag",
@@ -2160,10 +2113,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "b95300e569c059d26720f91d728dffc986a6860904b2f2f30fb00de84bd0d8dc",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "e276a71a4d711cab53fbb865813ff3a14315dc3f44211e628554c87e3f4df281",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-two-pages": {
       "id": "highlighting-two-pages",
@@ -2175,9 +2128,9 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#highlighted-cells-section +6px",
-      "captured_css": "267x379",
-      "native_px": "534x758",
-      "emitted_px": "534x758",
+      "captured_css": "267x397",
+      "native_px": "534x794",
+      "emitted_px": "534x794",
       "format": "png",
       "cursor": "hover on #add-highlight-page",
       "rings": [
@@ -2186,10 +2139,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "98fcebb00e6c08cbb0f5aabc99f8c40d4d2cbbdeed7d1043438c578a1f590965",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "419c15b1d3454e0e10fbc00034c86dfaa8210865edca1e70a26bb7078c36558b",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-missed-click-notice": {
       "id": "highlighting-missed-click-notice",
@@ -2210,10 +2163,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "8d2a3470533895e59147083b17b439f7a7d72dc82db6d01818188103f1985657",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "19a3a89b95d82c56bd33bec2b62371d82566e6f9f52fe85ffd33e3c3d6a0c27e",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-no-active-field-notice": {
       "id": "highlighting-no-active-field-notice",
@@ -2236,10 +2189,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "a14ddef1b5f124c86aa329a58dd7711d71123c61747f22f890cfe6fba90e4756",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "834cfb617b9752de15037eae18e85d13f56f6a084b1600e95392cc63ecd1a14b",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-annotation-step": {
       "id": "highlighting-annotation-step",
@@ -2251,9 +2204,9 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#highlighted-cells-section +6px",
-      "captured_css": "266x386",
-      "native_px": "532x772",
-      "emitted_px": "532x772",
+      "captured_css": "266x380",
+      "native_px": "532x760",
+      "emitted_px": "532x760",
       "format": "png",
       "cursor": null,
       "rings": [
@@ -2262,10 +2215,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "5ce0a59449f4b84facd9b1cbee69284e81e3ebe3923420c25d016742a4b0b64b",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "378ab57dc48c69ef3b83ce2a038d71d636bd37648f3f9715d6b915a721d9596a",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "highlighting-named-page": {
       "id": "highlighting-named-page",
@@ -2277,19 +2230,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#highlighted-cells-section +6px",
-      "captured_css": "266x352",
-      "native_px": "532x704",
-      "emitted_px": "532x704",
+      "captured_css": "266x370",
+      "native_px": "532x740",
+      "emitted_px": "532x740",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "722deac004fd5979851df483451cd0102c01b1be393473e88a1d39089fdc5794",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "0ccb2fbfaab3656bbc44897f8379a1a8546c0bf03758ce85b7fd2d7323a3adfe",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "core-multiview-two-panels": {
       "id": "core-multiview-two-panels",
@@ -2334,10 +2287,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "fe0fa81125e2664652459ca90a2fcd4b5583a30ed3d53e6824d5a4530dcd975d",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "25d1ccce3d9134fbfdc51b9bbff3ec0adbd5b39ba25c834690d4af5cebe419f9",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "core-connectivity-multiview": {
       "id": "core-connectivity-multiview",
@@ -2382,10 +2335,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "db6196c36d49375d8266dde11c2f7c8a58cfabee87411f53743740d3be3ce291",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "0734bd755bfb4803269684a02d8b950535087591b3f437fa7bfdf20b4c679e67",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-open-menu": {
       "id": "loading-open-menu",
@@ -2406,10 +2359,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "90ef43ab03d364ff84ec60a6b4ec2b62e3580d632986a7d4433e55d6295ec68a",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "b4b9368749f85920ab817f64aa8b66e0e0a7ff86f3fc6ad2dcf020d56b574757",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "home-hero-light-1280": {
       "id": "home-hero-light-1280",
@@ -2531,10 +2484,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "1f6f6e511cf758fc0104e9af7fe4f9ba3aaeac72beb8a7814622de9f81c0b8ff",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "a6c956353d73d6c96f94c1611e17019534542ec1e13118978ac29ddc37c0e69f",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "home-feature-genes-dark": {
       "id": "home-feature-genes-dark",
@@ -2556,10 +2509,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "bc1cdc37852044874da8c434a03db6fc8b8a378560d34a0eec1ce2eb8ed047a4",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "7082636d5b6878b6e32187669afec83cd450f0e61d62a37f7161cd9a7d93db9a",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "home-feature-analysis-light": {
       "id": "home-feature-analysis-light",
@@ -3273,19 +3226,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#data-mapping-controls +8px",
-      "captured_css": "248x295",
-      "native_px": "496x590",
-      "emitted_px": "496x590",
+      "captured_css": "248x270",
+      "native_px": "496x540",
+      "emitted_px": "496x540",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "69c8f967e211cb7f6931bfb148c0627ede33a7f37439425486a6aea24f3baa4d",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "2ef7692676965ddf51eadc093ff7c32399e18d0dca4788f3cb0a40b6f1cbe048",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "loading-data-mapping-other-arrays": {
       "id": "loading-data-mapping-other-arrays",
@@ -3296,20 +3249,20 @@
       "theme": "light",
       "viewport": "1440x1000",
       "device_scale_factor": 2,
-      "crop": "#data-mapping-controls .control-group-header ∪ #data-mapping-disclosure +6px",
-      "captured_css": "244x429",
-      "native_px": "488x858",
-      "emitted_px": "488x858",
+      "crop": "#data-mapping-controls .disclosure-header-row ∪ #data-mapping-disclosure +6px",
+      "captured_css": "244x365",
+      "native_px": "488x730",
+      "emitted_px": "488x730",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "cd48fe54a98e80a8dfa1ca83461705e35627530d30d45147a2aa2c73cafd885f",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "cfc1f3e182fe9ddab3c2e3ef671c13f5230774dd17b6b3f9996d859a6ddfe1ad",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "filtering-outlier-no-latent": {
       "id": "filtering-outlier-no-latent",
@@ -3345,19 +3298,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#session-section +6px",
-      "captured_css": "266x695",
-      "native_px": "532x1390",
-      "emitted_px": "532x1390",
+      "captured_css": "266x628",
+      "native_px": "532x1256",
+      "emitted_px": "532x1256",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "e6718f04dafbf7e6afd01e8fd9a9dd2ac4228e30b0077d95f1473593c928ebaf",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "907fc93fe80f77ad53c925625c6aad80d14f029e5ada5845f1f34c16c769598a",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "loading-session-panel-dark": {
       "id": "loading-session-panel-dark",
@@ -3369,19 +3322,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#session-section +6px",
-      "captured_css": "266x695",
-      "native_px": "532x1390",
-      "emitted_px": "532x1390",
+      "captured_css": "266x628",
+      "native_px": "532x1256",
+      "emitted_px": "532x1256",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "300f664dcfd0507179a1d792ff2a21a2419a13f24c97261b76c351c23dfcf85a",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "0699917df609fd1f0a1c992150f720bd6baa4e19750b6acef92e5c9f7a84f6ef",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "loading-dataset-box-details": {
       "id": "loading-dataset-box-details",
@@ -3393,19 +3346,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#dataset-facts +6px",
-      "captured_css": "244x499",
-      "native_px": "488x998",
-      "emitted_px": "488x998",
+      "captured_css": "244x513",
+      "native_px": "488x1026",
+      "emitted_px": "488x1026",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "e93ed6da7170de4104e6e56cbf041f927b8c6cb0a08a82faace4a781041637fb",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "1eb6e5ad3c510910d060cd8d17367e35437a96fb74fa3c3b615a34e56e1e69e0",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T16:44:38Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-link-control-typed": {
       "id": "loading-link-control-typed",
@@ -3426,10 +3379,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "bac5175dabaf4a896157cc1690be296402b0d928961660ec56b91faa265d6768",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "6e1eeaa860fe3bdc718c960bd695ed3e204ab65490c7ce6d1999b6c6ad933034",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-link-catalog-connected": {
       "id": "loading-link-catalog-connected",
@@ -3450,10 +3403,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "b8e6f5a31edefba2fe2afda239c20003adf8d15ec1aa43f70b7a537e1cb5a5da",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "9a00132865f01dc8d2fbe011c2e8f2d0c37d27967dc81d224d1b94a607208fb6",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-address-server-connected": {
       "id": "loading-address-server-connected",
@@ -3475,9 +3428,9 @@
       "uses_timeout": false,
       "page_errors": [],
       "sha256": "b5c402a3841e267e8d71cf6760fccf076ab8b538b6eaf942f20a803201b23e74",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T16:44:38Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-link-refusal-unrecognised": {
       "id": "loading-link-refusal-unrecognised",
@@ -3498,10 +3451,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "638d5533e0cc8c86cc3f36e81e135e03da1a676bf83c9c6f274c5105026f7594",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "2162fe98479a0cc67a06862bc5d354fd7ff6389f396b5b750cd1f6202decfc90",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:14:05Z"
     },
     "loading-open-h5ad-window": {
       "id": "loading-open-h5ad-window",
@@ -3522,10 +3475,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "f22663c47e50ac1740ca60b687842e8816c8948f6c9e19e6dd2ac7e1480866b7",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "d3b7c2f06f7431a7aec9b87685a20d49a1af42dabb862e4903d60ed4a213f4b4",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-open-zarr-zip-dataset-box": {
       "id": "loading-open-zarr-zip-dataset-box",
@@ -3546,34 +3499,34 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "49b373991e0fc4be1908047ed4ab688ac668141899ed25090c5790e244b95471",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "c88264dc1f362eab08351db5c72625356ec5bfccde5f7bb19b0e481fec5625ec",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-open-rds-dataset-box": {
       "id": "loading-open-rds-dataset-box",
       "topic": "data_loading",
       "name": "rds-dataset-box",
-      "describes": "The Dataset box after a Seurat object saved with saveRDS() was opened: its cells and genes, \"R object (.rds) · this computer\", the line \"Read once into this browser's storage for this tab\", and Details open with Read (once, from start to end, nothing uploaded), Kept (the origin-private file system until the tab closes) and what it holds.",
+      "describes": "The Dataset box after a Seurat object saved with saveRDS() was opened: its cells and genes, \"R object (.rds) · this computer\", the line \"Read whole once (it cannot be read in parts), kept in this browser's storage for next time\", and Details open with Read (whole, once, from start to end, nothing uploaded), Kept (the origin-private file system until it is cleared), Read in parts (a Cellucid-ready AnnData) and what it holds.",
       "dataset": "pancreas",
       "theme": "light",
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#dataset-facts +6px",
-      "captured_css": "244x531",
-      "native_px": "488x1062",
-      "emitted_px": "488x1062",
+      "captured_css": "244x721",
+      "native_px": "488x1442",
+      "emitted_px": "488x1442",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "aceb69bb8c555ea4de0d88e940ab741d2d8e3267b7f1d872d9366cfcd2e333cf",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "79e98f425b684f38f71d0cccab59bcb528d1b8ea594b0453f57b7eef714b3e35",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-open-loom-dataset-box": {
       "id": "loading-open-loom-dataset-box",
@@ -3609,19 +3562,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#dataset-facts +6px",
-      "captured_css": "244x517",
-      "native_px": "488x1034",
-      "emitted_px": "488x1034",
+      "captured_css": "244x707",
+      "native_px": "488x1414",
+      "emitted_px": "488x1414",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "e1299be854213ffba53e377095fd4d85137d8987dd168bb288cfee85d1992744",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "832590f03940ea3eae5a62e38b15de853099f2350d8cca1eab1bd24a476a16c1",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-open-tenx-outs-window": {
       "id": "loading-open-tenx-outs-window",
@@ -3642,10 +3595,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "0cf2c277a24fa76c3ef067c0c7eb5b5823a3f229093c062bfab314aac1698f81",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "3018d2ce70c256990790d303e02c61af73f395ea324600af2884954c1e7f4fc8",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-open-rda-choose-object": {
       "id": "loading-open-rda-choose-object",
@@ -3666,10 +3619,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "4609b6cd550699c9e8717af32832396e1740f7223eb9515a2511339afe4001ac",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "4084273bb5e3608dac3a55c6db6e856fe08b3dd383d2de4e6e6ca29544eb3e96",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-h5mu-modality-select": {
       "id": "loading-h5mu-modality-select",
@@ -3681,43 +3634,43 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": "#data-mapping-controls +6px",
-      "captured_css": "244x479",
-      "native_px": "488x958",
-      "emitted_px": "488x958",
+      "captured_css": "244x454",
+      "native_px": "488x908",
+      "emitted_px": "488x908",
       "format": "png",
       "cursor": "hover on #data-mapping-modality",
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "934e4d7360d9b3c1a7a3e7c83776c8056f4be03ce99814d71f3e1ab00481fb63",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "83dfca6e635e5405b5faee13c1c57ee2e6ee45b0159bb2eb777c75005c6423d4",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "loading-opening-progress": {
       "id": "loading-opening-progress",
       "topic": "data_loading",
       "name": "opening-progress",
-      "describes": "The opening panel centred over the empty viewer while a linked Seurat .rds is downloaded: \"Opening\" and the file's address, the step \"Downloading the whole file: … does not serve parts of files\", a progress bar part-way, how much has arrived of 9.4 MB with the speed and time left, and a Cancel button.",
+      "describes": "The opening panel centred over the empty viewer while a linked Seurat .rds is downloaded: \"Opening\" and the file's address, the step \"Downloading the whole file (9.4 MB): … does not serve parts of files\", a progress bar part-way, how much has arrived with the speed and time left, the note saying the host serves the file only whole, how much is downloaded and that it is kept, and a Cancel button.",
       "dataset": null,
       "theme": "light",
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": ".opening-overlay .opening-panel +24px",
-      "captured_css": "428x206",
-      "native_px": "856x412",
-      "emitted_px": "856x412",
+      "captured_css": "428x298",
+      "native_px": "856x596",
+      "emitted_px": "856x596",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": true,
       "page_errors": [],
-      "sha256": "9b9db3be74b75adb308ece312f52613ef96ad55ed69750611525d326184f2d40",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "e6740d1dbb8c493d1095b8f9813023b3ca41cf680c4f0ab689272611181ea30d",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T16:44:38Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-opening-failed": {
       "id": "loading-opening-failed",
@@ -3729,19 +3682,19 @@
       "viewport": "1440x1000",
       "device_scale_factor": 2,
       "crop": ".opening-overlay .opening-panel +24px",
-      "captured_css": "428x192",
-      "native_px": "856x384",
-      "emitted_px": "856x384",
+      "captured_css": "428x208",
+      "native_px": "856x416",
+      "emitted_px": "856x416",
       "format": "png",
       "cursor": null,
       "rings": [],
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "d2ff6d7119f3e54207629b260dfee1f2d12e98965b50e99004d4c615edf10483",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "5da9464bf655370732fd68a3712c7509e5fb6385a25446a08ded4c2e1a8b92ef",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T16:44:38Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-gdrive-private-sign-in": {
       "id": "loading-gdrive-private-sign-in",
@@ -3810,10 +3763,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "bbe7cbe2dcec169604417255eebaaaa9aea497ac790ae6b2d74fa756a2dd416f",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "3d6571f28b81bfc4be668103a24142ab9f0b8894ed6a0d935fda44fa4eef7c6b",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "loading-link-refusal-github-not-found": {
       "id": "loading-link-refusal-github-not-found",
@@ -3834,16 +3787,16 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "26154d9cf9552e4b7be2f408f0a69589eb12fd9fafae64d6b5db6e375a102dbe",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "90a225d6029e1a0cb4caf996720eb1bb5a280eac5575a96d517441dd898dc3c5",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:14:05Z"
     },
     "loading-address-refusal-server-unreachable": {
       "id": "loading-address-refusal-server-unreachable",
       "topic": "data_loading",
       "name": "fail-remote-server-unreachable",
-      "describes": "A Cellucid notification saying the Cellucid server could not be reached at a loopback address, and what to check.",
+      "describes": "A Cellucid notification saying the Cellucid server could not be reached because nothing readable came back, that the connection may have failed or the address may not hold Cellucid data, and what to check.",
       "dataset": "pancreas",
       "theme": "light",
       "viewport": "1440x1000",
@@ -3858,10 +3811,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "ee55e1e14c17e18a9344db565b09557c6e3dd75ead0017adbb26d50fb54b0f85",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "4fbfb969979aba0ddf3827d1acd53f6f68c1deb649c9615e6e8545ca32c321e8",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T16:44:38Z"
+      "captured_at": "2026-11-01T00:15:11Z"
     },
     "loading-keep-dataset-after-failure": {
       "id": "loading-keep-dataset-after-failure",
@@ -3882,10 +3835,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "03890ca122ebb2812ca58d01040a55647a9464dc1bfa910c5449e48dc1e91dcf",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "73f8acc412814ac2bc82344695f88eaee2f7590c9575c8c2df3c0cfa0ab428fa",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T16:44:38Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "server-cellucid-serve-window": {
       "id": "server-cellucid-serve-window",
@@ -3987,7 +3940,7 @@
       "id": "orientation-welcome-startup",
       "topic": "web_app",
       "name": "welcome-startup",
-      "describes": "The Cellucid welcome overlay as a first visit opens it, with Choose a dataset and Learn more, over the Suo atlas loaded behind it.",
+      "describes": "The Cellucid welcome overlay as a first visit opens it, with Start exploring and Learn more, over the Suo atlas loaded behind it.",
       "dataset": "suo",
       "theme": "light",
       "viewport": "1440x1000",
@@ -4002,10 +3955,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "7c28897f6acc61bc70c4b6d6711363aefb477e6f70460c7198d2106bbcf1770f",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "b9ecf631edf8f1456ba5298c0132e0b2274d661caf41a84247f6f6ba9595eb2b",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "orientation-startup-loaded-build": {
       "id": "orientation-startup-loaded-build",
@@ -4170,10 +4123,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "d54566b98899c7eb35ff2e4e5d5ac6c909d043b26a4538c2fdfcd75d885aa523",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "0bd153326f5053932b52551ffbfaeeb7e3a71bc3e70b50095c36c8333f0319ae",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "velocity-dataset-with-field": {
       "id": "velocity-dataset-with-field",
@@ -4196,10 +4149,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "62c810038423246169584f4f319ce543014a5fe834381ec52958b8b65d9fbab0",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "ffeddc9ffde833e2c388d76618f36937ea0ced3b4cb482908c9cdb35c3dee89b",
+      "web_repository_revision": "9e0810011ccb73945e5e739ac39db7960409a5b3",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T19:20:13Z"
     },
     "velocity-window-without-overlay": {
       "id": "velocity-window-without-overlay",
@@ -4558,16 +4511,16 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "29d0bca0275c57c83f5795591d371cea8f1f0468c9d4183a22e0eb3a77619740",
-      "web_repository_revision": "a9ac96c5c11253cac85589d842aafc807292aa45",
+      "sha256": "15255c1a1851363a760028cdf526761f9426154cbc778801cd3f1d642a50993d",
+      "web_repository_revision": "9311270fbecdf97cfa4f745636209449c2e49ba2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T15:53:21Z"
+      "captured_at": "2026-11-01T00:12:15Z"
     },
     "orientation-phone-plot": {
       "id": "orientation-phone-plot",
       "topic": "web_app",
       "name": "phone-plot",
-      "describes": "The same phone screen after tapping ✕: the whole Pancreas sample in view on the plot, the menu button (☰) at the top left, and the selection bar with its Select mode switch at the bottom.",
+      "describes": "Cellucid on a phone-sized touch screen as it opens the Pancreas sample: the whole sample in view on the plot, the selection bar with its Select mode switch, and below it the bar naming the dataset at the foot of the screen.",
       "dataset": "pancreas",
       "theme": "light",
       "viewport": "390x844 touch",
@@ -4582,10 +4535,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "bbd1b11cfe0a9a95ad88df8f8d771e224b2851dd47877df8be0b95f63370697a",
-      "web_repository_revision": "029c10b013b635c0502fc3d4f15fc6433e91a854",
+      "sha256": "9c6664e77c53bb8847bff203cda50ed4c386958dd95691b64920144310c196ad",
+      "web_repository_revision": "622b097035d64a4b5c00e6391fd90cea26d430c2",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-25T18:17:02Z"
+      "captured_at": "2026-10-31T15:05:22Z"
     },
     "loading-gdrive-admin-blocked": {
       "id": "loading-gdrive-admin-blocked",

@@ -71,6 +71,9 @@ async function open(browser, app, link) {
     const outcome = await page.waitForFunction(() => {
       const failure = document.getElementById('cellucid-startup-failure');
       if (failure) return `refused: ${failure.textContent.replace(/\s+/g, ' ').trim()}`;
+      // A ?data= link that cannot be opened says why over the empty viewer.
+      const failed = document.querySelector('.opening-overlay[data-state="failed"]:not([hidden]) .opening-step');
+      if (failed) return `refused: ${failed.textContent.replace(/\s+/g, ' ').trim()}`;
       const errors = [...document.querySelectorAll('.notification-error')]
         .map(note => note.textContent.replace(/\s+/g, ' ').trim());
       if (errors.length > 0) return `refused: ${errors.join(' | ')}`;
@@ -113,7 +116,10 @@ if (links.length === 0) {
 }
 
 const { chromium } = require('playwright');
-const browser = await chromium.launch();
+// The machine's GPU, as every measuring script of the web repository: a
+// software rasteriser would time itself, not the opening.
+const { browserLaunchOptions } = await import(pathToFileURL(path.join(WEB_REPO, 'scripts', 'lib', 'browser-launch.mjs')).href);
+const browser = await chromium.launch(browserLaunchOptions('chromium'));
 let failures = 0;
 try {
   for (const [link, pages] of links) {

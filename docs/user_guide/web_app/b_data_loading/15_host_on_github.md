@@ -72,8 +72,8 @@ cellucid_prepare(
 ```
 
 The default layout is the one to publish: Zarr v2, the expression matrix
-stored gene-major (CSC) in chunks of 65,536 values, every other array in
-chunks of 262,144, byte-shuffled and deflated (the expression values
+stored gene-major (CSC) in chunks of 16,384 values, every array with one row
+per cell in chunks of 65,536 and every other in chunks of 262,144, byte-shuffled and deflated (the expression values
 unshuffled), each chunk its own file, with consolidated metadata.
 [How fast it reads](#how-fast-it-reads) explains why no other layout is faster
 on GitHub. Every argument is described in
@@ -118,9 +118,14 @@ Paste either address into **Session › Open data › Link or server** and press
 | `owner/repo@branch/path/atlas.zarr` | the same host, another branch, tag or commit | `my-lab/atlas-data@v1/atlas.zarr` |
 | `https://owner.github.io/repo/path/atlas.zarr/` | GitHub Pages, once enabled (step 5) | `https://my-lab.github.io/atlas-data/atlas.zarr/` |
 
-A `github.com/owner/repo/tree/<branch>/…` link to the folder works too. To
-share it, put the address in a Cellucid link (`gh:` before the short form; a
-Pages address URL-encoded):
+A `github.com/owner/repo/tree/<branch>/…` link to the folder works too.
+Opened by its `owner/repo/…` address, the folder is read at the commit that
+last changed it (one request to GitHub's API), so what a visit reads of it
+is kept in the browser and the next visit downloads none of it until you
+push a change to the folder; past the API's 60 requests an hour for a
+browser without a sign-in, and from a GitHub Pages address, it is read
+anew at each visit. To share it, put the address in a Cellucid link (`gh:`
+before the short form; a Pages address URL-encoded):
 
 ```text
 https://www.cellucid.com/?data=gh:my-lab/atlas-data/atlas.zarr

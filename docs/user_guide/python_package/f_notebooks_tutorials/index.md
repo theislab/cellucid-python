@@ -9,10 +9,25 @@ These are long-form, notebook-style tutorials for the **Cellucid Python package*
 These pages are written in **MyST** and live in `docs/user_guide/python_package/f_notebooks_tutorials/`.
 
 The runnable `.ipynb` entries use the real Pancreas H5AD checked into this
-repository. The docs site does **not** execute notebooks during the build
-(`nb_execution_mode = "off"`), so run them locally to interact with the
-embedded viewer.
+repository (outside a clone, they download it once). The docs site does
+**not** execute notebooks during the build (`nb_execution_mode = "off"`), so
+run them in JupyterLab, VS Code or Colab to interact with the embedded viewer.
 ```
+
+::::{grid} 1
+:gutter: 3
+
+:::{grid-item-card} {octicon}`sync;1.5em;sd-mr-1` Cellucid in your pipeline (Python and R)
+:link: 06_cellucid_in_your_pipeline_python_and_r
+:link-type: doc
+
+Seven runnable notebooks, each with an R twin, that open in Colab: show a
+dataset in one line, pull highlights, labels and scores back, push clusters
+and gene sets in, read the web app's exports, re-analyse a selection, and
+work with subsampled views.
+:::
+
+::::
 
 ::::{grid} 1 1 2 2
 :gutter: 3
@@ -71,4 +86,5 @@ A real Pancreas notebook for embedding, Python↔frontend events, and session br
 03_advanced_notebooks_expert_developer
 04_real_world_dataset_recipes_gallery
 05_jupyter_embedding_hooks_sessions_gallery
+06_cellucid_in_your_pipeline_python_and_r
 ```

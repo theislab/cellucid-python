@@ -25,7 +25,7 @@ SCope, LoomExperiment, loomR and SeuratDisk.
 |---|---|
 | `/matrix` (genes × cells) | the expression matrix `X` |
 | `/layers/<name>` (`spliced`, `unspliced`, …) | the layers, listed under Data mapping › Genes › Expression |
-| a cell attribute with one value per cell (`ClusterName`, `nUMI`) | an obs field |
+| a cell attribute with one value per cell (`ClusterName`, `nUMI`) | an obs field; an integer one named as a clustering (`ClusterID`, `Clusters`, `louvain`, as a text table's columns are read) is categorical, its numbers the categories |
 | a cell attribute with one row per cell (`X_umap`, n × 2) | an embedding |
 | coordinate columns: `_X` / `_Y`, `_tSNE1` / `_tSNE2`, `umap_1` / `umap_2` | one embedding each: `X_embedding`, `X_tSNE`, `X_umap` |
 | SCope's compound `Embedding`, `Embeddings_X` / `Embeddings_Y` | `X_embedding`, `X_embedding_<id>` |
@@ -103,7 +103,10 @@ UMAP, and it is coloured by Cell Ranger's own clustering,
 
 Projections and clusterings are matched to the matrix by barcode. A cell a
 projection does not list cannot be drawn in it (the embedding is refused with
-the cell named); a cell a clustering does not list has no category.
+the cell named); a cell a clustering does not list has no category. The CSVs
+are streamed into typed columns, so their length is bounded by memory alone:
+a 10-million-cell folder's analysis (560 MB of CSV) is read in its bytes and a
+few bytes a cell.
 
 A matrix of several **feature types** (Gene Expression with Antibody Capture
 from CITE-seq, CRISPR Guide Capture, Multiplexing Capture) opens on Gene

@@ -2,13 +2,24 @@
 
 This page documents how to take UI state captured from the viewer (a `.cellucid-session` bundle) and apply parts of it back onto an `AnnData`.
 
+```{tip}
+To bring results from a **live viewer** onto your AnnData, `viewer.pull(adata)`
+is simpler: one call, no bundle, every highlight, label, score and gene set
+({doc}`../g_api_reference_coverage/api/round_trip`). `cellucid.pull(adata,
+"exports/")` reads a saved `.cellucid-session` together with the web app's
+CSV and GMT exports. This page is about applying a session bundle itself.
+```
+
 The main workflow is:
 
-1. Capture a session bundle (no download): {doc}`10_session_bundles_get_session_bundle`
+1. Capture a session bundle (no download): {doc}`10_session_bundles_request_session_bundle`,
+   or save one from the web app (**Save** under **Session file**)
 2. Apply it to AnnData:
-   - `viewer.apply_session_to_anndata(...)` (one-liner), or
    - `bundle.apply_to_anndata(...)` (explicit bundle object), or
-   - `cellucid.apply_cellucid_session_to_anndata(...)` (function-level control)
+   - `cellucid.apply_cellucid_session_to_anndata(...)` (function-level control), or
+   - `viewer.apply_session_to_anndata(adata, request)` (collect what a
+     request brought and apply it; in a notebook, in a later cell than the
+     request)
 
 ## At a glance
 
@@ -19,20 +30,14 @@ The main workflow is:
 
 ## Quickstart (copy/paste)
 
-### One-liner (recommended)
+### In a notebook (two cells)
 
 ```python
-adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
+request = viewer.request_session_bundle()
 ```
 
-On an `AnnDataViewer` this uses the server's dataset ID (`server.dataset_id`:
-the `dataset_id` you passed, or the data's `uns['cellucid']['id']`) as the
-expected ID.
-
-### Explicit two-step
-
 ```python
-bundle = viewer.get_session_bundle(timeout=60)
+bundle = request.result()
 adata2 = bundle.apply_to_anndata(
     adata,
     expected_dataset_id="my-study-v1",
@@ -40,10 +45,23 @@ adata2 = bundle.apply_to_anndata(
 )
 ```
 
+### Through the viewer
+
+```python
+adata2 = viewer.apply_session_to_anndata(adata, request, inplace=False)
+```
+
+This uses the viewer's dataset ID (the `dataset_id` you passed, or the data's
+`uns['cellucid']['id']`) as the expected ID.
+
 ```{important}
 Session application is currently **index-based**:
 
-The session references cells by **row index** (0-based). Only apply a session to an `AnnData` whose row order matches the dataset that produced the session.
+The session references cells by **original position** (0-based): the row of a
+cell in the order the dataset's cells were given, whatever order a file stores
+them in. Apply a session to an `AnnData` in that order: the object you prepared
+or served, or a Cellucid-ready file read back through
+{func}`~cellucid.restore_original_order`.
 
 Nothing in Python can verify that for you — see
 the `cellOrder` section below.
@@ -88,7 +106,8 @@ All materialized fields are cell-aligned `adata.obs` columns.
 ### 3) Provenance metadata → `adata.uns["cellucid"]`
 
 By default, application stores:
-- the session manifest,
+- the session manifest (without `source`: where the viewer opened the dataset
+  is not part of the object),
 - dataset fingerprint,
 - and “applied settings”
 under:
@@ -138,8 +157,8 @@ mapped gene axis.
 ### `cellOrder`: shape-checked here, enforced in the viewer
 
 `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
-16-character lowercase hexadecimal `digest` of the coordinates of that
-embedding. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
+16-character lowercase hexadecimal `digest` of that embedding's stored
+coordinates, each cell named by its original position. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
 columns that were read, one per dimension. It is what stops a dataset republished under the same
 name with the same cell and gene counts but a different row order from silently
 re-pointing every saved selection at different cells.
@@ -148,9 +167,9 @@ re-pointing every saved selection at different cells.
 - **Its shape is checked strictly.** Anything other than the three keys above,
   a `dimension` outside 1–3, a malformed `digest`, or an `embedding` whose
   columns do not fit its kind raises before payload decoding.
-- **Its digest is never verified.** It is taken over the normalized coordinates
-  the viewer drew, and `apply_session_to_anndata` writes into an `AnnData` whose
-  row order the caller controls. There is nothing here to check it against.
+- **Its digest is never verified.** It is the viewer's check, taken on the
+  cells it opens when it restores a session, and `apply_session_to_anndata`
+  writes into an `AnnData` whose rows and embeddings the caller controls.
 
 Enforcing cell-order identity is therefore the viewer's job, not this reader's,
 so a bundle this reader accepts is not necessarily one the web app will open.
@@ -216,7 +235,7 @@ This is almost always because:
 - you’re applying the session to a different dataset.
 
 Fix:
-- apply to the exact same AnnData (same row order), and
+- apply to the exact same AnnData, in its original cell order (`cellucid.restore_original_order` for a Cellucid-ready file read with anndata), and
 - pass the exact dataset ID used to create the viewer.
 
 ### Symptom: expected columns weren’t added
@@ -230,5 +249,5 @@ Confirm:
 
 ## Next steps
 
-- Session bundle capture: {doc}`10_session_bundles_get_session_bundle`
+- Session bundle capture: {doc}`10_session_bundles_request_session_bundle`
 - Session ↔ AnnData conceptual bridge: {doc}`../b_concepts_mental_models/05_sessions_to_anndata_bridge`

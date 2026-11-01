@@ -52,7 +52,7 @@ of the work happens:
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/legend-continuous-sscore.png
-:alt: The continuous legend for S_score: the Color scale (Viridis) bar with its two end values, Log color scale off and Rescale to range on, each with its (i), and below a rule the Visible range block with Live filtering on, Minimum and Maximum sliders, and Filter and Reset.
+:alt: The continuous legend for S_score: the Color scale (Viridis) bar with its two end values, Log color scale off and Rescale to range on, each with its (i), and below a rule the Visible range block with Live filtering on, Minimum and Maximum sliders, and Reset (Filter appears only with Live filtering off).
 :width: 488px
 
 **Continuous or gene** → a colour bar, two colour-mapping toggles, and a

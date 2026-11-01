@@ -40,7 +40,12 @@ terminal and the Python API (the full list: {doc}`01_loading_options_overview`).
 ## Security Model (Read Once)
 
 - By default, the server binds to `127.0.0.1` (localhost).
-  - This means **only your machine** can access it.
+  - This means only programs **on the same machine** can access it. On a
+    machine several people use at once (an HPC login or compute node, a shared
+    JupyterHub or RStudio Server), that is every user of that machine: the
+    served data needs no secret, so any of them can read it while the server
+    runs ({ref}`shared-machines`). When that matters, use the notebook widget
+    or a machine only you use.
 - If you bind to `0.0.0.0`, other machines on your network may be able to access it.
   - Do this only if you understand the risk and you trust your network.
 
@@ -140,7 +145,7 @@ The server runs four numbered steps, then prints its URLs:
 ```text
 $ cellucid serve pbmc_demo.h5ad \
       --dataset-name "PBMC demo" --dataset-id pbmc-demo --no-browser --port 8766
-cellucid v0.9.5
+cellucid v0.9.6
 
 [1/4] Detecting format...
       Path: /path/to/pbmc_demo.h5ad
@@ -207,12 +212,26 @@ Two more lines appear only when they apply:
   server builds the document once from the store's own metadata files and
   answers it in place of the missing one. Nothing is written to your store.
 - A store holding an array the browser cannot decode — an HDF5 filter other
-  than gzip, shuffle, Fletcher-32, or LZF (for example Blosc, Zstandard, szip,
-  or scaleoffset), or a Zarr codec such as bz2, lzma, or zfpy — prints
+  than gzip, shuffle, Fletcher-32, LZF, or hdf5plugin's Blosc, Zstandard, LZ4
+  and bitshuffle (for example szip, or scaleoffset), or a Zarr codec such as
+  Snappy or zfpy — prints
   `Browser cannot decode:` with the arrays and their codecs, then
-  `Serving: a decodable copy, written once to a temporary .h5ad`. The store is
-  read once with anndata (and its codec plugins), and the browser reads the
-  copy. The copy is removed when the server stops.
+  `Serving: a Zarr store in priority order, made as the browser reads it`.
+  Each chunk the browser asks for is decoded on the kernel (h5py or zarr, with
+  their codec plugins) and sent uncompressed; nothing is copied.
+- Any other AnnData file not written by `prepare()` is served the same way, in
+  priority order, so a subsample the browser opens transfers only its cells
+  (`Serving: a Zarr store in priority order, made as the browser reads it`);
+  a file `prepare()` wrote is served as it is (`Serving: as it is (cells in
+  priority order)`).
+- A MuData file (`.h5mu`, MuData Zarr), a Loom file or a 10x Cell Ranger
+  `outs/` folder is served the same way (`Serving: a Zarr store in priority
+  order, …`, or `a MuData Zarr store …` for a MuData and for a 10x matrix of
+  several feature types), holding what the browser presents from the file
+  itself — the same cells, names, fields, embeddings and genes — so its
+  contents are read and the launch choices checked in steps 2 and 3. A Loom
+  file or a 10x matrix with no embedding (a `.h5` alone: serve its `outs/`
+  folder) is refused in step 1, saying what to do.
 
 ### Launch choices: what the viewer opens on
 
@@ -280,7 +299,7 @@ The server answers:
 | `/_cellucid/datasets` | The dataset, where its store is, and the launch choices you set |
 | `/_cellucid/anndata/<dataset_id>.h5ad` (or `.zarr.zip`, `.h5mu`, `.loom`, `.h5`, `.rds.gz`, … — the file's own ending) | The file's bytes, with `Range`, `206 Partial Content`, `Content-Range`, `HEAD`, and `ETag` answered exactly |
 | `/_cellucid/anndata/<dataset_id>.zarr/<key>` | One key of a Zarr store folder; an absent key is a 404, which a Zarr reader takes as "absent" |
-| `/_cellucid/anndata/<dataset_id>/<path>` | One file of a MatrixMarket or Cell Ranger `outs/` folder, which `/_cellucid/datasets` lists with its size |
+| `/_cellucid/anndata/<dataset_id>/<path>` | One file of a MatrixMarket or Cell Ranger `outs/` folder, which `/_cellucid/datasets` lists with its size and `ETag` |
 | `/_cellucid/health` | `{"status": "ok", "type": "anndata", "version", "format", "n_cells", "n_genes"}`; the counts are `null` for a format Python does not read (an R object, Loom, 10x, MatrixMarket) |
 | `/_cellucid/info` | The same facts plus the bound `host` and `port` |
 | `/_cellucid/protocol` | Where the notebook viewer channel is, and the commands and events it carries |
@@ -289,12 +308,16 @@ The server answers:
 For the demo above, `/_cellucid/datasets` is:
 
 ```json
-{"datasets": [{"id": "pbmc-demo", "name": "PBMC demo", "anndata": {"file": {"url": "_cellucid/anndata/pbmc-demo.h5ad", "kind": "h5ad", "layout": "file", "size": 2799976}, "defaults": {"embedding2d": {"key": "X_umap", "columns": [1, 0]}, "knn": "connectivities"}}}]}
+{"datasets": [{"id": "pbmc-demo", "name": "PBMC demo", "anndata": {"file": {"url": "_cellucid/anndata/pbmc-demo.h5ad", "kind": "h5ad", "layout": "file", "size": 2799976, "etag": "\"2ab9e8-18e27b3d58754f73-18e27b3d58754f73-1a058bb9\""}, "defaults": {"embedding2d": {"key": "X_umap", "columns": [1, 0]}, "knn": "connectivities"}}}]}
 ```
 
 `url` is relative to the server's base URL, because the server cannot know the
-address a browser reaches it by (a tunnel, a proxy). `size` is given for a file
-and absent for a folder. `defaults` holds only the choices you set. The server
+address a browser reaches it by (a tunnel, a proxy). `size` and `etag` are
+given for a file and absent for a folder: `etag` is the validator the file's
+bytes are answered with, read from the file when the list is asked for, and
+the viewer keeps what it reads of the file under that version -- for later
+visits too -- so a file rewritten while it is served is read as a new one.
+`defaults` holds only the choices you set. The server
 is threaded and keeps connections alive (HTTP/1.1), because a browser reads one
 file with many range requests.
 
@@ -312,7 +335,8 @@ Run `cellucid serve --help` anytime. Its complete output:
 ```text
 $ cellucid serve --help
 usage: cellucid serve [-h] [--port PORT] [--host HOST] [--allowed-host HOST]
-                      [--no-browser] [--quiet | --verbose] [--no-web-ui]
+                      [--cache-bytes BYTES] [--no-browser]
+                      [--quiet | --verbose] [--no-web-ui]
                       [--web-source-url URL] [--web-cache-dir PATH]
                       [--latent-key KEY] [--centroid-min-points N]
                       [--dataset-name NAME] [--dataset-id ID] [--obs-key KEY]
@@ -347,6 +371,10 @@ options:
                         once per name. Needed only behind a reverse proxy such
                         as jupyter-server-proxy. One bare DNS name or IP
                         address, with no port, scheme or wildcard
+  --cache-bytes BYTES   Bytes a store served in priority order keeps of what
+                        it makes (renumbered genes), least recently used first
+                        out; 0 keeps nothing (default: a 64th of the machine's
+                        memory)
   --no-browser          Don't open browser automatically
   --quiet, -q           Suppress info messages
   --verbose, -v         Enable verbose/debug logging
@@ -360,9 +388,10 @@ options:
                         Fewest cells a category needs for the outlier filter
                         to measure it (default: the store's own, else 10)
   --dataset-name NAME   Dataset name (default: the store's
-                        uns['cellucid']['name'], required without it)
+                        uns['cellucid']['name'], else the file's name)
   --dataset-id ID       Stable dataset identifier (default: the store's
-                        uns['cellucid']['id'], required without it)
+                        uns['cellucid']['id'], else the file's name without
+                        its extension)
   --obs-key KEY         Exact AnnData obs column the viewer shows; repeat once
                         per column, in order. Every column is shown when this
                         is omitted
@@ -396,18 +425,22 @@ options:
                         when omitted
   --expression X|raw|layer:NAME
                         Where AnnData gene expression is read: X, raw, or
-                        layer:NAME (default: X when present, else raw or a
-                        layer, reported as guessed)
+                        layer:NAME (default: raw when it holds more genes than
+                        X or X is scaled, as Scanpy reads genes, else X;
+                        without X, raw or a layer, reported as guessed)
 
 Formats (detected, by the input format registry the web app reads):
     - .h5ad files; AnnData Zarr store folders (v2 or v3) and zipped stores (.zip)
     - .h5mu files and MuData Zarr stores
     - .loom files; 10x Cell Ranger .h5 files and outs/ folders
-    - MatrixMarket folders (matrix.mtx.gz, or GEO's GSM..._matrix.mtx.gz naming)
+    - MatrixMarket folders (a .mtx[.gz] file of any name, such as GEO's GSM..._matrix.mtx.gz)
     - R objects: .rds, .rda, .RData, gzipped or not (.rds.gz from GEO)
-    The browser reads every one itself; the server serves the bytes. A store
-    written by cellucid.prepare() names itself (uns['cellucid']), so
-    --dataset-name and --dataset-id are needed only for other data.
+    The browser reads every one itself; the server serves the bytes. An
+    h5Seurat file is not opened: in R, read it with SeuratDisk::LoadH5Seurat()
+    and save it with saveRDS(), then serve the .rds. A store
+    written by cellucid.prepare() names itself (uns['cellucid']); any other is
+    named after its file (its id the file's name without the extension), unless
+    --dataset-name and --dataset-id name it.
 
 Examples:
     # Serve an h5ad file (auto-detected)
@@ -556,10 +589,13 @@ You can start the same blocking server from Python (useful for scripts).
 
 `serve_anndata(data, dataset_name=..., dataset_id=...)` serves an `.h5ad`
 file, a Zarr store folder, a zipped Zarr store, any other file or folder
-Cellucid reads, or an in-memory `AnnData` or `MuData`. An in-memory object is
-written once to a temporary `.h5ad` or `.h5mu` (sparse matrices column-major,
-uncompressed, so one gene is one contiguous read) that is removed when the
-server stops or Python exits.
+Cellucid reads, or an in-memory `AnnData` or `MuData`. An in-memory `AnnData`
+is served as a store in priority order, each chunk made when the browser asks
+for it from a copy of the object taken as the server starts (a sparse `X` laid
+out gene-major in it, so one gene is one contiguous read; later edits to the
+object do not show); a `MuData` is served the same way, as a MuData Zarr
+store, with no file written. Both are released when the server stops or
+Python exits.
 
 ```python
 from cellucid import serve_anndata
@@ -633,7 +669,8 @@ cellucid serve /path/to/data.h5ad \
   --dataset-id my-study-v1
 ```
 
-Keep it bound to `127.0.0.1` (default).
+Keep it bound to `127.0.0.1` (default). Other users of the remote machine can
+still read what it serves ({ref}`shared-machines`).
 
 ### Step 2 — Create an SSH tunnel from your laptop
 
@@ -740,23 +777,27 @@ whole message: it names what went wrong and what to change. There is no Python
 traceback to wade through, because none of these is a Cellucid bug — they are
 things you can fix from the command line. Read the last line.
 
-### The store declares no identity and you named none
+### The store declares no identity: it is named after its file
+
+Not a failure. A store that declares no `uns['cellucid']['id']` and `['name']`
+is named as the R package names it, after its file, and the ID it was given is
+printed in one line, because sessions are kept under it:
 
 ```text
 $ cellucid serve lung_atlas.h5ad --no-browser
-cellucid v0.9.5
+cellucid v0.9.6
 
 [1/4] Detecting format...
       Path: /path/to/lung_atlas.h5ad
       Format: AnnData (.h5ad)
-Error: dataset_name and dataset_id are required: this AnnData declares no Cellucid identity of its own (uns['cellucid']['id'] and ['name']). Name the dataset, for example dataset_name="My study", dataset_id="my-study-v1" (--dataset-name/--dataset-id on the command line).
+      Dataset id: lung_atlas (sessions are kept under it; name it with dataset_id=, --dataset-id on the command line, or uns['cellucid']['id'])
 ```
 
-Add `--dataset-name` and `--dataset-id` and run it again, or write the identity
-into the object once (`adata.uns["cellucid"] = {"name": "My study", "id":
-"my-study-v1"}`) so every later run picks it up. A file written by
-`cellucid.prepare()` needs neither, because it carries both. When the store
-declares one of the two, only the other is reported missing.
+For an ID that stays the same whatever the file is called, pass
+`--dataset-name` and `--dataset-id`, or write the identity into the object
+once (`adata.uns["cellucid"] = {"name": "My study", "id": "my-study-v1"}`) so
+every later run picks it up. A file written by `cellucid.prepare()` carries
+both.
 
 ### The port is taken
 
@@ -775,7 +816,7 @@ your data — another process holds the port.
 ```text
 $ cellucid serve pbmc_demo.h5ad \
       --dataset-name "PBMC demo" --dataset-id pbmc-demo --no-browser --knn connectivities
-cellucid v0.9.5
+cellucid v0.9.6
 
 [1/4] Detecting format...
       Path: /path/to/pbmc_demo.h5ad
@@ -813,10 +854,10 @@ starts. The viewer then reports it when it opens the store, listing every
 `obsm` entry and why it was not used:
 
 ```text
-Cellucid found nothing to plot. It needs an obsm array with one row per cell (4,096) and at least one numeric column. obsm holds: X_df (table), spatial (4,096 × 2, NaN at cell 17). Add a 2-D embedding to obsm (for example with sc.tl.umap in Scanpy), then open the data again.
+Cellucid found nothing to plot. It needs an obsm array with one row per cell (4,096) and at least one numeric column. obsm holds: X_df (table), spatial (4,096 × 2, not representable as float32 at cell 17). Add a 2-D embedding to obsm (for example with sc.tl.umap in Scanpy), then open the data again.
 ```
 
-Here a table and an array with a `NaN` coordinate. Repair the array, compute an
+Here a table and an array with a value past float32. Repair the array, compute an
 embedding, or name a usable one with `--embedding-2d KEY`, and serve again.
 
 ### A missing package, an old package, and a Python that is too old
@@ -873,9 +914,10 @@ copy the traceback into the report.
   - If you allow public network access accidentally, other machines may reach your server.
 
 - **Large in-memory AnnData input**:
-  - An object is written once to a temporary `.h5ad` before the server binds,
-    so it needs that much free disk space in the temporary directory; serving
-    the file it came from skips the write.
+  - The object's arrays are copied once, before the server binds (its
+    snapshot: later edits do not show), into memory-mapped files in the
+    temporary directory, so it needs free disk space for one uncompressed copy
+    of them; a sparse `X` is laid out gene-major in that copy.
 
 - **Mixed content**:
   - Pointing an HTTPS Cellucid page at an `http://` server is refused by

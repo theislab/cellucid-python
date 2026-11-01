@@ -33,7 +33,7 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 
 ### 4) All-zero vectors (nothing draws at all)
 
-- **What you see:** the field loads, the notification reads `Velocity overlay ready`, and the canvas is unchanged. Not a faint flow — no flow.
+- **What you see:** the field loads and the overlay turns on without an error (a build that took over a second ends its card with `Velocity overlay ready`), and the canvas is unchanged. Not a faint flow — no flow.
 - **Why:** a particle whose spawn cell has a magnitude below a floor of `0.00001`
   is discarded in the vertex shader: its point size is forced to zero and its
   position is pushed off-clip. With every magnitude at exactly zero, every
@@ -59,18 +59,20 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 
 ### 6) NaN/Inf in vectors
 
-- **What you see:** the overlay never enables. `Show overlay` turns itself back
-  off and the status line under the overlay settings reads `Failed to load vector field.`
-- **Why:** nothing sanitizes a non-finite value. Both writers and the reader
-  reject the field outright — `cellucid.prepare(...)` refuses it when writing, and
-  in the browser the reader refuses the field at the first offending value
-  rather than substituting a number. A silently zeroed cell would be an invisible wrong
-  answer in a figure.
-- **Confirm:** `np.isfinite(vectors).all()` in Python. In the browser, read the
-  error notification: it names the `obsm` array and the first offending cell
-  (`Vector field 'velocity_umap' cannot be drawn: NaN at cell 17.`).
-- **What to do:** clean or recompute the field upstream and write the file again. The exact
-  error strings are listed in {doc}`07_troubleshooting_velocity_overlay`.
+- **What you see:** cells whose vector row holds NaN (or an infinity) have no
+  arrow; every other cell's arrow is drawn. A short notice counts those cells
+  and names the first when the field loads.
+- **Why:** a non-finite row is a cell the field has no vector for (scVelo
+  leaves NaN for cells it could not fit). Nothing is substituted: a silently
+  zeroed vector would be an invisible wrong answer in a figure. A field with
+  no finite row at all, or a value past float32, is refused, naming the first
+  offending cell (`Vector field 'velocity_umap' cannot be drawn: not
+  representable as float32 at cell 17.`).
+- **Confirm:** `np.isfinite(vectors).all(axis=1).sum()` in Python counts the
+  cells with a vector.
+- **What to do:** nothing, if those cells truly have no vector; otherwise
+  recompute the field upstream and write the file again. The exact error
+  strings are listed in {doc}`07_troubleshooting_velocity_overlay`.
 
 ### 7) Magnitudes are huge (units/normalization mismatch)
 

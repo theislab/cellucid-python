@@ -1,9 +1,11 @@
 """The AnnData server's public signatures and its single-use lifecycle.
 
 A server owns two resources: its socket, and -- for an in-memory AnnData
-object -- the temporary ``.h5ad`` it wrote. Every way a server ends (a stop, a
-failed start, a failed serve loop, a constructor that fails, or Python
-dropping the object) releases both, and a stopped server cannot be restarted.
+object -- the store in priority order it serves, with the files that store
+lays a cell-major expression matrix out in when the viewer first reads it.
+Every way a server ends (a stop, a failed start, a failed serve loop, a
+constructor that fails, or Python dropping the object) releases both, and a
+stopped server cannot be restarted.
 """
 
 from __future__ import annotations
@@ -17,15 +19,17 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 import pytest
+from _mapped_files import mapped_files
 from anndata import AnnData
+from scipy import sparse
 
 from cellucid.anndata_server import AnnDataServer, serve_anndata
-from cellucid.jupyter import AnnDataViewer, show_anndata
+from cellucid.jupyter import AnnDataViewer, Widget, show_anndata
 
 
 def _adata() -> AnnData:
     return AnnData(
-        X=np.array([[1.0], [2.0]], dtype=np.float32),
+        X=sparse.csr_matrix(np.array([[1.0], [2.0]], dtype=np.float32)),
         obs=pd.DataFrame(index=pd.Index(["cell-1", "cell-2"], dtype=object)),
         var=pd.DataFrame(index=pd.Index(["gene-1"], dtype=object)),
         obsm={"X_umap_2d": np.array([[0.0, 0.0], [1.0, 1.0]], dtype=np.float32)},
@@ -50,9 +54,20 @@ def _assert_socket_released(port: int) -> None:
         probe.bind(("127.0.0.1", port))
 
 
+def _held(server: AnnDataServer) -> Path:
+    """The folder the served store laid the object's cell-major ``X`` out in, made by reading it."""
+    store = server._served.priority
+    assert store is not None
+    assert store.get("X/indptr/0") is not None
+    folder = store._folder.folder
+    assert folder is not None and folder.is_dir()
+    return folder
+
+
 def _assert_released(server: AnnDataServer, temporary: Path) -> None:
+    # Every mapping let go first: Windows removes no mapped file.
+    assert mapped_files(temporary) == []
     assert not temporary.exists()
-    assert not temporary.parent.exists()
     assert server._server is None
     assert server.is_running() is False
     with pytest.raises(RuntimeError, match="single-use"):
@@ -87,30 +102,53 @@ def test_public_anndata_entry_points_have_complete_closed_signatures() -> None:
         "web_source_url",
         "web_cache_dir",
         "allowed_hosts",
+        "cache_bytes",
     ]
     assert list(inspect.signature(AnnDataServer).parameters) == server_parameters
     assert list(inspect.signature(serve_anndata).parameters) == server_parameters
-    notebook_tail = ["client_server_url", "web_source_url", "web_cache_dir", "allowed_hosts"]
+    notebook_tail = ["client_server_url", "web_source_url", "web_cache_dir", "allowed_hosts", "cache_bytes"]
     assert list(inspect.signature(AnnDataViewer).parameters) == [
         "data",
         "port",
-        "height",
         "auto_open",
         *LAUNCH_CHOICES,
         *notebook_tail,
     ]
-    assert list(inspect.signature(show_anndata).parameters) == [
-        "data",
-        "height",
-        *LAUNCH_CHOICES,
-        *notebook_tail,
-    ]
+    # The notebook widget runs no server: the browser loads the app from web_source_url.
+    widget_parameters = ["data", "height", *LAUNCH_CHOICES, "web_source_url", "cache_bytes"]
+    assert list(inspect.signature(show_anndata).parameters) == widget_parameters
+    assert list(inspect.signature(Widget).parameters) == widget_parameters
+
+
+def test_cache_bytes_bounds_what_a_served_store_keeps_as_cellucid_r_does() -> None:
+    from cellucid._served_store import default_cache_bytes, require_cache_bytes
+
+    # None keeps a 64th of the machine's memory (cellucid-r's
+    # .default_cache_bytes() follows the same rule); 0 keeps nothing.
+    assert require_cache_bytes(None) == default_cache_bytes()
+    assert require_cache_bytes(0) == 0
+    assert require_cache_bytes(np.int64(4096)) == 4096
+    for refused in (-1, 1.5, True, "1"):
+        with pytest.raises(ValueError, match="cache_bytes must be None or one non-negative whole number of bytes"):
+            require_cache_bytes(refused)
+    for budget in (None, 0, 12_345):
+        server = _server(cache_bytes=budget)
+        try:
+            expected = default_cache_bytes() if budget is None else budget
+            assert server.cache_bytes == expected
+            store = server._served.priority
+            assert store is not None and store._lines._budget == expected
+        finally:
+            server.stop()
+    # A refused budget is refused before anything is served.
+    with pytest.raises(ValueError, match="cache_bytes"):
+        _server(cache_bytes=-1)
 
 
 def test_show_anndata_rejects_identity_before_viewer_setup() -> None:
     with (
         mock.patch(
-            "cellucid.jupyter.AnnDataViewer._init_state",
+            "cellucid.jupyter.AnnDataViewer._init_viewer_state",
             side_effect=AssertionError("Notebook viewer setup was entered"),
         ) as viewer_setup,
         pytest.raises(ValueError, match="dataset_id"),
@@ -120,20 +158,31 @@ def test_show_anndata_rejects_identity_before_viewer_setup() -> None:
     viewer_setup.assert_not_called()
 
 
-def test_a_file_on_disk_is_served_as_it_is_and_never_copied(tmp_path: Path) -> None:
+def test_a_file_on_disk_is_read_where_it_is_and_its_decoded_arrays_go_with_the_server(tmp_path: Path) -> None:
     source = tmp_path / "fixture.h5ad"
     _adata().write_h5ad(source)
     server = _server(source)
-    assert server.store.path == source.resolve()
-    assert server._temporary_file is None
+    store = server._served.priority
+    assert store is not None
+    # A cell-major X on disk is laid out gene-major by the store's worker, read
+    # from the file: an array stored in chunks (anndata's sparse arrays) is
+    # decoded once into the scratch folder as its rows are read, an array in
+    # one piece read where it lies; the layout is written beside them, and the
+    # folder goes with the server.
+    store.laid_out()
+    assert store.get("X/indptr/0") is not None and store.get("X/data/0") is not None
+    folder = store._folder.folder
+    assert folder is not None
+    assert {path.name.split("-")[0] for path in folder.iterdir()} <= {"owner", "source", "X", "layers", "raw"}
     server.stop()
+    assert mapped_files(folder) == [] and mapped_files(source) == []
+    assert not folder.exists()
     assert source.exists()
 
 
-def test_an_object_is_served_from_a_temporary_file_removed_on_stop() -> None:
+def test_an_object_is_served_from_a_store_released_on_stop() -> None:
     server = _server()
-    temporary = server._temporary_file
-    assert temporary is not None and temporary.is_file()
+    temporary = _held(server)
     server.start_background()
     port = server.port
     server.stop()
@@ -148,39 +197,45 @@ def test_an_object_is_served_from_a_temporary_file_removed_on_stop() -> None:
 
 def test_stop_before_start_consumes_the_server_and_its_file() -> None:
     server = _server()
-    temporary = server._temporary_file
-    assert temporary is not None
+    temporary = _held(server)
     server.stop()
     _assert_released(server, temporary)
 
 
 def test_a_server_python_drops_without_a_stop_removes_its_file() -> None:
     server = _server()
-    temporary = server._temporary_file
-    assert temporary is not None and temporary.is_file()
+    temporary = _held(server)
     del server
     gc.collect()
-    assert not temporary.parent.exists()
+    assert mapped_files(temporary) == []
+    assert not temporary.exists()
 
 
-def test_a_constructor_that_fails_removes_the_file_it_wrote(tmp_path: Path) -> None:
-    written: list[Path] = []
-    import cellucid.anndata_server as module
+def test_a_constructor_that_fails_releases_the_store_it_made() -> None:
+    from cellucid._served_store import PriorityStore
 
-    real_write = module.write_temporary_h5ad
+    made: list[PriorityStore] = []
+    folders: list[Path] = []
+    real_of_anndata = PriorityStore.of_anndata
 
-    def tracking_write(adata: AnnData, *, dataset_id: str) -> Path:
-        path = real_write(adata, dataset_id=dataset_id)
-        written.append(path)
-        return path
+    def tracking(adata: AnnData, *, cache_bytes: int | None = None) -> PriorityStore:
+        store = real_of_anndata(adata, cache_bytes=cache_bytes)
+        made.append(store)
+        store.laid_out()
+        assert store.get("X/indptr/0") is not None
+        assert store._folder.folder is not None
+        folders.append(store._folder.folder)
+        return store
 
     with (
-        mock.patch.object(module, "write_temporary_h5ad", tracking_write),
+        mock.patch.object(PriorityStore, "of_anndata", tracking),
         pytest.raises(ValueError, match="knn_key names obsp"),
     ):
         _server(knn_key="connectivities")
-    assert len(written) == 1
-    assert not written[0].parent.exists()
+    assert len(made) == 1
+    assert mapped_files(folders[0]) == []
+    assert not folders[0].exists()
+    assert not made[0]._finalizer.alive
 
 
 def test_bind_failure_releases_the_file_and_consumes_the_server() -> None:
@@ -188,8 +243,7 @@ def test_bind_failure_releases_the_file_and_consumes_the_server() -> None:
         occupied.bind(("127.0.0.1", 0))
         occupied.listen(1)
         server = _server(port=occupied.getsockname()[1])
-        temporary = server._temporary_file
-        assert temporary is not None
+        temporary = _held(server)
         with pytest.raises(OSError):
             server.start_background()
     _assert_released(server, temporary)
@@ -199,8 +253,7 @@ def test_web_cache_failure_preserves_its_error_and_releases_the_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server = _server(serve_web_ui=True)
-    temporary = server._temporary_file
-    assert temporary is not None
+    temporary = _held(server)
     original = RuntimeError("exact cache failure")
 
     def fail_cache(**kwargs: object) -> None:
@@ -262,8 +315,7 @@ def test_thread_start_failure_rolls_back_the_socket_and_the_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server = _server()
-    temporary = server._temporary_file
-    assert temporary is not None
+    temporary = _held(server)
     original = RuntimeError("exact thread start failure")
 
     def fail_start(_thread: object) -> None:
@@ -284,8 +336,7 @@ def test_a_browser_that_does_not_open_is_a_transactional_start_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server = _server(open_browser=True)
-    temporary = server._temporary_file
-    assert temporary is not None
+    temporary = _held(server)
     original = RuntimeError("exact browser failure")
 
     def open_browser(_url: str) -> bool:
@@ -305,8 +356,7 @@ def test_background_serve_failure_is_retained_for_wait_and_releases_resources(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server = _server()
-    temporary = server._temporary_file
-    assert temporary is not None
+    temporary = _held(server)
     original = RuntimeError("exact serve failure")
 
     def fail_serve(_server: object) -> None:
@@ -321,7 +371,8 @@ def test_background_serve_failure_is_retained_for_wait_and_releases_resources(
         server.wait()
 
     assert raised.value is original
-    assert not temporary.parent.exists()
+    assert mapped_files(temporary) == []
+    assert not temporary.exists()
     assert server._server is None
     assert server.is_running() is False
     _assert_socket_released(server.port)

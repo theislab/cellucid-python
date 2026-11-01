@@ -82,14 +82,16 @@ samples of each condition. **More options → Test** chooses how:
 
 | Test | Values per sample | Two conditions | More conditions |
 |---|---|---|---|
-| Logit proportions (propeller) — default | `logit((count + 0.5) / (total + 1))` | Welch’s t-test | one-way ANOVA |
+| Logit proportions (propeller) — default | `logit((count + 0.5) / (total + 0.5·K))`, K the types with cells | Welch’s t-test | one-way ANOVA |
 | Ranks of proportions | `count / total` | Wilcoxon rank-sum | Kruskal-Wallis |
 | Centred log-ratio | `log(count + 0.5) − mean over types of log(count + 0.5)` | Welch’s t-test | one-way ANOVA |
 
 - The logit test follows propeller (Phipson et al., *Bioinformatics* 2022), on
-  logit-transformed proportions. propeller then moderates the variances with
-  limma’s empirical Bayes; Cellucid does not, so with few samples its p-values
-  are more conservative than propeller’s.
+  its logit-transformed pseudo-proportions exactly (speckle's
+  `getTransformedProps`: `(count + 0.5) / rowSums(count + 0.5)`, the total
+  plus 0.5 a type). propeller then moderates the variances with limma’s
+  empirical Bayes; Cellucid does not, so with few samples its p-values are
+  more conservative than propeller’s.
 - The Wilcoxon rank-sum test is exact when both conditions have fewer than 50
   samples and no ties, otherwise asymptotic with tie and continuity
   correction (as R’s `wilcox.test`).
@@ -97,6 +99,13 @@ samples of each condition. **More options → Test** chooses how:
   cell types.
 - A test across samples needs at least two samples in every condition; with
   fewer, the type gets no p-value and the result shows `Too few samples`.
+- A cell type with **no cells in scope** (a category the chosen cells, a page
+  or a subsample left out) is not tested: its transformed proportions would
+  depend only on how many cells each sample has, so it would look changed
+  whenever conditions differ in size. It stays out of the centred log-ratio's
+  mean, the tests and the multiple-testing correction; the table reads
+  `No cells in scope` for it, and the result carries a
+  `N types without cells` chip.
 
 These match SciPy (`ttest_ind(equal_var=False)`, `f_oneway`, `mannwhitneyu`,
 `kruskal`, `false_discovery_control`) on the same values; the parity is held by
@@ -109,8 +118,10 @@ the web app’s test suite.
 With a condition but no samples field, the cells are the only replicates.
 Composition then runs a χ² test of cell type × condition and, for each type, a
 χ² test of that type against all others across the conditions (Fisher’s exact
-test for a 2 × 2 table with an expected count below 5; Yates’s correction on a
-2 × 2 χ², as `scipy.stats.chi2_contingency`).
+test for a 2 × 2 table with an expected count below 5, two-sided as R's
+`fisher.test`; Yates’s correction on a 2 × 2 χ², as
+`scipy.stats.chi2_contingency` and R's `chisq.test`). These are the Detailed
+view's tests too, from one kernel, so one table gets one answer in both.
 
 Treating cells as replicates ignores how much samples differ from one another,
 so these p-values overstate the evidence. The result carries a
@@ -183,6 +194,13 @@ Sessions save the options and the shown result.
 ---
 
 ## Limits and edge cases
+
+- On a subsample, the result says how the open cells were chosen
+  ({doc}`../b_data_loading/21_subsampled_loading`). Composition does not run
+  when the open cells are stratified by the cell-type field at unequal shares
+  (balanced, or with a minimum per category): the proportions would be the
+  subsample's design, not the data's. Open every cell, or a uniform or
+  proportional subsample.
 
 - Composition compares proportions, which are linked: when one type grows the
   others shrink. A significant change in one type can be the reflection of a

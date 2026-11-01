@@ -307,18 +307,26 @@ A group made from a whole category is stored relative to that category and costs
 
 ### Python/Jupyter synchronization (implemented)
 
-Cellucid has a viewer channel (one WebSocket, `/_cellucid/ws`) to `cellucid-python` that supports:
+Cellucid has a viewer channel to `cellucid-python` (over the notebook widget's
+connection, or one WebSocket, `/_cellucid/ws`, for a browser tab) that supports:
 - **Python → UI commands** (e.g. `viewer.highlight_cells(...)`, `viewer.set_color_by(...)`)
 - **UI → Python hooks** (e.g. `@viewer.on_selection`, `@viewer.on_click`, `@viewer.on_hover`)
+- **Results back in one call**: `viewer.pull(adata)` writes every highlight
+  group (a `cellucid_highlight__<id>` column), label field and score onto `adata.obs`
 - **No-download session capture**: pull the current `.cellucid-session` into Python as an object and apply it onto an `AnnData`
 
 Recommended patterns:
 - If you want to react immediately, use hooks.
-- If you want a durable, reproducible artifact (and to mutate an `AnnData`), use a session bundle:
+- If you want your highlight groups as columns, run `viewer.pull(adata)` in a later cell.
+- If you want a durable, reproducible artifact, use a session bundle (in a
+  notebook, ask in one cell and collect in the next):
 
   ```python
-  viewer.wait_for_ready()
-  bundle = viewer.get_session_bundle(timeout=60)
+  request = viewer.request_session_bundle()
+  ```
+
+  ```python
+  bundle = request.result()
   adata2 = bundle.apply_to_anndata(
       adata,
       expected_dataset_id="my-study-v1",
@@ -326,7 +334,7 @@ Recommended patterns:
   )
   ```
 
-Important constraint: selections/highlights in sessions are currently **index-based** (cell identity is the row position), so only apply sessions to an `AnnData` with the same row order.
+Important constraint: selections/highlights in sessions name cells by **original position** (each cell's row in the order the dataset's cells were given, whatever order a file stores them in), so only apply sessions to the `AnnData` that produced them, in that original order (a Cellucid-ready file read with anndata: `cellucid.restore_original_order(adata)` first).
 
 Developer reference: {doc}`../../python_package/e_jupyter_hooks/16_reference`
 

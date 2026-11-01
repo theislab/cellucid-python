@@ -60,8 +60,16 @@ See web-app docs:
 ### Option B (recommended in notebooks): capture from Python (no browser download)
 
 Cellucid asks the viewer for the session and receives it back on the viewer
-channel (the WebSocket the viewer opened to the local server, as one binary
-frame), written to a temporary file; nothing is downloaded in the browser.
+channel (in a notebook, the notebook's own connection; in a browser tab, the
+WebSocket the viewer opened to this machine), written to a temporary file;
+nothing is downloaded in the browser.
+
+```{tip}
+To bring highlight groups, label fields, scores and gene sets back onto
+`adata.obs` without a session file, one call does it:
+`viewer.pull(adata)` ({doc}`42_pull_everything_back`). A session also keeps
+the view itself, and can be reopened in the web app.
+```
 
 ---
 
@@ -92,17 +100,23 @@ For the highlight mental model and UI walkthrough:
 
 ### Step 3 — Capture the bundle from Python
 
+Ask in one cell:
+
 ```python
-bundle = viewer.get_session_bundle(timeout=60)
+request = viewer.request_session_bundle()
+```
+
+and collect it in the next:
+
+```python
+bundle = request.result()
 bundle
 ```
 
-If you want to block explicitly until the viewer is ready:
-
-```python
-viewer.wait_for_ready(timeout=30)
-bundle = viewer.get_session_bundle(timeout=60)
-```
+A notebook widget hears the viewer between cells, so the bundle arrives after
+the cell that asked has finished; `request.done` says whether it is there. (A
+browser-tab viewer, `AnnDataViewer`, answers while a cell runs: there
+`request.result(timeout=60)` may follow in the same cell.)
 
 ### Step 4 — Inspect what’s inside
 
@@ -116,7 +130,7 @@ bundle.list_chunk_ids()
 
 ## Save the bundle as an artifact (recommended)
 
-The session bundle returned by `get_session_bundle()` may be stored in a temporary location.
+The session bundle `request.result()` returns is stored in a temporary location.
 Save it to a stable path:
 
 ```python
@@ -141,7 +155,7 @@ Other session state (camera position, UI layout, etc.) is not applied to AnnData
 ### Apply with the convenience API
 
 ```python
-adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
+adata2 = viewer.apply_session_to_anndata(adata, request, inplace=False)
 adata2
 ```
 
@@ -189,7 +203,7 @@ selected
 
 A bundle's `datasetFingerprint` carries exactly `datasetId`, `name`,
 `cellCount`, `varCount`, a `cellOrder` record, and a `dataMapping` record — the
-current (format 2) session fingerprint:
+current (format 3) session fingerprint:
 
 ```python
 bundle.dataset_fingerprint
@@ -225,33 +239,38 @@ shared rule, and read from the mapping's expression matrix.
 
 ### What `cellOrder` is, and why Python does not check its digest
 
-Everything a session records about your cells is a **row number**. That is safe
-only for as long as row 417 keeps meaning the same cell. Rewrite a dataset
+Everything a session records about your cells is a **position**: the cell's row
+in the dataset's original order. That is safe only for as long as position 417
+keeps meaning the same cell. Rewrite a dataset
 from a re-sorted `AnnData` and the id, the cell count, and the gene count are
-all still identical, while every stored row number now denotes something else.
+all still identical, while every stored position now denotes something else.
 
-`cellOrder` closes that hole in the viewer. It is a digest of the coordinates
-of one embedding — the one `cellOrder.embedding` names, an `obsm` key with its
-0-based columns — plus that embedding's dimension.
-Every embedding is normalized on its own, so a digest only means anything for
-the embedding it was taken over.
+`cellOrder` closes that hole in the viewer. It is a digest of the stored
+coordinates of one embedding — the one `cellOrder.embedding` names, an `obsm`
+key with its 0-based columns — each cell named by its original position, plus
+that embedding's dimension. A digest only means anything for the embedding it
+was taken over; how the viewer opened the cells (all of them, a share, grown
+step by step) does not change it.
 
 Python requires `cellOrder`, validates its shape strictly (`embedding` a
 `{key, columns}` record that fits the mapping's kind, `dimension` exactly 1, 2,
 or 3, `digest` exactly 16 lowercase hex characters), and never checks the digest
-value. There is nothing here to check it against: the digest covers coordinates
-the viewer normalized and drew, and you — not Cellucid — chose the row order of
-the object you are applying the session to. Verifying cell-order identity is the
-viewer's job.
+value: the digest is the viewer's check, taken on the cells it opens, and you —
+not Cellucid — chose the rows and embeddings of the object you are applying the
+session to. Verifying cell-order identity is the viewer's job.
 
 The practical consequence: **apply a session only to the `AnnData` that produced
-it, in the same row order.** In the notebook that is your responsibility, and
-no exception will tell you if you get it wrong. If you have subset or re-sorted
-`adata`, go back to the unmodified object.
+it, in its original cell order** (a session names cells by original position;
+a Cellucid-ready file read with anndata comes back in its stored priority order:
+`cellucid.restore_original_order(adata)` first, and applying to it before is
+refused). In the notebook that is your responsibility: a file object subset or
+re-sorted since it was read only gets a warning (its priority record no
+longer describes it, so its rows are taken as they are), and an object of
+your own gets none: go back to the unmodified object.
 
 ```python
 # Safe: the object the viewer was opened on, untouched.
-adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
+adata2 = viewer.apply_session_to_anndata(adata, request, inplace=False)
 
 # Not safe: a re-sorted view. The counts still match, so nothing raises.
 resorted = adata[adata.obs.sort_values("cell_type").index].copy()
@@ -277,20 +296,22 @@ Highlighted cells are stored on a named page that can be used by analysis and se
 
 ## Troubleshooting (symptom → diagnosis → fix)
 
-### Symptom: `viewer.get_session_bundle()` times out
+### Symptom: `request.result()` says the bundle has not arrived
 
 Likely causes:
-- viewer never reached “ready”
-- iframe cannot communicate to Python server (proxy/tunnel issue)
+- it was called in the same cell as `request_session_bundle()`: the viewer
+  answers between cells
+- the viewer has not opened its dataset yet, or its channel is not open
 
-How to confirm:
+How to confirm (in a new cell):
 ```python
+request.done
 viewer.debug_connection()
 ```
 
 Fix:
-- wait for ready: `viewer.wait_for_ready()`
-- ensure remote notebooks use a proxy/tunnel (see {doc}`22_large_dataset_server_mode_and_lazy_gene_expression`)
+- run `request.result()` again in a later cell
+- check `channel_connected` in the report
 
 ### Symptom: “Applying session adds no columns”
 
@@ -317,8 +338,8 @@ column explicitly before applying.
 ### Symptom: Python applies a bundle the web app refuses to open
 
 The two readers are not symmetric: only the web app compares the `cellOrder`
-digest against the coordinates it loads, so a re-ordered dataset is caught there
-and not here.
+digest against the stored coordinates of the cells it opens, so a re-ordered
+dataset is caught there and not here.
 
 How to confirm:
 ```python

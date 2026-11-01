@@ -2,7 +2,7 @@
 
 **Audience:** developer / power user  
 **Time:** 20–30 minutes  
-**Goal:** understand the protocol and guardrails behind `viewer.get_session_bundle()` and `apply_cellucid_session_to_anndata(...)`.
+**Goal:** understand the protocol and guardrails behind `viewer.request_session_bundle()` and `apply_cellucid_session_to_anndata(...)`.
 
 ```{note}
 This page is a “deep path” companion to {doc}`05_sessions_to_anndata_bridge`.
@@ -18,12 +18,13 @@ Most users should start there.
 In a notebook, Python can request the current session bundle from the frontend and receive it as a `CellucidSessionBundle` handle.
 
 High-level flow:
-1) Python sends `{"type": "requestSessionBundle", "requestId": ...}` to the viewer on its channel (`/_cellucid/ws`).
+1) Python sends `{"type": "requestSessionBundle", "requestId": ...}` to the viewer on its channel (the notebook widget's comm, or `/_cellucid/ws` for a browser tab).
 2) The web app serializes the current session into raw `.cellucid-session` bytes.
 3) The web app sends those bytes back on the same channel as one binary frame
    (header `{"type": "session_bundle", "requestId": ...}`, then the bundle).
-4) The server streams the frame to a temp file (bounded memory) and validates it.
-5) The server routes a `type="session_bundle"` event back to Python so `viewer.get_session_bundle()` can return.
+4) Python streams the frame to a temp file (bounded memory) and validates it.
+5) A `type="session_bundle"` event completes the request, so
+   `request.result()` returns (in a notebook, in a later cell).
 
 Why this matters:
 - Users never have to find/download a file from the browser.
@@ -103,12 +104,12 @@ and is sent, in order, when it does.
 ### Session bundle frames
 
 Guardrails:
-- Python registers an expected `(viewerId, requestId)` pair for as long as
-  `get_session_bundle(timeout=...)` waits.
-- The server accepts exactly one bundle for that pair (consumes the pending
+- Python registers an expected `(viewerId, requestId)` pair until the request
+  is collected or cancelled.
+- Python accepts exactly one bundle for that pair (consumes the pending
   request); a late one is dropped.
 - The frame is streamed to disk, so the temporary directory's free space is
-  the only size bound; an invalid bundle makes `get_session_bundle()` raise.
+  the only size bound; an invalid bundle makes `request.result()` raise.
 
 ---
 
@@ -116,7 +117,7 @@ Guardrails:
 
 A `.cellucid-session` file is:
 
-1) MAGIC header: `CELLUCID_SESSION/2\n` (session format 2; any other signature is refused)  
+1) MAGIC header: `CELLUCID_SESSION/3\n` (session format 3; a session of another format is refused naming it, any other signature as not a session)  
 2) `manifestByteLength` (u32 LE)  
 3) `manifest` JSON bytes (UTF‑8)  
 4) repeated chunks:
@@ -172,8 +173,8 @@ This prevents the worst failure mode:
 
 The manifest fingerprint carries two records beside those three scalars, and both
 are required. `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
-16-character lowercase hexadecimal `digest` of the coordinates of that
-embedding. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
+16-character lowercase hexadecimal `digest` of that embedding's stored
+coordinates, each cell named by its original position. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
 columns that were read, one per dimension. It exists because the three scalars
 all survive a rewrite of the same dataset from re-sorted input, and index-based
 selections would then silently denote different cells.
@@ -192,11 +193,12 @@ The two readers check them differently:
 | `cellOrder` and `dataMapping` present | required | required |
 | record shapes | validated | validated |
 | `dataMapping` keys exist on the dataset | checked | checked against the `AnnData` |
-| `cellOrder` digest value | compared against the loaded embedding | never checked |
+| `cellOrder` digest value | compared against the stored embedding of the cells it opens | never checked |
 
-Python cannot check the digest. It is taken over the normalized coordinates the
-viewer drew, while this API applies a session to an `AnnData` whose row order
-the caller controls. Enforcing cell-order identity is the viewer's job.
+Python does not check the digest. It is the viewer's check, taken on the cells
+it opens, while this API applies a session to an `AnnData` whose rows and
+embeddings the caller controls. Enforcing cell-order identity is the viewer's
+job.
 
 So a bundle this reader accepts may still be refused by the web app. That
 direction is expected.
@@ -206,20 +208,19 @@ direction is expected.
 ### Symptom: “Dropped a session bundle nobody is waiting for” (log)
 
 Meaning:
-- the bundle arrived after its `get_session_bundle()` call stopped waiting
-  (its timeout passed).
+- the bundle arrived after its request was cancelled (`request.cancel()`,
+  or the viewer stopped).
 
 Fix:
-- request a new bundle again from the *current* viewer instance, with a
-  longer `timeout=`.
+- request a new bundle again from the *current* viewer instance.
 
-### Symptom: “This file is not a Cellucid session file of format 2 …”
+### Symptom: “This file is not a Cellucid session file of format 3 …”
 
 Meaning:
 - the bytes the viewer sent on its channel for a `requestSessionBundle` are
   not a `.cellucid-session` file of the current format (or a file passed to
   `CellucidSessionBundle(...)` is not one). On the channel, the frame is
-  dropped and `viewer.get_session_bundle()` raises `RuntimeError` ("The viewer
+  dropped and `request.result()` raises `RuntimeError` ("The viewer
   did not capture the session bundle: The viewer sent an invalid session
   bundle: …") instead of waiting for its timeout.
 

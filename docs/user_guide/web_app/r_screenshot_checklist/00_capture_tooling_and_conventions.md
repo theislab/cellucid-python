@@ -407,7 +407,7 @@ The tool now asserts the selection stuck and fails loudly if it did not.
 
 **``#dataset-cells`` is not a ready signal.** It abbreviates to ``4K``. Use
 ``#filter-count`` (``Showing all 3,696 cells``) or ``#stats``
-(``Points: 3,696 • Field: clusters (category) • Centroids: 8``).
+(``3,696 cells • Field: clusters (category) • Centroids: 8``).
 
 **``scrollIntoView`` inside the sidebar changes what a full-window shot shows.**
 It scrolls the sidebar's own scroller, so the panel you wanted at the top is

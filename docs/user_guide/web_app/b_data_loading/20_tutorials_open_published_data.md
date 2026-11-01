@@ -3,10 +3,10 @@
 **Audience:** anyone who found a dataset in a paper's data availability
 section and wants to look at it  
 **Time:** 5 minutes each  
-**What you'll do:** open three kinds of published single-cell data with no
+**What you'll do:** open four kinds of published single-cell data with no
 conversion and nothing installed: a GEO sample's count matrix by its link, a
-Seurat object on Zenodo by its link, and a 10x Cell Ranger output folder from
-your computer  
+Seurat object on Zenodo by its link, a 10x Cell Ranger output folder from
+your computer, and a CELLxGENE atlas of 2.3 million cells  
 **Prerequisites:** a current desktop Chrome, Edge, Firefox or Safari
 
 Each tutorial uses a real public dataset. The numbers it states (cells, what
@@ -142,10 +142,72 @@ once rather than in place ({doc}`17_open_r_objects`).
 
 ---
 
+## 4. A large CELLxGENE atlas: the cells that fit, genes by symbol
+
+The integrated Human Lung Cell Atlas on CZ CELLxGENE is one `.h5ad` of
+21.9 GB: 2,282,447 cells × 55,329 genes, its matrix stored row by row (CSR,
+cell-major), its genes named by Ensembl ids with the symbols in
+`var['feature_name']`. Few laptops can hold all of it, so Cellucid opens what
+fits and says so.
+
+1. Paste this into the **Link or server** bar and click **Open** (or open
+   [this link](https://www.cellucid.com/?data=cellxgene:9f222629-9e39-47d0-b83f-e08d610c7479)):
+
+   ```text
+   cellxgene:9f222629-9e39-47d0-b83f-e08d610c7479
+   ```
+
+2. **The whole map, genes on a sample.** Cellucid opens every cell this
+   device holds, with their cell types, in seconds (a device without the
+   memory for all of them opens a seeded **Blocks** subsample that fits, and
+   says so). The file stores its matrix cell by cell (sparse, CSR), so one
+   gene's values are spread over every cell's row: reading a gene for every
+   cell reads the whole matrix. So a gene is read for a sample of the open
+   cells, as many as the first gene reads in about 20 seconds on your
+   connection: drawn first on the cells about 10 seconds read, then on more
+   as the rest of the 20 seconds reads them. The header of the collapsed
+   **Session › Subsampling** says so ("100 % cells · genes 1.8 %"); opened,
+   **Genes read for** shows the share and the cells ("40K of 2.3M cells"),
+   and the **Details** table under Cells to open says why ("a gene in about
+   20 s here") and what every cell would take. The gene's legend says the
+   same in one line ("Gene read for 40K of 2.3M cells", a link to that
+   slider), and the cells it was not read for are faded toward the
+   background, beneath the cells read, which are drawn larger ("Faded: not
+   read"). Move the **Genes read for** slider to a larger share (10 %, 25 %,
+   … 100 %) and press **Read** to read genes for more cells, its download
+   and time said first ({ref}`genes-read-for`).
+3. **Genes by symbol.** The genes open named by the var index, Ensembl ids
+   (search `ENSG00000168484`). To name them by symbol, choose
+   `feature_name` under **Session › Data mapping › Genes › Gene names** and
+   click **Apply**: the gene search then finds `SFTPC`, and each gene keeps
+   its Ensembl id wherever it leaves the viewer. The cells are drawn before
+   any gene name is read: the var index follows the first view, and until it
+   arrives the gene search says *Reading gene names…*.
+4. **The first gene.** A gene of a cell-major matrix is spread over every
+   cell's row, so before reading the first one Cellucid says what it costs
+   in one line — the bytes to read, the time at the speed it measured, the
+   cells — with a **Cancel** button; its **Details** say why, from how the
+   file stores its matrix. Its colours fill in on a growing sample of the
+   open cells, with the time the rest takes. Later genes read only their own
+   entries; picking another gene while the first is read joins that read
+   instead of starting over. A smaller share of the cells costs less, and a
+   copy written gene by gene (`cellucid.prepare()` in Python,
+   `cellucid_prepare()` in R) reads only each gene's own values.
+
+To give someone the same cells, add the subsample to the link
+(`&cells=10%&sample=blocks&seed=0`), or use **Copy link** under *Cells to
+open*; the Session panel shows the cells' digest so you can confirm you see
+the same ones. In a notebook, `cellucid.subsample_cells()` (Python) and
+`cellucid_subsample_cells()` (R) give the same cells
+({doc}`../../python_package/f_notebooks_tutorials/47_subsampled_views`).
+
+---
+
 ## Related pages
 
 - {doc}`14_open_from_link`: every provider and link form
 - {doc}`17_open_r_objects`: R objects and MatrixMarket folders, what is read
 - {doc}`18_open_loom_and_10x`: Loom files and Cell Ranger output
+- {doc}`21_subsampled_loading`: opening a share of the cells
 - {doc}`../../python_package/f_notebooks_tutorials/25_serve_loom_10x_and_matrixmarket`:
   the same files served from Python

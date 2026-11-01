@@ -39,7 +39,7 @@ This is the “no excuses” workflow that works for most people.
 6) **(Optional) Crop without changing camera**
    - Enable **Show preview** → enable **Frame export** → drag the frame → click **Confirm** to apply.
 
-7) Click **Export**.
+7) Click **Export**. While the export runs, the button reads **Cancel export**: press it to stop the export where it is (nothing is downloaded, and nothing is reported as failed).
 
 8) **Open the file outside Cellucid** and do a 10-second sanity check:
    - correct view (live vs snapshot),
@@ -95,7 +95,10 @@ expecting to see them side by side.
   matrices for PNG or Hybrid, a visible connectivity layer that the current
   exporter does not include, or a render mode other than **Points** (figure
   export draws the point layer only, so a volumetric smoke view would export as
-  a different image, not a degraded one).
+  a different image, not a degraded one). When the only blockers are the
+  connectivity edges or the velocity overlay, the dialog unblocks it in one
+  step: **Turn off edges and export** (or **vector field**, or both) turns
+  those layers off, as their switches would, and exports.
 
 :::{tip}
 If your preview looks wrong, click **Refresh** in the preview controls (especially after changing views, fields, or filters).

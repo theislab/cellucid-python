@@ -57,7 +57,9 @@ Common blockers and what they mean:
 
 - **“Connectivity overlay not exported”**  
   Connectivity edges are visible, but figure export covers the point layer only.
-  Disable the overlay before exporting.
+  Press **Turn off edges and export** in the dialog, or turn the edges off
+  yourself and export again. The velocity overlay is the same (**Turn off
+  vector field and export**).
 
 - **“Volumetric smoke cloud render mode not exported”**  
   The viewer is drawing a volumetric density field, but figure export renders
@@ -131,7 +133,9 @@ There is no “export anyway” action: resolve every listed blocker first.
 ### Likely causes (ordered)
 
 - You exported **Full vector** with too many visible points.
-- Category explosion: a huge categorical legend dominates the layout and file size.
+- Category explosion: a huge categorical legend dominates the file size (its
+  box is never larger than the plot, so past a few thousand categories the
+  entries are drawn too small to read, and every one is still written).
 - Multi-panel export with many views and a large plot size.
 
 ### How to confirm

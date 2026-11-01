@@ -49,8 +49,10 @@ If you’re here because “I loaded a session but it looks different”, start 
 5) {doc}`05_share_workflows_links_sessions_data_files` (how to share with humans)
 6) {doc}`10_troubleshooting_sessions` (the big “why did this fail?” map)
 
-From Python: read a session from a notebook viewer
-({doc}`../../python_package/e_jupyter_hooks/10_session_bundles_get_session_bundle`)
+From Python: bring results back with `viewer.pull(adata)`
+({doc}`../../python_package/g_api_reference_coverage/api/round_trip`), read a
+session from a notebook viewer
+({doc}`../../python_package/e_jupyter_hooks/10_session_bundles_request_session_bundle`)
 and apply it back to an AnnData
 ({doc}`../../python_package/e_jupyter_hooks/11_session_bundles_apply_session_to_anndata`).
 
@@ -59,7 +61,7 @@ and apply it back to an AnnData
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Data mapping group.
+:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Subsampling and Data mapping sections, each one line with its summary.
 :width: 532px
 
 The Session panel gathers every loading path under **Open data** and keeps the **Save** and **Load** buttons under **Session file**, directly below it.

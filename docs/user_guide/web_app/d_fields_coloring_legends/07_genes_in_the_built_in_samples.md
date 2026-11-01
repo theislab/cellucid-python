@@ -33,9 +33,12 @@ Type a name the loaded dataset does not publish and the dropdown replaces the
 result list with three lines:
 
 - **No gene matches**, followed by your query in quotes;
-- *This dataset publishes N gene names, chosen when its file was written and possibly
-  a subset of the source data. Check for typos too.*, where *N* is the loaded
-  dataset’s own published gene count; and
+- *Searched the N genes of this dataset, named by its var index; another var
+  column of the file (symbols) can name them instead.*, where *N* is the
+  loaded dataset’s own gene count
+  and the source is the one **Gene names** uses (`var['feature_name']` once a
+  column is chosen there), with a **Choose gene names…** button that opens it;
+  and
 - a **Why a gene may be missing** link, which opens
   {doc}`05_troubleshooting_fields_legends`.
 

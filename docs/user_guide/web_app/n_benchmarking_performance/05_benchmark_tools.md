@@ -277,16 +277,31 @@ analysis no longer changes your shader quality as a side effect.
   textures are stacked in layers of `MAX_TEXTURE_SIZE` rows, so a GPU that
   reports 8,192 (Firefox) holds as many points as one that reports 16,384, and
   every draw is split into calls of at most 16,777,216 points, below the
-  30,000,000 vertices Firefox accepts in one call. The engine's own ceiling is
-  the size of one GPU buffer: a 3D position stream of 12 bytes a point stops
-  at about 178 million points on Chromium and Firefox.
-- What you will meet before that ceiling is memory: about 41 bytes per point
-  for a 3D pattern and 31.5 for the 2D `flatumap` pattern, tab memory and GPU
-  memory together — about 2 GB at 50,000,000 3D points and 10 GB at
-  250,000,000. On a machine that cannot
-  allocate it the request fails as an allocation error, which is the honest
-  outcome — the limit that binds is your machine's memory, and the control does
-  not pretend to know what that is.
+  30,000,000 vertices Firefox accepts in one call. No GPU buffer limits it
+  either: positions and colours are stored in segments of 16,777,216 points,
+  one buffer each (one buffer of 3D positions used to stop at 178.8 million
+  points). Nor does the browser's largest single array: Chromium allocates at
+  most 2,145,386,496 bytes in one `ArrayBuffer` (3D positions of 178.8 million
+  points; WebKit 4 GiB, Firefox 16 GiB), so positions it refuses are made in
+  a WebAssembly memory instead, which holds up to 4 GiB on all three engines
+  (357.9 million 3D points). The worker generates them there and sends them
+  to the page in pieces of 192 MiB, which the page puts back together in one
+  memory of its own. Measured in Chromium: 178,956,971 3D points (2^29 + 1
+  floats) generated, assembled and handed to the tree worker in 11 s, the
+  tree built in 50 s.
+- What you will meet before that is memory. Measured in Chromium on an Apple
+  M1 Pro (16 GB), as the physical memory of the tab's renderer and GPU
+  processes together: 100,000,000 3D points take 5.4 GB once drawn, 7.8 GB
+  as their levels of detail are taken in and 5.0 GB after (50 bytes a
+  point); 100,000,000 `flatumap` (2D) points take 4.3 GB once drawn and
+  5.3 GB after (53 bytes a point), and 150,000,000 take 6.0 GB once drawn,
+  6.8 GB as their levels of detail are taken in and 6.5 GB after. Past
+  about 175 million 3D points the whole app would need about 9 GB steady and
+  14 GB while its levels of detail are built, more than a 16 GB machine
+  holds. On a
+  machine that cannot allocate it the request fails as an allocation error,
+  which is the honest outcome — the limit that binds is your machine's
+  memory, and the control does not pretend to know what that is.
 - The controls in this panel start out disabled and become usable once the app
   has finished wiring them. If a preset looks greyed out for a moment during a
   slow start, that is the intended behaviour — see

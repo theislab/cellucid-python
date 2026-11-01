@@ -53,6 +53,54 @@ Hard constraints:
 
 ### Point vertex streams
 
+**Visibility is the alpha texture; a colour's alpha byte layers it.** A cell
+is shown or hidden by its view's transparency alone, which the renderer holds
+as an R8 linear texture (`u_alphaTex`); a filter writes the transparency and
+never the colours (no copy of a colour array a kept view shares, no colour
+re-upload). The colour's alpha byte says how the cell is layered, bottom to
+top (`alpha-visibility.js`): `UNREAD_ALPHA_BYTE` (253) for a cell a gene
+sample did not read, `BENEATH_ALPHA_BYTE` (254) for a field's no-value grey
+(a gene's cells read that do not express it, a missing value), 255 for the
+rest. `colorLayersOf` reads a published colours array once (whether it is
+layered, how many cells are not read). A layered view is drawn one pass a
+layer over the same slots and ranges (`u_drawPass` 1 then 2), the grey
+first, so the coloured cells lie on top in 2D blending order; in 3D the grey
+pass yields in depth by one drawn point diameter (`u_yieldDepth`), so a
+coloured cell on the same surface shows while a cell well in front still
+occludes. Every level of detail, culled range and kept view draws it so; a
+figure draws the grey cells first too (`drawnSequence`).
+
+**Cells a gene sample did not read** (`rendering/read-cell-layer.js`) take a
+pass of their own first (`u_drawPass` 3): flat (no lighting), at the level's
+size, without depth writes (so every cell read shows over them in 3D too),
+in one colour, `u_unreadColor`, made from the view's background by
+`unreadCellColor`. That colour is the background moved toward the grey for
+0 by 8 CIE L*, or half the way where the two are closer, so the map keeps
+its shape, recedes, and never looks like a 0; the viewer sets it with every
+background (`setLayerBackground`, which also sets the grey for 0,
+`u_zeroColor`, from the same background: `zeroCellColor`; decision record
+{doc}`28_decisions_rendering_layers`). The cells read are then drawn larger:
+`readCellSizeMultiplier` projects up to 8,192 cells of the map and as many
+read cells each frame (under a millisecond at any size). It measures the
+map's area on screen as the cells of an occupancy grid that hold a probe,
+and takes the diameter at which the read cells shown would cover 40 % of
+that area. The multiplier never goes below 1 (the normal size), nor above
+the square root of the drawn cells over the read ones: a sample of every
+cell draws at the normal size. On a whole-screen map, 2,000 of 2.3M cells
+draw about ten times larger; 1M of 10M are dense already and draw normally.
+The read cells are drawn at every level of detail from their own slot list,
+`high-perf/read-cell-index.js`: an element buffer, 4 bytes a read cell,
+drawn with `drawElements` over the store's own vertex arrays, so nothing is
+copied. It is used when no more cells are read than the level draws, and is
+made again when the colours, the store's order or its segments change. A
+level with fewer cells than that draws its own share of the read cells, by
+range. Picking follows the same rule (`getCurrentPointLayers`): an upper
+layer wins (in 3D, any read cell over a cell not read), read cells are found
+at their drawn size, and when drawn at every level, outside the level too.
+Figure export draws the same three layers (`FigurePointLayers`, the faded
+colour made from the figure's own background) in PNG, Hybrid and both
+vector strategies.
+
 Full detail is drawn from two `ARRAY_BUFFER`s bound into one VAO:
 
 | Attribute | Stream | Layout | Bytes per point | Usage |
@@ -83,11 +131,14 @@ neither stream.
 layers of `MAX_TEXTURE_SIZE` rows as the count needs; a count that fits one
 row gets one row exactly as wide as the count, so its first upload covers the
 whole image (Firefox clears an image a first upload covers only in part). The
-alpha texture, the permutation and the permute pass's source all use it, and a
+alpha texture, the permutation, the permute pass's source and the velocity
+overlay's per-cell textures (vector field, positions, visibility and spawn
+table, `rendering/overlays/shared/packed-texture.js`) all use it, and a
 shader finds item `i` with a shift, a mask and one division (`linearTexel`). A single 2D texture
 used to cap them at `MAX_TEXTURE_SIZE²` items: 67,108,864 on a GPU that
 reports 8,192 (Firefox on macOS), so a 3D position gather (three words a
-point) failed there above 22.4M points.
+point) failed there above 22.4M points, and the velocity overlay refused
+datasets above 67.1M cells there (268M where the engine reports 16,384).
 
 **Unchanged panes keep their pixels.** The scene target (the multisampled
 target, or the default framebuffer with antialiasing off) is not cleared
@@ -120,12 +171,141 @@ issues consecutive ranges of at most 16,777,216 vertices. Draws execute in
 submission order, so the image (and transform-feedback output) is that of one
 draw; a 100M-point frame costs at most 6 extra calls.
 
-**Draw order.** A geometry's points are stored on the GPU in the draw order of
-the spatial tree over them (`SpatialIndex#drawOrder`, computed by
-`high-perf/draw-order.js`): grouped by LOD band, then by draw unit (a tree
+**No buffer holds more than one segment of points.** A WebGL buffer is capped
+by bytes (Chromium 2^31 − 2^21, Firefox 2^31 − 1, WebKit 2^32 − 1), so one
+buffer of 3D positions (12 bytes a point) would stop at 178.8M points on
+Chromium, and Direct3D 11 caps one resource lower still. Every per-point
+vertex store -- the live and kept views' positions and colours -- is a
+`PointStore` (`rendering/high-perf/point-store-segments.js`): consecutive
+segments of at most 16,777,216 slots, one buffer each (192 MiB of 3D
+positions, 64 MiB of colours). A view draws through one vertex array a segment
+(`SegmentedVertexArray`), one draw a segment in slot order; full detail, a
+reduced level's prefix and frustum-culled ranges (`splitRangesBySegment`, one
+`multiDrawArraysWEBGL` a segment) are split at segment boundaries, and the
+point shader adds the segment's first slot (`u_slotBase`) to `gl_VertexID`
+wherever it reads a per-slot texture. Highlights drawn from the store bind one
+VAO a segment too, and figure export's own context uploads each of its passes
+(points, centroid overlay, highlight rings) as segmented stores; a store the
+export's GPU refuses fails the export by name instead of drawing nothing. The same points are submitted in the same order, so the
+picture is the one-buffer picture byte for byte
+(`tests/browser/segmented-point-stores.spec.mjs` forces 4,096-point segments
+and compares every pixel and every stored word); a store of up to 16,777,216
+points is one buffer, as before. A refused allocation is one segment, and
+`PointStore`'s layout makes growing a store an append: full segments never
+move (`unchangedSegments`). Per-point textures are linear textures (below),
+addressed by signed 32-bit shader integers, so they hold up to 2^31 − 1
+items; the highlight renderer's slot-word buffer (4 bytes a slot) stays one
+buffer, which binds at 536M points on Chromium.
+
+**No CPU array is limited by one `ArrayBuffer`.** Engines cap one
+`ArrayBuffer` (measured: Chromium 2,145,386,496 bytes, WebKit 2^32, Firefox
+2^34), so 3D positions on the page would stop at 178.8M cells on Chromium. A
+WebAssembly memory holds up to 2^32 bytes on all three engines, and a typed
+array views it whole, so every per-cell array that an engine refuses as an
+`ArrayBuffer` is made in one (`utils/large-arrays.js`, `allocateLargeArray`;
+every reader allocation goes through it via `allocateTypedArray`): positions,
+vector fields, layouts grown or reordered in place, copies for figure export
+and the read-only facades. Only arrays the engine refuses take a memory
+(Chromium keeps about 120 memories alive in one page), and every consumer
+reads them as any other `Float32Array` -- picking, lasso, projectiles, figure
+export, kept views, sessions (the cell-order digest), the velocity overlay,
+edges. A memory's buffer cannot be transferred, and cloning a typed array
+copies its whole buffer, so such an array crosses threads in pieces of at most
+192 MiB (`PieceSender` → `PieceReceiver`, each piece transferred), assembled at
+the other end: the AnnData reader worker posts any array of a reply it cannot
+transfer that way (`{event: 'piece'}` before the reply), the generator worker
+its positions and colours, the figure-export client its uploads, and the tree
+worker assembles the slices it is sent. Embeddings and vector fields are read
+by row range and made in pieces of 2^24 cells in the reader worker
+(`embedding-payload.js`), each posted as it is made, so the worker never holds
+a whole one and a float64 `obsm` of any size is read. Past 4 GiB (357.9M 3D
+cells) no page can hold one array, and a read that needs one fails naming the
+bytes it needed. Measured in Chromium:
+178,956,971 3D cells (2^29 + 1 floats, refused as an `ArrayBuffer`) generated in
+the worker, assembled in a memory on the page, their bounds (1.0 s) and
+cell-order digest (3.0 s) read, and their tree built in the worker from slices
+(50 s).
+
+**Levels of detail are fixed counts in priority order.** A level of detail is
+the first `m` cells of the open cells' **priority order** (`data/cell-priority.js`):
+rank = the 32-bit hash `fmix32(position ^ fmix32(seed ^ 0x9e3779b9))` of the
+cell's original position, under the file's own seed for a priority-ordered
+file and the subsample's seed otherwise (the default seed for a whole file
+Cellucid did not write). The counts are one fixed ladder
+(`high-perf/draw-order.js`, `lodLadder`): 1,000 cells, then 5/4 of the level
+before (rounded down), and last every open cell, so a level's count, and
+therefore its cells, does not depend on how many cells are open (100M cells
+have 53 levels in 100 bands, 10M have 43 in 47, 1,000 or fewer one). Every reduced level is a
+uniform random sample of the open cells: it draws the cloud's density and its
+mix of categories as all cells do, up to sampling noise, and where a cell is or
+what it is never decides whether it is drawn
+(`tests/lod-priority-order.test.mjs` holds every level of a category-sorted
+atlas, culled and not, within five standard errors of the population's
+shares; `tests/browser/lod-priority-sample.spec.mjs` does the same for the
+drawn indices in the browser). A level of `m` cells is exactly the uniform
+subsample of size `m` with the same seed, and the same prefix is the first
+pass of a progressive analysis (`app/analysis/shared/progressive-cells.js`).
+The forced-level slider spans the ladder of the cells shown. The priority
+comes from how the dataset was opened (`cellPriorityOf`, set by
+`state.setCellPriority` → `viewer.setCellPriority` →
+`HighPerfRenderer#setCellPriority` right after the scene is published):
+
+- a priority-ordered file (`prepare()` / `cellucid_prepare()` write cells in
+  priority order) opened whole or by a prefix, and a subsample of a cell-level
+  method (`uniform`, `stratified`, `spatial`), are open **in** priority order
+  (`OPEN_ORDER_PRIORITY`): open cell `i` has rank `i`;
+- a `blocks` subsample opens whole runs of neighbours in run order, so its
+  cells are ranked one by one under its seed; so is every other share not
+  open in its own order (one opened in the file's cell order, a
+  priority-ordered file's share in file order, and a step of a share grown
+  from few chunks, its cells in chunk order);
+- every other dataset (a file Cellucid did not write, opened whole; a
+  synthetic benchmark) is ranked under the default seed.
+
+A ranked cell's rank is always that of its **identity**, its original
+position (`openOrder[i]`, else `kept[i]`, else `i`: what
+`data/cell-identity.js` names it by), never of where it is open: the same
+cell has the same rank in every order, step, view, revisit and session of a
+share, so its levels of detail, picking and the levels a figure exports
+draw the same cells first (`tests/lod-priority-order.test.mjs`). Until
+2026-10-30 a share not open in its priority order, chunk steps included,
+was ranked by open index under the default seed.
+
+**Cells open in priority order draw every level at once.** Their stores are
+published in open order, which is rank order, so a level is a prefix of the
+store as it is (`high-perf/lod-levels.js`, `RankLevels`): no tree, no
+permutation, no gather and nothing built per cell. A level is described by its
+count alone: its cells are the open cells `[0, count)`, in whatever order the
+store holds them, so the same record serves every band of the tree's adoption
+below (a consumer that iterates the cells in draw order, figure export, reads
+the store's order, `getViewDrawOrder`). The tree is built in the worker
+meanwhile, and its order is adopted afterwards (below). Cells ranked one by
+one (`blocks`, a whole foreign file) have no such prefix: their levels arrive
+with the tree.
+
+**One record of a level, one validator.** Every consumer of the current level
+(picking, highlights, connectivity edges, the velocity overlay's spawn
+sources, the highlight count, figure export) reads the same record,
+`LodMembership` (`high-perf/renderer-contracts.js`), published by
+`HighPerfRenderer#getCurrentLodMembership` and checked by the one
+`requireLodMembership`: `count`, `lodLevel`, `pointCount`, `dimensionLevel`,
+a `generationToken`, and either `admissionLevels` null (the level is the first
+`count` cells: `RankLevels`, and a tree over cells in priority order) or one
+byte a cell (a tree over cells ranked by hash), and `indices` (the level's
+cells in a tree's draw order) or null. A cell is drawn when
+`admissionLevels === null ? cell < count : admissionLevels[cell] <= lodLevel`
+(`lodMembershipAdmits`). Consumers check the fields they read, never the set
+of keys: six hand-made copies that pinned the key set made picking and the
+KNN edges throw at every rank-order level. Picking sizes a dot with the
+level's own size multiplier, as it is drawn (`getCurrentLODSizeMultiplier`).
+
+**Draw order.** A geometry's points are then stored on the GPU in the draw
+order of the spatial tree over them (`SpatialIndex#drawOrder`, computed by
+`high-perf/draw-order.js`): grouped by **band**, then by draw unit (a tree
 leaf in 3D, one of 64 coarse nodes in 1D and 2D), then by ascending cell
-index. Band `b` holds the cells the hierarchical order first
-admits at LOD level `b`; the last band holds the full-detail remainder. So:
+index. A band is a fixed run of ranks (`drawBands`): the ladder's steps, each
+split again at every multiple of `DRAW_BAND_POINTS` (2,097,152), so band
+boundaries are the same ranks whatever the cell count. So:
 
 - a reduced LOD level is one `drawArrays` **prefix** of the stored points;
 - full detail is `drawArrays` over all of them;
@@ -139,6 +319,90 @@ admits at LOD level `b`; the last band holds the full-detail remainder. So:
   exact cull. No per-point index is ever written or uploaded after the order
   is built, and a camera that does not move re-culls nothing.
 
+**A store takes its tree's order band by band, without blocking a frame.**
+Every band of a tree order holds exactly the cells of its ranks, only in
+another order, so a store in rank order can take the order one band at a
+time while it is drawn: after any number of bands, every prefix that ends on
+a band boundary -- every level -- still holds exactly its own cells. What a
+store holds is a `StoreOrder` (`high-perf/store-order.js`): slots
+`[0, adopted)` in the tree's order, slots of an earlier order below
+`orderedSlots`, and every later slot in rank order; the GPU reads the same
+mapping from one R32UI slot map (texel `s` is the cell of slot `s`) below
+`u_orderedSlots`, and takes slot `s` itself from there on. Each band is
+gathered in place from its own cells (`GpuPermuter#writeWordsRange`): its slot
+map texels are written, then its positions and the colours of every view
+presented on the store, copied from the store itself on the GPU (a band is at
+most 2,097,152 cells, one gather pass), so the page uploads 4 bytes a cell
+for the map and nothing else. That holds too for a band still in an earlier
+tree's order (cells kept by an Apply below a cut, or below the cells added):
+it holds the same ranks in another order, so for the gather its map texels
+first name the slot of that order holding each cell (`earlierSlotsOf`), then
+the cell; 4 more bytes a cell instead of the band's positions and colours from
+page memory. The earlier order's slot map already holds that order below its
+`orderedSlots`, so it is taken over when it is large enough (a cut, or a new
+tree over the same cells) instead of a new map being written. Only a band
+wider than one pass (a store segment forced smaller in tests) is read from
+page memory.
+
+Nothing in an adoption waits for the GPU. The slot map and the gather's source
+texture are allocated with their check read in a later frame when nothing
+kept by choice could be evicted to make room (a refusal could then only be
+reported); the bands' checks are read once, when the store holds the order
+whole or has given it up (`deferWebGLErrorCheck`'s `readAfter`), because in
+Chromium every `getError` is a round trip that waits for all commands queued
+before it, a whole frame of a large view, even after the fence passed; the
+permute pass reads the generic value of its attribute from the state shadow
+(`gl-state-shadow.js`, read once where the context is made) instead of
+`getVertexAttrib`, which waited the same way. A tree built under a priority
+the cells no longer have, whose order that priority decided, is dropped when
+it lands (`builtUnderStalePriority`, the rule `setCellPriority` applies to the
+trees it holds): before, a culling tree requested before a priority-ordered
+dataset's priority was set landed after it, was taken whole in one frame, and
+made the next tree's order be taken whole too (a 3.1 s frame at 100M 3D). A frame moves at most `STORE_ORDER_POINTS_PER_FRAME`
+(2,097,152) points into order, across every store, and asks for the next
+frame while bands remain; levels by rank are drawn meanwhile, and culling
+starts once every band is in order. A store of cells not in priority order
+takes its tree's order whole in one frame (its slots are not ranks, so no band
+is its own cells) and draws levels from then on.
+
+**Cells added or removed in place.** An Apply of a larger or smaller share of
+the same method and seed (`app/open-cells-resize.js`) keeps the stores of the
+cells kept (`viewer.resizeLiveCells` → `HighPerfRenderer#resizeLiveCells`):
+added cells are appended to the position and colour stores (`PointStore#resize`
+copies the one partial segment on the GPU and writes only the new slots), in
+rank order behind whatever order the store holds; removed cells are cut from
+the end, and where the store holds a tree's order past the cut, the band the
+cut falls in (at most 2,097,152 cells) is rewritten in rank order, so the first
+`n'` slots hold exactly the first `n'` cells. Nothing else is uploaded or
+reordered: levels by rank are drawn at once over the new count, and the next
+tree's order is adopted band by band as above. Colours are compared with the
+published ones over the kept cells and sent whole only if they differ (a
+colour scale over every open cell can change). The alpha texture, one byte
+a cell, keeps its storage whenever that holds the new count, and only the rows
+that change are sent: the kept cells' rows whose bytes moved, and every row
+from the one where the old and new counts meet (`_resizeAlphaTexture`,
+`resizedLinearPlan`: the same shape, so the same shader addressing). A
+progressive opening names the cells it grows to (`capacity`, from its
+plan's target). Each store segment and texture that must be made anew is
+made once for that target, so every later step up to it, and every cut, only
+writes: no allocation, no GPU copy and no `gl.getError`. Such a read waits
+for every command before it, and at 10M cells the read-backs of each step
+cost 144 ms, with 100 ms more for the new texture. The highlight byte texture
+and the read cells' slot list follow the same rule: storage that holds the
+new count is written in place. After the new tree is adopted, the stores and every frame
+(full detail, culled, a reduced level, culled) are byte-identical to a direct
+open of the same cells (`tests/browser/lod-rank-order-resize.spec.mjs`, 2D and
+3D, a raise and a lower across 4,096-point segments).
+
+A ranked order is two passes of a 16-bit radix sort over the ranks in the tree
+worker (82 ms for 10M cells in Node on an Apple M1 Pro; ranks are a bijection
+of positions, so a dataset opened whole sorts the ranks alone and recovers each
+cell from its rank). Within a band the units and the ascending cell order are
+as before, so frustum culling draws each unit's own share of the same sample,
+and full detail draws every cell. A tree over cells open in priority order is
+banded whether or not levels were asked for (it costs nothing there); levels
+built under another priority are dropped and built again.
+
 Neighbouring points are neighbours in memory and on screen, which is also what
 makes the stored order faster at full detail: 10,000,000 points drew in 18 ms
 against 68 ms in source order on Chromium (15 against 57 on WebKit, 14 against
@@ -151,8 +415,9 @@ one run on a loaded machine).
 Positions are per geometry, so each geometry carries its order; colours are
 per view, and each view's colour store is gathered into the order of the
 geometry it shows. Alpha stays in source order in its R8 texture, read through
-the order's R32UI permutation texture (`u_useLodIndexTex`: texel `k` is the
-cell stored in slot `k`), so a visibility change still touches neither stream.
+the store order's R32UI slot map (`u_orderedSlots`: texel `k` is the cell
+stored in slot `k`, below that count), so a visibility change still touches
+neither stream.
 Picking, highlights, overlays, analysis and export all read source-order CPU
 arrays; nothing but the point draw reads the stored order.
 
@@ -162,11 +427,124 @@ draw order (banded by LOD when LOD is on) are built together in a worker
 way), so loading a dataset, turning LOD or culling on, keeping a view or
 showing another representation never runs a tree build on the main thread
 (about 2.2 s at 10M points before). Until a view's tree lands, the view draws
-full detail from its store as it is; when it lands, the renderer installs it
+levels by rank when its cells are open in priority order, else full detail,
+from its store as it is; when it lands, the renderer installs it
 and asks the viewer for a frame (`onAsyncTreeReady`). A build whose positions
-were replaced before it returned is dropped. Positions of any size go to the
+were replaced before it returned is dropped. On Chromium a build with levels is first
+admitted against the tab's JavaScript heap (`jsHeapSizeLimit`): a build that
+runs on the main thread (where there is no worker) is admitted with its whole
+peak, about 64 B a point, since a heap that cannot hold it collects forever
+instead of failing; a build in the worker is admitted with what the main
+thread receives of it, the decoded tree's nodes (2 B a point, measured 1.1–1.5);
+the draw order and leaf ids are typed arrays, outside the heap the limit
+bounds. In 3D the tree's leaves are its draw units, so their ids are the draw
+order's own runs (`forEachLeafRun`: one run of the order a band) and the tree
+keeps none (`dropDerivableLeafIds`): 4 bytes a cell that neither cross from
+the worker nor stay on the page. A 1D or 2D unit is a coarse node whose cells
+keep source order, so its leaves keep their ids. With that, levels of detail come up for 100,000,000 points, where the
+whole-build projection refused them (6.2 GB projected over a 4.1 GiB cap). Positions of any size go to the
 worker, in transferred slices of 64 MiB, one task each, so no main-thread task
-copies a whole geometry and the main thread never holds a second copy. A query that needs a tree at once (a click-time pick on a pane whose
+copies a whole geometry and the main thread never holds a second copy. The
+worker builds one tree at a time, and a geometry's positions are sent only
+once it has answered the build before (`_startNextSpatialTreeJob`): four panes
+of four 3D representations used to post all four position copies into the
+worker's queue at once; now it holds one. A build of the tree alone still
+waiting its turn makes the levels too when they are asked for meanwhile,
+instead of a second build of the same positions.
+
+**Cells an embedding does not place are left out of it, not refused.** A
+modality that did not measure every cell (MuData), or any embedding with
+non-finite rows, gives those cells NaN positions in every axis: the one mark
+(`rendering/unplaced-positions.js`). The viewer accepts a row that is finite
+in every axis or NaN in every axis (`assertCellPositions`), and nothing else.
+NaN fails every comparison, so bounds (`readPositionBounds`), projections,
+picking and lasso leave the cells out by themselves; a spatial tree holds
+the placed cells only (`buildSpatialTree`), and each band of its draw order
+ends with its unplaced cells, after the last leaf's range
+(`buildDrawOrder`), so a culled draw never reaches them. NaN never goes to
+the GPU: a position store, a kept view's geometry store, the edge position
+texture, the velocity textures and the figure-export upload take a stand-in
+(`positionsForGpu`; a zero vector for velocity), made only for a geometry
+that has unplaced cells and only for the upload, and every vertex shader
+that reads a cell's position rejects it (`isUnplacedPosition`: points,
+highlight rings, edges). The smoke volume leaves them out; the edge slider's
+first K counts only edges whose both ends are placed in the pane
+(`connectivityVisibleCells`), so the count and the lines drawn agree; and
+no velocity particle spawns at an unplaced cell (the spawn table skips
+them). They are still cells: filters, analyses and every other embedding
+keep them.
+
+**Level of detail and culling turn on when they are needed.** Both start off;
+once per opening (a dataset, cells grown or cut, another representation) the
+viewer measures frames of every cell of every presented pane
+(`rendering/full-detail-frame-cost.js`, three frames, which it asks for as
+soon as it is armed, once the publication it measures has committed). Each
+frame is measured as two shares, each as bounds the true value lies within:
+the page's (from the frame's start to its last command, read from the clock)
+and the GPU's. The GPU's share is read with the best instrument the browser
+offers: the GPU timer (`EXT_disjoint_timer_query_webgl2`, a `TIME_ELAPSED`
+query around the frame's commands, exact whenever it is read; Chromium on a
+hardware GPU has it, Chromium's software GL, Firefox and WebKit do not,
+measured 2026-11-01), else a fence polled in tasks: the GPU finished after
+the last poll that found it unsignaled and by the poll that found it
+signaled (6 to 10 ms apart in WebKit and 4 to 6 ms in Chromium on an idle
+Apple M1 Pro, up to 150 ms on a loaded hosted runner), so its share is at
+most the time to that poll and at least the time to the poll before, less
+the page's share. A browser pipelines frames, so a frame lasts the longer of
+the two shares. A measurement's answer bounds its cheapest frame (the least
+lower bound and the least upper bound of its samples, so a first frame or a
+stall does not count), and its spread is how far the next-cheapest frame is
+proven to lie above it. When the GPU's share alone is proven over
+`INTERACTIVE_FRAME_BUDGET_MS` (33 ms, 30 frames a second: a UX target; a
+page slow on its own thread is not made faster by drawing fewer cells), the
+render controls turn both on (level of detail only where the ladder has a
+reduced level: below its first count, 1,000 cells, every level is every
+cell) and ask for the frames drawn with them, once their trees are built and
+adopted, to be measured the same way (`verifyFullDetailFrameCost`). No
+automatic choice may make a frame slower, and the verdict is what the bounds
+prove (`verdictOf`): `faster` when the chosen frames' upper bound lies below
+the frames of every cell's lower bound by more than either spread, and they
+stay and the Performance tip says what was measured
+(`onFullDetailFrameCost`, `render-controls.js`); `not-faster` when the
+frames of every cell's upper bound is not above the chosen frames' lower
+bound by more than it; `unresolved` when the bounds overlap, which no exact
+instrument reaches. Not proven faster, they go off again for this framing
+and the tip says which ("no faster here", or "closer than this browser can
+time", with the bounds measured as ranges), and the next framing (a camera
+that moved and settled, another focused pane) is measured afresh. The rule
+before 2026-11-01 added the larger of the spread and the poll interval to
+the cheapest sample: a 150 ms poll on a busy runner called frames measured
+174 ms against 324 ms "no faster" (Web contracts run 41307458156). The
+benchmark's pass profiler times passes with the same extension; timer
+queries cannot nest, so the measurement times no frame while a pass query
+is open (its fence measures it), and a pass that begins while the
+measurement times the frame is not timed (`untimedPasses`). The rule does
+not branch on the dimension:The rule does
+not branch on the dimension: a 2D view at full framing, whose level of
+detail stays at every cell, is measured no faster with culling (721 against
+438 ms a frame at 1M cells on software GL) and keeps every cell. Only frames drawn with level of
+detail off are measured (culling may be on: a frame of the whole view still
+draws every cell); an opening that starts with level of detail on, or where
+it is turned on (by a person, a session or a caller of the viewer), is not
+measured, even if it is turned off again, and an answer that lands after it
+was turned on is dropped: the choice is made. Every measurement the viewer
+starts -- a dataset's cells published, grown or cut, another representation, a
+restored graphics context, a new framing -- changes what the last answer was
+measured on, so it is said first (`onFullDetailFrameCost`, `kind`
+'measuring'): the render controls turn their own automatic choice off then,
+the frames of every cell are measured, and the choice is turned on and
+verified again exactly as at the first opening (on a restore the measurement
+starts once the viewer accepts changes again). A person's own change to
+either box stands for the page. A caller of
+the viewer that sets either itself (`setAdaptiveLOD`, `setFrustumCulling`: the
+benchmark matrix runner's configurations, a notebook, a browser test) makes
+that opening's choice: every report and every such call names the opening it
+belongs to (`onFullDetailFrameCost`, `onPerformanceSettingsChanged`), and the
+render controls leave the rest of that opening's reports alone and stop
+waiting for its next framing. Before, a verdict landing after such a call
+turned the caller's culling off or level of detail on again, mid-benchmark and
+mid-test (hosted runners' software GL measures most openings too slow: Web
+contracts run 41213981681). A query that needs a tree at once (a click-time pick on a pane whose
 index has not arrived, projectiles) still builds a plain tree directly; the
 viewer asks the worker for every large pane's index when cell info is on and
 when a selection tool is armed, so this is rare.
@@ -174,7 +552,13 @@ when a selection tool is armed, so this is rare.
 **A store adopts its tree's order in the frame that first needs it,**
 whenever a tree exists, in every dimension (a hover tree counts too): in 3D
 the order draws a 10M-point full-detail frame about 3x faster, in 2D about
-3x faster too (21 ms against 67 ms, no vsync, Apple M1 Pro). Before a tree
+3x faster too (21 ms against 67 ms, no vsync, Apple M1 Pro). The order is an
+input of the picture: translucent points (2-D blending, a fogged 3-D point)
+overlap in it, so the frame after the adoption is not the frame before it.
+`isPresentedGeometrySettled` is therefore false while a tree is being built
+for a presented view's positions, or lies published but not yet adopted, with
+culling and level of detail off too (a cell lookup's tree,
+`prepareCellPicking`). Before a tree
 exists a geometry is stored in source order, straight from the published
 arrays with no client copy. The adoption uploads the permutation (4 bytes a
 point), then rewrites the store's positions and the colours of every view
@@ -186,7 +570,51 @@ bit for bit. A store still in source order is its own source: its words are
 drawn into the texture on the GPU (one point a word, at its texel, into the
 texture as a colour attachment), so nothing is uploaded from the page; only a
 store in another order, or whose first upload is still pending, uploads its
-words. (An upload from the store bound as `PIXEL_UNPACK_BUFFER` is the
+words. Above 16,777,216 points (`GATHER_CHUNK_POINTS`) the gather never holds
+the whole source on the GPU: it uploads the source one chunk of points at a
+time from page memory, and every target range of at most a chunk of slots
+takes, in each pass, the slots whose source point is in that chunk, keeping
+the rest (read back as a vertex attribute, written to a chunk-sized scratch
+store and copied over the range on the GPU). Its transient memory is one
+chunk-sized source texture and one chunk-sized scratch store at any size --
+2 × 192 MiB at 100M 3D points, where a whole-source texture was 1.2 GB beside
+the 1.2 GB store. The scratch store is made once a write, not once a chunk. The
+vertex attribute that read a range lets go of it after the passes onto the
+gather's own anchor buffer, never onto no buffer: Chromium's command-buffer
+client never sends a vertex attribute pointer made with no `ARRAY_BUFFER`
+bound to its GPU process, so the vertex array kept the store's last segment,
+and the next gather writing that segment with it bound drew
+`INVALID_OPERATION` ("a transform feedback buffer that would be written to is
+also bound to a non-transform-feedback target"): a kept view of more than one
+segment (16.7M cells) could not be recoloured. Every attribute is released
+that way (`releaseVertexAttribute`, `rendering/gl-utils.js`;
+`tests/vertex-attribute-release-contract.test.mjs` rejects a pointer made
+with no buffer bound), which also frees a dormant kept view's colour store
+when it is released for memory: on Chromium its vertex arrays kept every
+segment allocated (128 MiB measured for 32M cells). The error queue is read
+once a chunk, after its passes and before the next chunk allocates; a write
+whose passes raised an error is run again with every call checked, so the
+error names the call, the pass and the segment. That read waits for the
+GPU process to run the passes, and on Firefox and WebKit for the GPU (10-13
+ms after a 10M-point write; Chromium under 1 ms), so writes made often -- a
+view's highlight words, a draw order adopted a band a frame -- are checked
+later (`deferWebGLErrorCheck`, `rendering/gl-errors.js`): a fence goes after
+the write, each frame asks whether the GPU passed it (which never waits),
+and the queue is read once it has, so the read waits for nothing (measured:
+read on the next frame). A failure then goes to the earliest outstanding
+write whose run, call by call, names it, and says which writes the read
+covered; a write whose source is its own store is never run again. A
+synchronous check that reads such an error first names the writes still
+outstanding, and the GPU gather hands one its own calls did not raise to
+them. That texture is what kept a 100M-point 3D store from ever
+adopting its order: Chromium refuses it (`INVALID_OPERATION` on its storage;
+the 800 MB texture of 100M 2D points is accepted), the refusal threw in every
+frame, and the view drew all 100M points at every forced level with no
+message (measured: every level drew 100M points, 383 ms a frame; with the
+chunked gather the levels draw 2.3M–51M points). An adoption the GPU refuses
+now says so once (a notification naming the view, its point count and the
+GPU's refusal), the view draws at full detail, and the store tries again when
+LOD or culling is toggled. (An upload from the store bound as `PIXEL_UNPACK_BUFFER` is the
 obvious copy, but Firefox on macOS warns on every one.) At 10M 3D points
 the adoption takes 14–19 ms of CPU, once (it uploaded 120 MB of positions
 and 40 MB of colours: 32–35 ms); turning LOD on used to block the page for
@@ -275,9 +703,12 @@ on source order.
     then lets the viewer stop drawing.
   - A build reads the GL error state once, after its allocations (each read
     is a synchronous round trip that waits for every queued command). A
-    rebuild asked for inputs identical to the shown volume's (positions,
-    colours, visibility, outlier quantiles and threshold, grid size, gamma —
-    compared byte for byte against copies kept with the volume) does no work.
+    rebuild asked for inputs identical to the shown volume's (the same
+    positions, colours, visibility and outlier-quantile arrays, held by weak
+    reference, the colours and the visibility at the same write counts
+    `getSmokeDensitySource` reports — every write to them goes through
+    `per-cell-array-ownership.js`, which counts it — and the same threshold,
+    grid size and gamma) does no work. Nothing per cell is copied for it.
     It requires `EXT_color_buffer_float`,
     `EXT_float_blend`, `MAX_3D_TEXTURE_SIZE` ≥ 128 and `MAX_TEXTURE_SIZE` ≥
     1536. These are checked once per context, up front and without allocating,
@@ -292,7 +723,8 @@ on source order.
     reduction textures are deleted on success and failure, and every touched
     GL binding/capability is restored. Programs plus the corner/quad buffers
     are cached per context, disposed with `SmokeRenderer`, and invalidated on
-    context loss. The viewer requires a page reload after context loss.
+    context loss; a restored context gets a new `SmokeRenderer` with the same
+    settings, and the volume is built again from its source.
   - The user notification duration covers the synchronous renderer call,
     including validation and publication. The `[GPU Splat] … submission`
     console duration starts after the input checks and measures command
@@ -303,11 +735,11 @@ on source order.
   - Backend: `rendering/connectivity-edge-layer.js` (which edges a pane shows:
     `rendering/connectivity-edge-selection.js`).
   - The graph stays on the CPU as the reader worker built it
-    (`ConnectivityEdges`, `data/connectivity-edges.js`): its edges as 12-byte records
-    already in the draw order below (both endpoints' cells and the `float32`
-    relative strength), every cell's neighbours in one list (8 bytes an edge,
-    also the k-NN tool's adjacency), and the forward offsets — about 20 bytes
-    an edge. Nothing in it is shuffled, copied or ordered on the page.
+    (`ConnectivityEdges`, `data/connectivity-edges.js`): its forward
+    adjacency — each edge once, at its smaller cell, with its partner and its
+    `float32` relative strength, and the forward offsets — 8 bytes an edge
+    and 4 a cell (a k = 15 graph of 50M cells: 3.0 GB). Nothing is stored in
+    draw order and nothing is copied on the page.
   - A pane shows the first K of its visible edges — both endpoints pass the
     pane's filters and, with level of detail on, its current level — in one fixed
     random order: a keyed Feistel bijection of the edge indices (each round a
@@ -316,13 +748,23 @@ on source order.
     K is the edge slider's value: 250,000 (or every edge, if fewer) for a newly
     loaded graph (`CONNECTIVITY_DEFAULT_VISIBLE_TARGET`), the same in every
     pane. A pane added later selects on its first frame.
-  - A selection takes the cheaper of two exact walks: reading the ordered
-    records from the start until K are visible (sequential, O(K / visible
-    fraction)), or ranking only the visible cells' forward edges (the last of
-    each cell's neighbours) and keeping the K smallest ranks (O(cells + visible
-    cells' edges)). On a
-    6.3M-edge graph a legend click with edges shown costs about 2 ms (at most
-    about 10 ms) instead of 14–260 ms.
+  - The edge of rank `r` is `order.at(r)`; its destination and strength are
+    read by edge, and its source is found by binary search within one block of
+    128 edges (`blockSources`, the source of every 128th edge). The records of
+    the first 4K ranks are kept in rank order (the shown-order prefix, 48 bytes
+    a shown edge, made when K is set and kept across filter changes); records
+    are written in edge order (each chunk's edges sorted, their sources found
+    in one forward walk), so K records cost K order steps and one pass.
+  - A selection takes the cheaper of two exact walks: reading ranks from 0
+    until K are visible (the prefix's records sequentially, past it each rank's
+    edge, a hidden destination costing no source search; O(K / visible
+    fraction)), or ranking only the visible cells' forward edges and keeping
+    the K smallest ranks in at most 2K slots (O(cells + visible cells'
+    edges), O(K) memory). Both give the records of the old ordered-records
+    layout bit for bit (proved against it on synthetic graphs: 648 selections,
+    12.3M records). At 10M cells (70M edges, K = 250,000): no hidden cell
+    0 ms after the prefix (about 0.1 s once, when K is set); a filter leaving
+    half the cells 4–11 ms; one leaving a fifth about 0.2 s (the cell walk).
   - Only those K edges reach the GPU: their 12-byte records, from which a
     transform-feedback pass writes one 28-byte instance record each (both
     endpoints' positions, missing axes 0, and the strength) by copying bits
@@ -336,8 +778,20 @@ on source order.
     and gathers, and a representation switch only gathers.
   - The visible-edge count for the slider's range is exact at once when the
     selection ranked the visible cells' edges; otherwise it is counted over the
-    visible cells in time-boxed slices after the selection, so a filter change
-    never waits for it.
+    visible cells' forward edges in time-boxed slices after the selection, so a
+    filter change never waits for it.
+  - The k-NN tool does not need the page's graph: the graph is checked once
+    (its edges built, the check recorded in `app/main.js`, the edges let go
+    unless shown), and the tool reads the rows of each degree's frontier from
+    the file in the reader worker
+    (`getConnectivityRows`, 65,536 cells a read, the next read issued while one
+    is walked; `KnnExpansion` in `selection-gesture-queries.js`). While a view
+    shows the graph, so the page holds its edges, a frontier is answered from
+    them instead (`forwardEdgeRows`, two passes over every edge) whenever that
+    is measured faster than reading its rows from the file (`knnRowReader` in
+    `app/main.js`). A released
+    drag commits its step once its rows have arrived, after every step released
+    before it.
 
 - **Highlight tools**
   - Backend: `HighlightTools` (`cellucid/assets/js/rendering/highlight-renderer.js`)
@@ -430,9 +884,14 @@ Cellucid can render:
   views not presented this frame are released first
   (`HighPerfRenderer._releaseDormantSnapshotStores`; the viewer reports the
   presented views every frame with `setPresentedViews`), and a released view
-  is rebuilt from its own colours and alpha bytes when it is next drawn or
-  edited (`_restoreSnapshotStores`), drawing exactly what it drew. Only a set
-  of views shown at once that does not fit is refused, by the device.
+  is rebuilt from its published colours and transparency (both kept by
+  reference) when it is next drawn or edited (`_restoreSnapshotStores`),
+  drawing exactly what it drew. Only a set of views shown at once that does
+  not fit is refused, by the device. A kept view holds no CPU copy of its R8
+  image (before: a padded copy per view and a shared staging array, 1 byte a
+  cell each): as for the live view, a transparency change is compared with
+  the published values and only the rows whose bytes moved are sent, through
+  one bounded 1 MiB scratch; `null` transparency shows every cell.
 
 Key idea:
 - A snapshot view is not “a second dataset”; it is a second **view context** with its own camera/representation/filter/field choices, rendered from the same underlying point identity index space.
@@ -574,6 +1033,17 @@ Vector field overlays are conceptually simple (“animate particles along vector
 Implementation notes:
 - The overlay is “opt-in”: it is initialized only when enabled/needed.
 - When visibility changes, `viewer.updateTransparency` marks the overlay “visibility dirty” so it can lazily rebuild spawn sources.
+- Particles spawn from a table of at most `spawnTableSize` (65,536) visible
+  cells. It is filled by walking the candidates (the level's cells, or every
+  cell) in a fixed order: start, then a step coprime with their count near
+  its golden ratio, so any run of them spreads over the cells. Each respawn
+  epoch (one particle lifetime) refills the table from where the last one
+  stopped. Over successive epochs every visible cell is a spawn source, each
+  once a cycle, at 10M cells as at 100k, not a fixed 65,536 of them. A refill
+  reads only as many cells as it takes and keeps the visibility texture; a
+  table that already holds every visible cell is never refilled. A change of
+  inputs (visibility, level, positions) starts a full build, which checks
+  every transparency value first.
 
 Developer advice:
 - Avoid coupling overlay state to UI controls directly; route it through state events and viewer methods.
@@ -967,19 +1437,34 @@ Mitigation:
 ### WebGL context lost
 
 Symptoms:
-- canvas freezes
+- a dialog says the graphics were reset by the browser and are being restored
 - DevTools shows “WebGL context lost”
 
 Causes:
+- a GPU process crash or reset, a driver timeout
 - GPU memory pressure (large datasets + high settings)
-- browser tab throttling
-- driver instability
+
+What happens (`rendering/viewer.js`, "Lost and restored graphics"): the
+viewer asks for the context back (`preventDefault` on `webglcontextlost`),
+fences every GPU owner without a GL call, and captures the session at once
+(`app/graphics-reset-session.js`: the same bundle Save session writes, read
+from CPU state), which the dialog offers. When the browser restores the
+context, every GPU object is made again from what the CPU holds
+(`restoreLostGraphics`): the renderer with its settings (quality, level of
+detail, culling, forced level, cell priority), the live cells, each kept view
+with its own geometry, centroids and colours, the highlights
+(`HighlightTools#resumeRendering`), the connectivity edges (the layer's
+`suspend`/`resume`), the grid, studio and centroid programs, the antialiasing
+target and smoke settings; the velocity overlay and the smoke volume are drawn
+again by their owners (`onGraphicsReset`, the smoke source change).
+Filters, selections, kept views and analyses never leave the page. Only if
+restoring fails does the dialog offer Reload, and the captured session is
+written to disk first. `tests/browser/graphics-context-restore.spec.mjs`
+proves the same pixels after a restore on every engine.
 
 Mitigation:
 - reduce smoke settings / disable heavy overlays
 - lower dataset size for reproduction
-- reload the page after context loss; restored contexts are not reused by the
-  current viewer
 - use the performance troubleshooting docs: {doc}`../n_benchmarking_performance/index`
 
 ---

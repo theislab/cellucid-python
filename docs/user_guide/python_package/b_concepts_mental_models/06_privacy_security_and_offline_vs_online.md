@@ -5,7 +5,7 @@
 **What you’ll learn:**
 - When your data stays local vs when it can be exposed
 - What a non-loopback bind publishes on a shared machine, and how to bound it
-- What the Python server is doing with `cellucid.com` (hosted UI assets)
+- Where the viewer UI comes from (`www.cellucid.com`) in a notebook and in a browser tab
 - What source access the viewer requires in firewalled environments
 
 ---
@@ -21,14 +21,23 @@ viewer source.
 
 ## “Does my dataset get uploaded to cellucid.com?”
 
-### Notebook/server modes (most `cellucid-python` usage)
+### Notebook mode (`show_anndata`)
 
-By default:
+- the browser loads the app's code from `https://www.cellucid.com` (or the
+  copy you name with `web_source_url=`) into the widget's output,
+- the app reads your dataset from the kernel through the notebook's own
+  connection; no port is opened and no server is started,
+- the widget's page is a viewer page (`?viewer=embedded`): it sends **no usage
+  analytics**, although its code comes from www.cellucid.com (the hosted app
+  reports usage only on its own pages).
+
+### Server modes (`cellucid serve`, `serve_anndata`, `AnnDataViewer`)
+
 - your dataset is served by a local Python server (usually `127.0.0.1:<port>`),
 - the exact verified viewer generation is served from that same origin,
 - the browser loads data from your local server.
 
-Your dataset is **not uploaded** anywhere automatically.
+In both, your dataset is **not uploaded** anywhere automatically.
 
 ### Web app file picker mode (no Python server)
 
@@ -44,11 +53,22 @@ Start here: {doc}`../../web_app/b_data_loading/index`
 
 ### Default: localhost-only
 
-`AnnDataServer` (`cellucid serve`, `serve_anndata`) and notebook viewers bind to `127.0.0.1` by default.
+`AnnDataServer` (`cellucid serve`, `serve_anndata`) and browser-tab viewers (`AnnDataViewer`) bind to `127.0.0.1` by default. A notebook widget binds nothing.
 
 That means:
-- only the same machine can reach the server,
+- only programs on the same machine can reach the server — and on a machine
+  several people use at once (an HPC login or compute node, a single-host
+  JupyterHub, a multi-user RStudio Server or Posit Workbench), that is **every
+  user of that machine**: anyone with a shell there reads the served dataset
+  with one `curl` while the server runs (see below),
 - people on your network cannot access it unless you deliberately bind to a public interface or tunnel it.
+
+There is no secret in the data routes: the browser reads them with plain range
+requests. The viewer channel (commands and events) does need the per-viewer
+token, so another user can read the data but cannot drive your notebook. When
+the data must not be readable by the other users of the machine, use the
+notebook widget (`show_anndata()`: no port is opened), or run the server on a
+machine only you use.
 
 ### If you bind to a non-localhost host (be careful)
 
@@ -82,8 +102,9 @@ project. Schedulers place other users’ jobs beside yours as a matter of course
 so this is the ordinary case, not a rare one.
 
 Reads are unauthenticated on a loopback bind too. The difference is only who is
-able to perform them: on `127.0.0.1`, your own machine; on `0.0.0.0`, everyone
-who can route to the port.
+able to perform them: on `127.0.0.1`, every user of the same machine (only you
+on a personal computer, everyone logged in to a shared node); on `0.0.0.0`,
+everyone who can route to the port.
 
 ### When a wildcard bind is still the right trade
 
@@ -161,7 +182,7 @@ So the bind address is not the last line of defence. The `Host` header is:
 
 ### Reverse proxies must be declared
 
-A reverse proxy — `jupyter-server-proxy` above all — forwards the browser’s
+A reverse proxy — a JupyterHub or RStudio Server proxy route, say — forwards the browser’s
 `Host` verbatim, so your loopback server receives the proxy’s host name and
 refuses it. That request is indistinguishable from a rebound one: both arrive on
 loopback naming a foreign authority, and a rebound page is same-origin, so it
@@ -223,9 +244,10 @@ Start debugging at: {doc}`08_debugging_mental_model_where_to_look`.
 
 ### Why the viewer UI is established at startup
 
-In notebook/server modes, Cellucid serves the web app UI from your Python server so:
-- the viewer and dataset share the same origin (avoids mixed-content),
-- your notebook embed is more reliable across environments.
+In server modes, Cellucid serves the web app UI from your Python server so
+the viewer and dataset share the same origin (avoids mixed content and CORS).
+A notebook widget keeps no copy: the browser loads the app from
+`web_source_url`, and the kernel needs no access to it.
 
 Before binding its HTTP server, Cellucid:
 
@@ -237,8 +259,10 @@ Before binding its HTTP server, Cellucid:
 
 ### What this means without source access
 
-- `cellucid serve`, `serve_anndata(...)`, and `show_anndata(...)` require the configured
-  source at each startup when they serve the viewer UI.
+- `cellucid serve`, `serve_anndata(...)` and `AnnDataViewer(...)` require the
+  configured source at each startup when they serve the viewer UI.
+- `show_anndata(...)` needs the *browser* to reach `https://www.cellucid.com`
+  (or `web_source_url`), not the kernel.
 - Source or inventory failure stops startup. A previous local generation is
   kept intact but is not served as a substitute.
 - `cellucid serve ... --no-web-ui` is the explicit data-endpoint-only mode and
@@ -246,8 +270,11 @@ Before binding its HTTP server, Cellucid:
 
 ### Where the cache lives
 
-The default cache is a process-independent temporary directory
-(platform-dependent). Select another location explicitly with
+The default cache is this user's own cache folder: `~/.cache/cellucid/web`
+on Linux (`$XDG_CACHE_HOME` when set), `~/Library/Caches/cellucid/web` on
+macOS and `%LOCALAPPDATA%\cellucid\web` on Windows. Each user of a shared
+machine has their own, as with the R package
+(`tools::R_user_dir("cellucid", "cache")/web`). Select another location explicitly with
 `--web-cache-dir PATH` or the `web_cache_dir=` Python argument.
 
 In Python:
@@ -324,9 +351,9 @@ Fix:
 ### Symptom: every request returns `421 Misdirected Request`
 
 Likely cause:
-- the browser reaches Cellucid through a reverse proxy (usually
-  `jupyter-server-proxy`), which forwards its own `Host`, and that name has not
-  been declared.
+- the browser reaches a browser-tab server through a reverse proxy (a hub's
+  proxy route), which forwards its own `Host`, and that name has not been
+  declared.
 
 Confirm:
 - the server log contains
@@ -337,8 +364,8 @@ Fix:
   `--allowed-host hub.example.org`, and keep passing the proxy’s browser base as
   `client_server_url=`.
 
-See {doc}`08_debugging_mental_model_where_to_look` for the full remote-notebook
-checklist.
+See {doc}`08_debugging_mental_model_where_to_look` for the full remote
+checklist. In a notebook, `show_anndata()` needs no proxy at all.
 
 ### Symptom: “Someone else on my network can see my dataset”
 

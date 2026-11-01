@@ -81,9 +81,13 @@ module* rather than by the coordinator:
 Two more are not initialized by the coordinator at all:
 `sidebar-controls.js` and `select-bar-placement.js` are wired by
 `ui/core/sidebar-layout.js`, which `main.js` calls right after the viewer is
-created. The sidebar toggle is painted with the first frame, and on a phone it
-is the only way out of the full-screen menu, so it must work before the first
-dataset has loaded, which is when the coordinator runs.
+created. The sidebar toggle and, on a phone, the panel's peek bar
+(`#phone-sheet-bar`: the dataset's name and a handle; a tap or an upward swipe
+opens the panel) are painted with the first frame, so they work before the
+first dataset has loaded, which is when the coordinator runs. A phone starts
+with the bar: `ui/core/viewport-init.js` marks the root before the stylesheet
+applies (`data-phone-sheet="peek"`), unless this tab last left the panel open
+(`cellucid:phone-sheet` in session storage, `ui/core/phone-sheet-memory.js`).
 
 If you are tracing why a control is inert, check which of these paths owns it
 before assuming the coordinator does.
@@ -115,10 +119,14 @@ The `ui/` layer also has directories this page does not otherwise cover:
 | Open… menu | `ui/modules/open-data-menu.js` | the **Open…** button's two-item menu (**File…**, **Folder…**) and its keyboard handling |
 | Address routing | `ui/modules/address-routing.js` | what the **Link or server** bar opens: a `cellucid serve` server, linked data, or (asked over `/_cellucid/health`) either |
 | Dataset connections | `ui/modules/dataset-connections.js` | local file and folder pickers, the **Link or server** bar (server and link connectors), the **Server** / **Link** connection lines with **Disconnect**, the sign-in step |
-| Dataset drop | `ui/modules/dataset-drop.js` | a file or folder dropped anywhere on the page, opened as the matching picker would (initialized by `dataset-connections.js`; `ui/core/file-drop-guard.js` stops the browser navigating to a dropped file) |
+| Dataset drop | `ui/modules/dataset-drop.js` | a file or folder dropped anywhere on the page, opened as the matching picker would (initialized by `dataset-connections.js`; `ui/core/file-drop-guard.js` stops the browser navigating to a dropped file; a folder listed concurrently by `data/local-folder.js`; in Chromium the item's handle kept to reopen, `app/local-file-handles.js`) |
 | Share dialog | `ui/modules/share-dialog.js` | the Dataset box's **Share**: link, badge and embed snippet for a dataset a URL can reopen |
 | Session controls | `ui/modules/session-controls.js` | save/load `.cellucid-session` buttons |
-| Data mapping controls | `ui/modules/data-mapping-controls.js` (+ `ui/modules/data-mapping/`) | Session › Data mapping: the Embeddings checklist (on/off, defaults, column selections; arrays rarely drawn under **Other arrays (N)**), the Genes (**Modality** for a dataset of several, Expression, Gene names, Values, Highly variable genes), Neighbour graph, Latent space and Vector fields sections, Revert/Apply |
+| Session sections | `ui/modules/session-sections.js` | the Session panel's collapsible sections, **Subsampling** (`#reading-section`) and **Data mapping** (`#data-mapping-controls`): collapsed by default, each a one-line summary in its header while collapsed (`setSummary`; `subsamplingSummary`: "100 % cells · genes 6 %"), the open state kept per viewer in `localStorage` (`cellucid_session_sections`, every access guarded; never a session or the address), and `expandSessionSection`, which whatever leads into one calls first |
+| Cells to open | `ui/modules/subsample-control.js` | Session › Subsampling › **Cells to open**: the share slider, method and seed, **Apply**, one status line and its **Details** table |
+| Genes read for | `ui/modules/gene-read-control.js` | Session › Subsampling › **Genes read for**: the slider of the share of the open cells a gene is read for (steps: the share now, then 1, 5, 10, 25, 50, 100 % up to what the gene index fits, `geneReadSteps`), its one status line (`geneReadStatus`: the chosen cells and their cost, repriced every 5 s while shown; while reading, the cells read and the time left), **Read** / **Stop** (`readGenesForMoreCellsSaid`). The one place the gene sample changes; `createGeneReadNote` / `createGeneReadLink` are the lines in a gene's legend and an analysis's result that link to it (`revealGeneReadControl`) |
+| Stored line | `ui/modules/kept-stores-line.js` | Session › **Stored**: what this browser keeps, one line beside **Manage…** (`summarizeKeptStores`: `{text, title}`, the title naming every kind) |
+| Data mapping controls | `ui/modules/data-mapping-controls.js` (+ `ui/modules/data-mapping/`) | Session › Data mapping (its summary through `onSummary`): the Embeddings checklist (on/off, defaults, column selections; arrays rarely drawn under **Other arrays (N)**), the Genes (**Modality** for a dataset of several, Expression, Gene names, Values, Highly variable genes), Neighbour graph, Latent space and Vector fields sections, Revert/Apply |
 
 ### Field/filter/highlight modules
 
@@ -128,7 +136,7 @@ The `ui/` layer also has directories this page does not otherwise cover:
 | Gene expression helper | `ui/modules/field-selector-gene-expression.js` | gene dropdown/search behavior |
 | Deleted fields panel | `ui/modules/field-selector-deleted-fields.js` | restore/purge UI |
 | Filter controls | `ui/modules/filter-controls.js` | filter stack UI + count |
-| Legend renderer | `ui/modules/legend-renderer.js` | legend DOM + outlier UI container |
+| Legend renderer | `ui/modules/legend-renderer.js` | legend DOM + outlier UI container; a continuous field's **Gray for zero** (genes with no negative value), **Log color scale** and **Rescale to range** switches, a gene sample's one-line layer note and its link to Genes read for (`createGeneReadLink`), and **Visible range** (label, slider and number box a row each, `legend/range-bounds.js` `boundText`) |
 | Outlier filter control | `ui/modules/outlier-filter-control.js` | the legend's **Outlier filter**: **Choose latent space** without a latent space, else the slider with at most one line, progress and **Cancel** |
 | Highlight controls | `ui/modules/highlight-controls.js` | highlight pages + groups + selection mode tools |
 

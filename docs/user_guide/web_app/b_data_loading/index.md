@@ -38,7 +38,7 @@ Use this as a decision tree. You can always switch later.
 |---|---|---|---|
 | A Zarr store folder (`.zarr`), for example from `prepare()` | **Open… › Folder…**, or drop the folder | Read key by key from disk, nothing zipped or uploaded | {doc}`03_browser_file_picker_tutorial` |
 | A `.loom`, a 10x Cell Ranger `outs/` folder, or a MuData `.h5mu` | **Open… › File…** (Loom, `.h5mu`) or **Folder…** (`outs/`) | Read in place as it is, no conversion | {doc}`18_open_loom_and_10x` or {doc}`19_multimodal_mudata` |
-| A Seurat or SingleCellExperiment object (`.rds`, `.rda`, `.RData`), or a MatrixMarket folder | **Open… › File…** (R objects) or **Folder…** (MatrixMarket) | Read once into this browser's storage, no R needed | {doc}`17_open_r_objects` |
+| A Seurat or SingleCellExperiment object (`.rds`, `.rda`, `.RData`), or a MatrixMarket folder | **Open… › File…** (R objects) or **Folder…** (MatrixMarket) | Cannot be read in parts: read whole once into this browser's storage and kept for next time, no R needed | {doc}`17_open_r_objects` |
 | A portable `.zarr.zip` or `.zip` | **Open… › File…** | One validated file selection in every supported browser | {doc}`03_browser_file_picker_tutorial` |
 | A `.h5ad` of any size, and no Python | **Open… › File…** | One file selection, nothing installed, nothing uploaded; read from disk as each view needs it | {doc}`03_browser_file_picker_tutorial` |
 | A `.h5ad` on a remote machine, or one you drive from a notebook | Server mode or Jupyter | Python hands the file to the browser, which reads it in place as each view needs it | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
@@ -53,17 +53,23 @@ Use this as a decision tree. You can always switch later.
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Data mapping group.
+:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Subsampling and Data mapping sections, each one line with its summary.
 :width: 532px
 
-Every loading path has its own label under **Open data** in the Session panel,
-and **Save** and **Load** sit under **Session file**, below it. The **Dataset**
-box at the top always describes the dataset currently open, whichever path
-opened it ([The Dataset box](01_loading_options_overview.md#the-dataset-box)).
+Every loading path has its own label under **Open data** in the Session panel;
+**Stored** (once something is kept), then **Save** and **Load** under
+**Session file**, sit below it, and under them two sections collapsed to one
+line each: **Subsampling** (how much is read: Cells to open, Genes read for)
+and **Data mapping**. The **Dataset** box at the top always describes the
+dataset currently open, whichever path opened it ([The Dataset
+box](01_loading_options_overview.md#the-dataset-box)).
 ```
 
 :::{note}
-The Session panel keeps every loading action and connection state visible.
+The Session panel keeps every loading action and connection state visible;
+Subsampling and Data mapping start collapsed, each saying what it holds in its
+header ("100 % cells · genes 6 %", "3 embeddings · UMAP 2D"), and remember
+whether you opened them, in this browser only.
 Its compact `i` buttons only open explanatory help: click one, or focus it with
 {kbd}`Tab` and press {kbd}`Enter` or {kbd}`Space`. Press {kbd}`Escape`, click
 elsewhere, or move focus outside to close it. See
@@ -109,7 +115,15 @@ Instead of a button, you can drag one file (`.h5ad`, `.zarr.zip`, `.rds`,
 Ranger `outs/` folder or one MatrixMarket folder from your file manager and
 drop it anywhere on the viewer. While you drag, an outline and a *Drop to open* card cover the viewer.
 A drop is read exactly as **Open… › File…** or **Open… › Folder…** would
-read it, and it replaces any load in progress like any other choice.
+read it, and it replaces any load in progress like any other choice. A
+dropped folder's files are asked for several at a time, as many as the
+browser answers faster with, and in Chrome and Edge through the folder's
+handle, which those browsers list faster than its entries: measured on a
+real drop in Chrome, a Zarr folder of 22,023 files is listed in 2.7 s
+rather than 4.4 s; in Safari's engine the listing takes about a quarter
+less time than one file after another. In Chrome and Edge a dropped file or
+folder is kept to reopen with one click, as a chosen one is
+({ref}`reopen-local-file`).
 
 Anything else is refused with a notification that says what can be dropped:
 several items at once (drop the `.zarr` folder itself, not the files inside
@@ -308,12 +322,13 @@ If your dataset includes vector fields (e.g. RNA velocity), enable the overlay a
 | GitHub catalog | Public, dataset-specific share links | No |
 | Self-hosted catalog | A catalog on your own static host or CDN | No — any HTTP server will do |
 | Server mode | Data on a remote machine, or a Zarr store folder | Yes — `cellucid serve` |
-| Jupyter | Interactive analysis workflows | No — the viewer manages a localhost server |
+| Jupyter | Interactive analysis workflows | No — the viewer is a notebook widget; no server, no port |
 
 :::{note}
-Server mode and Jupyter both use HTTP internally. The distinction above is
-whether you start a separate terminal command. Both bind to `127.0.0.1` by
-default; use the documented SSH-tunnel workflow for a remote machine.
+Server mode binds to `127.0.0.1` by default; use the documented SSH-tunnel
+workflow for a remote machine. Jupyter uses no server at all: the widget hands
+the data to the viewer through the notebook's own connection, so a remote
+notebook needs nothing extra.
 :::
 
 ---
@@ -329,6 +344,7 @@ default; use the documented SSH-tunnel workflow for a remote machine.
 14_open_from_link
 16_private_drive_onedrive
 13_data_mapping
+21_subsampled_loading
 17_open_r_objects
 18_open_loom_and_10x
 19_multimodal_mudata

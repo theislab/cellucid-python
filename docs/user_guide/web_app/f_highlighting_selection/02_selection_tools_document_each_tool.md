@@ -380,6 +380,17 @@ Degree `2` = neighbors-of-neighbors, etc.
 The step readout names the degree it has reached, e.g. `Step 1: 90 cells (2°
 neighbors)`. As degree grows, selection can grow very quickly.
 
+Each degree reads the neighbour lists of the cells the last one reached from
+the file (the graph is checked once, when the tool first needs it, and its
+edges are then let go unless they are shown; its rows are read by cell), so
+the tool holds no memory per cell or edge of the graph however large the
+dataset is. On a local file a degree is a few milliseconds; over a
+link the first visit of a region of the graph waits for its bytes, which are
+then kept. The preview follows as the rows arrive, and a released step
+appears once its last degree has been read. If the file can no longer be
+read, the drag stops with *“KNN selection stopped: the neighbor graph could
+not be read”*.
+
 ### When to use
 - You want “manifold-aware” selection that follows biological neighborhoods rather than Euclidean blobs.
 - You want to grow a cluster boundary gradually from a seed.

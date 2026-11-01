@@ -384,7 +384,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 - **There is a visible gap at lines 214–216** where §"Confirm the dataset id in the UI (recommended)" ends with "the Community Annotation status panel displays the dataset id" followed by two blank lines and a horizontal rule. That reads like a removed figure. The status-panel crop (lifecycle step 6) belongs exactly there.
 - Repo-layout claims **verified** against `cellucid-annotation`: `annotations/{config.json, config.schema.json, schema.json}`, `annotations/users/` (contains only `.gitkeep` — **no example user file**), `annotations/moderation/{merges.json, merges.schema.json}`, `.github/workflows/validate.yml`, `scripts/validate_user_files.py`. All present. `merges.json` is `{"version":1,"updatedAt":"1970-01-01T00:00:00Z","merges":[]}`.
 - The template `config.json` uses `datasetId: "example-dataset-id"` with `fieldsToAnnotate: ["cell_type","batch"]`, not the `leiden`/`my_atlas_v1` used in this page's examples. Not wrong, but a screenshot of the template file next to the guide's example would remove a real point of confusion for a non-technical author copying the template.
-- §6 "self-host the GitHub OAuth + API proxy" documents an eight-route Worker contract and a health JSON. That is a **terminal-screenshot** opportunity per the user's objective: `curl https://<worker>/ | jq` showing `{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":1,…}`. Suggested `community_annotation/worker-health-curl.png`, `:width: 700px`. Redact the origin.
+- §6 "self-host the GitHub OAuth + API proxy" documents a nine-route Worker contract and a health JSON. That is a **terminal-screenshot** opportunity per the user's objective: `curl https://<worker>/ | jq` showing `{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":2,…}`. Suggested `community_annotation/worker-health-curl.png`, `:width: 700px`. Redact the origin.
 
 ---
 
@@ -471,7 +471,7 @@ Then route `https://worker.example/**`. Exact fixture shapes, all verified from 
 
 | Route | Response |
 |---|---|
-| `GET /` (capability handshake, runs **first**) | `{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":1,"endpoints":["/auth/login","/auth/callback","/auth/user","/auth/installations","/auth/installation-repos","/cap/lookup-cells","/api/repos/*"]}` — **must match `WORKER_ENDPOINTS` element-by-element in order** or sign-in aborts before redirect |
+| `GET /` (capability handshake, runs **first**) | `{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":2,"endpoints":["/auth/login","/auth/callback","/auth/revoke","/auth/user","/auth/installations","/auth/installation-repos","/cap/lookup-cells","/api/repos/*"]}` — **must match `WORKER_ENDPOINTS` element-by-element in order** or sign-in aborts before redirect |
 | `GET /auth/user` | `{"id":4242,"login":"tester"}` |
 | `POST /auth/installations` | `{"installations":[{"id":71,"account":{"login":"team"}}]}` |
 | `POST /auth/installation-repos` (body `{installation_id}`) | `{"repositories":[{"id":1,"full_name":"team/labels","private":false}]}` |

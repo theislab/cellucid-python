@@ -14,12 +14,12 @@ import contextlib
 import ipaddress
 import json
 import logging
+import os
 import re
 import shutil
 import socket
 import stat
 import sys
-import tempfile
 import threading
 import time
 from collections.abc import Callable, Sequence
@@ -41,6 +41,9 @@ logger = logging.getLogger("cellucid.server")
 DEFAULT_PORT = 8765
 DEFAULT_HOST = "127.0.0.1"
 CELLUCID_WEB_URL = "https://www.cellucid.com"
+# The origins the hosted app is served from, which may read a server's data
+# across origins (CORS): the canonical one and the bare apex, nothing else.
+HOSTED_APP_ORIGINS = frozenset({CELLUCID_WEB_URL, "https://cellucid.com"})
 WEB_ASSET_INVENTORY_FILENAME = "cellucid-web-assets.json"
 
 _EXCLUSIVE_ADDRESS_USE: int | None = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
@@ -274,8 +277,25 @@ def _remove_web_cache_dir(cache_dir: Path) -> None:
 
 
 def _web_cache_dir() -> Path:
-    """Return the process-independent default cache location."""
-    return Path(tempfile.gettempdir()) / "cellucid-web-cache"
+    """Return this user's default web cache directory, ``<user cache>/cellucid/web``.
+
+    The user cache is ``%LOCALAPPDATA%`` on Windows, ``~/Library/Caches`` on
+    macOS, and ``$XDG_CACHE_HOME`` (an absolute path) or ``~/.cache``
+    elsewhere: per user, as the R package's
+    ``tools::R_user_dir("cellucid", "cache")/web``. A shared temporary folder
+    would be one directory for every user of a machine: on a shared Linux host
+    the first user's copy (private to them) could not be replaced by anyone
+    else, so no other user's viewer would start.
+    """
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA", "")
+        base = Path(local) if local and Path(local).is_absolute() else Path.home() / "AppData" / "Local"
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Caches"
+    else:
+        xdg = os.environ.get("XDG_CACHE_HOME", "")
+        base = Path(xdg) if xdg and Path(xdg).is_absolute() else Path.home() / ".cache"
+    return base / "cellucid" / "web"
 
 
 # =============================================================================
@@ -830,12 +850,9 @@ class CORSMixin:
         if host in ("localhost", "127.0.0.1"):
             return origin
 
-        # Allow the canonical hosted viewer origin.
-        if origin == CELLUCID_WEB_URL:
-            return origin
-
-        # Allow https subdomains under cellucid.com (optional, but safe).
-        if parsed.scheme == "https" and (host == "cellucid.com" or host.endswith(".cellucid.com")):
+        # The hosted app, exactly: no other page on a cellucid.com name (the
+        # documentation site runs scripts of its own host) may read the data.
+        if origin in HOSTED_APP_ORIGINS:
             return origin
 
         return None
@@ -855,7 +872,7 @@ class CORSMixin:
         # from the compressed length.
         self.send_header(
             "Access-Control-Expose-Headers",
-            "Accept-Ranges, Content-Encoding, Content-Length, Content-Range, ETag",
+            "Accept-Ranges, Content-Encoding, Content-Length, Content-Range, ETag, Retry-After",
         )
         if self.allow_caching:
             self.send_header("Cache-Control", "public, max-age=3600")

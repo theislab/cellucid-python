@@ -91,7 +91,7 @@ ids, and keep a subset with `gene_identifiers=[...]`
 
 ### Optional
 
-- `connectivities=adata.obsp["connectivities"]` (symmetric, zero diagonal)
+- `connectivities=adata.obsp["connectivities"]` (symmetric; a diagonal is left out)
 - `vector_fields={"velocity": {"X_umap": adata.obsm["velocity_umap"]}}` (stored as `obsm['velocity_umap']`)
   ({doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`)
 - launch defaults: `embedding_defaults`, `obs_keys`, `vector_field_default`,

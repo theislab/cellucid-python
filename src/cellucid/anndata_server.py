@@ -26,12 +26,25 @@ computes nothing per request. It serves:
   notebook to its viewer, events back; :mod:`cellucid._viewer_channel`) and
   the viewer's web build.
 
-An in-memory AnnData object is written once to a temporary ``.h5ad`` (sparse
-expression matrices column-major, so a gene is one contiguous read) and served
-like a file; the file is removed when the server stops or Python exits. So is a
-store holding an array stored with a codec the browser does not decode (an
-HDF5 filter such as Blosc or Zstandard, a Zarr codec such as bz2): anndata and
-its codec plugins read it once, and the browser reads the copy.
+An AnnData object, and an AnnData file (``.h5ad``, Zarr) whose cells are not
+in priority order, are served as a Zarr store in **priority order**
+(:mod:`cellucid._served_store`): the layout ``prepare()`` writes, made chunk
+by chunk from the source as the browser reads it. So are a MuData file
+(``.h5mu``, MuData Zarr: a MuData Zarr store, each modality's rows following
+its cells), a Loom file and a 10x Cell Ranger matrix or ``outs/`` folder,
+presented as the browser presents the file itself
+(:mod:`cellucid._served_formats`). A subsample the viewer opens is then the
+first rows of every array, so the bytes sent are in proportion to the cells
+opened, whatever the source's layout. A file in priority order already
+(``prepare()``'s AnnData or MuData) is served as it is, unless it holds an
+array stored with a codec the browser does not decode (an HDF5 filter such as
+Blosc or Zstandard, a Zarr codec such as bz2): then it is served through the
+same store, which decodes it on the kernel. R objects and MatrixMarket
+folders, which the browser reads once from the start, are served as they are.
+An AnnData or MuData object is served from a snapshot, the same store made
+from it; its expression matrices are laid out gene-major in the store's
+background worker, so the viewer opens at once, and a gene asked for before
+its matrix is laid out is made from the object at once.
 
 Usage:
     from cellucid.anndata_server import serve_anndata
@@ -44,13 +57,14 @@ Usage:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
-import os
+import math
+import re
 import threading
-import weakref
 import webbrowser
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from functools import partial
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
@@ -61,6 +75,7 @@ from urllib.parse import unquote, urlparse
 from ._anndata_files import (
     ANNDATA_KINDS,
     MUDATA_KINDS,
+    AnnDataContents,
     AnnDataStore,
     browser_undecodable,
     classify_anndata_path,
@@ -69,17 +84,16 @@ from ._anndata_files import (
     read_anndata_contents,
     read_cellucid_identity,
     read_into_memory,
-    remove_temporary_h5ad,
-    write_temporary_h5ad,
-    write_temporary_h5mu,
 )
 from ._console import console_print
 from ._contracts import (
     _require_dataset_id,
     _require_dataset_name,
 )
+from ._file_versions import file_version, path_version
 from ._launch_defaults import launch_defaults
 from ._plural import plural
+from ._served_store import NotReady, StoreBody, require_cache_bytes
 from ._server_base import (
     CELLUCID_WEB_URL,
     DEFAULT_HOST,
@@ -106,6 +120,9 @@ from .data_mapping import EmbeddingKeySpec
 if TYPE_CHECKING:
     import anndata
     import mudata
+    import pandas as pd
+
+    from ._served_store import PriorityStore
 
 logger = logging.getLogger("cellucid.anndata_server")
 
@@ -154,26 +171,35 @@ def _route_name(store: AnnDataStore, dataset_id: str) -> str:
 
 @dataclass(frozen=True)
 class _ServedStore:
-    """What the handler serves: the store, its route name, and generated metadata."""
+    """What the handler serves: a store on disk as it is, or a store in
+    priority order (:mod:`cellucid._served_store`), and its route name."""
 
-    store: AnnDataStore
-    #: The last route segment (:func:`_route_name`).
+    #: The last route segment (:func:`_route_name`; ``<id>.zarr`` for a store in priority order).
     route_name: str
+    #: The format id the viewer reads the store as (``input_formats.json``).
+    kind: str
+    #: ``"file"``, ``"zip"`` or ``"folder"`` (a store in priority order is a Zarr folder).
+    layout: str
+    #: The store on disk served as it is; None for a store in priority order.
+    store: AnnDataStore | None = None
+    #: The store in priority order; None for a store on disk served as it is.
+    priority: PriorityStore | None = None
     #: (store key, bytes) answered in place of a missing consolidated document.
-    generated_metadata: tuple[str, bytes] | None
+    generated_metadata: tuple[str, bytes] | None = None
     #: The generated document's validator: a hash of its bytes, computed once.
     generated_etag: str = ""
 
 
-def _file_etag(status: os.stat_result) -> str:
-    """A strong validator of one file version: its size, modification time and inode.
+#: The formats a server serves by path in priority order besides AnnData,
+#: read on the kernel (:mod:`cellucid._served_store`, :mod:`cellucid._served_formats`):
+#: MuData, Loom, 10x Cell Ranger files and ``outs/`` folders.
+PRIORITY_SOURCE_KINDS = MUDATA_KINDS | frozenset({"loom", "tenx-h5", "tenx-outs"})
 
-    A file rewritten in place or replaced by another gets a new one, so a
-    browser that kept bytes of the old version revalidates them and is told
-    they changed (and the viewer, reading with ``If-Range``-free range
-    requests, sees the new tag and refuses to mix versions).
-    """
-    return f'"{status.st_size:x}-{status.st_mtime_ns:x}-{status.st_ino:x}"'
+
+def _unreadable(error: OSError) -> str:
+    """What a dataset list says of a file served as it is that is gone."""
+    name = Path(error.filename).name if error.filename else "The served file"
+    return f"{name} is no longer readable"
 
 
 def _canonical_store_key(text: str) -> str | None:
@@ -184,6 +210,56 @@ def _canonical_store_key(text: str) -> str | None:
     if any(part in ("", ".", "..") for part in parts):
         return None
     return text
+
+
+def _resolve_store_route(served: _ServedStore, route: str) -> Path | tuple[StoreBody, str] | None:
+    """What one route under :data:`ANNDATA_ROUTE_PREFIX` names: the file to
+    answer from, a body and its validator (generated metadata, a key of a
+    store in priority order, whose bytes are made as a range of them is
+    asked for: :meth:`~cellucid._served_store.PriorityStore.body`), or None
+    for a route the store does not have.
+
+    A Zarr store folder is answered key by key; an absent key is None, which
+    a Zarr reader reads as "absent" (an unwritten chunk is its fill value). A
+    key may not leave the store.
+    """
+    if served.layout != "folder":
+        assert served.store is not None
+        return served.store.path if route == served.route_name else None
+    prefix = f"{served.route_name}/"
+    key = _canonical_store_key(route[len(prefix) :]) if route.startswith(prefix) else None
+    if key is None:
+        return None
+    if served.priority is not None:
+        body = served.priority.body(key)
+        return None if body is None else (body, served.priority.etag)
+    generated = served.generated_metadata
+    if generated is not None and key == generated[0]:
+        return StoreBody.of(generated[1]), served.generated_etag
+    assert served.store is not None
+    path = served.store.path.joinpath(*PurePosixPath(key).parts)
+    try:
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    if not resolved.is_file() or not resolved.is_relative_to(served.store.path):
+        return None
+    return resolved
+
+
+def _not_ready_answer(waiting: NotReady) -> tuple[int, dict[str, str], bytes]:
+    """The answer to a key of a file's matrix the store has not counted yet
+    (:class:`~cellucid._served_store.NotReady`): ``503``, ``Retry-After`` the
+    whole seconds left at its pace (one second, its resolution, before it has
+    one), and the message saying how far it is. The viewer waits exactly that
+    long and shows the message; a wait the server names is never counted as a
+    failure there (``formats/io/byte-source.js``, ``withRetries``), so a
+    count of any length is waited for."""
+    body = str(waiting).encode("utf-8")
+    headers = {"Content-Type": "text/plain", "Content-Length": str(len(body))}
+    seconds = 1 if waiting.seconds is None else max(1, math.ceil(waiting.seconds))
+    headers["Retry-After"] = str(seconds)
+    return 503, headers, body
 
 
 class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
@@ -215,7 +291,7 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
         served: _ServedStore,
         server_info: dict,
         health: dict,
-        datasets: dict,
+        datasets: Callable[[], dict[str, Any]],
         serve_web_ui: bool,
         web_cache_dir: Path,
         allowed_hosts: frozenset[str],
@@ -224,6 +300,8 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
         self.served = served
         self.server_info = server_info
         self.health = health
+        #: The dataset list, made at each request: a file served as it is is
+        #: described as it is then (its size and validator).
         self.datasets = datasets
         self.serve_web_ui = serve_web_ui
         self.web_cache_dir = web_cache_dir
@@ -264,7 +342,13 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
             elif path == "_cellucid/info":
                 self.send_json(self.server_info, head_only)
             elif path == "_cellucid/datasets":
-                self.send_json(self.datasets, head_only)
+                try:
+                    datasets = self.datasets()
+                except OSError as error:
+                    # The file served as it is is gone (or unreadable).
+                    self.send_error_response(404, _unreadable(error))
+                    return
+                self.send_json(datasets, head_only)
             elif path == "_cellucid/protocol":
                 self.send_json(_protocol_capability_document(), head_only)
             elif path == CHANNEL_ROUTE:
@@ -284,33 +368,28 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
             self.send_error_response(500, "Internal server error")
 
     def _handle_store(self, route: str, *, head_only: bool) -> None:
-        store = self.served.store
-        if store.layout != "folder":
-            if route != self.served.route_name:
-                self.send_error_response(404, f"Not found: {ANNDATA_ROUTE_PREFIX}{route}")
-                return
-            self._send_file(store.path, head_only=head_only)
-            return
-        prefix = f"{self.served.route_name}/"
-        key = _canonical_store_key(route[len(prefix) :]) if route.startswith(prefix) else None
-        if key is None:
-            self.send_error_response(404, f"Not found: {ANNDATA_ROUTE_PREFIX}{route}")
-            return
-        generated = self.served.generated_metadata
-        if generated is not None and key == generated[0]:
-            self._send_bytes(generated[1], self.served.generated_etag, head_only=head_only)
-            return
-        path = store.path.joinpath(*PurePosixPath(key).parts)
         try:
-            resolved = path.resolve(strict=True)
-        except (OSError, RuntimeError):
-            resolved = None
-        # An absent key is a 404, which a Zarr reader reads as "absent" (an
-        # unwritten chunk is its fill value). A key may not leave the store.
-        if resolved is None or not resolved.is_file() or not resolved.is_relative_to(store.path):
-            self.send_error_response(404, f"No key {key!r} in the store")
-            return
-        self._send_file(resolved, head_only=head_only)
+            resolved = _resolve_store_route(self.served, route)
+            if resolved is None:
+                self.send_error_response(404, f"Not found: {ANNDATA_ROUTE_PREFIX}{route}")
+            elif isinstance(resolved, Path):
+                self._send_file(resolved, head_only=head_only)
+            else:
+                self._send_bytes(resolved[0], resolved[1], head_only=head_only)
+        except NotReady as waiting:
+            # Raised before any header is sent: the bytes are made first.
+            self._send_not_ready(waiting)
+
+    def _send_not_ready(self, waiting: NotReady) -> None:
+        """``503``: a file's matrix the store has not counted yet; ``Retry-After``
+        the seconds left at its pace (none before it has one), the body how far it is."""
+        status, headers, body = _not_ready_answer(waiting)
+        self.send_response(status)
+        for name, value in headers.items():
+            self.send_header(name, value)
+        self.end_headers()
+        if self.command != "HEAD":
+            self._response_writer().write(body)
 
     def _range_interval(self, size: int, etag: str) -> tuple[int, int] | None | bool:
         """The requested interval, None for the whole resource, False when refused.
@@ -377,9 +456,7 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
             self.send_error_response(404, f"{path.name} is no longer readable")
             return
         with file:
-            status = os.fstat(file.fileno())
-            size = status.st_size
-            etag = _file_etag(status)
+            size, etag = file_version(file.fileno())
             if self._not_modified(etag):
                 return
             interval = self._range_interval(size, etag)
@@ -396,18 +473,22 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
                 # cannot be completed, so the connection is closed.
                 self.close_connection = True
 
-    def _send_bytes(self, body: bytes, etag: str, *, head_only: bool) -> None:
+    def _send_bytes(self, body: StoreBody, etag: str, *, head_only: bool) -> None:
+        """Answer bytes made on request: only the interval asked for is made,
+        before the headers (making a chunk of a file's matrix not counted yet
+        raises :class:`NotReady`, answered ``503``)."""
         if self._not_modified(etag):
             return
-        interval = self._range_interval(len(body), etag)
+        interval = self._range_interval(body.size, etag)
         if interval is False:
-            self.send_range_not_satisfiable(len(body))
+            self.send_range_not_satisfiable(body.size)
             return
         assert interval is not True
-        length = self._send_head(size=len(body), interval=interval, etag=etag)
+        start, end = interval if interval is not None else (0, body.size - 1)
+        data = b"" if head_only or body.size == 0 else body.read(start, end + 1)
+        length = self._send_head(size=body.size, interval=interval, etag=etag)
         if not head_only and length:
-            start = 0 if interval is None else interval[0]
-            self._response_writer().write(body[start : start + length])
+            self._response_writer().write(data)
 
     def log_message(self, format: str, *args):
         """Override to use Python logging (formatted only when it is shown)."""
@@ -418,6 +499,18 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
 # =============================================================================
 # Server
 # =============================================================================
+
+
+def _names_version(store: AnnDataStore) -> Any:
+    """What names the version of a served file or store folder: the file's
+    own validator, or a Zarr folder's consolidated metadata (written again
+    with every store ``prepare()`` writes)."""
+    if store.layout != "folder" or store.files is not None:
+        return path_version(store.path)
+    for name in (".zmetadata", "zarr.json"):
+        if (store.path / name).is_file():
+            return path_version(store.path / name)
+    return path_version(store.path)
 
 
 def _describe_layout(store: AnnDataStore) -> str:
@@ -431,22 +524,26 @@ def _describe_layout(store: AnnDataStore) -> str:
     return label
 
 
-def _identity_subject(kind: str) -> str:
-    """Why a dataset of format ``kind`` has no identity unless one is given.
+def _label_id(label: str) -> str:
+    """The dataset id a label gives, by cellucid-r's rule (``.label_id``).
 
-    AnnData and MuData declare theirs in ``uns['cellucid']``; every other
-    format is read by the browser alone, so the server cannot take one from it.
+    Every run of characters an id may not hold becomes ``-``, leading
+    characters that are not a letter or digit and trailing ``.`` or ``-``
+    go, and it is cut to 180 characters; a label that leaves nothing a
+    portable id may be is ``python-object``.
     """
-    if kind in ANNDATA_KINDS or kind in MUDATA_KINDS:
-        noun = "MuData" if kind in MUDATA_KINDS else "AnnData"
-        return (
-            f"this {noun} declares no Cellucid identity of its own "
-            "(uns['cellucid']['id'] and ['name'])"
-        )
-    return (
-        f"a {input_formats_label(kind)} is read by the browser alone, so the server "
-        "cannot take a Cellucid identity from it"
-    )
+    ident = re.sub(r"[^A-Za-z0-9._-]+", "-", label)
+    ident = re.sub(r"^[^A-Za-z0-9]+|[.-]+$", "", ident)[:180]
+    ident = re.sub(r"[.-]+$", "", ident)
+    try:
+        return _require_dataset_id(ident)
+    except (TypeError, ValueError):
+        return "python-object"
+
+
+def _file_label(path: Path) -> str:
+    """A file or folder's name without its extension (``atlas.zarr.zip`` -> ``atlas``)."""
+    return re.sub(r"(\.zarr\.zip|\.[A-Za-z0-9]+)$", "", path.name)
 
 
 def input_formats_label(kind: str) -> str:
@@ -514,6 +611,7 @@ class AnnDataServer:
         web_source_url: str = CELLUCID_WEB_URL,
         web_cache_dir: str | Path | None = None,
         allowed_hosts: Sequence[str] | None = None,
+        cache_bytes: int | None = None,
     ) -> None:
         """
         Check the store and the launch choices; the server binds on ``start``.
@@ -526,10 +624,14 @@ class AnnDataServer:
             ``.loom``, a 10x ``.h5`` file or ``outs/`` folder, a MatrixMarket
             folder, ``.rds``/``.rda``/``.RData``, gzipped or not), or an
             AnnData or MuData object. A leading ``~`` in a path is expanded to
-            the user's home directory. A path is served as it is on disk; an
-            object is written once to a temporary ``.h5ad`` or ``.h5mu``
-            (sparse matrices column-major), which is removed when the server
-            stops.
+            the user's home directory. An AnnData object, and an AnnData,
+            MuData, Loom or 10x file whose cells are not in priority order,
+            are served as a Zarr store in priority order made from them as
+            the viewer reads it (:mod:`cellucid._served_store`); a file
+            ``prepare()`` wrote, an R object and a MatrixMarket folder are
+            served as they are on disk. An object is served from a snapshot
+            taken as the server is made (MuData as AnnData), its expression
+            matrices laid out gene-major in the background.
         port : int
             Port to serve on.
         host : str
@@ -555,13 +657,15 @@ class AnnDataServer:
         dataset_name : str, optional
             Exact non-empty human-readable name without surrounding whitespace
             or control characters. Unicode is preserved. Defaults to
-            ``uns['cellucid']['name']``; required when the store has none.
+            ``uns['cellucid']['name']``, else the file's name, or
+            ``AnnData (<n> cells)`` for an object.
         dataset_id : str, optional
             Portable 1-180 byte ASCII identifier beginning with a letter or
             digit and otherwise using only letters, digits, ``.``, ``_``, or
             ``-``; it cannot end in ``.`` or use a Windows device name.
             Sessions and community annotations are keyed by it. Defaults to
-            ``uns['cellucid']['id']``; required when the store has none.
+            ``uns['cellucid']['id']``, else made from the file's name without
+            its extension, or from the object's label (``AnnData (N cells)``) (said in one line).
         obs_keys : sequence of str, optional
             Exact ``obs`` columns the viewer shows, in this order. If None,
             every column is shown.
@@ -581,8 +685,10 @@ class AnnDataServer:
         expression_source : str, optional
             Where gene expression is read: ``"X"``, ``"raw"`` (``raw.X``, with
             genes named from ``raw.var``), or ``"layer:<name>"``; None follows
-            the viewer's default rule (``X`` when present, else ``raw`` or a
-            layer, reported as guessed).
+            the viewer's default rule (``raw`` when the file has it and it
+            holds more genes than ``X`` or ``X`` holds scaled values, as Scanpy
+            reads genes; else ``X``; without ``X``, ``raw`` or a layer,
+            reported as guessed).
         vector_field_default : str, optional
             The vector field the overlay opens on: ``<field>`` of an obsm
             array ``<field>_<basis>`` drawn over ``X_<basis>`` (``velocity``
@@ -608,6 +714,14 @@ class AnnDataServer:
             bare DNS name or IP literal — no port, no scheme, no wildcard — and
             is matched on any port. Declaring names also applies the ``Host``
             check to a non-loopback bind.
+        cache_bytes : int, optional
+            What a store served in priority order (an object, or a file not in
+            priority order) keeps of what it makes, in bytes, least recently used
+            first out: the genes it renumbered and sorted for the chunks it
+            answers. None keeps a 64th of the machine's memory (256 MiB on a 16 GB
+            machine), at most the share the web app gives its decoded chunks, and
+            cellucid-r's ``cache_bytes`` keeps; 0 keeps nothing (each gene is made
+            again when it is read again).
         """
         self.dataset_name: str = ""
         self.dataset_id: str = ""
@@ -618,6 +732,8 @@ class AnnDataServer:
         self.port = require_server_port(port)
         self.host = host
         self.allowed_hosts = require_allowed_hosts(allowed_hosts)
+        #: What a store served in priority order keeps of what it makes (bytes).
+        self.cache_bytes = require_cache_bytes(cache_bytes)
         if type(open_browser) is not bool:
             raise TypeError("open_browser must be a boolean")
         if type(quiet) is not bool:
@@ -640,8 +756,12 @@ class AnnDataServer:
         self._closed = False
         self._serving = False
         self._background_error: BaseException | None = None
-        self._temporary_file: Path | None = None
-        self._temporary_finalizer: weakref.finalize | None = None
+        #: Releases what serving holds (a store's open file and its files, its
+        #: scratch folder, :mod:`cellucid._scratch`); idempotent.
+        self._release: Callable[[], Any] | None = None
+        #: The obs names of a file served as it is, and the version they were read at (:attr:`obs_names`).
+        self._names: tuple[Any, pd.Index | None] | None = None
+        self._names_lock = threading.Lock()
         #: Whether a taken ``port`` is passed over for the next free one
         #: (:class:`AnnDataViewer` sets it when no port was given).
         self.next_free_port = False
@@ -668,7 +788,7 @@ class AnnDataServer:
             )
         except BaseException:
             self._closed = True
-            self._remove_temporary_file()
+            self._release_store()
             raise
 
     def _resolve_identity(
@@ -677,30 +797,33 @@ class AnnDataServer:
         given_name: str | None,
         declared: tuple[object, object],
         *,
-        subject: str,
+        name: str,
+        id_label: str,
     ) -> None:
-        """Name the dataset: as given, else as ``uns['cellucid']`` declares it.
+        """Name the dataset: as given, else as ``uns['cellucid']`` declares it,
+        else as cellucid-r does (``.serve_object``, ``.serve_path``).
 
-        ``subject`` says why no identity was found, in the words of what was
-        handed over (:func:`_identity_subject`).
+        ``name``: what the dataset is called when nothing names it (a file's
+        name, or ``AnnData (2,638 cells)`` for an object); ``id_label``: what
+        its id is made from (:func:`_label_id`; a file's name without its
+        extension). An id made so is said in one line, with how to set it:
+        sessions are kept under it.
         """
         declared_id, declared_name = declared
         if given_id is None and declared_id is not None:
             given_id = _require_dataset_id(declared_id, label="uns['cellucid']['id']")
         if given_name is None and declared_name is not None:
             given_name = _require_dataset_name(declared_name, label="uns['cellucid']['name']")
-        missing = [
-            label
-            for label, value in (("dataset_name", given_name), ("dataset_id", given_id))
-            if value is None
-        ]
-        if missing:
-            raise ValueError(
-                f"{' and '.join(missing)} {'are' if len(missing) > 1 else 'is'} required: "
-                f"{subject}. Name the dataset, for example dataset_name=\"My study\", "
-                "dataset_id=\"my-study-v1\" (--dataset-name/--dataset-id on the command line)."
-            )
-        assert given_id is not None and given_name is not None
+        if given_name is None:
+            given_name = _require_dataset_name(name, label="dataset_name")
+        if given_id is None:
+            given_id = _label_id(id_label)
+            if not self.quiet:
+                print_detail(
+                    "Dataset id",
+                    f"{given_id} (sessions are kept under it; name it with dataset_id=, "
+                    "--dataset-id on the command line, or uns['cellucid']['id'])",
+                )
         self.dataset_id = given_id
         self.dataset_name = given_name
 
@@ -723,26 +846,25 @@ class AnnDataServer:
                 given_id,
                 given_name,
                 read_cellucid_identity(store),
-                subject=_identity_subject(store.kind),
+                name=store.path.name,
+                id_label=_file_label(store.path),
             )
+            # Every HDF5 and Zarr format is served through the store in
+            # priority order when the browser cannot decode one of its
+            # codecs: the kernel decodes each chunk it is asked for.
             undecodable = browser_undecodable(store)
-            if undecodable and store.kind not in ANNDATA_KINDS:
-                raise ValueError(
-                    f"The browser cannot decode some arrays of {store.path.name} "
-                    f"({', '.join(undecodable[:3])}{' and more' if len(undecodable) > 3 else ''}): "
-                    "they are stored with a codec it does not read. Write the file again with "
-                    "gzip compression (or none), or convert it to AnnData and serve that."
-                )
-            if undecodable:
-                # The browser cannot decode these arrays; anndata (with its
-                # codec plugins) can. The store is read once and served as a
-                # temporary .h5ad the browser reads in full.
-                if not quiet:
-                    shown = ", ".join(undecodable[:3])
-                    more = f" and {len(undecodable) - 3} more" if len(undecodable) > 3 else ""
-                    print_detail("Browser cannot decode", f"{shown}{more}")
-                    print_detail("Serving", "a decodable copy, written once to a temporary .h5ad")
-                store = self._serve_temporary(read_into_memory(store))
+            if undecodable and not quiet:
+                shown = ", ".join(undecodable[:3])
+                more = f" and {len(undecodable) - 3} more" if len(undecodable) > 3 else ""
+                print_detail("Browser cannot decode", f"{shown}{more}")
+            if store.kind in ANNDATA_KINDS:
+                self._serve_anndata_file(store, undecodable=bool(undecodable))
+            elif store.kind in PRIORITY_SOURCE_KINDS:
+                self._serve_foreign_file(store, undecodable=bool(undecodable))
+            else:
+                # Read once from the start by the browser (an R object, a
+                # MatrixMarket folder): served as it is.
+                self._served = _ServedStore(_route_name(store, self.dataset_id), store.kind, store.layout, store=store)
         else:
             import anndata as ad
 
@@ -755,32 +877,40 @@ class AnnDataServer:
             if not quiet:
                 print_detail("Source", f"in-memory {'MuData' if mudata else 'AnnData'}")
                 print_detail(
-                    "Format", f"written once to a temporary {'.h5mu' if mudata else '.h5ad'}"
+                    "Format",
+                    f"a {'MuData ' if mudata else ''}Zarr store in priority order, made as the browser reads it",
                 )
             uns = data.uns  # type: ignore[union-attr]
             declared = uns.get("cellucid") if hasattr(uns, "get") else None
+            noun = "MuData" if mudata else "AnnData"
+            label = f"{noun} ({data.n_obs:,} {plural(data.n_obs, 'cell')})"  # type: ignore[union-attr]
             self._resolve_identity(
                 given_id,
                 given_name,
                 (declared.get("id"), declared.get("name")) if isinstance(declared, Mapping) else (None, None),
-                subject=_identity_subject("h5mu" if mudata else "h5ad"),
+                name=label,
+                id_label=label,
             )
-            store = (
-                self._serve_temporary_mudata(data) if mudata else self._serve_temporary(data)
-            )
+            from ._served_store import PriorityStore
+
+            self._serve_priority(PriorityStore.of_mudata(data, cache_bytes=self.cache_bytes) if mudata else PriorityStore.of_anndata(data, cache_bytes=self.cache_bytes))  # type: ignore[arg-type]
         if not quiet:
             print_success("Format detected")
-        self.store = store
-        self.data_format = store.kind
+        served = self._served
+        self.data_format = served.kind
 
         if not quiet:
             print_step(2, 4, "Reading metadata")
-        # None for a format only the browser reads (an R object, a Loom or
-        # Cell Ranger file, a MatrixMarket folder): what it holds is learned
-        # when the browser opens it, and the launch choices are checked then.
-        contents = read_anndata_contents(store)
+        # None for a format only the browser reads (an R object, a
+        # MatrixMarket folder): what it holds is learned when the browser
+        # opens it, and the launch choices are checked then.
+        if served.priority is not None:
+            contents: AnnDataContents | None = served.priority.contents()
+        else:
+            assert served.store is not None
+            contents = read_anndata_contents(served.store)
         if contents is not None and contents.n_obs <= 0:
-            noun = "MuData" if store.kind in MUDATA_KINDS else "AnnData"
+            noun = "MuData" if served.kind in MUDATA_KINDS else "AnnData"
             raise ValueError(f"{noun} datasets must contain at least one observation")
         self.contents = contents
         if not quiet:
@@ -791,8 +921,8 @@ class AnnDataServer:
             print_step(3, 4, "Checking launch choices")
         self.defaults = launch_defaults(contents, **choices)
         generated = (
-            consolidated_zarr_metadata(store)
-            if store.layout == "folder" and store.files is None
+            consolidated_zarr_metadata(served.store)
+            if served.store is not None and served.layout == "folder" and served.store.files is None
             else None
         )
         if not quiet:
@@ -801,19 +931,19 @@ class AnnDataServer:
             if generated is not None:
                 print_detail("Consolidated metadata", f"built in memory ({generated[0]})")
             print_success("Launch choices checked")
-        self._served = _ServedStore(
-            store,
-            _route_name(store, self.dataset_id),
-            generated,
-            "" if generated is None else f'"{hashlib.sha256(generated[1]).hexdigest()[:32]}"',
-        )
+        if generated is not None:
+            self._served = replace(
+                served,
+                generated_metadata=generated,
+                generated_etag=f'"{hashlib.sha256(generated[1]).hexdigest()[:32]}"',
+            )
 
         from . import __version__
 
         self.server_info = {
             "version": __version__,
             "type": "anndata",
-            "format": store.kind,
+            "format": served.kind,
             "host": self.host,
             "port": self.port,
             # Null when only the browser can read the data (see above).
@@ -824,22 +954,68 @@ class AnnDataServer:
             "runtime": self.runtime,
         }
 
-    def _serve_temporary(self, adata: anndata.AnnData) -> AnnDataStore:
-        """Write ``adata`` to the temporary ``.h5ad`` this server serves."""
-        path = write_temporary_h5ad(adata, dataset_id=self.dataset_id)
-        self._temporary_file = path
-        # Removed on stop, and when Python exits without a stop.
-        self._temporary_finalizer = weakref.finalize(self, remove_temporary_h5ad, path)
-        return classify_anndata_path(path)
+    def _serve_anndata_file(self, store: AnnDataStore, *, undecodable: bool) -> None:
+        """Serve an AnnData file: as it is when it is in priority order, else in priority order.
 
-    def _serve_temporary_mudata(self, mdata: Any) -> AnnDataStore:
-        """Write ``mdata`` to the temporary Cellucid-ready ``.h5mu`` this server serves."""
-        path = write_temporary_h5mu(
-            mdata, dataset_id=self.dataset_id, dataset_name=self.dataset_name
-        )
-        self._temporary_file = path
-        self._temporary_finalizer = weakref.finalize(self, remove_temporary_h5ad, path)
-        return classify_anndata_path(path)
+        A file in priority order whose codecs the browser cannot decode is
+        served through the store in priority order too (in its own order),
+        which decodes it on the kernel. A layout before anndata 0.8 is
+        served as it is (the browser reads it), or, with such a codec, read
+        by anndata into memory first.
+        """
+        from ._served_store import PriorityStore, file_order
+
+        order = file_order(store)
+        if order == "priority" and not undecodable or order == "older" and not undecodable:
+            self._served = _ServedStore(_route_name(store, self.dataset_id), store.kind, store.layout, store=store)
+            if not self.quiet:
+                print_detail(
+                    "Serving",
+                    "as it is (cells in priority order)" if order == "priority" else "as it is",
+                )
+            return
+        if order == "older":
+            priority = PriorityStore.of_anndata(read_into_memory(store), cache_bytes=self.cache_bytes)
+        else:
+            priority = PriorityStore.of_file(store, cache_bytes=self.cache_bytes)
+        if not self.quiet:
+            print_detail(
+                "Serving",
+                "a Zarr store "
+                + ("decoded on the kernel" if order == "priority" else "in priority order")
+                + ", made as the browser reads it",
+            )
+        self._serve_priority(priority)
+
+    def _serve_foreign_file(self, store: AnnDataStore, *, undecodable: bool) -> None:
+        """Serve a MuData, Loom or Cell Ranger file in priority order (as the browser presents it).
+
+        A MuData file in priority order already (``prepare()``'s) is served
+        as it is, unless the browser cannot decode one of its codecs.
+        """
+        from ._served_store import PriorityStore, file_order
+
+        if store.kind in MUDATA_KINDS:
+            if file_order(store) == "priority" and not undecodable:
+                self._served = _ServedStore(_route_name(store, self.dataset_id), store.kind, store.layout, store=store)
+                if not self.quiet:
+                    print_detail("Serving", "as it is (cells in priority order)")
+                return
+            priority = PriorityStore.of_mudata_file(store, cache_bytes=self.cache_bytes)
+        elif store.kind == "loom":
+            priority = PriorityStore.of_loom(store, cache_bytes=self.cache_bytes)
+        else:
+            priority = PriorityStore.of_cell_ranger(store, cache_bytes=self.cache_bytes)
+        if not self.quiet:
+            what = "a MuData Zarr store" if priority.layout == "mudata" else "a Zarr store"
+            print_detail("Serving", f"{what} in priority order, made as the browser reads it")
+        self._serve_priority(priority)
+
+    def _serve_priority(self, priority: PriorityStore) -> None:
+        """Serve a store in priority order; it is closed when the server stops or Python exits."""
+        kind = "mudata-zarr" if priority.layout == "mudata" else "zarr"
+        self._served = _ServedStore(f"{self.dataset_id}.zarr", kind, "folder", priority=priority)
+        self._release = priority.close
 
     def _print_contents(self) -> None:
         contents = self.contents
@@ -853,25 +1029,126 @@ class AnnDataServer:
         print_detail("obsp", ", ".join(sorted(contents.obsp)) or "none")
         print_detail("layers", ", ".join(sorted(contents.layers)) or "none")
 
+    def answer_request(
+        self, method: str, path: str, range_header: str | None
+    ) -> tuple[int, dict[str, str], bytes]:
+        """Answer one request for the dataset as the HTTP handler does, without a socket.
+
+        This is how a notebook widget's viewer reads the dataset
+        (:mod:`cellucid.jupyter._widget`): the routes of
+        :class:`AnnDataRequestHandler` but the viewer channel and the web
+        build -- the documents (``_cellucid/health``, ``info``, ``datasets``,
+        ``protocol``) and the store's bytes, one ``Range`` interval at a time
+        (``206`` with ``Content-Range``, ``416`` for an interval the resource
+        does not have). ``path`` is relative to the base address; ``method``
+        is ``GET`` or ``HEAD``. Returns the status, the headers and the body
+        (empty for ``HEAD``).
+        """
+        if method not in ("GET", "HEAD"):
+            return 405, {"Content-Type": "text/plain"}, b"Only GET and HEAD are answered"
+        route = unquote(urlparse(path).path).lstrip("/")
+        documents = {
+            "_cellucid/health": self._health_document,
+            "_cellucid/info": lambda: self.server_info,
+            "_cellucid/datasets": self._datasets_document,
+            "_cellucid/protocol": _protocol_capability_document,
+        }
+        if route in documents:
+            try:
+                document = documents[route]()
+            except OSError as error:
+                body = _unreadable(error).encode()
+                return 404, {"Content-Type": "text/plain", "Content-Length": str(len(body))}, body
+            body = json.dumps(document).encode("utf-8")
+            headers = {"Content-Type": "application/json", "Content-Length": str(len(body))}
+            return 200, headers, b"" if method == "HEAD" else body
+        try:
+            resolved = (
+                _resolve_store_route(self._served, route[len(ANNDATA_ROUTE_PREFIX) :])
+                if route.startswith(ANNDATA_ROUTE_PREFIX)
+                else None
+            )
+        except NotReady as waiting:
+            return _not_ready_answer(waiting)
+        if resolved is None:
+            body = f"Not found: {route}".encode()
+            return 404, {"Content-Type": "text/plain", "Content-Length": str(len(body))}, body
+        try:
+            file = None if not isinstance(resolved, Path) else open(resolved, "rb", buffering=0)  # noqa: SIM115 - closed below
+        except OSError:
+            body = f"{route} is no longer readable".encode()
+            return 404, {"Content-Type": "text/plain", "Content-Length": str(len(body))}, body
+        try:
+            if file is not None:
+                size, etag = file_version(file.fileno())
+            else:
+                assert not isinstance(resolved, Path)
+                size, etag = resolved[0].size, resolved[1]
+            try:
+                interval = parse_byte_range(range_header, size)
+            except ValueError:
+                body = b"Requested byte range is not satisfiable"
+                return 416, {
+                    "Content-Type": "text/plain",
+                    "Content-Length": str(len(body)),
+                    "Content-Range": f"bytes */{size}",
+                    "Accept-Ranges": "bytes",
+                }, body
+            start, end = interval if interval is not None else (0, size - 1)
+            length = 0 if size == 0 else end - start + 1
+            headers = {
+                "Content-Type": "application/octet-stream",
+                "Content-Length": str(length),
+                "Accept-Ranges": "bytes",
+                "ETag": etag,
+            }
+            if interval is not None:
+                headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+            status_code = 206 if interval is not None else 200
+            if method == "HEAD" or length == 0:
+                return status_code, headers, b""
+            if file is None:
+                assert not isinstance(resolved, Path)
+                # Only the bytes asked for are made (a file's matrix not counted yet: 503).
+                try:
+                    return status_code, headers, resolved[0].read(start, start + length)
+                except NotReady as waiting:
+                    return _not_ready_answer(waiting)
+            file.seek(start)
+            body = file.read(length)
+            if len(body) != length:
+                # The file shrank after its size was read.
+                message = f"{route} changed while it was read".encode()
+                return 409, {"Content-Type": "text/plain", "Content-Length": str(len(message))}, message
+            return status_code, headers, body
+        finally:
+            if file is not None:
+                file.close()
+
     @property
     def file_route(self) -> str:
         """The store's route, relative to the server's base URL."""
-        suffix = "/" if self.store.layout == "folder" else ""
+        suffix = "/" if self._served.layout == "folder" else ""
         return f"{ANNDATA_ROUTE_PREFIX}{self._served.route_name}{suffix}"
 
     def _datasets_document(self) -> dict[str, Any]:
+        served = self._served
         file: dict[str, Any] = {
             "url": self.file_route,
-            "kind": self.store.kind,
-            "layout": self.store.layout,
+            "kind": served.kind,
+            "layout": served.layout,
         }
-        if self.store.layout != "folder":
-            file["size"] = self.store.path.stat().st_size
-        elif self.store.files is not None:
-            # A browser cannot list a folder: its files and their exact sizes.
+        store = served.store
+        if store is not None and served.layout != "folder":
+            # The file as it is now: its size, and the validator its bytes are
+            # answered with, which names this version of it to the viewer
+            # (what it keeps of the file is filed under it).
+            file["size"], file["etag"] = path_version(store.path)
+        elif store is not None and store.files is not None:
+            # A browser cannot list a folder: its files, their exact sizes and validators.
             file["files"] = [
-                {"path": name, "size": (self.store.path / name).stat().st_size}
-                for name in self.store.files
+                {"path": name, "size": size, "etag": etag}
+                for name, (size, etag) in ((name, path_version(store.path / name)) for name in store.files)
             ]
         return {
             "datasets": [
@@ -894,12 +1171,38 @@ class AnnDataServer:
             "n_genes": info["n_genes"],
         }
 
-    def _remove_temporary_file(self) -> None:
-        finalizer = self._temporary_finalizer
-        self._temporary_finalizer = None
-        self._temporary_file = None
-        if finalizer is not None:
-            finalizer()
+    def _release_store(self) -> None:
+        release = self._release
+        self._release = None
+        if release is not None:
+            release()
+
+    @property
+    def obs_names(self) -> pd.Index | None:
+        """The served cells' obs names in their original order -- the order the
+        viewer names cells in -- or None when this process cannot read them (a
+        format only the browser reads).
+
+        One source with what is served: a store made for an object or a file
+        holds the names it took with the cells (an object's at show time,
+        whatever is done to it after); a file served as it is gives the names
+        it holds at the version it is served as, read again when it changes
+        (a file prepared again to the same path)."""
+        served = self._served
+        if served.priority is not None:
+            return served.priority.obs_names
+        store = served.store
+        if store is None or store.kind not in ANNDATA_KINDS | MUDATA_KINDS:
+            return None
+        version = _names_version(store)
+        with self._names_lock:
+            cached = self._names
+            if cached is None or cached[0] != version:
+                from .anndata_session._results import read_obs_names
+
+                cached = (version, read_obs_names(store.path))
+                self._names = cached
+            return cached[1]
 
     @property
     def url(self) -> str:
@@ -1029,7 +1332,7 @@ class AnnDataServer:
             served=self._served,
             server_info=dict(self.server_info),
             health=self._health_document(),
-            datasets=self._datasets_document(),
+            datasets=self._datasets_document,
             serve_web_ui=self.serve_web_ui,
             web_cache_dir=self.web_cache_dir,
             allowed_hosts=self.allowed_hosts,
@@ -1070,7 +1373,7 @@ class AnnDataServer:
             )
 
     def _finish_serving(self) -> None:
-        """Close the socket and remove a temporary file after serving ended."""
+        """Close the socket and release what serving held (a served store's scratch folder) after serving ended."""
         self._running = False
         server = self._server
         self._server = None
@@ -1079,7 +1382,7 @@ class AnnDataServer:
             if server is not None:
                 server.server_close()
         finally:
-            self._remove_temporary_file()
+            self._release_store()
 
     def _rollback_failed_start(self, *, shutdown: bool) -> None:
         """Rollback acquired resources without replacing the startup exception."""
@@ -1101,7 +1404,7 @@ class AnnDataServer:
         self._server = None
         self._thread = None
         self._serving = False
-        self._remove_temporary_file()
+        self._release_store()
         self._closed = True
 
     def start_background(self):
@@ -1109,7 +1412,7 @@ class AnnDataServer:
         self.start(blocking=False)
 
     def stop(self):
-        """Stop the server and remove a temporary file it wrote."""
+        """Stop the server and release what it held (a served store's scratch folder)."""
         self._running = False
         failures: list[BaseException] = []
         server = self._server
@@ -1131,7 +1434,7 @@ class AnnDataServer:
             thread.join()
         self._thread = None
         self._serving = False
-        self._remove_temporary_file()
+        self._release_store()
         self._closed = True
 
         if not self.quiet:
@@ -1180,6 +1483,7 @@ def serve_anndata(
     web_source_url: str = CELLUCID_WEB_URL,
     web_cache_dir: str | Path | None = None,
     allowed_hosts: Sequence[str] | None = None,
+    cache_bytes: int | None = None,
 ) -> AnnDataServer:
     """
     Serve a dataset (a file, a folder, an AnnData or MuData object) to the viewer, which reads it itself.
@@ -1197,8 +1501,10 @@ def serve_anndata(
         ``.h5`` file or ``outs/`` folder, a MatrixMarket folder,
         ``.rds``/``.rda``/``.RData``, gzipped or not), or an AnnData or MuData
         object. A leading ``~`` in a path is expanded to the user's home
-        directory. An object is written once to a temporary ``.h5ad`` or
-        ``.h5mu``, removed when the server stops.
+        directory. An AnnData or MuData object, and an AnnData, MuData, Loom
+        or 10x file not in priority order, are served as a Zarr store in
+        priority order, made as the viewer reads it from a snapshot taken
+        when the server starts; no copy of an object is written as a file.
     port : int
         Port to serve on (default: 8765).
     host : str
@@ -1223,12 +1529,14 @@ def serve_anndata(
     dataset_name : str, optional
         Exact non-empty human-readable name without surrounding whitespace or
         control characters. Unicode is preserved. Defaults to
-        ``uns['cellucid']['name']``; required when the store has none.
+        ``uns['cellucid']['name']``, else the file's name, or
+        ``AnnData (<n> cells)`` for an object.
     dataset_id : str, optional
         Portable 1-180 byte ASCII identifier beginning with a letter or digit
         and otherwise using only letters, digits, ``.``, ``_``, or ``-``; it
         cannot end in ``.`` or use a Windows device name. Defaults to
-        ``uns['cellucid']['id']``; required when the store has none.
+        ``uns['cellucid']['id']``, else made from the file's name without its
+        extension, or from the object's label (``AnnData (N cells)``) (said in one line).
     obs_keys : sequence of str, optional
         Exact ``obs`` columns the viewer shows, in this order. If None, every
         column is shown.
@@ -1260,6 +1568,14 @@ def serve_anndata(
         reverse proxy such as ``jupyter-server-proxy``. Each entry is one bare
         DNS name or IP literal — no port, no scheme, no wildcard — and is
         matched on any port.
+    cache_bytes : int, optional
+        What a store served in priority order (an object, or a file not in
+        priority order) keeps of what it makes, in bytes, least recently used
+        first out: the genes it renumbered and sorted for the chunks it
+        answers. None keeps a 64th of the machine's memory (256 MiB on a 16 GB
+        machine), at most the share the web app gives its decoded chunks, and
+        cellucid-r's ``cache_bytes`` keeps; 0 keeps nothing (each gene is made
+        again when it is read again).
 
     Returns
     -------
@@ -1306,6 +1622,7 @@ def serve_anndata(
         web_source_url=web_source_url,
         web_cache_dir=web_cache_dir,
         allowed_hosts=allowed_hosts,
+        cache_bytes=cache_bytes,
     )
     server.start()
     return server

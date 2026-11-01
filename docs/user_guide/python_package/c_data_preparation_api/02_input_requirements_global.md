@@ -28,10 +28,13 @@ is then written beside its target under a temporary hidden name
 
 ## Values
 
-- Numbers must be finite and fit in float32. An embedding, a vector field, an
-  expression matrix or a graph holding NaN, an infinity, or a magnitude above
-  float32's range is refused with a count of what was found and the first
-  positions affected.
+- Numbers must be finite and fit in float32. An expression matrix or a graph
+  holding NaN, an infinity, or a magnitude above float32's range is refused
+  with a count of what was found and the first positions affected.
+- An embedding or a vector field may hold rows of NaN (or an infinity): a cell
+  the array has no value for, written as given and not drawn in that
+  embedding (or drawn without an arrow). Every other value fits float32, and
+  at least one cell has finite values.
 - `obs` and `var` numbers may hold NaN (a missing value) but not infinities.
 - Integer counts in `gene_expression` are stored exactly: as float32 up to
   2^24, and as float64 when any count is larger.

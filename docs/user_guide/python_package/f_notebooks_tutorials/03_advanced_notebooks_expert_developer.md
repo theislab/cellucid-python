@@ -18,7 +18,7 @@ These tutorials are for power users and developers who want to:
 - Session bundle capture/restore and how it depends on dataset identity
 - Robust event handling patterns (timeouts, deduping, multiple viewers)
 - Vector field invariants (shape, dimension, scale) and failure modes
-- Debugging the Python server + iframe + web UI cache stack
+- Debugging the notebook widget, and the browser-tab server + web UI cache stack
 
 ```{note}
 For runnable hook/session notebooks, see {doc}`05_jupyter_embedding_hooks_sessions_gallery`.

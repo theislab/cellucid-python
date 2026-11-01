@@ -32,10 +32,12 @@ If you’re in Grid compare, click a panel first to make it the active view, the
 :alt: The Color by heading with its (i), above the three field selectors stacked in order — Categorical obs holding clusters, Continuous obs holding None, and an empty Gene expression search box — each followed by four small icon buttons, with the pointer pressing the first.
 :width: 504px
 
-The three selectors, in the order they appear. The four small buttons to the
-right of each are **Duplicate**, **Rename**, **Delete** and **Clear**; they are
-greyed out until that selector holds a field, which is why they look inert on
-the two empty rows here.
+The three selectors, in the order they appear. The small buttons to the
+right of each are **Duplicate**, **Rename**, **Delete** and **Clear**, and on
+the two obs rows also **Export** (after **Duplicate**: the field as a CSV of
+obs names and values, {doc}`../f_highlighting_selection/03_highlight_ui`);
+they are greyed out until that selector holds a field, which is why they look
+inert on the two empty rows here.
 ```
 
 :::{tip}
@@ -95,15 +97,25 @@ to see what a renamed field used to be called, look there.
 Gene expression is usually a long list (thousands of genes), so the UI is a search box:
 
 - Click in **Gene expression** → results dropdown opens
-- Type to filter genes by substring match
+- Type (or paste) to filter genes by substring match, ignoring letter case
 - Click a result to load and activate it
+
+A gene name is matched as it is written: a dot is a character like any other
+(`AC058791.1`, `RP11-34P13.7`). An Ensembl accession typed with a version
+(`ENSG00000141510.17`) also finds the same accession listed without one or
+with another version, since the version numbers a release of the annotation,
+not another gene; gene sets pasted into Gene signature or Dot plot are matched
+the same way.
 
 Keyboard shortcuts:
 - `↓` / `↑` move the highlighted result through the dropdown (opening it if
   it is closed); they wrap from the last result to the first and back, and
   `↑` with nothing highlighted starts at the last result
-- `Enter` selects the highlighted result, or the **top** result when none is
-  highlighted
+- `Enter` selects the highlighted result, or the **top** result for what the
+  box says when none is highlighted (the gene named exactly first, then names
+  that start with it). When the name matches no gene, the dropdown says **No
+  gene matches** and screen readers hear "*name* is not a gene in this
+  dataset."
 - `Esc` closes the dropdown (and removes focus)
 
 A gene you are about to choose starts loading early. When a result stays
@@ -114,7 +126,28 @@ choosing the result uses it instead of starting a second one. A background
 load that fails stays silent; choosing the gene loads it again and reports the
 error then.
 
-The search covers the gene list in use. Changing the gene names or the
+The search covers the gene list in use. A dataset's gene names are read
+right after its first view is drawn: until then the search shows **Reading
+gene names…** and cannot be typed in (and, if they could not be read, says
+so, with the reason as its tooltip). A gene chosen from elsewhere meanwhile (an
+analysis result's gene) is not shown, and a notification says that the gene
+names are still being read.
+
+A gene chosen is always shown or a notification says why not:
+
+- chosen while more cells are being opened (a progressive opening's step, or
+  **Apply** under **Cells to open**), it is read on the cells opened after
+  that step and shown then;
+- chosen while the gene list is replaced (**Session › Data mapping**, whether
+  you applied it or the app did because the values contradict the file's
+  `log1p` record), it is read from the new list and shown, under the name the
+  new list gives it; if the new list does not have it, a notification says so;
+- chosen while a session or a sample's saved view is being restored or saved,
+  it is not shown, and a notification says which and asks you to choose it
+  again when that has ended.
+
+Choosing another gene, pressing **Cancel** on its loading notification, or
+opening another dataset replaces a choice without a message. Changing the gene names or the
 expression matrix under **Session › Data mapping** replaces that list; a gene
 a view is coloured by stays selected when the new list has it (see
 {doc}`../b_data_loading/13_data_mapping`).

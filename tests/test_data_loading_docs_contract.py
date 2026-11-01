@@ -178,7 +178,7 @@ def test_real_pancreas_server_and_jupyter_evidence_is_wired_into_the_guides() ->
         "      embedding2d: {'key': 'X_umap', 'columns': [1, 0]}",
         "      knn: connectivities",
         "Consolidated metadata: built in memory (.zmetadata)",
-        "Serving: a decodable copy, written once to a temporary .h5ad",
+        "Serving: a Zarr store in priority order, made as the browser reads it",
     ):
         assert step_line in server_guide
 
@@ -240,14 +240,18 @@ def test_real_pancreas_server_and_jupyter_evidence_is_wired_into_the_guides() ->
     )
     assert "jupyter_pancreas" in jupyter_gallery
     # The viewer a notebook embeds is a scenario capture, and the connection
-    # report is a transcript of a real run, never a photographed notebook.
+    # report is the notebook widget's, as the notebook prints it, never a
+    # photographed notebook. A widget runs no server, so the report names no
+    # server probe.
     assert "show-anndata-driven-from-python.png" in jupyter_gallery
-    assert "'frontend_roundtrip': {'ok': True" in jupyter_gallery
-    assert "'anndata_store_probes'" in jupyter_gallery
+    assert "Transport: notebook widget" in jupyter_gallery
+    assert "Channel connected: True" in jupyter_gallery
+    assert "anndata_store_probes" not in jupyter_gallery
+    assert "server_health" not in jupyter_gallery
     assert "pancreas-notebook-embed.png" not in jupyter_gallery
     assert "pancreas-debug-connection.png" not in jupyter_gallery
     assert "show_anndata(DATA_PATH" in jupyter_gallery
-    assert "normal released-build resolution path" in jupyter_gallery
+    assert "viewer.pull()" in jupyter_gallery
     assert "show_anndata(adata)" not in jupyter_gallery
     assert "no-argument" not in jupyter_gallery
 

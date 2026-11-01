@@ -78,8 +78,9 @@ the viewer chooses for itself. See
   `{"id": "zlib", "level": 6}`, after numcodecs' `shuffle` filter on every
   array of values wider than one byte except the expression values; format 3
   uses the specification's `blosc` codec (shuffle, zlib level 6) for those
-  arrays and `gzip` for the others. Arrays read whole hold up to 262,144
-  values per chunk, the data and indices of the expression matrix 65,536.
+  arrays and `gzip` for the others. Arrays with one row per cell hold up to
+  65,536 values per chunk, the other arrays read whole 262,144, the data and
+  indices of the expression matrix 16,384.
 - A `.zarr.zip` stores every entry uncompressed (the chunks are compressed
   already), with the store at the top level of the archive.
 - The same inputs give a byte-identical store, folder or ZIP.

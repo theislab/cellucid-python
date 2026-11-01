@@ -3,8 +3,7 @@
 Goal: in one notebook, get a working loop where you **select cells in the viewer** and Python **highlights those same cells back** in the viewer.
 
 This is the fastest sanity check that:
-- the iframe loads,
-- the server is reachable,
+- the widget shows the viewer and the viewer reads the dataset,
 - viewer → Python events are arriving,
 - Python → viewer commands are being delivered.
 
@@ -18,7 +17,7 @@ This is the fastest sanity check that:
 **Time**: ~5–10 minutes
 
 **Prerequisites**
-- A Jupyter environment (classic Jupyter or JupyterLab; VS Code and Colab are untested, see {doc}`03_supported_environments_matrix`)
+- A notebook that shows widgets (JupyterLab is tested; Notebook 7, VS Code, Colab, marimo and Databricks are expected to work, see {doc}`03_supported_environments_matrix`)
 - `pip install cellucid`
 - An `AnnData` object named `adata`, or a path to a file or folder Cellucid reads (`.h5ad`, AnnData Zarr, `.h5mu`, `.loom`, 10x, MatrixMarket, `.rds`)
 
@@ -54,18 +53,19 @@ viewer = show_anndata("my_dataset.h5ad", height=600)  # written by cellucid.prep
 viewer
 ```
 
-## Step 2 — Wait until the viewer reports “ready”
+## Step 2 — Check that the viewer reported “ready”
 
-Run this in a new cell:
+The viewer loads once the cell that showed it finishes. When it shows the
+data, run this in a new cell:
 
 ```python
-viewer.wait_for_ready(timeout=60)
 print("Ready payload:", viewer.state.ready)
 ```
 
-Why this matters:
-- It confirms the viewer finished loading.
-- It makes later steps more reliable (you won’t race against initialization).
+`None` means it has not opened the dataset yet; run the cell again in a
+moment. (A notebook widget hears the viewer only between cells, so
+`viewer.wait_for_ready()` in the same cell would raise at once; a hook,
+`@viewer.on_ready`, runs as soon as it is ready.)
 
 ## Step 3 — Make a selection in the viewer UI
 
@@ -77,22 +77,35 @@ In the embedded viewer:
 For a deep dive on selection tools, see the web app guide:
 - {doc}`../../web_app/f_highlighting_selection/02_selection_tools_document_each_tool`
 
-## Step 4 — Block until Python receives the selection event
+## Step 4 — Read the selection in Python
 
-Run this in a new cell. It will **wait** until you make a selection in the viewer:
+After you made the selection, run this in a new cell:
 
 ```python
-event = viewer.wait_for_event("selection", timeout=None)  # wait forever
-cells = event.get("cells", [])
-print(f"Selected {len(cells)} cells (first 10):", cells[:10])
+selection = viewer.selection          # None before the first selection
+cells = selection.cells               # rows of obs (0-based), ascending
+print(f"Selected {len(selection)} cells (first 10):", cells[:10])
+print(selection.obs_names[:10])       # their obs names
 ```
 
-```{important}
-Cell indices are **0-based row indices** in the dataset that Cellucid is currently serving.
+The selection reached Python while the kernel was idle, so the next cell sees
+it at once.
 
-- For a viewer constructed directly from `adata`, indices refer to that
-  object's current row order.
-- If you reorder/subset `adata` after creating the viewer, indices will no longer match what you expect.
+```{important}
+Cell indices are the cells' **original positions** (0-based): a cell's row in
+the object or file as it was shown, in its original order.
+
+- For an object shown in its own order, that is its row as it was when shown;
+  `selection.obs_names` are the names it had then, whatever is done to it
+  after.
+- An object read from a Cellucid-ready file in priority order (`anndata.read_zarr`
+  of `prepare()`'s output) holds its rows in another order: the viewer still
+  names cells by original position, `selection.obs_names` name the right
+  cells, and `viewer.pull(adata)` / `viewer.subset(adata)` refuse that object
+  until `cellucid.restore_original_order(adata)` puts its cells back.
+- To take the cells themselves, use `viewer.subset(adata)` or
+  `adata[selection.obs_names]`; an object reordered or subset after it was
+  shown is refused by `pull` and `subset` rather than written in the wrong rows.
 ```
 
 ## Step 5 — Highlight the same cells back in the viewer
@@ -125,8 +138,8 @@ def handle_selection(event):
 ```
 
 ```{important}
-Hook callbacks run when the viewer sends an event on its channel to the local
-server, so they run on that channel's background thread, not the notebook's.
+Hook callbacks run when the viewer's event reaches Python on its channel, on
+that channel's background thread, not in a notebook cell.
 
 - Keep callbacks fast and defensive.
 - If you do heavy work (Scanpy, model inference), consider queueing the work and handling it outside the callback.
@@ -138,9 +151,9 @@ See {doc}`08_writing_robust_callbacks`.
 
 - **Nothing prints in Step 4**: you haven’t made a selection that triggers a `selection` event yet.
 - **Selection indices don’t match your `adata`**: your AnnData row order changed after the viewer started.
-- **Viewer construction raises or the iframe is blank**: distinguish an exact
-  web-generation startup error from a browser URL/mixed-content problem (see
-  troubleshooting).
+- **The output is empty or says the app did not load**: the notebook does not
+  show widgets (`anywidget` missing where the notebook server runs), or the
+  browser cannot reach `https://www.cellucid.com` (see troubleshooting).
 
 ## Troubleshooting
 
@@ -159,4 +172,4 @@ Then use the symptom-based guide:
 - Commands catalog (Python → viewer): {doc}`06_python_to_frontend_commands`
 - Events catalog (viewer → Python): {doc}`07_frontend_to_python_events`
 - Viewer state + waiting: {doc}`09_viewer_state_and_wait_for_event`
-- Session bundles (no-download): {doc}`10_session_bundles_get_session_bundle`
+- Session bundles (no-download): {doc}`10_session_bundles_request_session_bundle`

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import functools
 import os
+import warnings
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal, ParamSpec, TypeVar
@@ -15,6 +16,7 @@ import pandas as pd
 from scipy import sparse
 
 from .._anndata_files import AnnDataContents, is_mudata
+from .._console import console_print
 from .._contracts import (
     _require_dataset_id,
     _require_dataset_name,
@@ -24,6 +26,7 @@ from .._contracts import (
 from .._launch_defaults import launch_defaults
 from .._plural import plural
 from ..data_mapping import EmbeddingKeySpec, column_gene_names, default_modality
+from ..subsample import _require_uint32
 from ._data import (
     anndata_components,
     cellucid_record,
@@ -39,6 +42,7 @@ from ._inputs import (
     resolve_genes,
     resolve_obs,
     resolve_vector_fields,
+    storable_columns,
     stored_expression,
 )
 from ._mudata import (
@@ -52,6 +56,7 @@ from ._mudata import (
     resolve_modality,
 )
 from ._outliers import DEFAULT_MIN_POINTS, stored_outlier_quantiles
+from ._priority import CellPriority, prefix_levels, stored_order_of, without_positions
 from ._store import DEFAULT_ZARR_FORMAT, Elements, OutputTarget, write_store
 
 #: The order ``uns['cellucid']['defaults']`` lists its keys in.
@@ -230,6 +235,7 @@ def prepare(
     normalize_embeddings: bool | None = None,
     centroid_min_points: int | None = None,
     modality: str | None = None,
+    priority_seed: int | None = 0,
     zarr_format: Literal[2, 3] | None = None,
     force: bool = False,
 ) -> Path:
@@ -303,7 +309,11 @@ def prepare(
           ``X_<basis>``, which is that vector field; ``obsp['connectivities']``;
           and from ``uns['cellucid']`` the identity (``id``, ``name``,
           ``description``, ``citation``, ``source``) and the launch defaults.
-          Layers, ``raw`` and other ``obsp`` matrices are not written. To leave
+          Layers, ``raw``, other ``obsp`` matrices, ``obsm`` entries that are
+          not numeric arrays, and ``obs``/``var`` columns of no AnnData
+          encoding Cellucid writes (a date, a time span) are not written, and
+          a message names each one, as cellucid-r names them (the same column
+          given as ``obs=`` is refused, saying how to convert it). To leave
           out a component ``data`` holds, remove it from a copy first.
         - MuData (modalities over shared cells, ``axis`` 0): the cells'
           ``mdata.obs``, ``mdata.obsm`` (the shared embeddings and vector
@@ -322,7 +332,11 @@ def prepare(
         as ``obsm[key]`` in float32, every column, at its own coordinates (the
         viewer normalizes them). A latent space for outlier measurement is one
         of them, named by ``latent_key``. A plain ``(n_cells,)`` vector is one
-        column; sparse input is densified. ``X_umap_1d``/``X_umap_2d``/``X_umap_3d``,
+        column; sparse input is densified. A row holding NaN (or an infinity)
+        is a cell the embedding does not place (one computed on some of the
+        cells): it is written as given, the viewer leaves it out of that
+        embedding's views, and in the latent space it gets no outlier
+        quantile; at least one cell must have finite values. ``X_umap_1d``/``X_umap_2d``/``X_umap_3d``,
         else the first 1- to 3-column of ``X_umap``, ``X_UMAP``, ``X_wnn.umap``
         and ``X_ref.umap``, are shown by default.
     dataset_id
@@ -351,7 +365,11 @@ def prepare(
     connectivities
         ``(n_cells, n_cells)`` neighbour graph, stored as
         ``obsp['connectivities']`` (CSR float32). Exactly symmetric, finite,
-        non-negative, with a zero diagonal.
+        non-negative; its diagonal is left out (a self-loop is no edge: Seurat's
+        ``RNA_snn`` has 1 there), and a directed graph (``RNA_nn``,
+        ``distances``) is refused. From an AnnData ``data=``, the graph the
+        viewer's default rule opens with: ``obsp['connectivities']``, else
+        Seurat's ``<assay>_snn``.
     vector_fields
         ``{field: {embedding key: (n_cells, k) array}}``, one column per
         column of the embedding. Each array is stored as
@@ -396,7 +414,8 @@ def prepare(
         The obs columns the viewer lists, in this order; every column is
         stored either way.
     var_gene_id_column
-        The var column whose values name the genes in the viewer.
+        The var column whose values name the genes in the viewer. Omitted,
+        the var index names them; Data mapping can choose a column later.
     vector_field_default
         The ``vector_fields`` field the overlay opens on; one of its
         embeddings must be shown when the file opens (a chosen or default
@@ -413,6 +432,17 @@ def prepare(
         (``rna``, ``gex``, ``gene expression``, ``gene_expression``, ``sct``,
         any case), else the first. Refused for an AnnData, which has one
         feature space.
+    priority_seed
+        The seed of the cells' priority order, an integer in
+        ``[0, 2**32 - 1]``. The cells are stored by ascending priority -- the
+        ``uniform`` rank of the subsampling specification
+        (:func:`~cellucid.subsample_cells`) with this seed -- so every
+        subsample Cellucid opens with this seed is the first rows of every
+        array, and reads nothing of the cells it leaves out. Each row's
+        original position is kept in ``obs['cellucid_original_position']``;
+        :func:`~cellucid.restore_original_order` puts the cells back in the
+        order given. None stores the cells in the order given, without a
+        priority.
     zarr_format
         2 or 3, for ``format="zarr"`` or ``"zarr.zip"``; Zarr v2 when None.
         Refused with ``format="h5ad"`` and ``"h5mu"``.
@@ -444,6 +474,8 @@ def prepare(
         ``out_path`` exists and ``force`` is False.
     """
     force = _require_native_boolean(force, label="force")
+    if priority_seed is not None:
+        priority_seed = _require_uint32(priority_seed, "priority_seed")
     explicit = {
         "embeddings": embeddings,
         "dataset_id": dataset_id,
@@ -474,7 +506,20 @@ def prepare(
             f"data must be an anndata.AnnData or a mudata.MuData, got {type(data).__name__}. "
             "Pass arrays and data frames as embeddings=, obs=, gene_expression= and the rest."
         )
+    positions: np.ndarray | None = None
+    if data is not None:
+        # An object read from a file in a verified priority order holds its
+        # cells in that stored order: each row's original position is known,
+        # and the way back to the original order and on to the file's is one
+        # permutation (CellPriority.of), so a file prepared from it names
+        # every cell as that file did -- and one in the same order is written
+        # as it is, with no copy of the object.
+        stored = stored_order_of(data)
+        if stored.notice is not None:
+            warnings.warn(stored.notice, UserWarning, stacklevel=3)
+        positions = stored.positions
     selected = _selected_modalities(data, modalities)
+    notes: list[tuple[str, str]] = []
     multimodal = data is not None and is_mudata(data) and (selected is None or len(selected) > 1)
     target = _resolve_target(
         out_path, output_format=format, zarr_format=zarr_format, force=force, mudata=multimodal
@@ -490,9 +535,10 @@ def prepare(
             )
         names = check_mudata(data, selected)
         every = [str(name) for name in data.mod]
-        arguments = {**_mudata_root_components(data, every), **given}
+        arguments = {**_mudata_root_components(data, every, notes), **given, "priority_seed": priority_seed}
+        _say_not_written(notes, given)
         _require_identity(arguments, data_given=True)
-        write_store(target, _mudata_layout(data, names, arguments))
+        write_store(target, _mudata_layout(data, names, arguments, positions))
     else:
         if selected is not None:
             if "modality" in given:
@@ -500,10 +546,11 @@ def prepare(
                     "modality names the modality the viewer opens on, and modalities= writes "
                     "one, which is stored as an AnnData with no modalities."
                 )
-            components = _single_modality_components(data, selected[0])
+            components = _single_modality_components(data, selected[0], notes)
         else:
-            components = anndata_components(data) if data is not None else {}
-        arguments = {**components, **given}
+            components = anndata_components(data, notes) if data is not None else {}
+        arguments = {**components, **given, "priority_seed": priority_seed}
+        _say_not_written(notes, given)
         _require_identity(arguments, data_given=data is not None)
         if "embeddings" not in given and data is None:
             raise TypeError(
@@ -516,8 +563,15 @@ def prepare(
                 "data holds no embedding: its obsm has no numeric array. Compute one, for "
                 "example sc.pp.neighbors(adata); sc.tl.umap(adata), or pass embeddings=."
             )
-        write_store(target, _anndata_elements(arguments))
+        write_store(target, _anndata_elements(arguments, positions))
     return target.path
+
+
+def _say_not_written(notes: list[tuple[str, str]], given: Mapping[str, Any]) -> None:
+    """Say what of ``data`` is not written, for each component an explicit argument does not replace."""
+    for component, note in notes:
+        if component not in given:
+            console_print(note)
 
 
 def _require_identity(arguments: dict[str, Any], *, data_given: bool) -> None:
@@ -595,8 +649,9 @@ def _with_defaults(
     *,
     obs_columns: dict[str, Any],
     latent: np.ndarray | None,
+    priority: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """``cellucid`` with its launch defaults and, for a latent space, its outlier quantiles."""
+    """``cellucid`` with its launch defaults, for a latent space its outlier quantiles, and its priority."""
     if defaults:
         cellucid["defaults"] = _uns_value({key: defaults[key] for key in _DEFAULTS_ORDER if key in defaults})
     if latent is not None:
@@ -606,6 +661,8 @@ def _with_defaults(
             latent,
             defaults.get("centroidMinPoints", DEFAULT_MIN_POINTS),
         )
+    if priority is not None:
+        cellucid["priority"] = priority
     return cellucid
 
 
@@ -618,12 +675,18 @@ def _require_vector_field_default(field: object, fields: Sequence[str]) -> None:
         )
 
 
-def _anndata_elements(arguments: Mapping[str, Any]) -> Elements:
-    """One Cellucid-ready AnnData's elements, every component checked."""
+def _anndata_elements(arguments: Mapping[str, Any], given: np.ndarray | None = None) -> Elements:
+    """One Cellucid-ready AnnData's elements, every component checked.
+
+    ``given`` is each row's original position when the components are an
+    object's in a verified stored order (:func:`prepare`), None when each row
+    is its own.
+    """
     cellucid = _cellucid_identity(arguments)
     obsm, n_cells = resolve_embeddings(arguments["embeddings"])
     vectors, fields = resolve_vector_fields(arguments.get("vector_fields"), obsm, n_cells)
     obs_index, obs_columns = resolve_obs(arguments.get("obs"), n_cells)
+    obs_columns = without_positions(obs_columns, "obs", verified=given is not None)
 
     gene_expression = arguments.get("gene_expression")
     var_gene_id_column = arguments.get("var_gene_id_column")
@@ -636,24 +699,41 @@ def _anndata_elements(arguments: Mapping[str, Any]) -> Elements:
                 f"{supplied[0]} describes the genes of gene_expression, and no "
                 "gene_expression was supplied."
             )
-        x = None
+        expression = None
+        genes = None
         var_index = np.asarray([], dtype=object)
         var_columns: dict[str, Any] = {}
     else:
-        expression, var_index, var_columns = resolve_genes(
-            resolve_expression(gene_expression, n_cells),
+        expression = resolve_expression(gene_expression, n_cells)
+        genes, var_index, var_columns = resolve_genes(
+            int(expression.shape[1]),
             arguments.get("var"),
             var_gene_id_column,
             arguments.get("gene_identifiers"),
         )
-        x = stored_expression(expression)
-        # The matrix before its values took their stored type is not kept.
-        del expression
 
     connectivities = arguments.get("connectivities")
     obsp = {} if connectivities is None else {
         "connectivities": resolve_connectivities(connectivities, n_cells)
     }
+
+    # Every per-cell element in the file's order (a priority order, or the
+    # original one for an object in a stored order), before anything is
+    # derived from it (the outlier quantiles), so the file holds what its rows give.
+    priority = CellPriority.of(n_cells, arguments.get("priority_seed"), given)
+    levels: np.ndarray | None = None
+    if priority is not None:
+        obsm = priority.rows_of_mapping(obsm)
+        vectors = priority.rows_of_mapping(vectors)
+        obs_index = priority.rows(obs_index)
+        obs_columns = priority.obs_columns(obs_columns)
+        obsp = {key: priority.graph(graph) for key, graph in obsp.items()}
+        if priority.recorded:
+            levels = prefix_levels(n_cells)
+    order, new_row = (None, None) if priority is None else priority.rows_moved
+    # Gene-major in the file's order, in one pass (:mod:`._gene_major`).
+    x = None if expression is None else stored_expression(expression, genes=genes, order=order, new_row=new_row, levels=levels)
+    del expression
 
     _require_vector_field_default(arguments.get("vector_field_default"), fields)
     all_obsm = {**obsm, **vectors}
@@ -679,6 +759,7 @@ def _anndata_elements(arguments: Mapping[str, Any]) -> Elements:
         defaults,
         obs_columns=obs_columns,
         latent=None if latent_key is None else obsm[latent_key],
+        priority=None if priority is None or not priority.recorded else priority.record(levels),
     )
     return Elements(
         x=x,
@@ -719,7 +800,7 @@ def _selected_modalities(data: Any, modalities: object) -> list[str] | None:
     return chosen
 
 
-def _single_modality_components(mdata: Any, name: str) -> dict[str, Any]:
+def _single_modality_components(mdata: Any, name: str, notes: list[tuple[str, str]] | None = None) -> dict[str, Any]:
     """One modality of a MuData as an AnnData's components (``modalities=[name]``).
 
     The root's cells, obs, embeddings, vector fields, graph and identity, and
@@ -745,7 +826,7 @@ def _single_modality_components(mdata: Any, name: str) -> dict[str, Any]:
     def placed(values: Any) -> Any:
         return values if in_order else values[rows]
 
-    components = _mudata_root_components(mdata, every)
+    components = _mudata_root_components(mdata, every, notes)
     own = {key: placed(value) for key, value in modality.obsm.items() if is_cell_array(value)}
     clash = sorted(set(own) & set(components["embeddings"]))
     if clash:
@@ -761,7 +842,10 @@ def _single_modality_components(mdata: Any, name: str) -> dict[str, Any]:
             merged.setdefault(field, {}).update(arrays)
         components["vector_fields"] = merged
     components["gene_expression"] = placed(modality.X)
-    components["var"] = modality.var
+    var, note = storable_columns(modality.var, f"mdata.mod[{name!r}].var")
+    components["var"] = var
+    if note is not None and notes is not None:
+        notes.append(("var", note))
     if "connectivities" not in components and "connectivities" in modality.obsp:
         graph = modality.obsp["connectivities"]
         components["connectivities"] = graph if in_order else graph[rows][:, rows]
@@ -774,7 +858,7 @@ def _copied_from_modality(key: str, names: Sequence[str], keys_of: Callable[[str
     return bool(separator) and name in names and inner in keys_of(name)
 
 
-def _mudata_root_components(mdata: Any, names: Sequence[str]) -> dict[str, Any]:
+def _mudata_root_components(mdata: Any, names: Sequence[str], notes: list[tuple[str, str]] | None = None) -> dict[str, Any]:
     """What a MuData holds at its root, as ``prepare()`` takes it (:func:`._data.split_obsm`).
 
     ``names`` are every modality of ``mdata``: mudata's root copies of any of
@@ -794,7 +878,10 @@ def _mudata_root_components(mdata: Any, names: Sequence[str]) -> dict[str, Any]:
         and not _copied_from_modality(str(key), names, lambda name: mdata.mod[name].obsm)
     }
     embeddings, fields = split_obsm(root_obsm)
-    components: dict[str, Any] = {"obs": obs.drop(columns=copied), "embeddings": embeddings}
+    stored_obs, note = storable_columns(obs.drop(columns=copied), "mdata.obs")
+    if note is not None and notes is not None:
+        notes.append(("obs", note))
+    components: dict[str, Any] = {"obs": stored_obs, "embeddings": embeddings}
     if fields:
         components["vector_fields"] = fields
     if "connectivities" in mdata.obsp:
@@ -842,8 +929,12 @@ def _selected_var_axis(
     return var_index, placed
 
 
-def _mudata_layout(mdata: Any, names: Sequence[str], arguments: Mapping[str, Any]) -> MuDataLayout:
-    """One Cellucid-ready MuData, every component but the modalities' matrices checked."""
+def _mudata_layout(mdata: Any, names: Sequence[str], arguments: Mapping[str, Any], given: np.ndarray | None = None) -> MuDataLayout:
+    """One Cellucid-ready MuData, every component but the modalities' matrices checked.
+
+    ``given`` is each cell's original position when the MuData is in a
+    verified stored order (:func:`prepare`), None when each row is its own.
+    """
     cellucid = _cellucid_identity(arguments)
     n_cells = int(mdata.n_obs)
     supplied = arguments.get("embeddings") or {}
@@ -864,6 +955,7 @@ def _mudata_layout(mdata: Any, names: Sequence[str], arguments: Mapping[str, Any
             "obs has one row per cell of the MuData."
         )
     obs_index, obs_columns = resolve_obs(given_obs, n_cells)
+    obs_columns = without_positions(obs_columns, "obs", verified=given is not None)
     connectivities = arguments.get("connectivities")
     obsp = {} if connectivities is None else {
         "connectivities": resolve_connectivities(connectivities, n_cells)
@@ -873,11 +965,25 @@ def _mudata_layout(mdata: Any, names: Sequence[str], arguments: Mapping[str, Any
         for name in names
         if name in mdata.obsm and np.asarray(mdata.obsm[name]).dtype == bool
     }
-    modalities = {name: resolve_modality(mdata, name) for name in names}
+    modalities = {name: resolve_modality(mdata, name, stored=given is not None) for name in names}
     if list(names) == [str(name) for name in mdata.mod]:
         var_index = global_var_index(mdata)
     else:
         var_index, modalities = _selected_var_axis(mdata, modalities)
+    # The cells in priority order, each modality's rows by its cells' global
+    # priority, so a prefix of the cells is a prefix of every modality.
+    priority = CellPriority.of(n_cells, arguments.get("priority_seed"), given)
+    levels: np.ndarray | None = None
+    if priority is not None:
+        obsm = priority.rows_of_mapping(obsm)
+        vectors = priority.rows_of_mapping(vectors)
+        obs_index = priority.rows(obs_index)
+        obs_columns = priority.obs_columns(obs_columns)
+        obsp = {key: priority.graph(graph) for key, graph in obsp.items()}
+        masks = {name: priority.rows(mask) for name, mask in masks.items()}
+        if priority.recorded:
+            levels = prefix_levels(n_cells)
+        modalities = {name: priority.modality(item, levels) for name, item in modalities.items()}
     if not obsm and not any(modality.obsm for modality in modalities.values()):
         raise ValueError(
             "This MuData holds no embedding: neither mdata.obsm nor any modality's obsm has "
@@ -894,15 +1000,10 @@ def _mudata_layout(mdata: Any, names: Sequence[str], arguments: Mapping[str, Any
         if latent_key in obsm:
             latent = obsm[latent_key]
         elif latent_key in placed_widths:
+            # A cell the modality did not measure has a NaN row: it gets no
+            # outlier quantile, and the other cells are measured without it.
             name, _, key = latent_key.partition(":")
             modality = modalities[name]
-            if np.any(modality.obsmap == 0):
-                raise ValueError(
-                    f"latent_key names {latent_key!r}, and modality {name!r} did not measure "
-                    "every cell, so the outlier filter could not measure the others. Name an "
-                    "embedding every cell has: one of mdata.obsm, or of a modality that "
-                    "measured every cell."
-                )
             latent = placed_rows(modality.obsm[key], modality.obsmap)
         else:
             raise ValueError(
@@ -945,7 +1046,13 @@ def _mudata_layout(mdata: Any, names: Sequence[str], arguments: Mapping[str, Any
         ),
         arguments,
     )
-    cellucid = _with_defaults(cellucid, defaults, obs_columns=obs_columns, latent=latent)
+    cellucid = _with_defaults(
+        cellucid,
+        defaults,
+        obs_columns=obs_columns,
+        latent=latent,
+        priority=None if priority is None or not priority.recorded else priority.record(levels),
+    )
     return MuDataLayout(
         obs_index=obs_index,
         obs=obs_columns,

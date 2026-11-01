@@ -292,10 +292,16 @@ The browser reads the store in place, with HTTP range requests through the
 tunnel, and the server only serves bytes:
 
 - **The server holds no matrix in memory.** For an `.h5ad` or Zarr path it reads
-  metadata at startup and then serves the bytes each view asks for, so the job
-  needs little memory. An in-memory `AnnData` is the exception: it is written
-  once to a temporary `.h5ad` (in the system temporary directory), which needs
-  disk space for the whole object.
+  metadata and the small elements (`obs`, `var`, `uns`) at startup and then
+  makes each chunk a view asks for from the file, so the job needs little
+  memory: an array stored in chunks is decoded once, as its rows are first
+  read, into a memory-mapped file in the temporary directory (disk space for
+  the decoded arrays read, removed when the server stops; point `TMPDIR` at
+  node-local scratch on a cluster). An in-memory `AnnData` is held by your session;
+  its arrays are copied once (a sparse `X` laid out gene-major) into
+  memory-mapped files in the system temporary directory, which need disk space
+  for one uncompressed copy of them; a later server removes them when a job
+  was killed before it stopped its own.
 - **The neighbor graph costs nothing until it is drawn.** The viewer reads
   `obsp['connectivities']` (or the graph `--knn` names) the first time a view
   draws edges. See {doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
@@ -324,7 +330,7 @@ without it; see
 | `Port 12765 is already in use` | Another user or an earlier server holds it on a shared node | Choose another port, or `--port 0` and read the printed one |
 | Startup aborts fetching the web build | The node has no outbound access | `--no-web-ui`, or serve from a node that has it |
 | Startup silent for minutes in step 4 | The verified web build is being fetched | Wait, or `--no-web-ui` on a node without outbound access |
-| Startup silent in step 1 after `Browser cannot decode` | The store uses a codec the browser cannot decode, and a decodable copy is being written once | Wait once, or rewrite the store with gzip compression |
+| The first views slow after `Browser cannot decode` | The store uses a codec the browser cannot decode; each chunk is decoded on the kernel as it is asked for | Rewrite the store with gzip compression, or `prepare()` it |
 
 ## Related pages
 

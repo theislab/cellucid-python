@@ -76,28 +76,33 @@ Most “bugs” are one of these.
 1) No active field selected (Cellucid renders the “no-field” state as neutral gray).
 2) **Log color scale** enabled on a sparse field, where most cells are zero and
    therefore drop to the “None” grey.
-3) The gene or column you picked **cannot be drawn** — it contains an infinity,
+3) **Gray for zero** is on for a sparse gene: its zeros (most cells) are drawn
+   gray, on purpose ({ref}`gray-for-zero`).
+4) The gene or column you picked **cannot be drawn** — it contains an infinity,
    or it has no value at all — so it was refused and the active field never
    changed. What you are looking at is still the previous (or no-field) grey.
-4) The field did not load correctly (transport failure).
+5) The field did not load correctly (transport failure).
 
 ### How to confirm
 
 - If all selectors show **None** → it’s (1).
 - If **Log color scale** is on and you’re coloring by a sparse gene → it’s often (2).
+- If **Gray for zero** is on in the gene's legend → it’s (3).
 - If a notification titled `Gene cannot be shown` (or one beginning
   `Failed to load field:`) counts `+Infinity` / `-Infinity` / `NaN` values and
-  lists the first affected cells → it’s (3). Note that the selector snaps back:
+  lists the first affected cells → it’s (4). Note that the selector snaps back:
   the field was never activated.
-- If you see a load failure that names a status code or a URL instead → it’s (4).
+- If you see a load failure that names a status code or a URL instead → it’s (5).
 
 ### Fix
 
 - For (1): pick a categorical/continuous field or gene.
 - For (2): turn off **Log color scale**, or choose a gene/field with positive values.
-- For (3): repair the values at the source — reloading cannot change the
+- For (3): turn **Gray for zero** off: the zeros take the colour scale's
+  lowest colour again (the default).
+- For (4): repair the values at the source — reloading cannot change the
   outcome. See {ref}`undrawable-continuous-payload`.
-- For (4): reload the dataset; if it persists, check the column in the AnnData file itself.
+- For (5): reload the dataset; if it persists, check the column in the AnnData file itself.
 
 :::{note}
 “The field has **no** positive values at all” is not a possible cause here:
@@ -110,7 +115,8 @@ picture this way.
 ### Prevention
 
 - Treat “gray” as a meaning-bearing state:
-  - gray can mean “no field selected” or “value is missing / log-incompatible”.
+  - gray can mean “no field selected”, “value is missing / log-incompatible”,
+    or, with Gray for zero on, “the gene is 0 here”.
 
 ---
 
@@ -247,7 +253,11 @@ whereas `0` is a real measurement and will be coloured as one.
 
 ### Likely causes (ordered)
 
-1) The gene is published under a different name than the one you typed.
+1) The gene is published under a different name than the one you typed. When
+   the genes are named by database identifiers (an Ensembl var index such as
+   `ENSG00000168484`), a symbol finds nothing: choose the var column that
+   holds the symbols (CELLxGENE's `feature_name`) under **Session › Data
+   mapping › Gene names** and Apply.
 2) The gene is not in this dataset at all — the file holds only some of the
    source’s genes.
 3) The search matches anywhere in a name; a short query matches many genes.
@@ -255,6 +265,11 @@ whereas `0` is a real measurement and will be coloured as one.
    names that start with it, then the rest, and Enter takes the top one unless
    you first move the highlight with the arrow keys.
 4) The gene list is present but very large; your query is too broad.
+5) The gene was chosen but is not shown yet, or not at all. A gene chosen while
+   more cells are being opened, or while the gene list is replaced, is shown
+   once that ends; one chosen while a session or a saved view is being
+   restored or saved is not, and a notification says so. Read the
+   notification, then choose the gene again.
 
 ### How to confirm
 
@@ -262,10 +277,15 @@ whereas `0` is a real measurement and will be coloured as one.
   `gata3` finds `GATA3`.
 - If the list keeps growing as you scroll (every match is listed, 100 at a time), you’re matching too many.
 - Open the field selector and read a few gene names directly. Search matches
-  the gene names the dataset lists, and there is no alias mapping.
-- Compare the count in the empty-state message (“This dataset publishes *N* gene
-  names…”) against the gene count you expect from the source. A large gap means
-  preparation published a subset.
+  the gene names the dataset lists, as **Session › Data mapping › Gene
+  names** names them (the var index, or the var column chosen there), and no
+  other alias.
+- Compare the count in the empty-state message (“Searched the *N* genes of
+  this dataset, named by …”) against the gene count you expect from the
+  source. A large gap means preparation published a subset. When it names the
+  var index and your file keeps symbols in another column (a CELLxGENE file's
+  `feature_name`), **Choose gene names…** opens **Session › Data mapping ›
+  Gene names**, where that column names the genes.
 
 ### If you are using a built-in sample
 

@@ -175,33 +175,27 @@ Disabling the category filter stops it from hiding cells, but the legend may sti
 
 ---
 
-## 6) “My gene filter (or outlier filter) stops applying when I switch fields”
+## 6) “My gene filter (or outlier filter) still hides cells after I switched fields”
 
 ### What you see
 
 - You filter by gene expression or outliers.
-- You switch to another field.
-- The filtered-out cells reappear.
-
-```{figure} ../../../_static/screenshots/filtering/window-gene-range-scope-lost.png
-:alt: The same window after switching the active field to clusters: every cell is drawn again, the Ins1 row has left the Filters block, and the count line reads Showing all 3,696 cells.
-:width: 1440px
-
-One field change after an `Ins1` range filter was hiding almost everything.
-The row is gone from the list, so the app is not hiding the filter from you —
-the filter genuinely stopped applying.
-```
+- You colour by another field.
+- The filtered-out cells stay hidden.
 
 ### Why it happens
 
-Current behavior:
-- gene filters apply only while that gene is the active field,
-- outlier filtering applies only while the categorical field it was set on is the active field (its threshold is kept for when you come back).
+Every filter keeps applying until you remove it, whatever the view is coloured
+by: a gene's range filter and a field's outlier filter hide cells exactly as an
+obs range or category filter does. Each is listed under **Filters**, and the
+visible-cell count and the analyses that use the visible cells read the same
+filters.
 
 ### What to do
 
-- Treat gene/outlier filtering as “active-field scoped” tools.
-- If you need persistent gating while coloring by something else, write the gate into the file as an obs field (e.g., a score/boolean) and filter it as obs.
+- To see every cell again, remove or disable the filter under **Filters**.
+- To change a gene's range, colour by that gene again; to change an outlier
+  threshold, colour by the field it was set on.
 
 ---
 
@@ -295,18 +289,17 @@ after.
 
 ### What you see
 
-- Sliders feel “chunky” (small changes don’t affect visibility).
-- Very fine thresholds are hard to set.
+- A slider skips the exact threshold you want (`≥ 1500`, `≥ 0.0125`).
 
 ### Why it happens
 
-UI sliders are `0–100` percent steps (1% increments) of the field's full
-range.
+A slider moves in thousandths of the field's range (log-spaced on a log colour
+scale), so its bounds are a grid, if a fine one.
 
 ### What to do
 
-- Use UI filtering for coarse/interactive gating.
-- Do fine-grained gating upstream in Python or R when precision matters.
+- Type the bound in the number box beside the slider: it applies exactly as
+  typed, and the filter list and figure provenance state it exactly.
 
 ---
 

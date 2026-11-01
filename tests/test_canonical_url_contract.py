@@ -52,6 +52,11 @@ FROZEN_APEX_IDENTIFIERS: dict[str, tuple[str, ...]] = {
         '  "generator": "https://cellucid.com",',
         '  "exporter": { "name": "Cellucid", "website": "https://cellucid.com" },',
     ),
+    # The apex is one of the two origins the hosted app is served from, which
+    # the server's CORS policy names exactly.
+    "src/cellucid/_server_base.py": (
+        'HOSTED_APP_ORIGINS = frozenset({CELLUCID_WEB_URL, "https://cellucid.com"})',
+    ),
     CONVENTION_PAGE: (
         "- `https://cellucid.com/contracts/community-annotation/user-v1.schema.json`",
         "- `https://cellucid.com/contracts/community-annotation/config-v1.schema.json`",
@@ -60,10 +65,10 @@ FROZEN_APEX_IDENTIFIERS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# `CORSMixin._get_allowed_origin` accepts the apex and any `.cellucid.com`
-# subdomain over HTTPS. These lines describe that matcher, so they are neither
-# links nor identifiers.
-ORIGIN_PATTERN_LINE = "- `https://cellucid.com` and `https://*.cellucid.com`"
+# `CORSMixin._get_allowed_origin` accepts the hosted app's two origins exactly
+# (`HOSTED_APP_ORIGINS`). This line names them as origins, so it is neither a
+# link nor an identifier.
+ORIGIN_PATTERN_LINE = "- `https://www.cellucid.com` and `https://cellucid.com` (the hosted app's origins, exactly)"
 ORIGIN_PATTERN_PAGES = (
     "docs/user_guide/python_package/e_jupyter_hooks/"
     "13_security_cors_origins_and_mixed_content.md",

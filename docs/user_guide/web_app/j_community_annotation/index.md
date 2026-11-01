@@ -29,7 +29,9 @@ Community annotation is “offline-first” after you connect a repo:
   or by fork + Pull Request only when the repository allows forking. If neither
   route is available, Publish is disabled. Cellucid selects one route before
   mutation; a failure is terminal and does not switch to the other route.
-- GitHub OAuth tokens are stored only in `sessionStorage` (cleared when the tab closes).
+- Your GitHub sign-in token expires after 8 hours. It is stored only in this
+  tab's `sessionStorage` (a reload keeps it until it expires; closing the tab
+  ends it), and **Sign out** revokes it at GitHub.
 
 Practical implication after a repository has been connected and its state is
 available locally:
@@ -160,6 +162,13 @@ Community annotation is per **dataset**, per **categorical obs column**, per **c
 - **Annotatable column**: a categorical obs field (e.g. `leiden`, `cluster`, `cell_type_coarse`) that the author enables for annotation.
 - **Category**: one category/level within that column (e.g. Leiden cluster `"7"`). Each category gets its own vote/suggestion “bucket”.
 
+Annotations name a column and a category, never a cell, so they do not depend
+on which cells are open or on the order a file stores them in: a subsample
+({doc}`../b_data_loading/21_subsampled_loading`) and a file Cellucid wrote (its
+cells in priority order) read and write the same annotation files as every
+cell does. The consensus column the app derives from them labels the cells
+that are open.
+
 Within each bucket, annotators can:
 
 - propose one or more **suggestions** (candidate labels),
@@ -215,7 +224,7 @@ bundle. The Community Annotation subtree is intentionally excluded because it
 is network/auth-driven. Session Save/Load does not carry votes, suggestions,
 comments, repository connection, or GitHub authentication.
 
-- GitHub tokens live in `sessionStorage`.
+- GitHub tokens live in `sessionStorage` and expire after 8 hours.
 - Votes/suggestions/comments and the repo connection use annotation-specific
   local storage.
 - Raw pulled GitHub file bodies use IndexedDB, while the cache's SHA index uses

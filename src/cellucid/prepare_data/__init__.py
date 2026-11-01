@@ -16,5 +16,6 @@ cellucid-r's ``cellucid_prepare()`` writes the same. The private submodules:
 """
 
 from ._prepare import prepare
+from ._priority import restore_original_order
 
-__all__ = ["prepare"]
+__all__ = ["prepare", "restore_original_order"]

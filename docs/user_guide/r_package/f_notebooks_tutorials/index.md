@@ -1,10 +1,35 @@
 # Notebook Tutorials
 
-Short, runnable walkthroughs. Three start from a Seurat or
-SingleCellExperiment object (the first three cards below); three simulate
-their data from matrices (Beginner, Intermediate and Advanced).
-Paste the code into an R session (or an R Markdown notebook) and run it as it
-is.
+Short, runnable walkthroughs. Paste the code into an R session (RStudio,
+Positron, an R Markdown notebook) or open the notebooks (`.ipynb`, R kernel)
+in Jupyter or Google Colab, and run them as they are.
+
+## Cellucid in your pipeline (notebooks, each with a Python twin)
+
+Show an object in one line, work in the viewer, and bring what you made back
+onto the Seurat or SingleCellExperiment object in one call — or push what you
+computed into the viewer. Each opens in Google Colab from its badge.
+
+| Topic | R | Python twin |
+|---|---|---|
+| View an object in a notebook (Jupyter, Colab, RStudio) | {doc}`07_view_in_a_notebook` | {doc}`../../python_package/f_notebooks_tutorials/41_show_a_dataset_in_any_notebook` |
+| Pull highlights, labels and scores back | {doc}`08_pull_everything_back` | {doc}`../../python_package/f_notebooks_tutorials/42_pull_everything_back` |
+| Push clusters, refine, pull back (`FindClusters`) | {doc}`09_push_clusters_refine_and_pull` | {doc}`../../python_package/f_notebooks_tutorials/43_push_clusters_refine_and_pull` |
+| No notebook: the web app's exports in one call | {doc}`10_round_trip_without_a_notebook` | {doc}`../../python_package/f_notebooks_tutorials/44_round_trip_without_a_notebook` |
+| Gene sets: GMT in, signature scores out | {doc}`11_gene_sets_round_trip` | {doc}`../../python_package/f_notebooks_tutorials/45_gene_sets_round_trip` |
+| A selection, re-analysed | {doc}`12_subset_and_reanalyse` | {doc}`../../python_package/f_notebooks_tutorials/46_export_an_h5ad_subset_and_reanalyse` |
+| Subsampled views | {doc}`13_subsampled_views` | {doc}`../../python_package/f_notebooks_tutorials/47_subsampled_views` |
+
+In a Jupyter notebook R hears the viewer between cells: show the viewer in one
+cell, work in it, and call `cellucid_pull()` in the next
+({doc}`../../python_package/f_notebooks_tutorials/06_cellucid_in_your_pipeline_python_and_r`
+explains the two-cell pattern and lists the calls side by side).
+
+## Walkthroughs
+
+Three start from a Seurat or SingleCellExperiment object (the first three
+cards below); three simulate their data from matrices (Beginner, Intermediate
+and Advanced).
 
 ::::{grid} 1 1 2 2
 :gutter: 3

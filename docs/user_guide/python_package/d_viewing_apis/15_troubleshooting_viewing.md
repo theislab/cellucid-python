@@ -3,7 +3,7 @@
 This page is symptom-driven troubleshooting for:
 - `cellucid serve …` (CLI server mode),
 - `serve_anndata(...)` (Python server mode),
-- `show_anndata(...)` (notebook embedding).
+- `show_anndata(...)` (a notebook widget), and `AnnDataViewer(...)` (a browser-tab viewer).
 
 If you’re new, skim the “Quick triage” section first.
 
@@ -13,12 +13,14 @@ If you’re new, skim the “Quick triage” section first.
 
 ### 1) What workflow are you using?
 
-- Terminal/browser → you’re in **server mode** (`cellucid serve …`)
-- Notebook iframe → you’re in **notebook mode** (`show_anndata`)
+- Terminal/browser → you’re in **server mode** (`cellucid serve …`, `serve_anndata`, `AnnDataViewer`)
+- Viewer inside a notebook cell → you’re in **notebook mode** (`show_anndata`)
 
-This matters because notebook mode adds extra failure modes (HTTPS mixed content, notebook proxies).
+This matters because notebook mode has no server: steps 2 and 3 do not apply
+to it, and its failure modes are the notebook's (widget support, the browser
+loading the app, messages arriving between cells).
 
-### 2) Is the server alive?
+### 2) Is the server alive? (server mode)
 
 Open (replace `<port>`):
 
@@ -28,7 +30,7 @@ http://127.0.0.1:<port>/_cellucid/health
 
 If this doesn’t load, the viewer can’t load either.
 
-### 3) Is the exact viewer generation being served?
+### 3) Is the exact viewer generation being served? (server mode)
 
 Open the exact **Viewer URL** printed by the server:
 
@@ -50,7 +52,7 @@ with a notification titled `Gene cannot be shown` that counts the offending
 values and names the first affected cells. See
 [a gene or column that cannot be drawn](#symptom-a-gene-or-column-is-found-but-cannot-be-drawn).
 
-### 5) If you are in a notebook: run a structured debug report
+### 5) If you are in a notebook: run a structured debug report (in a new cell)
 
 ```python
 viewer.debug_connection()
@@ -73,9 +75,9 @@ viewer.debug_connection()
 - choose a port explicitly: `cellucid serve ... --port 9000`
 - in Python, pass `port=0` to request one operating-system-assigned port and
   then use the actual `server.url` / `server.viewer_url`
-- a notebook viewer created without `port=` already takes the next free port
+- an `AnnDataViewer` created without `port=` already takes the next free port
   after 8765 and prints a note; one created with an explicit `port=` raises
-  instead
+  instead (a notebook widget, `show_anndata`, uses no port)
 - in notebooks, call `viewer.stop()` on old viewers (see {doc}`11_viewer_lifecycle_cleanup_ports_and_multiple_viewers`)
 
 ### Prevention
@@ -95,7 +97,9 @@ This failure occurs before the viewer server is published.
 - the selected `web_cache_dir` is not writable
 
 ### How to confirm
-- read the exception raised by `cellucid serve` or `show_anndata(...)`
+- read the exception raised by `cellucid serve`, `serve_anndata(...)` or
+  `AnnDataViewer(...)` (a notebook widget keeps no web build: the browser loads
+  the app)
 - exercise the same establishment contract directly with
   `cellucid.web_cache.ensure_web_ui_cached(force=True)` (or
   `viewer.ensure_web_ui_cached()`)
@@ -167,23 +171,24 @@ Full rules: {doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
 ## Symptom: “Cellucid found nothing to plot”
 
 ### Likely causes (ordered)
-- no embedding was ever computed, so `obsm` holds only tables, sparse arrays, or
-  nothing at all
-- every candidate array holds a non-finite value (or no spread) in the columns
-  that would be plotted
+- every candidate array places no cell (every row non-finite), holds a value
+  past float32, or has no spread in the columns that would be plotted
 - arrays do not have one row per cell (`adata.n_obs`)
+- (no embedding ever computed -- `obsm` empty, or only tables and sparse
+  arrays -- is refused as having no cell embedding instead:
+  {ref}`no-cell-embedding`)
 
 ### How to confirm
 
 The message lists every `obsm` entry and says why it was not used:
 
 ```text
-Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, NaN at cell 17). Add a 2-D embedding to obsm (for example with sc.tl.umap in Scanpy), then open the data again.
+Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, not representable as float32 at cell 17). Add a 2-D embedding to obsm (for example with sc.tl.umap in Scanpy), then open the data again.
 ```
 
 ### Fix
 - compute an embedding (`sc.tl.umap(adata)`), or repair the array the message
-  names (the first non-finite cell is given)
+  names (the first cell past float32 is given)
 - or name a usable array explicitly with `embedding_keys` / `--embedding-<n>d`
 - a dimensional key whose array does not have exactly its own column count is an
   error, not a reinterpretation: `X_umap_3d` holding `(n_obs, 2)` is refused
@@ -300,21 +305,18 @@ while the viewer refuses one column at a time as you select it.
 
 ---
 
-## Symptom (notebook): iframe is blank, unreachable, or mixed-content blocked
+## Symptom (notebook): the output is empty, or says the app did not load
 
 ### Likely causes (ordered)
-- notebook served over HTTPS
-- kernel/server is remote (JupyterHub/cloud)
-- the browser-facing proxy/tunnel base was not supplied as `client_server_url=`
-
-### How to confirm
-- compare `viewer.viewer_url` with the URL that the browser can actually reach
-- inspect the browser console for mixed-content or connection errors
+- the notebook front end does not show widgets (`anywidget` missing where the
+  notebook *server* runs)
+- the browser cannot load the app from `https://www.cellucid.com` (offline,
+  blocked address); the output says “The page at … has not answered as a
+  Cellucid viewer”
 
 ### Fix
-- expose the selected port through an HTTPS proxy or tunnel
-- pass that exact browser-reachable base as `client_server_url=` when creating
-  the viewer, and a proxy's host name as `allowed_hosts=`
+- `pip install anywidget` where the notebook server runs, and reload the page
+- allow the address, or host a copy of the app and pass `web_source_url=`
 
 Deep dive: {doc}`10_notebook_widget_mode_advanced`.
 
@@ -323,19 +325,27 @@ Deep dive: {doc}`10_notebook_widget_mode_advanced`.
 ## Symptom (notebook): the viewer loads, but hooks and commands do nothing
 
 ### Likely causes (ordered)
-- the viewer's channel (one WebSocket to `/_cellucid/ws`) cannot open: a proxy
-  between the page and the server does not pass WebSockets
-- the page is not the one this viewer registered (its `viewerId`/`viewerToken`
-  do not match a running viewer, e.g. after `viewer.stop()`)
+- a cell is still running: the widget's messages reach Python between cells
+- the output belongs to a stopped or older viewer (after `viewer.stop()` or a
+  kernel restart it keeps its last view and says so: where the notebook front
+  end reports the kernel's connection closing, JupyterLab and Notebook 7, the
+  output says *The notebook's kernel stopped: run this cell again*, and the
+  viewer ends the reads that were waiting on the kernel instead of waiting
+  for them)
+- a long cell is running while the viewer opens a large dataset: the viewer
+  waits for the kernel without a deadline (the kernel answers between cells)
+  and goes on once the cell finishes
+- in a browser tab (`AnnDataViewer`) behind a proxy: the channel (one
+  WebSocket to `/_cellucid/ws`) cannot open because the proxy does not pass
+  WebSockets; the viewer says “… this viewer cannot open its channel (…)”
 
 ### How to confirm
-- the viewer says “… this viewer cannot open its channel (…). A proxy between
-  this page and the host must pass WebSockets.”
-- `viewer.debug_connection()` reports `channel_connected: False` and a
-  `frontend_roundtrip` error
+- `viewer.debug_connection()` in a new cell reports `channel_connected` and
+  `recent_events`
 
 ### Fix
-- configure the proxy to pass WebSocket upgrades for `/_cellucid/ws`
+- let the cell finish; re-run the cell that creates the viewer for a stale output
+- behind a proxy, configure it to pass WebSocket upgrades for `/_cellucid/ws`
 - commands sent meanwhile wait in Python and are delivered, in order, once the
   viewer connects
 
@@ -415,8 +425,8 @@ The graph is read only when a view draws it, so it costs nothing at startup.
 ### Likely causes (ordered)
 - the first gene of a large row-major (CSR) matrix: the browser builds a gene
   index once, and later genes are fast
-- a large in-memory AnnData, written once to a temporary `.h5ad` before the
-  server binds
+- a large in-memory AnnData whose cell-major `X` is still being laid out
+  gene-major (in the background from the start; the first gene waits for it)
 - huge categorical fields or heavy overlays
 
 ### Fix

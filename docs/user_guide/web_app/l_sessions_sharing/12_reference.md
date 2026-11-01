@@ -12,15 +12,20 @@
 **Save** (under **Session file**) downloads one binary file with the
 `.cellucid-session` extension. Its framing is:
 
-1. the 19-byte ASCII signature `CELLUCID_SESSION/2\n` — the file kind and
-   its session format version, `2`;
+1. the 19-byte ASCII signature `CELLUCID_SESSION/3\n` — the file kind and
+   its session format version, `3`;
 2. `manifestByteLength` as an unsigned 32-bit little-endian integer;
 3. exactly that many UTF-8 JSON manifest bytes; and
 4. for each manifest entry, a 32-bit little-endian stored length followed by
    exactly that chunk's stored bytes.
 
-A file that does not start with `CELLUCID_SESSION/2\n` is refused before
-anything else is read, with: *This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).*
+A session of another format version is refused before anything else is
+read, naming it: one saved by an earlier Cellucid (format 2, whose cell-order
+digest was taken over coordinates as they were drawn, which no later version
+can recompute) with *This session was saved by an earlier version of Cellucid (session format 2): the check that it marks the same cells cannot be verified, so it was not opened. Re-create it in this version of Cellucid.*, one saved by a newer Cellucid with *This
+session was saved by a newer version of Cellucid (session format 4), which this
+version cannot read. Open it in that version of Cellucid.* Any other file that
+does not start with `CELLUCID_SESSION/3\n` is refused with: *This file is not a Cellucid session file of format 3 (it does not start with CELLUCID_SESSION/3).*
 
 There may be no duplicate chunks, unlisted payload, truncated payload, or
 trailing bytes. Cellucid treats every bundle as untrusted input and validates
@@ -82,9 +87,14 @@ and `chunks`:
   `{"kind": "remote", "url", "dataset"}` for a Cellucid server,
   `{"kind": "file", "name", "dataset"}` for a file or folder opened from this
   computer (`name` is its file or folder name), or `null` for a
-  notebook. A local file cannot be opened from the session: **Load** applies
-  the session to whatever is open and, when that is another dataset, the
-  refusal names the dataset it needs. A published sample view's `source` is
+  notebook. A local file is opened from the session only where this browser
+  kept its handle (Chrome and Edge, {ref}`reopen-local-file`, keyed by the
+  record's `dataset`): **Load** reopens it at once while the browser still
+  lets it be read (Chrome keeps that leave while a tab of the site is open,
+  or on every visit when allowed so), else offers **Reopen <name>**, whose
+  click asks the browser and then applies the session. Anywhere else **Load** applies the session to
+  whatever is open and, when that is another dataset, the refusal names the
+  dataset it needs. The handle is never part of the session. A published sample view's `source` is
   always `null`. The source is only a pointer: the fingerprint, not the
   source, decides whether the session applies.
 - `datasetFingerprint` has exactly `datasetId`, `name`, `cellCount`,
@@ -104,7 +114,12 @@ and `chunks`:
   of integers, never null) — the embedding the live view
   showed when the session was saved. `dimension` is its dimension, exactly `1`,
   `2`, or `3`. `digest` is 16 lowercase hexadecimal characters computed over
-  every cell coordinate of that embedding in dataset row order.
+  the stored values of that embedding's columns for the cells the session was
+  saved on, each cell named by its original position (MurmurHash3 lanes summed
+  over the cells; specified in
+  {doc}`../p_developer_docs/10_sessions_persistence_and_serialization`), so how
+  the cells were opened — whole, grown, a share, priority order — does not
+  change it.
 - `dataMapping` records the arrays the dataset was shown with. Its `kind` is
   always `"anndata"` (any other `kind` is refused: `kind must be "anndata"`),
   and it has exactly `kind`, `embeddings` (`enabled`: the embedding
@@ -164,8 +179,8 @@ is restored onto them when the dataset can show or use them (they are applied
 before the first chunk, and rolled back with the rest), and refused, naming
 what is missing, when it cannot; a group the dataset cannot change must equal
 the one it is shown with. The digest is checked on the embedding
-`cellOrder.embedding` names, which is loaded for the check whichever embedding
-is on screen. Cellucid does not apply a layout-only subset and does not skip
+`cellOrder.embedding` names, over the cells the session was saved on (opened
+first), whichever embedding is on screen; it is not loaded for display. Cellucid does not apply a layout-only subset and does not skip
 dataset-dependent chunks. Any departure from the fingerprint's six-key shape
 is a schema violation.
 

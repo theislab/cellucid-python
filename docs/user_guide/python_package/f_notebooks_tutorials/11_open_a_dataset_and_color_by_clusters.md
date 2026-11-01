@@ -321,24 +321,25 @@ See web-app docs:
 
 ## Troubleshooting (symptom → diagnosis → fix)
 
-### Symptom: “The viewer iframe is blank or says it can’t load”
+### Symptom: “The viewer output is empty or says it can’t load”
 
 Likely causes (most common first):
-1) the Python server failed to start (an exception in the cell output)
-2) the configured web generation could not be fetched, verified, or published
-3) remote kernel without proxy/tunnel
+1) `show_anndata` raised (an exception in the cell output: a missing
+   embedding, a dataset name or id it needs)
+2) the notebook cannot show widgets (JupyterLab or Notebook 7 without
+   `anywidget` where the notebook server runs)
+3) the browser cannot load the app from www.cellucid.com
 
-How to confirm:
+How to confirm (in a new cell):
 ```python
 viewer.debug_connection()
 ```
 
 Fix:
-- a busy port does not stop `show_anndata` (it serves on 8765, or the next
-  free port when another viewer holds it); with an explicit
-  `AnnDataViewer(port=...)`, pick a different port
-- clear the web cache and retry (see {doc}`../../web_app/b_data_loading/05_jupyter_tutorial`)
-- use Jupyter Server Proxy or SSH tunneling (see {doc}`22_large_dataset_server_mode_and_lazy_gene_expression`)
+- install `anywidget` in the notebook server's environment and reload the page
+  ({doc}`../e_jupyter_hooks/03_supported_environments_matrix`)
+- on a network that blocks www.cellucid.com, host a copy of the app and pass
+  `web_source_url=`
 
 ### Symptom: “Color-by works, but categories look wrong”
 

@@ -86,12 +86,16 @@ file; until a latent space is chosen it is a **Choose latent space** button
 instead of the slider ({doc}`02_outlier_filtering_per_active_field`).
 ```
 
-There is also a scope rule that catches everyone once:
+Every filter applies until you remove it, whatever the view is coloured by:
 
-- **Gene expression range filters apply only while that gene is the active
-  field.**
-- **Outlier filters apply only while the field they belong to is the active
-  field.**
+- a **gene expression range filter** set while the gene was coloured keeps
+  hiding cells after you colour by a cluster or another gene;
+- an **outlier filter** keeps applying after you colour by another field.
+
+Each is listed under **Filters** with its field (`CD3E: 1.00 – 4.00`,
+`cell_type: outlier ≤ 90%`), where it can be disabled or removed, and
+**Visible cells** in an analysis is exactly the cells the view shows with all
+of them applied.
 
 If you ever feel “the plot is lying to me”, the debugging rule is:
 **trust the Filters panel** (it lists every filter you can create in the
@@ -156,10 +160,13 @@ These are easy-to-miss gotchas:
   both writers refuse it, counting the offending values and naming the first
   affected cells.
   :::
-- **Categorical visibility filters**: a cell whose category code is the
-  missing-value marker is **skipped** by category filters, so it stays visible
-  no matter which categories you untick. It is drawn in the neutral “None” grey
-  and has no legend row of its own.
+- **Categorical visibility filters**: a cell without a category (the
+  missing-value code) is drawn in the neutral “None” grey and has a legend row
+  of its own, **Missing**, under the categories, with its count (`visible /
+  available`, like a category's) and a checkbox: untick it to hide those
+  cells, a filter like a hidden category (listed as `<field>: hiding
+  Missing`, saved in sessions). Unticking categories never hides them;
+  **Hide all** and **Show all** include them.
 - **Outlier filtering**: a cell without an outlier quantile is never removed by
   outlier filtering. This happens for every cell in a category smaller than
   `centroid_min_points` (default `10`), and for a cell with no category.
@@ -243,9 +250,11 @@ No—filters are reversible visibility rules. Remove or disable them to bring ce
 
 Clearing the active field affects **coloring** (points become neutral gray), but it does **not** clear filters.
 
-### “My gene filter worked, then stopped working when I switched fields.”
+### “My gene filter still hides cells after I coloured by clusters.”
 
-Current behavior: gene-range filters apply only while that gene is the active field (see {doc}`04_common_filter_types_document_every_filter_the_ui_exposes`).
+That is intended: a gene-range filter keeps applying until it is removed,
+whatever is coloured. Remove or disable it under **Filters** (see
+{doc}`04_common_filter_types_document_every_filter_the_ui_exposes`).
 
 ---
 

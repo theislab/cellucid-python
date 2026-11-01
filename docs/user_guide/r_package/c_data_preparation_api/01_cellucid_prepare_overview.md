@@ -134,7 +134,7 @@ It returns, invisibly, the absolute path of the written store.
 | `obs` | no | `data.frame` of cell metadata, one row per cell. | `obs`, every column |
 | `var` | no | `data.frame` of gene metadata, one row per gene; needs `gene_expression`. | `var`, every column |
 | `gene_expression` | no | Cells x genes matrix, sparse (`Matrix`) or dense. | `X`, float32 (float64 for integer counts above 2^24), gene-major |
-| `connectivities` | no | Cells x cells neighbour graph, exactly symmetric, zero diagonal. | `obsp['connectivities']`, float32 CSR |
+| `connectivities` | no | Cells x cells neighbour graph, exactly symmetric; its diagonal is left out. | `obsp['connectivities']`, float32 CSR |
 | `vector_fields` | no | Per-cell vectors bound to an embedding `X_<basis>`, as many columns as it: `list(velocity = list(X_umap = v2))`. | `obsm['<field>_<basis>']` (`velocity_umap`) |
 | `modalities` | no | The modalities of `data` to write, in this order (default: all, the Seurat active assay or the main experiment first); one name writes a plain AnnData. | `mod/<name>`, `mod-order` |
 | `gene_identifiers` | no | The genes to store, in this order (default: all). | narrows `X` and `var` |

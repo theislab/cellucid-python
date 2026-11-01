@@ -70,12 +70,22 @@ The Session panel gathers every loading path under **Open data** and keeps the *
 
 #### B) From a notebook viewer without downloading (advanced)
 
-Use this when you are running Cellucid inside a notebook and want Python to receive the bundle directly:
+Use this when you are running Cellucid inside a notebook and want Python to receive the bundle directly. A notebook widget hears the viewer only between cells, so ask in one cell:
 
 ```python
-viewer.wait_for_ready(timeout=30)
-bundle = viewer.get_session_bundle(timeout=60)
+request = viewer.request_session_bundle()
 ```
+
+and collect it in the next:
+
+```python
+bundle = request.result()
+```
+
+The same two steps work in a browser-tab viewer (`AnnDataViewer`), which
+answers while a cell runs, so there `result(timeout=60)` may follow in the
+same cell. To bring results onto an
+AnnData without a bundle, `viewer.pull(adata)` ({doc}`round_trip`).
 
 ### 2) Inspect what’s inside a bundle
 
@@ -102,7 +112,8 @@ Applying a bundle can add:
 - **User-defined categorical and continuous cell-aligned fields** in
   `adata.obs`
 - Optional bookkeeping in `adata.uns["cellucid"]["session"]` (`store_uns=True`,
-  the default): the manifest, the dataset fingerprint, the added columns, and
+  the default): the manifest (without `source`, where the viewer opened the
+  dataset), the dataset fingerprint, the added columns, and
   the `highlights/meta` and `core/field-overlays` chunks
 
 The target may also be a MuData: the session is checked against what the
@@ -133,8 +144,8 @@ The bundle reader and AnnData applicator include guards:
 
 ### Format overview (for developers)
 
-The `.cellucid-session` framing (session format 2) is:
-1. MAGIC bytes: `CELLUCID_SESSION/2\n` — the format version is part of the signature
+The `.cellucid-session` framing (session format 3) is:
+1. MAGIC bytes: `CELLUCID_SESSION/3\n` — the format version is part of the signature
 2. `manifestByteLength` (u32 little-endian)
 3. UTF-8 manifest JSON bytes
 4. repeated chunks: `[chunkByteLength (u32 LE), chunkBytes...]`
@@ -146,8 +157,12 @@ file or folder; `null` for a notebook), `requires` (the obs columns and genes
 the session uses) and `chunks`. Each chunk has metadata in the manifest (`kind`,
 `codec`, expected sizes, ids).
 
-A file that does not start with `CELLUCID_SESSION/2\n` is refused with the web
-app's sentence: *This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).*
+A session of another format version is refused with the web app's sentence
+naming it (`other_session_format_message()`): *This session was saved by an
+earlier version of Cellucid (session format 2): the check that it marks the
+same cells cannot be verified, so it was not opened. Re-create it in this
+version of Cellucid.* Any other file that does not start with
+`CELLUCID_SESSION/3\n` is refused with: *This file is not a Cellucid session file of format 3 (it does not start with CELLUCID_SESSION/3).*
 
 ### Compact payloads
 
@@ -155,6 +170,7 @@ app's sentence: *This file is not a Cellucid session file of format 2 (it does n
 |---|---|
 | `highlights/cells/<groupId>` | byte 0 picks the smallest of: 0 sorted-delta varints, 1 bitset, 2 runs, 3 a bitmask over the cells of the group's category, 4 the whole category (no per-cell bytes) |
 | `user-defined/codes/<fieldId>` | byte 0 picks: 0 raw codes, 1 runs, 2 codes packed 1, 2 or 4 bits each |
+| `user-defined/values/<fieldId>` | the field's values, little-endian float32, one per cell (`NaN`: no value) |
 | `analysis/windows`, `analysis/docked` | typed JSON: settings and results as JSON whose numeric result columns are stored as raw typed arrays |
 
 A category-relative membership (3 or 4) is decoded against
@@ -179,6 +195,8 @@ current inventory is:
 | `highlights-meta` | `highlights/meta` |
 | `highlights-cells` | `highlights/cells/<groupId>` |
 | `user-defined-codes` | `user-defined/codes/<fieldId>` |
+| `user-defined-values` | `user-defined/values/<fieldId>` (a pushed continuous column's float32 values) |
+| `gene-sets` | `gene-sets/notebook` (the gene sets a notebook pushed; only when there are some) |
 | `analysis-windows` | `analysis/windows` |
 | `analysis-docked` | `analysis/docked` |
 | `cinematic-camera` | `cinematic/camera` |
@@ -227,6 +245,23 @@ Highlights and codes are stored as **cell positions** in the dataset (or, for a
 whole category, as that category). If your AnnData row order differs, labels
 will be assigned to the wrong cells.
 
+A session saved on a **subsample** records which cells were open (the
+manifest's `cells`: the specification, the kept rows and their digest). Its
+highlights and fields are in the positions of those cells; applying it checks
+the digest and that `adata` has the dataset's full cell count, and places
+every column at the original rows. A cell that was not open is `<NA>` in a
+highlight column and missing in a field's.
+
+A session saved while genes were read for a sample of the open cells (a
+large dataset stored cell by cell opens every cell on the map and reads a
+gene for the first of them) records that sample:
+`CellucidSessionBundle.genes` is `{"cells", "order", "digest"}` (how many of
+the open cells, the file's cell order they were open in -- every cell's, or a
+share's spread through a file in its own order -- or `None` for a
+subsample's own order, and their cell-set digest), or `None`. A session holds no gene values, so applying it is the
+same either way; the record says which cells the viewer's gene results (a
+signature score, a marker table) were computed on.
+
 ### Conflicting column names
 
 Applying a bundle can create columns like `cellucid_highlight__<group_id>`.
@@ -262,7 +297,7 @@ Fix:
 - Apply to the original AnnData used to create the session.
 - Pass the exact dataset ID used to create the viewer.
 
-### Symptom: “This file is not a Cellucid session file of format 2 …”
+### Symptom: “This file is not a Cellucid session file of format 3 …”
 Fix:
 - Confirm the file is actually a `.cellucid-session` file saved by this release and not (for example) a `.json` file or a renamed file.
 
@@ -346,5 +381,6 @@ Fix:
 
 ## See also
 
-- {doc}`jupyter` for capturing a bundle in-notebook (`viewer.get_session_bundle`)
+- {doc}`jupyter` for capturing a bundle in-notebook (`viewer.request_session_bundle`)
+- {doc}`round_trip` for pulling everything (highlights, labels, scores, gene sets) from a viewer or the web app's exports in one call
 - {doc}`../../e_jupyter_hooks/index` for deeper hook/event documentation

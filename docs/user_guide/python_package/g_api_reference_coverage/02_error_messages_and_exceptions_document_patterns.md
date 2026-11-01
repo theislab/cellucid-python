@@ -75,8 +75,9 @@ Document these explicitly:
 - missing embeddings (an empty or absent `embeddings=` mapping)
 - mismatched `n_cells` across inputs (`obs`, embeddings, `gene_expression`,
   `connectivities`, vector fields)
-- NaN/Inf in embeddings, expression, the graph and vector fields, counted with
-  the first affected positions
+- NaN/Inf in expression and the graph, counted with the first affected
+  positions; an embedding or vector field with no finite row (a NaN row alone
+  is a cell it does not place), or a value past float32
 - keys and column names that cannot be a path in a store on every platform
 - text the viewer prints verbatim -- `dataset_name`, `dataset_description`,
   `citation_text`, `source_name` -- carrying a character with no glyph
@@ -96,11 +97,16 @@ Where documented:
 ### Jupyter viewers and hooks
 
 Document:
-- “viewer does not appear” (notebook context / iframe restrictions)
-- “browser cannot reach localhost” (explicit proxy or tunnel required)
-- “events not arriving” (viewer not ready / its channel cannot open: a proxy
-  that does not pass WebSockets, or a page origin the server refuses)
-- session capture timeouts
+- “viewer does not appear” (not a notebook; no widget support; the browser
+  cannot load the app)
+- “a call raised: the widget hears the viewer only between cells” (a waiting
+  call in the cell that asks)
+- “browser cannot reach localhost” (browser-tab viewers: explicit proxy or
+  tunnel required)
+- “events not arriving” (viewer not ready, a cell still running, or — in a
+  browser tab — a channel that cannot open: a proxy that does not pass
+  WebSockets, or a page origin the server refuses)
+- session capture: asked and collected in the same cell, or timeouts
 
 Where documented:
 - {doc}`api/jupyter`, {doc}`api/viewers`, {doc}`api/sessions`

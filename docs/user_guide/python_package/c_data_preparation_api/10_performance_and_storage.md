@@ -42,6 +42,13 @@ every gene in two cell types). Full method and the per-step numbers:
 - `prepare()` holds the converted arrays in memory next to its inputs: the
   expression matrix as float32 CSC, the embeddings as float32. Plan for a few
   times the size of the expression matrix's stored values.
+- A sparse `X` that is not in memory is never read whole: a backed AnnData's
+  (`read_h5ad(path, backed="r")`) is read from its file in blocks, and a
+  lazily read one (a dask array of sparse blocks, `anndata.experimental.read_lazy`)
+  is decoded block of rows by block of rows into a scratch folder in the
+  temporary folder (removed afterwards), then laid out from there; the same
+  holds for an AnnData `show_anndata()` serves (its X, layers and raw). A
+  dense dask array is computed.
 - Compressing the chunks is most of the time `prepare()` takes. An `.h5ad`'s
   chunks are compressed on every core and stored with HDF5's direct chunk
   write, in the layout HDF5 itself writes; a Zarr store's are compressed
@@ -51,10 +58,12 @@ every gene in two cell types). Full method and the per-step numbers:
 
 ## Reading in the browser
 
-- One gene is one range of `X/data` and `X/indices` (chunks of 65,536 values),
-  so colouring by a gene costs a few requests whatever the dataset size.
-- Embeddings, `obs` columns and the graph are read whole, in chunks of 262,144
-  values.
+- One gene is one range of `X/data` and `X/indices` (chunks of 16,384 values),
+  so colouring by a gene costs a few requests whatever the dataset size; in
+  priority order a subsample reads only the first values of each gene.
+- Embeddings and `obs` columns are read by rows, in chunks of 65,536 values
+  (the first rows only, for a subsample); the graph is read whole, in chunks
+  of 262,144 values.
 - Centroids are computed by the browser. Outlier quantiles are stored with
   `latent_key` (4 bytes per cell per categorical column, before compression), and the browser
   reads one column's on the outlier slider's first move; without them, the

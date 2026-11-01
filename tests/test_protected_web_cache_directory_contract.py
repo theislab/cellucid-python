@@ -488,7 +488,7 @@ def test_cache_dir_none_still_resolves_to_the_default_location(
     monkeypatch: pytest.MonkeyPatch,
     source: list[str],
 ) -> None:
-    """Omitting ``cache_dir`` must still select the process-independent default."""
+    """Omitting ``cache_dir`` must still select this user's default."""
     workdir = tmp_path / "workdir"
     workdir.mkdir()
 
@@ -512,3 +512,33 @@ def test_cache_dir_none_still_resolves_to_the_default_location(
 
         assert web_cache.clear_web_cache() == default
         assert not default.exists()
+
+
+def test_the_default_web_cache_is_each_users_own(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every user of a machine has their own cache, as in R (``R_user_dir``).
+
+    One shared name in the system temporary folder made a second user of a
+    shared Linux host unable to start any viewer: the first user's private
+    copy could not be replaced.
+    """
+    from cellucid import _server_base
+
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+    monkeypatch.setattr(_server_base.sys, "platform", "linux")
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    assert _server_base._web_cache_dir() == home / ".cache" / "cellucid" / "web"
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
+    assert _server_base._web_cache_dir() == tmp_path / "xdg" / "cellucid" / "web"
+    monkeypatch.setenv("XDG_CACHE_HOME", "relative/cache")
+    assert _server_base._web_cache_dir() == home / ".cache" / "cellucid" / "web", "a relative XDG path is ignored"
+    monkeypatch.setattr(_server_base.sys, "platform", "darwin")
+    assert _server_base._web_cache_dir() == home / "Library" / "Caches" / "cellucid" / "web"
+    monkeypatch.setattr(_server_base.sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    assert _server_base._web_cache_dir() == tmp_path / "local" / "cellucid" / "web"
+    monkeypatch.delenv("LOCALAPPDATA")
+    assert _server_base._web_cache_dir() == home / "AppData" / "Local" / "cellucid" / "web"

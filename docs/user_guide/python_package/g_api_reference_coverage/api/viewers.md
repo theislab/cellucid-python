@@ -4,7 +4,13 @@
 .. currentmodule:: cellucid
 ```
 
-The viewer class is the **stateful** notebook object returned by {func}`~cellucid.show_anndata`.
+Two classes share one viewer API:
+
+- {class}`~cellucid.jupyter.Widget` (also `cellucid.Widget`): the notebook
+  widget {func}`~cellucid.show_anndata` returns, shown in a cell's output and
+  reached through the notebook's own connection;
+- {class}`~cellucid.AnnDataViewer`: the same API for a viewer in a browser tab
+  of its own, served from this machine (a script, an SSH tunnel).
 
 They are designed for two-way interaction:
 - **Viewer → Python:** hooks/events like `@viewer.on_selection`
@@ -16,26 +22,26 @@ If you prefer a minimal interface, start with {doc}`jupyter`.
 
 ## Fast path
 
-### A) Any AnnData
+### A) Any AnnData, in a notebook
 
 ```python
-from cellucid import AnnDataViewer
+import cellucid
 
-viewer = AnnDataViewer(
+viewer = cellucid.Widget(
     adata,
     dataset_name="My study",
     dataset_id="my-study-v1",
 )
-viewer.display()
+viewer  # the cell's output shows it (show_anndata() shows it for you)
 ```
 
-### B) A Cellucid-ready AnnData (written by `prepare()`)
+### B) A Cellucid-ready AnnData (written by `prepare()`), in a browser tab
 
 ```python
 from cellucid import AnnDataViewer
 
 viewer = AnnDataViewer("my_study.h5ad")  # names itself (uns['cellucid'])
-viewer.display()
+print(viewer.viewer_url)  # open it in a browser; in a notebook a link is shown
 ```
 
 ---
@@ -73,27 +79,33 @@ def on_command_error(event):
     print("Rejected:", event["command"], event["reason"])
 ```
 
-### 3) Robust notebooks: wait for readiness
+### 3) Robust scripts: wait for readiness
+
+A browser-tab viewer answers while your code runs, so it can wait:
 
 ```python
 viewer.wait_for_ready(timeout=30)
 ```
 
-### 4) Capture a session bundle (advanced)
+(A notebook widget hears the viewer only between cells; there, use
+`@viewer.on_ready` or read `viewer.state.ready` in a later cell — see
+{doc}`jupyter`.)
+
+### 4) Pull results, or capture a session bundle
 
 ```python
-bundle = viewer.get_session_bundle(timeout=60)
+summary = viewer.pull(adata)                 # highlights, labels, scores -> adata.obs
+request = viewer.request_session_bundle()
+bundle = request.result(timeout=60)          # in a notebook: in the next cell
 ```
 
-See {doc}`sessions` for applying the bundle back to AnnData.
+See {doc}`round_trip` for the round trip, and {doc}`sessions` for applying a
+bundle back to AnnData.
+
 
 ### 5) Read and change the data mapping
 
 ```python
-# wait_for_event waits for the NEXT event; skip it once the mapping has arrived
-if viewer.data_mapping is None:
-    viewer.wait_for_event("data_mapping")
-print(viewer.data_mapping["embeddings"])
 viewer.set_data_mapping(
     embeddings={
         "enabled": [{"key": "X_tsne", "columns": [0, 1]}],
@@ -102,9 +114,16 @@ viewer.set_data_mapping(
 )
 ```
 
-The viewer reports its mapping once the dataset loads (and again whenever it
-changes); until then `viewer.data_mapping` is `None` and `set_data_mapping()`
-raises before sending anything.
+Nothing waits. The viewer reports its mapping once the dataset loads (and
+again whenever it changes): `set_data_mapping()` merges the fields into it,
+checks the result (an invalid value raises, nothing sent) and sends it -- at
+once, or, called before the viewer reported a mapping, as soon as it does.
+The applied mapping is `viewer.data_mapping` from a later cell; a mapping the
+viewer refuses arrives as a `command_error`.
+
+```python
+print(viewer.data_mapping["embeddings"])   # a later cell
+```
 
 ---
 
@@ -122,10 +141,28 @@ Best practices:
 
 ## API reference
 
+### `Widget`
+
+```{eval-rst}
+.. autoclass:: cellucid.jupyter.Widget
+   :members: wait_for_ready, display, debug_connection, stop
+```
+
+`Widget` has every method of `AnnDataViewer` below except the ones about its
+server and web build (`viewer_url`, `server_url`, `clear_web_cache`,
+`ensure_web_ui_cached`).
+
 ### `AnnDataViewer`
 
 ```{eval-rst}
 .. autoclass:: AnnDataViewer
+   :members:
+```
+
+### `SessionBundleRequest`
+
+```{eval-rst}
+.. autoclass:: cellucid.jupyter.SessionBundleRequest
    :members:
 ```
 
@@ -134,11 +171,19 @@ Best practices:
 ## Edge cases (do not skip)
 
 ### Not running in a notebook
-- If you instantiate a viewer in a plain Python script, `display()` will print a URL instead of embedding an iframe.
+- `show_anndata()` refuses outside a notebook and names the browser-tab
+  alternatives; an `AnnDataViewer`'s `display()` prints its address.
 
-### Re-running cells creates multiple servers
-- Each viewer starts a local server on a port.
-- If you re-run the cell repeatedly without stopping old viewers, you may end up with multiple servers and confusing behavior.
+### Re-running cells
+- Each `AnnDataViewer` starts a local server on a port, and each `Widget`
+  keeps its dataset (for an in-memory object, the store it serves and the
+  files a cell-major matrix is laid out in) until it is stopped. Call
+  `viewer.stop()` on viewers you no longer use.
+
+### Waiting in a notebook cell
+- A `Widget` hears the viewer only between cells: its waiting calls raise at
+  once in the cell that would wait, and say what to do instead
+  ({doc}`../../e_jupyter_hooks/03_supported_environments_matrix`).
 
 ### Callbacks and exceptions
 - Hook callbacks run in registration order (`on_message` callbacks first), on
@@ -153,13 +198,15 @@ Best practices:
 
 ## Troubleshooting (symptom → diagnosis → fix)
 
-### Symptom: “`viewer.display()` prints a URL instead of showing an embedded viewer”
+### Symptom: “`viewer.display()` prints a URL instead of showing a viewer”
 Fix:
-- You are likely not in a notebook context; open the printed URL in a browser tab, or run inside Jupyter or JupyterLab.
+- That is an `AnnDataViewer`, which runs in a browser tab: open the URL. To
+  show the viewer in a notebook cell, use `show_anndata()` or `cellucid.Widget`.
 
 ### Symptom: “Hooks never fire”
 Fix:
-- Wait for the viewer to be ready: `viewer.wait_for_ready()`.
+- Check the viewer is ready: `viewer.state.ready` (in a later cell, for a
+  widget), or `viewer.wait_for_ready()` for a browser-tab viewer.
 - Temporarily register `@viewer.on_message` to see raw events and confirm communication.
 
 ### Symptom: “I have too many running servers”

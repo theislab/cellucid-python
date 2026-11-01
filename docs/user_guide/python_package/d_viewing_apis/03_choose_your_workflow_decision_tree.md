@@ -33,7 +33,7 @@ That’s it. If you get stuck, go to {doc}`15_troubleshooting_viewing`.
 
 ### Step 1 — Are you in a notebook?
 
-#### Yes: notebook (Jupyter/JupyterLab; VS Code and Colab untested)
+#### Yes: notebook (JupyterLab, Notebook 7, VS Code, Colab, marimo, Databricks)
 
 1) If you have a file written by `prepare()`:
    - Use `show_anndata("pbmc_cellucid.h5ad")`; it names itself →
@@ -43,8 +43,9 @@ That’s it. If you get stuck, go to {doc}`15_troubleshooting_viewing`.
      or the same exact identity arguments with `"data.zarr"` (or any other file
      or folder Cellucid reads: {doc}`02_loading_routes`) →
      {doc}`06_jupyter_show_anndata_quickstart`
-3) If your notebook is served over **HTTPS** (JupyterHub, cloud):
-   - Read the proxy section before debugging: {doc}`10_notebook_widget_mode_advanced`
+3) If your notebook is remote (JupyterHub, VS Code Remote, Colab, cloud):
+   - The same call works; no port or proxy is involved:
+     {doc}`10_notebook_widget_mode_advanced`
 
 #### No: terminal / script
 
@@ -86,8 +87,8 @@ Use:
 - Notebook: `show_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")`
 - Script: `serve_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")`
 
-The object is written once to a temporary `.h5ad`, removed when the server
-stops. If it is already on disk, pass the path instead, or write a
+The object is served in priority order, each chunk made from it as the viewer
+reads it, so a subsample transfers only its cells. To share or host it, write a
 Cellucid-ready AnnData with `prepare()`.
 
 ### Step 3 — Are you on a remote machine (HPC / cloud)?

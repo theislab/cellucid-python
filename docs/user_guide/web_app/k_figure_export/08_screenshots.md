@@ -70,8 +70,10 @@ a multi-file request downloads once as a ZIP containing the native files.
 :width: 1440px
 
 Pressing **Export** with the velocity overlay running raises this. It is a
-modal, not a toast, and its only button is **Back** — there is no “export
-anyway”. The rule behind it is that a figure must match the view it claims to
+modal, not a toast, and there is no “export anyway”. Besides **Back**, a view
+blocked only by the edges or the vector field offers **Turn off … and
+export**, which turns those layers off and exports the points as shown
+(the screenshot predates that button). The rule behind it is that a figure must match the view it claims to
 be, so anything the exporter cannot reproduce blocks the export rather than
 being silently dropped. See {doc}`06_edge_cases`.
 ```

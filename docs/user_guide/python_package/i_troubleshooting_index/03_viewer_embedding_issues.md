@@ -2,24 +2,41 @@
 
 ## The notebook cell is empty
 
-Keep the returned viewer object alive, confirm the cell produced HTML output,
-and inspect the browser console for the first error. Then verify that the
-viewer URL shown by the Python object is reachable from the browser that renders
-the notebook.
+`show_anndata()` shows a notebook widget. An empty output means the notebook
+front end does not show it: install `anywidget` in the environment that runs
+the *notebook server* (installing `cellucid` installs it in the kernel's
+environment, which some setups keep separate) and reload the page, or use a
+front end that shows widgets — JupyterLab, Notebook 7, VS Code, Colab, marimo
+or Databricks ({doc}`../e_jupyter_hooks/03_supported_environments_matrix`).
+Outside a notebook `show_anndata()` raises and names the browser-tab
+alternatives.
 
-## The viewer frame cannot reach the local server
+## The output says the app did not load
 
-Remote notebooks, JupyterHub, and HTTPS notebook origins need a route the
-browser can reach, such as `jupyter-server-proxy` or an SSH tunnel; pass its
-exact base as `client_server_url=` (and a proxy's host as `allowed_hosts=`).
-The browser—not the Python kernel—must be able to reach the displayed URL, and
-any proxy in between must pass WebSockets for commands and hooks
-({doc}`../e_jupyter_hooks/03_supported_environments_matrix`).
+The widget frames the Cellucid app, which the **browser** loads from
+`https://www.cellucid.com`. If the browser cannot reach it (offline laptop,
+blocked address), allow it, or host a copy of the app and pass its address as
+`web_source_url=`. The kernel needs no network access and no port.
+
+## The viewer shows the data, but Python hears nothing
+
+The kernel handles the widget's messages between cells: hooks fire and
+`viewer.state` updates once the running cell ends. A call that waits for the
+viewer in the same cell raises at once and says what to do instead. Run
+`viewer.debug_connection()` in a new cell and check `channel_connected`.
+
+## A browser-tab viewer cannot reach its server
+
+`AnnDataViewer`, `serve_anndata` and `cellucid serve` run a server on the
+kernel's machine. From a remote kernel, forward the port over SSH, or pass a
+reverse proxy's exact base as `client_server_url=` and its host as
+`allowed_hosts=`; the proxy must pass WebSockets for commands and hooks
+({doc}`../d_viewing_apis/12_remote_servers_ssh_tunneling_and_cloud`).
 
 ## The UI loads but the dataset does not
 
 Inspect the first failing dataset request and its response body. A viewer-asset
-problem and a dataset-server problem are separate paths and should be diagnosed
+problem and a dataset problem are separate paths and should be diagnosed
 separately.
 
 See {doc}`../d_viewing_apis/06_jupyter_show_anndata_quickstart`,

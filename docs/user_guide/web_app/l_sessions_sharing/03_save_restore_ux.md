@@ -24,7 +24,7 @@ In the left sidebar:
    - **Load** (opens a file picker and restores a `.cellucid-session` file)
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-01-session-controls.png
-:alt: The Session accordion showing the Dataset box for the loaded sample, the Open data group with the Sample dataset dropdown, the Open… button and the Link or server bar, the Session file group with Save and Load below them, and the collapsed Data mapping group.
+:alt: The Session accordion showing the Dataset box for the loaded sample, the Open data group with the Sample dataset dropdown, the Open… button and the Link or server bar, the Session file group with Save and Load below them, and the collapsed Subsampling and Data mapping sections, each one line with its summary.
 :width: 540px
 
 The **Session** accordion. Everything that brings a dataset in sits under
@@ -241,8 +241,11 @@ to fail the whole restore rather than diverge quietly.
 ### 1) Treat the dataset + session as a pair
 
 Sessions do not contain the dataset. A session saved on a sample, a data link
-or a server points to it and opens it; one saved on a local file or in a
-notebook does not:
+or a server points to it and opens it; one saved in a notebook does not, and
+one saved on a local file names the file. In Chrome and Edge, **Load** in the
+browser that opened that file reopens it from the handle kept of it, with one
+click on **Reopen <name>** ({ref}`reopen-local-file`); anywhere else the file
+has to be opened first. So:
 - store the `.cellucid-session` file next to the dataset file,
 - or host the dataset (see {doc}`../b_data_loading/14_open_from_link`) and save
   the session on the hosted copy, so the session opens it by itself.
@@ -286,7 +289,7 @@ Workflow:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Data mapping group.
+:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Subsampling and Data mapping sections, each one line with its summary.
 :width: 532px
 
 The Session panel gathers every loading path under **Open data** and keeps the **Save** and **Load** buttons under **Session file**, directly below it.

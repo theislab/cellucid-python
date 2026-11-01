@@ -502,20 +502,24 @@ on the selection.
 
 ### Likely causes (ordered)
 1) The page is not a viewer opened by Python (no viewer channel active).
-2) The viewer channel is not open: the server no longer knows this viewer (it
-   was stopped), or a proxy between the page and the server does not pass
-   WebSockets (`/_cellucid/ws`). The viewer shows a **Viewer stopped** or
+2) The viewer channel is not open: Python no longer knows this viewer (it
+   was stopped, or the kernel restarted), or — for a browser-tab viewer — a
+   proxy between the page and the server does not pass WebSockets
+   (`/_cellucid/ws`). The viewer shows a **Viewer stopped** or
    **Viewer disconnected** notification.
 3) Dataset/index mismatch (Python indices refer to different cells than the viewer).
 
 ### How to confirm
-- Confirm you are using the viewer workflow (Cellucid opened with `?viewer=true&viewerId=…&viewerToken=…` in its address).
-- In Python, print/log the viewer URL and verify it is the one embedded.
+- Confirm you are using the viewer workflow: a notebook widget (`show_anndata`),
+  or a browser tab opened at the viewer's own URL (`viewer.viewer_url`, with
+  `?viewer=true&viewerId=…&viewerToken=…` in its address).
+- Run `viewer.debug_connection()` in a new cell and check `channel_connected`.
 - Try a simple command that is known to be wired (e.g., `set_color_by`) to validate communication.
 - Follow the connection checks in {doc}`../../python_package/e_jupyter_hooks/14_troubleshooting_hooks`.
 
 ### Fix
-- Use the viewer URL the server printed (or run the cell that shows it again), and make any proxy in between pass WebSockets.
+- Run the cell that shows the viewer again (or, for a browser tab, use the
+  viewer URL the server printed), and make any proxy in between pass WebSockets.
 - Ensure the dataset order in Python matches the dataset loaded in the viewer.
 
 ### Prevention

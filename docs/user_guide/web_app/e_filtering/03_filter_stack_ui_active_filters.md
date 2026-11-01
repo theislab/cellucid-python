@@ -45,7 +45,10 @@ It has two parts:
 
 - A **count line**:
   - `Showing all N cells` (no filtering), or
-  - `Showing X of N cells` (some cells hidden)
+  - `Showing X of N cells` (some cells hidden);
+  - on a subsample, N is the open cells of every cell: `Showing all 240 of
+    1,200 cells`, `Showing 120 of 240 of 1,200 cells`
+    ({doc}`../b_data_loading/21_subsampled_loading`)
 - A **filter list** (“stack”):
   - each entry is one active filter in the current view
 
@@ -90,7 +93,8 @@ Each filter row includes:
   - unchecked = filter disabled (does not affect visibility)
   - its tooltip reads `Turn this filter off` / `Turn this filter on`
 - a **text summary** (human-readable):
-  - continuous range: `Field: min – max`, both bounds to two decimal places
+  - continuous range: `Field: min – max`, each bound to six significant
+    figures, so a typed or slider bound reads exactly as applied
   - categorical hides: `Field: hiding A, B, C, D` — at most four names, then
     ` +N more`
   - outlier filter: `Field: outlier ≤ 95%`

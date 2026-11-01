@@ -27,8 +27,12 @@ This is the “bridge” between exploratory visualization and reproducible anal
 
 ## The mental model (one page)
 
-Both directions travel on one channel, a WebSocket the viewer opens to the
-local server (`/_cellucid/ws`):
+Both directions travel on one channel, the viewer channel. In a notebook
+(`show_anndata()`, a widget) it is carried by the notebook's own connection;
+in a browser tab (`AnnDataViewer`) it is a WebSocket the viewer opens to this
+machine (`/_cellucid/ws`). The notebook hands a widget's messages to the
+kernel **between cells**, so events reach Python, and hooks run, while the
+kernel is idle.
 
 ### Viewer → Python (events/hooks)
 
@@ -43,8 +47,10 @@ Events include:
 - `command_error` (a command from Python the viewer refused)
 - `data_mapping` (what the viewer plots and reads)
 
-and the replies `pong`, `debug_snapshot` and `session_bundle` to
-`debug_connection()` and `get_session_bundle()`.
+the results (`result`, `result_removed`, `results`: every highlight group,
+label field, score and gene set, which `viewer.pull(adata)` writes onto `obs`),
+and the replies `pong`, `debug_snapshot` and `session_bundle` to a browser-tab
+viewer's `debug_connection()` and to `request_session_bundle()`.
 
 `message` is not one of them. It is a hook that receives every event the
 viewer sends and nothing else — there is no custom or app-specific event type. An
@@ -76,13 +82,9 @@ viewer = show_anndata(
 viewer
 ```
 
-### 2) Wait until it’s ready (optional but recommended)
+The viewer appears when this cell finishes. Run the next cells one at a time.
 
-```python
-viewer.wait_for_ready(timeout=30)
-```
-
-### 3) Print selection sizes in Python
+### 2) Print selection sizes in Python
 
 ```python
 @viewer.on_selection
@@ -93,7 +95,7 @@ def _handle_selection(event):
 
 Now select cells in the viewer (lasso, etc.) and confirm Python prints.
 
-### 4) Highlight the selection back in the UI
+### 3) Highlight the selection back in the UI
 
 ```python
 @viewer.on_selection
@@ -109,30 +111,36 @@ def _highlight_selection(event):
 
 ## Practical patterns (what you’ll actually want in real notebooks)
 
-### Pattern A — “Wait for one selection, then continue”
+### Pattern A — “Select, then run the next cell”
 
-This is a clean workflow for tutorials and reproducible notebooks:
+The cleanest workflow for tutorials and reproducible notebooks needs no
+callback: select in the viewer, then read the selection in the next cell.
 
 ```python
-event = viewer.wait_for_event("selection", timeout=120)
-cells = event["cells"]
-print("Selected:", len(cells))
-viewer.highlight_cells(cells, color="#00c853")
+selection = viewer.selection          # None before the first selection
+print("Selected:", len(selection), "cells with the", selection.source)
+viewer.highlight_cells(selection.obs_names, color="#00c853")
 ```
 
-Why this is useful:
-- you can write notebooks that pause until the user selects something
-- you avoid “callback soup” for simple interactive flows
+`viewer.selection` carries the cells as rows of `obs` (`selection.cells`)
+and, when the kernel can read them, their obs names (`selection.obs_names`).
+
+```{note}
+A notebook cell cannot wait for a selection (`viewer.wait_for_event("selection")`):
+the widget hears the viewer only between cells, so it raises at once and says
+so. In a browser-tab viewer (`AnnDataViewer`), whose server answers on its own
+threads, `wait_for_event` does wait.
+```
 
 ### Pattern B — Turn a selection into an `AnnData` subset safely
 
 ```python
-event = viewer.wait_for_event("selection", timeout=120)
-cells = event["cells"]
-
-subset = adata[cells].copy()
-subset
+subset = viewer.subset(adata)                     # the last selection
+group = viewer.subset(adata, "Lasso selection")   # a highlight group, by label or id
 ```
+
+To keep every highlight group and label field as `obs` columns instead, pull
+them all at once: `viewer.pull(adata)` ({doc}`42_pull_everything_back`).
 
 ```{important}
 Selection indices refer to the **row order of the dataset at the time you created the viewer**.
@@ -146,8 +154,8 @@ Best practice: treat `adata` as immutable after opening the viewer, or recreate 
 Hooks run on the viewer channel's thread, not in your cell. An exception a hook
 raises is logged (logger `cellucid.viewer_channel`, "A viewer event hook
 failed") and the channel stays open. The event itself is not lost: it is
-recorded in `viewer.state` and handed to `wait_for_event(...)` before any hook
-runs, and the other hooks still run for it. Validate the exact input, and
+recorded in `viewer.state` (and, in a browser-tab viewer, handed to
+`wait_for_event(...)`) before any hook runs, and the other hooks still run for it. Validate the exact input, and
 record failures where your notebook can see them:
 
 ```python
@@ -191,12 +199,16 @@ viewer.reset_view()
 If you need low-level control:
 
 ```python
-viewer.send_message({"type": "highlight", "cells": [1, 2, 3], "color": "#ff0000"})
+viewer.send_message({"type": "highlight", "cells": [1, 2, 3], "color": "#ff0000", "label": None})
 ```
 
 ```{note}
 A message sent before the viewer is displayed waits and is delivered, in order, once the viewer connects; `send_message` returns `False` while it waits and `True` when it was sent at once. The `show_anndata(...)` helper displays automatically in notebook contexts.
 ```
+
+To show your own columns and gene sets in the viewer, push them:
+`viewer.push(adata.obs["leiden"])`, `viewer.push_gene_set("T cells", genes)`
+({doc}`43_push_clusters_refine_and_pull`).
 
 ---
 
@@ -204,14 +216,13 @@ A message sent before the viewer is displayed waits and is delivered, in order, 
 
 ### Multiple viewers in one notebook
 
-Each viewer has its own viewer id and token (`viewerId`, `viewerToken` in its
-address) and its own channel, so events reach the right Python object. Each
-also has its own server: the first on port 8765, the next on the next free
-port.
+Each viewer has its own viewer id and token and its own channel, so events
+reach the right Python object. (Browser-tab viewers also have their own
+server each: the first on port 8765, the next on the next free port.)
 
 Best practices:
 - keep a variable name per viewer (`viewer_a`, `viewer_b`)
-- call `viewer.stop()` when you’re done to free ports and avoid confusion
+- call `viewer.stop()` when you’re done
 
 ### Long-running analysis inside callbacks
 
@@ -219,7 +230,7 @@ If your callback takes seconds/minutes, the UI may feel laggy.
 
 Options:
 - do minimal work inside the callback and enqueue to a background thread/process
-- use `wait_for_event(...)` and run analysis in the main flow instead
+- read `viewer.selection` in the next cell and run analysis in the main flow instead
 
 ### Hover events can be very frequent
 
@@ -234,36 +245,36 @@ Treat hover as “streaming telemetry”:
 ### Symptom: “I select cells but Python receives nothing”
 
 Likely causes:
-- viewer never reached `ready`
-- browser cannot reach the kernel-side server port (remote kernel without proxy/tunnel)
-- a proxy between the page and the server does not pass WebSockets (the
-  viewer channel, `/_cellucid/ws`)
+- the kernel is busy: a running cell holds the viewer's messages until it
+  ends
+- the selection was not confirmed (a lasso that is drawn but not confirmed
+  sends nothing)
+- the viewer's channel is not open (the app did not load)
 
-How to confirm:
+How to confirm (in a new cell):
 ```python
 viewer.debug_connection()
 ```
 
 Fix:
-- on remote Jupyter, configure a browser-reachable proxy route or use SSH
-  tunneling, then pass its exact base as `client_server_url=` (see
-  {doc}`22_large_dataset_server_mode_and_lazy_gene_expression`)
-- verify `/_cellucid/health` is reachable from the browser
+- let the cell finish; hooks run while the kernel is idle
+- check `channel_connected` and `connected_outputs` in the report; an empty
+  output in JupyterLab or Notebook 7 needs `anywidget` where the notebook
+  server runs ({doc}`../e_jupyter_hooks/03_supported_environments_matrix`)
 
 ### Symptom: “Python receives events but highlight doesn’t show”
 
 Likely causes:
-- you sent highlight before the viewer finished initializing
 - your cell indices are wrong (reordered dataset)
 
 Fix:
-- wait for ready: `viewer.wait_for_ready()`
+- name the cells by obs name (`viewer.highlight_cells(adata.obs_names[mask])`)
 - print a few indices and sanity-check by clicking cells
 
 ### Symptom: “My notebook becomes slow over time”
 
 Likely causes:
-- multiple servers/viewers left running
+- multiple viewers left running
 - accumulating callbacks
 
 Fix:
@@ -276,4 +287,5 @@ Fix:
 
 - {doc}`32_session_persistence_and_restoring_analysis_artifacts` (save/restore state; reproducibility)
 - {doc}`05_jupyter_embedding_hooks_sessions_gallery` (runnable hook/session notebooks)
+- {doc}`06_cellucid_in_your_pipeline_python_and_r` (pull, push, gene sets, exports; Python and R)
 - Deep docs: {doc}`../e_jupyter_hooks/index`

@@ -5,15 +5,19 @@ inventing message types or accepting undeclared fields.
 
 ## Prerequisites
 
-- A displayed viewer from `show_anndata(...)`
-- A viewer that has reached `ready`
+- A viewer that has reached `ready`: a notebook widget from
+  `show_anndata(...)`, or a browser-tab viewer from `cellucid.AnnDataViewer(...)`
+  (the request/response exchanges below wait for the viewer's answer, which a
+  notebook widget can only hear between cells: run them with an
+  `AnnDataViewer`)
 - Familiarity with Python dictionaries
 
 ## The two authenticated directions
 
-Both directions travel on the viewer channel, one WebSocket the viewer opens
-to the server and authenticates once with its exact `viewerId` and
-`viewerToken`. Python's commands are the command-specific record only (a
+Both directions travel on the viewer channel, which the viewer authenticates
+once with its exact `viewerId` and `viewerToken`: carried by the notebook's
+own connection for a widget, a WebSocket to this machine for a browser-tab
+viewer. Python's commands are the command-specific record only (a
 highlight or a visibility change travels as one binary frame of cell indices);
 the viewer's events come back as JSON text frames, and selections as binary
 cell indices. The server checks each closed event record and gives it to the
@@ -46,12 +50,23 @@ The `event` discriminator is one of:
 - `session_bundle`
 - `command_error`
 - `data_mapping`
+- `color_by`
+- `result`, `result_removed`, `results` (what `viewer.pull()` reads)
 
 The remaining fields are the exact payload for that discriminator. See
 {doc}`../e_jupyter_hooks/07_frontend_to_python_events` for every field and
 value constraint.
 
 ## Exercise the request/response diagnostics
+
+A browser-tab viewer answers while the cell waits:
+
+```python
+from cellucid import AnnDataViewer
+
+viewer = AnnDataViewer(adata, dataset_name="My study", dataset_id="my-study-v1")
+viewer.wait_for_ready(timeout=60)
+```
 
 ### Ping → pong
 
@@ -96,7 +111,9 @@ print(report["recent_events"])
 ```
 
 The report uses only the two diagnostic exchanges above plus direct server and
-verified-web-generation probes.
+verified-web-generation probes. A notebook widget's `debug_connection()`
+waits for nothing and reports the widget's side instead (`transport`,
+`connected_outputs`, `channel_connected`, `state`, `recent_events`).
 
 ## Use the supported command helpers
 

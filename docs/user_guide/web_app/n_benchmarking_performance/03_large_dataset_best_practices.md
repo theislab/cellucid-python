@@ -31,6 +31,28 @@ Practical (very rough) intuition:
   precisely because the renderer is not the first thing to give way. Run it on
   your own machine before assuming a dataset is too big — the answer is a
   property of your GPU, not of the cell count.
+- **At 100 million cells and above**, turn levels of detail on: each level is
+  a uniform random sample of the cells, so a moving view stays representative.
+  Measured on a 16 GB Apple M1 Pro in Chromium with 100M 3D cells: levels of
+  up to 2.4M cells draw in 17 ms a frame, 86M in 75 ms and all 100M in 85 ms
+  once the spatial order is taken, after a first frame at 22 s. Cells in
+  priority order (a file Cellucid wrote, a subsample) draw their first level
+  0.3 s after levels of detail are turned on; any other file draws them once
+  the spatial index is built (about 30 s at 100M); 150M 2D cells draw a 3.4M
+  level in 53 ms. What runs out first is memory (see
+  {doc}`05_benchmark_tools` for the footprints), which is why a dataset larger
+  than the device holds opens as a subsample sized to fit.
+- **Connectivity edges** cost 8 bytes an edge and 4 a cell while shown,
+  whatever the slider shows: about 11 edges a
+  cell at k = 15, so 0.6 GB at 10M cells and 3.0 GB at 50M (built in the
+  reader with at most 4 bytes a cell more; measured on a 16 GB Apple M1 Pro
+  in Chromium, 50M cells' 349.7M edges build and show in 40 s, 10M cells'
+  69.9M in 8 s). Only the edges shown reach the
+  GPU (40 bytes each, 250,000 by default). A graph whose edges need more than
+  the memory Cellucid may use on this device is refused with its size, and
+  the dataset stays open without it. The KNN drag tool checks the graph once
+  (building its edges and letting them go) and then reads each degree's
+  neighbours from the file, so it holds nothing per cell or edge.
 
 If you hit “WebGL context lost”, jump to {doc}`07_troubleshooting_performance` and {doc}`../a_orientation/02_system_requirements`.
 
@@ -51,6 +73,7 @@ If you only do one thing from this page, do this list in order.
 
 - A large `.h5ad` or Zarr store opens *directly in the browser*, read from disk as each view needs it (an R object or a MatrixMarket folder is read once from the start instead). A cell-major (CSR) matrix is indexed by gene first; a file written by `prepare()` or `cellucid_prepare()` is gene-major and skips that.  
   See {doc}`../b_data_loading/03_browser_file_picker_tutorial` → “How a direct `.h5ad` is read”.
+- Opening a share of the cells drawn in blocks (the default for a file other tools wrote) reads about that share of every per-cell array and of a cell-major matrix; a uniform share of such a file reads nearly every chunk, since its cells are spread through all of them. A gene-major (CSC) matrix written by other tools reads each gene's **whole column at any share**, because each of a gene's stored chunks spans many cells and a representative sample has a cell in nearly every one. With a gene's entries in *C* chunks and a share drawn as *m* separate blocks of cells, about 1 − exp(−m / C) of its chunks hold a kept cell (uniform sampling: all of them). A file written by `prepare()` or `cellucid_prepare()` stores its cells in priority order, so every share reads only its own part of each gene.
 - For data on another machine: **Server Mode** over an SSH tunnel, so only the bytes a view needs cross the network. A served file is read by the same browser reader, so serving a local file does not make it faster.  
   See {doc}`../b_data_loading/04_server_tutorial`.
 
@@ -66,11 +89,25 @@ If you only do one thing from this page, do this list in order.
   and about 90% in a dense 2D view, in the measurements on
   {doc}`02_performance_considerations_what_gets_slow_and_why`; it applies to the
   next frame either way.
-- `Level of detail (LOD)` starts off. Turn it on whenever the frame is slow while
-  zoomed out — it works at every dataset size. `Auto` draws fewer points the
+- `Level of detail (LOD)` and `Frustum culling` start off and **turn on by
+  themselves** when your GPU's time for a frame of every cell is measured
+  over 33 ms (30 frames a second), right after the dataset opens, and stay on
+  only if frames drawn with them are then measured faster (otherwise they go
+  off again until you move the view); the Performance tip says what was
+  measured, as a range where this browser can only time the frames that
+  closely ("closer than this browser can time" when the ranges overlap). A small dataset stays at full
+  detail. Turning either box off yourself is a choice that stands for the
+  page. LOD works at every dataset size. Every reduced level is a uniform
+  random sample of the open cells, so what it shows (density, the mix of
+  categories) is what all cells show. The levels are fixed counts — 1,000
+  cells, then a quarter more at each level, up to every open cell — so a
+  level shows the same cells whatever share you open. A file Cellucid wrote,
+  or a subsample, draws its levels as soon as it opens; any other file draws
+  them once its spatial index is built in the background. `Auto` draws fewer points the
   further back you pull, down to a floor of `min(2,000,000, cells ÷ 8)` points:
   never more than an 8× reduction, and never below two million on a large atlas.
-  If you want fewer than that on weak hardware, set `Force LOD level` yourself:
+  If you want fewer than that on weak hardware, set `Force LOD level` yourself
+  (the slider spans the levels of the cells open):
   the forced level is deliberately not held to that floor. The exact rule, and why the reduction lands where it does, is in
   {doc}`02_performance_considerations_what_gets_slow_and_why`.
 

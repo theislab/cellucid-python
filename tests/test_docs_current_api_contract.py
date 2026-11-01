@@ -139,16 +139,21 @@ def _markdown_python_sources() -> Iterator[tuple[str, str]]:
 
 
 def _notebook_python_sources() -> Iterator[tuple[str, str]]:
+    from IPython.core.inputtransformer2 import TransformerManager
+
+    # IPython syntax (``%pip``, also inside an ``if`` block) is valid notebook
+    # code but not Python: IPython's own transformer turns it into the Python
+    # it runs as. A notebook of another kernel (the R tutorials) holds no Python.
+    to_python = TransformerManager()
     for path in _notebook_files():
         notebook = json.loads(path.read_text(encoding="utf-8"))
+        language = notebook.get("metadata", {}).get("kernelspec", {}).get("language", "python")
+        if language.lower() != "python":
+            continue
         for cell_number, cell in enumerate(notebook.get("cells", []), start=1):
             if cell.get("cell_type") != "code":
                 continue
-            source = "".join(cell.get("source", []))
-            # IPython line magics are valid notebook syntax but not Python AST.
-            source = "\n".join(
-                line for line in source.splitlines() if not line.lstrip().startswith("%")
-            )
+            source = to_python.transform_cell("".join(cell.get("source", [])))
             if not source.strip():
                 continue
             yield f"{path.relative_to(REPOSITORY_ROOT)}:cell {cell_number}", source
@@ -262,13 +267,27 @@ def test_runnable_python_examples_match_current_public_signatures() -> None:
             if not isinstance(node, ast.Call):
                 continue
             name = _call_name(node)
-            if name not in signatures:
+            # A method called on a viewer is the viewer's (viewer.pull(adata)
+            # is AnnDataViewer.pull, not cellucid.pull(adata, source)).
+            viewer_method = (
+                isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "viewer"
+                and callable(getattr(cellucid.AnnDataViewer, name, None))
+            )
+            if viewer_method:
+                signature = inspect.signature(getattr(cellucid.AnnDataViewer, name))
+            elif name in signatures:
+                signature = signatures[name]
+            else:
                 continue
-            signature = signatures[name]
             keywords = {keyword.arg for keyword in node.keywords if keyword.arg is not None}
             has_expansion = any(keyword.arg is None for keyword in node.keywords)
             has_starred_args = any(isinstance(argument, ast.Starred) for argument in node.args)
-            unknown = sorted(keywords - set(signature.parameters))
+            takes_any_keyword = any(
+                parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in signature.parameters.values()
+            )
+            unknown = [] if takes_any_keyword else sorted(keywords - set(signature.parameters))
             if unknown:
                 failures.append(f"{location}:{node.lineno}: {name} has removed keywords {unknown}")
             if has_expansion or has_starred_args:
@@ -334,83 +353,16 @@ def test_runnable_python_examples_match_current_public_signatures() -> None:
 
 _FENCE = re.compile(r"^(?P<ticks>`{3,})(?P<info>.*)$")
 
-# A transcript that documents the *missing-identity failure* has to show the
-# command without its identity flags -- that incomplete command is the whole
-# subject of the example. The exemption is the failure the CLI itself prints for
-# exactly that mistake, so it cannot be spelled over a command that is being
-# recommended rather than diagnosed.
-_MISSING_IDENTITY_REPORT = re.compile(
-    r"^Error: (?:dataset_name and dataset_id are|dataset_(?:name|id) is) required\b"
-)
-
-
-def _fenced_block_of_each_line(text: str) -> list[int | None]:
-    """Return, per line, the index of the fenced block it belongs to."""
-    membership: list[int | None] = []
-    open_ticks: str | None = None
-    block_index = -1
-    for line in text.splitlines():
-        fence = _FENCE.match(line)
-        if open_ticks is None:
-            if fence is not None:
-                open_ticks = fence["ticks"]
-                block_index += 1
-            membership.append(None)
-            continue
-        if fence is not None and len(fence["ticks"]) >= len(open_ticks) and not fence["info"].strip():
-            open_ticks = None
-            membership.append(None)
-            continue
-        membership.append(block_index)
-    return membership
-
-
 def test_cli_examples_use_only_the_exact_current_contract() -> None:
+    # A store that declares no identity is named after its file, as
+    # cellucid-r names it, so a command needs no identity flags; a removed
+    # option is never documented.
     failures: list[str] = []
     for path in [*_markdown_files(), *_notebook_files()]:
         text = path.read_text(encoding="utf-8")
         relative = path.relative_to(REPOSITORY_ROOT)
         if "--no-backed" in text or "--backed" in text:
             failures.append(f"{relative}: documents a removed backed-mode CLI option")
-
-        logical_text = re.sub(r"\\\s*\n\s*", " ", text)
-        lines = logical_text.splitlines()
-        membership = _fenced_block_of_each_line(logical_text)
-        diagnostic_blocks = {
-            block
-            for block, line in zip(membership, lines, strict=True)
-            if block is not None and _MISSING_IDENTITY_REPORT.match(line.strip())
-        }
-        # A file written by ``cellucid.prepare()`` declares its own identity in
-        # ``uns['cellucid']``, so a block that says it serves one may omit the
-        # flags; it has to say so, in the block, where the reader copies from.
-        prepared_blocks = {
-            block
-            for block, line in zip(membership, lines, strict=True)
-            if block is not None and "cellucid.prepare()" in line
-        }
-        for line_number, line in enumerate(lines, start=1):
-            # A command names its store after the subcommand; a line that only
-            # mentions `cellucid serve` (a quoted message listing where a file
-            # goes) is not a command.
-            if "cellucid serve" not in line or not re.search(
-                r"\.(?:h5ad|zarr)\b", line.split("cellucid serve", 1)[1]
-            ):
-                continue
-            # The identity flags are optional for a store that declares
-            # uns['cellucid']['id'] and ['name'], so prose may name the bare
-            # command. A command in a code block is one a reader copies onto
-            # their own file, which usually declares no identity, so it names
-            # the dataset.
-            if membership[line_number - 1] is None:
-                continue
-            if membership[line_number - 1] in diagnostic_blocks | prepared_blocks:
-                continue
-            if "--dataset-name" not in line or "--dataset-id" not in line:
-                failures.append(
-                    f"{relative}:{line_number}: direct AnnData CLI example lacks exact identity"
-                )
-
     assert not failures, "\n".join(failures)
 
 
@@ -472,19 +424,6 @@ def test_docs_do_not_reintroduce_removed_or_invented_runtime_contracts() -> None
     ]
     for claim in retired_web_claims:
         assert claim not in all_docs_text
-
-    incomplete_identity_calls = [
-        "show_anndata(adata)",
-        'show_anndata("data.h5ad")',
-        'show_anndata("data.zarr")',
-        "show_anndata(<data.h5ad>)",
-        "show_anndata(<data.zarr or AnnData>)",
-        "serve_anndata(adata)",
-        "serve_anndata(<data.h5ad>)",
-        "serve_anndata(<data.zarr>)",
-    ]
-    for call in incomplete_identity_calls:
-        assert call not in python_guide_text
 
     assert not re.search(
         r"serve_anndata\s*\([^)]*\bbacked\s*=\s*True",
@@ -1102,7 +1041,17 @@ def test_debug_connection_docs_use_only_the_keyed_store_probe_report() -> None:
         path.read_text(encoding="utf-8")
         for path in sorted((DOCS_ROOT / "user_guide" / "python_package").rglob("*.md"))
     )
-    assert python_guide.count("anndata_store_probes") >= 11
+    # A browser-tab viewer (AnnDataViewer) reports its served store under
+    # ``anndata_store_probes``; a notebook widget serves no HTTP and reports
+    # none, so the pages that document a browser-tab report must name it.
+    for relative in (
+        "e_jupyter_hooks/16_reference.md",
+        "e_jupyter_hooks/14_troubleshooting_hooks.md",
+        "h_developer_docs/12_debugging_playbook.md",
+        "b_concepts_mental_models/08_debugging_mental_model_where_to_look.md",
+    ):
+        page = (DOCS_ROOT / "user_guide" / "python_package" / relative).read_text(encoding="utf-8")
+        assert "anndata_store_probes" in page, relative
     assert "dataset_identity_probes" not in python_guide
     assert "dataset_identity_url" not in markdown
     assert "dataset_identity_error" not in markdown
@@ -1473,7 +1422,9 @@ def test_specification_lists_exactly_the_uns_cellucid_keys_the_writer_and_viewer
     text = SPECIFICATION.read_text(encoding="utf-8")
     top = _table_keys(text.split("## 2. `uns['cellucid']`", 1)[1])
     defaults = _table_keys(text.split("### `defaults`", 1)[1])
-    assert top == ["schema", "id", "name", "description", "citation", "source", "defaults", "outlierQuantiles", "session"]
+    assert top == [
+        "schema", "id", "name", "description", "citation", "source", "defaults", "outlierQuantiles", "session", "priority",
+    ]
     assert defaults == [
         "embedding1d",
         "embedding2d",

@@ -17,7 +17,10 @@ browser; `cellucid_serve()` does the same for a browser on another machine
 as it reads a file, and talks back to R over a WebSocket: commands from R,
 selections and other events to R. Nothing is written to disk, and nothing
 leaves the machine: the server listens on `127.0.0.1` unless you choose
-another `host`.
+another `host`. The store holds the cells in priority order, as
+`cellucid_prepare()` writes them, so a subsample the viewer opens (Session ›
+Open data) is the first rows of every array and only its cells are sent;
+cells are still named by their position in your object.
 
 Start here: {doc}`../d_viewing_loading/04_view_in_rstudio_positron`
 

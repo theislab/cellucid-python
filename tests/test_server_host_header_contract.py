@@ -798,3 +798,33 @@ def test_the_declaration_is_validated_before_the_dataset_is_read(tmp_path: Path)
             serve_web_ui=False,
             allowed_hosts=["*"],
         )
+
+
+@pytest.mark.parametrize(
+    ("origin", "allowed"),
+    [
+        ("https://www.cellucid.com", True),
+        ("https://cellucid.com", True),
+        ("http://localhost:3000", True),
+        ("http://127.0.0.1:8000", True),
+        # No other page on a cellucid.com name: the documentation site runs
+        # its host's scripts and must not read a served dataset.
+        ("https://docs.cellucid.com", False),
+        ("https://preview.cellucid.com", False),
+        ("http://www.cellucid.com", False),
+        ("https://www.cellucid.com.example.org", False),
+        ("https://theislab.github.io", False),
+        ("null", False),
+    ],
+)
+def test_cross_origin_reads_are_open_to_the_hosted_app_and_loopback_pages_only(origin: str, allowed: bool) -> None:
+    """The CORS policy names the hosted app's origins exactly, as R's server does."""
+    from email.message import Message
+
+    from cellucid._server_base import CORSMixin
+
+    handler = CORSMixin.__new__(CORSMixin)
+    headers = Message()
+    headers["Origin"] = origin
+    handler.headers = headers  # type: ignore[attr-defined]
+    assert (handler._get_allowed_origin() == origin) is allowed

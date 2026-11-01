@@ -214,12 +214,14 @@ Fix:
 - pick variables that exist and are populated for those cells,
 - ensure gene expression is available for gene variables.
 
-### Symptom: `r = 0` with `p = 1`, unexpectedly
+### Symptom: `r` reads `Undefined` (`r undefined` on the plot)
 
-This is not a failure or a missing value — it is the defined answer when one
-variable has no variance inside that page. With a constant X or Y the
-correlation denominator is zero, so `r` is set to exactly `0`, and `t` and the
-p-value follow as `0` and `1`.
+One variable has no variance inside that page, so there is no correlation to
+report: the correlation's denominator is zero. The table reads `Undefined`,
+the interpretation names the variable (*CD3E is constant in these cells*),
+and the plot says `r undefined`. It is not `r = 0` (which would read as
+evidence of no correlation); SciPy's `pearsonr` and `spearmanr` return NaN in
+the same case.
 
 Likely causes:
 - one variable is constant within the page (an all-zero gene is the usual one),

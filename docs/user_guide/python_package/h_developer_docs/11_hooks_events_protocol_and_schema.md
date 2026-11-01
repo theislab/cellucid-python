@@ -55,9 +55,11 @@ Opening it:
 ### Frontend → Python (events)
 
 - JSON text frames, at most 1 MiB each, for `hover`, `click`, `ready`, `pong`,
-  `debug_snapshot`, `command_error` and `data_mapping`
-- binary frames for `selection` and `session_bundle`: a little-endian `uint32`
-  header length, a UTF-8 JSON header (`{"type": "selection", "source"}` or
+  `debug_snapshot`, `command_error`, `data_mapping`, `color_by`,
+  `result_removed` and `results`
+- binary frames for `selection`, `result` and `session_bundle`: a
+  little-endian `uint32` header length, a UTF-8 JSON header
+  (`{"type": "selection", "source"}`, a result's header, or
   `{"type": "session_bundle", "requestId"}`), then the body
 - a selection's body is the selected row indices as little-endian `uint32`,
   strictly ascending, one or more; the server reads it into one buffer
@@ -299,10 +301,11 @@ so that it can never be sniffed the way a version would be:
   "channel": "_cellucid/ws",
   "commands": ["clearHighlights", "debug_snapshot", "freeze", "highlight",
                "ping", "requestSessionBundle", "resetCamera", "setColorBy",
-               "setDataMapping", "setVisibility"],
-  "binaryCommands": ["highlight", "setVisibility"],
-  "events": ["click", "command_error", "data_mapping", "debug_snapshot",
-             "hover", "pong", "ready", "selection", "session_bundle"]
+               "setDataMapping", "setField", "setGeneSet", "setVisibility"],
+  "binaryCommands": ["highlight", "setField", "setVisibility"],
+  "events": ["click", "color_by", "command_error", "data_mapping",
+             "debug_snapshot", "hover", "pong", "ready", "result",
+             "result_removed", "results", "selection", "session_bundle"]
 }
 ```
 
@@ -363,8 +366,10 @@ Recommendation:
 
 Likely causes:
 - dataset load failed in the frontend (check browser console),
-- iframe cannot reach the server, or its channel cannot open (proxy/mixed-content),
-- server health endpoint fails.
+- a cell is still running (a notebook widget's messages arrive between cells),
+- the viewer's channel did not open (`channel_connected` is false; for a
+  browser tab, a proxy that does not pass WebSockets or a server the page
+  cannot reach).
 
 Fix:
 - run `viewer.debug_connection()` and follow {doc}`12_debugging_playbook`.

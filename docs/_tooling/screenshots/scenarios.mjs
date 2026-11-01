@@ -124,6 +124,26 @@ const NOTIFICATIONS_DRAINED = {
 };
 
 /**
+ * Open one of the Session panel's collapsible sections, as a person does:
+ * a click on its header (`#reading-toggle` for Subsampling,
+ * `#data-mapping-toggle` for Data mapping), only while it is collapsed. Both
+ * start collapsed, and whether one is open is this browser's preference
+ * (`localStorage`), so a capture opens what it photographs instead of
+ * relying on an earlier one.
+ *
+ * @param {string} toggle - The section header's selector
+ */
+function expandSessionSection(toggle) {
+  return {
+    run: async page => {
+      const header = page.locator(toggle);
+      if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
+      await page.waitForSelector(`${toggle}[aria-expanded="true"]`);
+    },
+  };
+}
+
+/**
  * Stop the clock that is about to delete a timed notification.
  *
  * A SUCCESS or INFO notification dismisses itself four seconds after it is
@@ -695,25 +715,6 @@ function buildFilteringScenarios() {
       settle,
     },
     {
-      id: 'filtering-button-disabled-live-on',
-      topic: 'filtering',
-      name: 'filter-button-disabled-live-on',
-      describes:
-        'The same Visible range block with Live filtering on: the Filter button'
-        + ' is greyed out under the pointer, beside an enabled Reset button.',
-      dataset: 'pancreas',
-      steps: [
-        READY,
-        ...sScore,
-        { scrollIntoView: '#legend' },
-        { waitFor: '#legend .legend-filter button.switch[aria-checked="true"]' },
-        { waitFor: '#legend .legend-filter .btn-primary[disabled]' },
-      ],
-      shot: { mode: 'element', selector: '#legend .legend-filter', padding: 6 },
-      cursor: { on: '#legend .legend-filter .btn-primary', at: 'center', state: 'hover' },
-      settle,
-    },
-    {
       id: 'filtering-window-continuous-range',
       topic: 'filtering',
       name: 'window-continuous-range-applied',
@@ -933,29 +934,6 @@ function buildFilteringScenarios() {
         ...ins1,
         { scrollIntoView: '#legend' },
         setRange(MIN_SLIDER, 3),
-        { scrollIntoView: '#active-filters-container' },
-        NOTIFICATIONS_DRAINED,
-      ],
-      shot: { mode: 'window' },
-      settle,
-    },
-    {
-      id: 'filtering-window-gene-range-scope-lost',
-      topic: 'filtering',
-      name: 'window-gene-range-scope-lost',
-      describes:
-        'The same window after switching the active field to clusters: every '
-        + 'cell is drawn again, the Ins1 row has left the Filters block, and the '
-        + 'count line reads Showing all 3,696 cells.',
-      dataset: 'pancreas',
-      steps: [
-        READY,
-        { closeSection: '#session-section' },
-        ...ins1,
-        { scrollIntoView: '#legend' },
-        setRange(MIN_SLIDER, 3),
-        ...clusters,
-        { waitForText: '#filter-count', text: 'Showing all 3,696 cells' },
         { scrollIntoView: '#active-filters-container' },
         NOTIFICATIONS_DRAINED,
       ],
@@ -2137,7 +2115,7 @@ function buildAnnotationAndSessionScenarios() {
       name: 'refusal-02-not-a-session-file',
       describes:
         'A Cellucid notification reading "This file is not a Cellucid session '
-        + 'file of format 2 (it does not start with CELLUCID_SESSION/2).", with a'
+        + 'file of format 3 (it does not start with CELLUCID_SESSION/3).", with a'
         + ' dismiss button at its right, after a file that is not a session '
         + 'bundle was chosen in Load.',
       dataset: 'pancreas',
@@ -3523,13 +3501,14 @@ function buildDataLoadingRefusalScenarios() {
         } },
         NOTIFICATIONS_DRAINED,
         { openSection: '#session-section' },
+        expandSessionSection('#data-mapping-toggle'),
         { run: page => page.locator('#data-mapping-disclosure .disclosure-header').first().click() },
         { waitFor: '#data-mapping-embeddings' },
         { run: page => page.locator('#data-mapping-more .disclosure-header').first().click() },
         { waitForText: '#data-mapping-more', text: '24 columns' },
         { scrollIntoView: '#data-mapping-more' },
       ],
-      shot: { mode: 'region', selectors: ['#data-mapping-controls .control-group-header', '#data-mapping-disclosure'], padding: 6 },
+      shot: { mode: 'region', selectors: ['#data-mapping-controls .disclosure-header-row', '#data-mapping-disclosure'], padding: 6 },
       settle: REFUSAL_SETTLE,
     },
 
@@ -5107,6 +5086,13 @@ async function openFromDisk(page, kind, target) {
     `${document.getElementById('dataset-name')?.textContent}|`
       + `${document.getElementById('dataset-origin')?.textContent}`
   ));
+  // Where the browser has its own pickers (Chromium's showOpenFilePicker),
+  // Open… uses them, and an automated browser cannot answer them; without
+  // them the same item opens the file inputs, whose chooser it can.
+  await page.evaluate(() => {
+    window.showOpenFilePicker = undefined;
+    window.showDirectoryPicker = undefined;
+  });
   await page.click('#user-data-open-btn');
   await page.waitForSelector('#user-data-open-menu', { state: 'visible' });
   const [chooser] = await Promise.all([
@@ -5244,9 +5230,11 @@ function buildFormatAndViewerScenarios() {
       describes:
         'The Dataset box after a Seurat object saved with saveRDS() was opened: '
         + 'its cells and genes, "R object (.rds) · this computer", the line '
-        + '"Read once into this browser\'s storage for this tab", and Details '
-        + 'open with Read (once, from start to end, nothing uploaded), Kept (the '
-        + 'origin-private file system until the tab closes) and what it holds.',
+        + '"Read whole once (it cannot be read in parts), kept in this browser\'s '
+        + 'storage for next time", and Details open with Read (whole, once, from '
+        + 'start to end, nothing uploaded), Kept (the origin-private file system '
+        + 'until it is cleared), Read in parts (a Cellucid-ready AnnData) and what '
+        + 'it holds.',
       kind: 'file',
       file: 'pancreas.rds',
     }),
@@ -5336,6 +5324,7 @@ function buildFormatAndViewerScenarios() {
         // The file has no X_umap, so it opens on a best guess and says so in a
         // notification that stays until dismissed; it is outside this crop.
         { openSection: '#session-section' },
+        expandSessionSection('#data-mapping-toggle'),
         { run: async page => {
           const genes = page.locator('[data-mapping-section="genes"] .disclosure-header');
           if ((await genes.getAttribute('aria-expanded')) !== 'true') await genes.click();
@@ -5361,9 +5350,10 @@ function buildFormatAndViewerScenarios() {
       describes:
         'The opening panel centred over the empty viewer while a linked Seurat '
         + '.rds is downloaded: "Opening" and the file\'s address, the step '
-        + '"Downloading the whole file: … does not serve parts of files", a '
-        + 'progress bar part-way, how much has arrived of 9.4 MB with the speed '
-        + 'and time left, and a Cancel button.',
+        + '"Downloading the whole file (9.4 MB): … does not serve parts of '
+        + 'files", a progress bar part-way, how much has arrived with the speed '
+        + 'and time left, the note saying the host serves the file only whole, '
+        + 'how much is downloaded and that it is kept, and a Cancel button.',
       awaitStartup: false,
       query: async () => {
         const file = await formatFixture('pancreas.rds');
@@ -5551,7 +5541,9 @@ function buildFormatAndViewerScenarios() {
       name: 'fail-remote-server-unreachable',
       describes:
         'A Cellucid notification saying the Cellucid server could not be '
-        + 'reached at a loopback address, and what to check.',
+        + 'reached because nothing readable came back, that the connection may '
+        + 'have failed or the address may not hold Cellucid data, and what to '
+        + 'check.',
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
@@ -5958,8 +5950,8 @@ function buildViewAndExportScenarios() {
       topic: 'web_app',
       name: 'welcome-startup',
       describes:
-        'The Cellucid welcome overlay as a first visit opens it, with Choose a '
-        + 'dataset and Learn more, over the Suo atlas loaded behind it.',
+        'The Cellucid welcome overlay as a first visit opens it, with Start '
+        + 'exploring and Learn more, over the Suo atlas loaded behind it.',
       dataset: 'suo',
       keepWelcome: true,
       steps: [SUO_READY, NOTIFICATIONS_DRAINED],
@@ -6525,6 +6517,9 @@ function buildPhoneScenarios() {
       steps: [
         PANCREAS_READY,
         NOTIFICATIONS_DRAINED,
+        // A phone starts with the plot and the panel as a bar at the foot of
+        // the screen; a tap on the bar opens it full screen.
+        { run: page => page.locator('#phone-sheet-bar').tap() },
         { run: page => page.waitForFunction(
           () => !document.getElementById('sidebar')?.classList.contains('hidden')
         ) },
@@ -6537,16 +6532,16 @@ function buildPhoneScenarios() {
       topic: 'web_app',
       name: 'phone-plot',
       describes:
-        'The same phone screen after tapping ✕: the whole Pancreas sample in '
-        + 'view on the plot, the menu button (☰) at the top left, and the '
-        + 'selection bar with its Select mode switch at the bottom.',
+        'Cellucid on a phone-sized touch screen as it opens the Pancreas sample: '
+        + 'the whole sample in view on the plot, the selection bar with its '
+        + 'Select mode switch, and below it the bar naming the dataset at the '
+        + 'foot of the screen.',
       dataset: 'pancreas',
       viewport: PHONE_VIEWPORT,
       steps: [
         PANCREAS_READY,
         NOTIFICATIONS_DRAINED,
-        SIDEBAR_SETTLED,
-        { run: page => page.locator('#sidebar-toggle').tap() },
+        // A phone opens on the plot, the panel waiting as the bar at its foot.
         { run: page => page.waitForFunction(
           () => document.getElementById('sidebar')?.classList.contains('hidden')
         ) },

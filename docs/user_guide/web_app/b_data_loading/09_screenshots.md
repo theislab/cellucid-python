@@ -13,7 +13,7 @@ format rather than with any one host.
 ## Loading and session controls
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Data mapping group.
+:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Subsampling and Data mapping sections, each one line with its summary.
 :width: 532px
 
 The Session panel with the Pancreas sample open. The **Dataset** box at the
@@ -24,7 +24,7 @@ another: the **Sample dataset** list, **Open…** for a file or folder, and the
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel-dark.png
-:alt: The same Session panel in the dark theme: the Dataset box, Open data with the Sample dataset dropdown, Open… and the Link or server bar, Session file with Save and Load, and the collapsed Data mapping group.
+:alt: The same Session panel in the dark theme: the Dataset box, Open data with the Sample dataset dropdown, Open… and the Link or server bar, Session file with Save and Load, and the collapsed Subsampling and Data mapping sections, each one line with its summary.
 :width: 532px
 
 The same panel in the dark theme.
@@ -79,12 +79,12 @@ A Zarr ZIP (`.zarr.zip`) opened from this computer, with **Details** open.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/rds-dataset-box.png
-:alt: The Dataset box after a Seurat object saved with saveRDS() was opened: its cells and genes, "R object (.rds) · this computer", the line "Read once into this browser's storage for this tab", and Details open with Read (once, from start to end, nothing uploaded), Kept (the origin-private file system until the tab closes) and what it holds.
+:alt: The Dataset box after a Seurat object saved with saveRDS() was opened: its cells and genes, "R object (.rds) · this computer", the line "Read whole once (it cannot be read in parts), kept in this browser's storage for next time", and Details open with Read (whole, once, from start to end, nothing uploaded), Kept (the origin-private file system until it is cleared), Read in parts (a Cellucid-ready AnnData) and what it holds.
 :width: 488px
 
 A Seurat object saved with `saveRDS()`. An R file has no random access, so it
-is read once into this browser's storage for the tab, and the Dataset box says
-so on its own line ({doc}`17_open_r_objects`).
+is read whole once into this browser's storage and kept for next time, and the
+Dataset box says so on its own line ({doc}`17_open_r_objects`).
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/rda-choose-object.png
@@ -130,7 +130,7 @@ A CITE-seq `.h5mu`: **Data mapping › Genes** shows a **Modality** select
 ## The opening itself
 
 ```{figure} ../../../_static/screenshots/data_loading/opening-progress.png
-:alt: The opening panel centred over the empty viewer while a linked Seurat .rds is downloaded: "Opening" and the file's address, the step "Downloading the whole file: … does not serve parts of files", a progress bar part-way, how much has arrived of 9.4 MB with the speed and time left, and a Cancel button.
+:alt: The opening panel centred over the empty viewer while a linked Seurat .rds is downloaded: "Opening" and the file's address, the step "Downloading the whole file (9.4 MB): … does not serve parts of files", a progress bar part-way, how much has arrived with the speed and time left, the note saying the host serves the file only whole, how much is downloaded and that it is kept, and a Cancel button.
 :width: 856px
 
 While nothing else is on screen, an opening is shown over the empty viewer:
@@ -159,7 +159,7 @@ A CSV renamed to `.h5ad`. The leading bytes are checked, not the extension.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/fail-remote-server-unreachable.png
-:alt: A Cellucid notification saying the Cellucid server could not be reached at a loopback address, and what to check.
+:alt: A Cellucid notification saying the Cellucid server could not be reached because nothing readable came back, that the connection may have failed or the address may not hold Cellucid data, and what to check.
 :width: 760px
 
 A server address with nothing listening behind it.

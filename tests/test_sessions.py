@@ -8,7 +8,10 @@ import pytest
 from cellucid.anndata_session import apply_cellucid_session_to_anndata
 from cellucid.session_bundle import (
     NOT_A_SESSION_FILE_MESSAGE,
+    SESSION_FORMAT_VERSION,
     CellucidSessionBundle,
+    other_session_format_message,
+    session_signature_refusal,
 )
 from cellucid.session_codecs import (
     decode_cell_set,
@@ -18,7 +21,7 @@ from cellucid.session_codecs import (
     digest_cell_set,
 )
 
-FORMAT2 = Path(__file__).parent / "fixtures" / "session_format2"
+FORMAT3 = Path(__file__).parent / "fixtures" / "session_format3"
 
 
 def _mapping_fingerprint_keys() -> dict:
@@ -161,15 +164,15 @@ def test_typed_json_restores_arrays_and_refuses_dangling_references():
         decode_typed_json(struct.pack("<I", len(text)) + text)
 
 
-def test_web_app_format2_file_reads_exactly():
-    """A file the web app's own encoders wrote (fixtures/session_format2)."""
+def test_web_app_format3_file_reads_exactly():
+    """A file the web app's own encoders wrote (fixtures/session_format3)."""
     import anndata as ad
     import pandas as pd
 
-    expected = json.loads((FORMAT2 / "expected.json").read_text())
-    bundle = CellucidSessionBundle(FORMAT2 / "session.cellucid-session")
-    assert bundle.dataset_fingerprint["name"] == "Format 2 fixture"
-    assert bundle.dataset_source == {"kind": "file", "name": "format2.h5ad", "dataset": "format2"}
+    expected = json.loads((FORMAT3 / "expected.json").read_text())
+    bundle = CellucidSessionBundle(FORMAT3 / "session.cellucid-session")
+    assert bundle.dataset_fingerprint["name"] == "Format 3 fixture"
+    assert bundle.dataset_source == {"kind": "file", "name": "format3.h5ad", "dataset": "format3"}
     assert bundle.required_fields == {"obs": ["ctype"], "var": []}
     windows = decode_typed_json(bundle.decode_chunk("analysis/windows"))
     assert windows["windows"][0]["result"]["log2fc"].tolist() == [1.5]
@@ -195,7 +198,7 @@ def test_web_app_format2_file_reads_exactly():
         var=pd.DataFrame(index=["gene_0"]),
         obsm={"X_umap": np.zeros((n_obs, 2), dtype=np.float32)},
     )
-    out = apply_cellucid_session_to_anndata(bundle, adata, expected_dataset_id="format2")
+    out = apply_cellucid_session_to_anndata(bundle, adata, expected_dataset_id="format3")
     for group_id, cells in expected["groups"].items():
         column = out.obs[f"cellucid_highlight__{group_id}"].to_numpy()
         assert np.flatnonzero(column).tolist() == cells, group_id
@@ -209,12 +212,12 @@ def test_web_app_format2_file_reads_exactly():
     labels[0] = "B"
     moved.obs["ctype"] = pd.Categorical(labels)
     with pytest.raises(ValueError, match="no longer holds the same cells"):
-        apply_cellucid_session_to_anndata(bundle, moved, expected_dataset_id="format2")
+        apply_cellucid_session_to_anndata(bundle, moved, expected_dataset_id="format3")
 
     missing = adata.copy()
     del missing.obs["ctype"]
     with pytest.raises(ValueError, match="obs column 'ctype'"):
-        apply_cellucid_session_to_anndata(bundle, missing, expected_dataset_id="format2")
+        apply_cellucid_session_to_anndata(bundle, missing, expected_dataset_id="format3")
 
 
 def test_a_file_without_the_signature_is_refused_with_the_viewer_sentence(tmp_path):
@@ -228,6 +231,33 @@ def test_a_file_without_the_signature_is_refused_with_the_viewer_sentence(tmp_pa
         with pytest.raises(ValueError) as error:
             CellucidSessionBundle(path).list_chunk_ids()
         assert str(error.value) == NOT_A_SESSION_FILE_MESSAGE
+
+
+def test_a_session_of_another_format_is_refused_naming_its_version(tmp_path):
+    # The web app's sentences (bundle/format.js otherSessionFormatMessage),
+    # word for word: a format-2 file's cell-order digest was taken over
+    # display coordinates, which no later version can check.
+    path = tmp_path / "other.cellucid-session"
+    manifest = json.dumps({"createdAt": "2025-01-01T00:00:00.000Z"}).encode()
+    assert SESSION_FORMAT_VERSION == 3
+    for version, sentence in (
+        (
+            2,
+            "This session was saved by an earlier version of Cellucid (session format 2): "
+            "the check that it marks the same cells cannot be verified, so it was not opened. "
+            "Re-create it in this version of Cellucid.",
+        ),
+        (
+            4,
+            "This session was saved by a newer version of Cellucid (session format 4), "
+            "which this version cannot read. Open it in that version of Cellucid.",
+        ),
+    ):
+        path.write_bytes(f"CELLUCID_SESSION/{version}\n".encode() + struct.pack("<I", len(manifest)) + manifest)
+        with pytest.raises(ValueError) as error:
+            CellucidSessionBundle(path).list_chunk_ids()
+        assert str(error.value) == sentence == other_session_format_message(version)
+    assert session_signature_refusal(b"CELLUCID_SESSION/x\n") == NOT_A_SESSION_FILE_MESSAGE
 
 
 def test_apply_session_rejects_out_of_range_categorical_codes_without_mutation() -> None:
@@ -512,6 +542,30 @@ def test_a_continuous_alias_of_a_column_with_missing_values_applies_as_the_viewe
         adata, expected_dataset_id="exact",
     )
     np.testing.assert_array_equal(out.obs["score copy"].to_numpy(), [1.5, np.nan, -2.0])
+
+
+def test_the_recorded_session_leaves_out_where_the_viewer_opened_the_dataset() -> None:
+    """A link, a server address or a file name never travels in ``uns`` with the object."""
+    import anndata as ad
+    import pandas as pd
+
+    adata = ad.AnnData(
+        X=np.ones((3, 1), dtype=np.float32),
+        obs=pd.DataFrame(index=["a", "b", "c"]),
+        var=pd.DataFrame(index=["gene"]),
+        obsm={"X_umap": np.zeros((3, 2), dtype=np.float32)},
+    )
+    bundle = _mock_bundle(n_cells=3, user_fields=[], codes={}, groups=[], cells={})
+    bundle.manifest["source"] = {
+        "kind": "link",
+        "locator": "https://lab.example/private/atlas.h5ad?versionId=3",
+        "dataset": "exact",
+    }
+    out = apply_cellucid_session_to_anndata(bundle, adata, expected_dataset_id="exact")
+    stored = out.uns["cellucid"]["session"]["manifest"]
+    assert "source" not in stored
+    assert set(stored) == set(bundle.manifest) - {"source"}
+    assert bundle.manifest["source"]["kind"] == "link", "the bundle itself is unchanged"
 
 
 def test_field_names_with_a_colon_apply_as_the_viewer_allows_them() -> None:

@@ -8,6 +8,17 @@
 directly, in your browser: nothing is uploaded, and only the parts a view needs
 (an embedding, the obs columns, one gene at a time) are read.
 
+```{note}
+The web app also opens a Seurat or SingleCellExperiment object saved with
+`saveRDS()` or `save()`, but such a file **cannot be read in parts**: it is
+compressed as one stream, so the browser reads all of it, once, before the
+first view, says so up front, and keeps what it read for the next visit
+({ref}`which-formats-are-read-in-parts`). For a file you share, or one too
+large to read whole on every new computer, write it once with
+`cellucid_prepare(path, format = "zarr.zip", data = obj)`: every viewer then
+reads only what each view needs.
+```
+
 ## From your computer: a `.zarr.zip`
 
 A browser folder picker may leave out hidden files, and every Zarr store keeps

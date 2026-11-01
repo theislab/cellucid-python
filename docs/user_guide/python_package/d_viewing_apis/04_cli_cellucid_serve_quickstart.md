@@ -46,9 +46,9 @@ The viewer reads the file itself — in place where the format allows it, once
 from the start for an R object or a MatrixMarket folder; the server serves its
 bytes (with `sendfile` and exact `Range` answers). `--dataset-name` and
 `--dataset-id` default to the AnnData or MuData's own
-`uns['cellucid']['name']` and `['id']`, and are required when it has none —
-always for an R object, a Loom, 10x or MatrixMarket dataset, whose identity
-Python does not read. A file written by `cellucid.prepare()` declares both, so
+`uns['cellucid']['name']` and `['id']`; a dataset that declares none (any R
+object, Loom, 10x or MatrixMarket dataset) is named after its file, its id
+the file's name without the extension, printed when the server starts. A file written by `cellucid.prepare()` declares both, so
 `cellucid serve pbmc_cellucid.h5ad` is the whole command for one.
 
 The same command serves the other formats:
@@ -136,8 +136,8 @@ store's `uns['cellucid']['defaults']`, else the viewer's default rule — see
 - A Zarr store folder must hold `zarr.json` (Zarr v3) or `.zgroup` (Zarr v2) at
   its root; a MuData Zarr store says so in its root attributes.
 - Any other folder must be a Cell Ranger `outs/` (holding
-  `filtered_feature_bc_matrix.h5`) or a MatrixMarket folder (`matrix.mtx[.gz]`
-  with its lists, also under a shared prefix such as `GSM4567_matrix.mtx.gz`).
+  `filtered_feature_bc_matrix.h5`) or a MatrixMarket folder (a `.mtx[.gz]`
+  file, whatever its name, such as `GSM4567_matrix.mtx.gz`, with its lists).
 - A directory name ending in `.zarr` is not sufficient by itself, and a valid
   Zarr store does not need that suffix.
 - Anything else → error: `Unable to detect format for: <path>`.

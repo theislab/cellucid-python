@@ -21,8 +21,8 @@ Every route ends in the same viewer, with millions of cells drawn on the GPU in
 
 ## Route 1: open a file in the browser
 
-1. Open [www.cellucid.com](https://www.cellucid.com) and choose **Choose a
-   dataset** on the welcome card.
+1. Open [www.cellucid.com](https://www.cellucid.com) and choose **Start
+   exploring** on the welcome card.
 2. In the **Session** panel, under **Open data**, press **Open…**, choose
    **File…** and pick your file (or **Folder…** for a Zarr store, a Cell
    Ranger `outs/` folder or a MatrixMarket folder), or drop it on the page.

@@ -13,7 +13,7 @@ If you prefer to learn by definition-first, read {doc}`04_ui_glossary_terminolog
 ## What appears on ordinary startup
 
 ```{figure} ../../../_static/screenshots/web_app/welcome-startup.png
-:alt: The Cellucid welcome overlay as a first visit opens it, with Choose a dataset and Learn more, over the Suo atlas loaded behind it.
+:alt: The Cellucid welcome overlay as a first visit opens it, with Start exploring and Learn more, over the Suo atlas loaded behind it.
 :width: 1440px
 
 Every ordinary bundled or catalog startup opens the welcome overlay.
@@ -24,8 +24,12 @@ startup whose address already names its data (a Python or R viewer, a
 `cellucid serve` server, or a `?data=` link) skips the overlay.
 ```
 
-Choose **Choose a dataset** to open the data controls, or press {kbd}`Escape`
-to inspect the loaded default dataset first.
+Choose **Start exploring** (or press {kbd}`Escape`, or click outside the
+card) to close it and look at the loaded default dataset. **Learn more** opens
+this documentation. Your own data opens from **Session › Open data**; every
+way to open it is in {doc}`../b_data_loading/01_loading_options_overview`.
+Until Cellucid has started (the first moments of a visit) those controls say
+*Starting Cellucid* and open as soon as it is ready.
 
 ```{figure} ../../../_static/screenshots/web_app/startup-loaded-build.png
 :alt: The Suo atlas loaded after the welcome overlay is dismissed, with every sidebar section collapsed so the footer shows, ending in the Version and Build line.
@@ -72,7 +76,11 @@ all 3,696 cells*. The published counts of every built-in sample are listed in
 
 ### 1) Confirm or replace the default dataset
 
-1) After dismissing the welcome overlay, inspect the **Session** accordion.
+1) After dismissing the welcome overlay, inspect the **Session** accordion:
+   the **Dataset** box, **Open data**, **Stored** (once something is kept),
+   **Session file**, and two sections collapsed to one line each,
+   **Subsampling** ("100 % cells") and **Data mapping** ("1 embedding ·
+   UMAP 2D"); click a header to open it.
 2) Keep the loaded Suo sample, or choose another entry under **Sample
    dataset**. **Pancreatic endocrinogenesis (scVelo)** is the standard
    1D/2D/3D velocity example; see

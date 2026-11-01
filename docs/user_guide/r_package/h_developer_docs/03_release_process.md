@@ -27,10 +27,14 @@ The full step-by-step checklist lives in:
 7) `release.yaml` then builds the source tarball, runs
    `R CMD check --as-cran` on it (a manual run can choose the default check
    instead), and uploads it with its SHA-256 as the `r-source-tarball`
-   artifact.
+   artifact. For a published release it attaches the tarball to the release
+   and, when the check reports no WARNING and no ERROR, submits it to CRAN
+   with `cran-comments.md` as the comment (`devtools:::upload_cran()`); CRAN
+   then emails the maintainer a confirmation link, which the maintainer must
+   click.
 8) Publish targets, in the order `cellucid-r/publishing.md` documents:
    - GitHub release (source of truth)
-   - CRAN (manual upload of the tarball to the submission form)
+   - CRAN (submitted by `release.yaml`; confirmed by the maintainer's email click)
    - r-universe (auto-builds from GitHub once the GitHub App is installed)
    - conda-forge (`r-cellucid`, built from the CRAN tarball)
 
