@@ -9,11 +9,11 @@ discipline that keeps a bump sweep able to find every declaration, and the
 classification logic that keeps deliberate divergence from being reported as
 drift.
 
-The classification matters as much as the sweep. `cellucid/npm/package.json`
-sits at `0.0.1` on purpose (it is a name reservation, documented in
-`cellucid/npm/publishing.md`), and committed exports stamp the exporter release
-that built them, so older exports legitimately record older versions. A sweep
-that flagged either would be ignored within a release.
+The classification matters as much as the sweep. Committed exports stamp the
+exporter release that built them, so older exports legitimately record older
+versions, and a sweep that flagged them would be ignored within a release.
+Everything else agrees, the npm name-reservation package included: it is
+released under the same version (`cellucid/.github/workflows/npm-publish.yml`).
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ def test_the_sweep_covers_every_cellucid_repository() -> None:
 
 
 def test_every_declaration_is_classified_and_independent_ones_are_justified() -> None:
-    kinds = {sweep.RELEASE, sweep.INDEPENDENT, sweep.ARTIFACT}
+    kinds = {sweep.RELEASE, sweep.ARTIFACT}
     for declaration in sweep.DECLARATIONS:
         assert declaration.kind in kinds, declaration
         assert declaration.repository in sweep.REPOSITORIES, declaration
@@ -95,16 +95,21 @@ def test_a_marker_carried_off_the_declaring_line_always_states_why() -> None:
             assert not declaration.marker_reason, declaration
 
 
-def test_the_npm_placeholder_is_excluded_from_the_agreement_check() -> None:
-    placeholder = [
+def test_the_npm_package_is_released_under_the_same_version() -> None:
+    npm = [
         declaration
         for declaration in sweep.DECLARATIONS
         if declaration.repository == "cellucid"
         and declaration.relative_path == "npm/package.json"
     ]
-    assert len(placeholder) == 1
-    assert placeholder[0].kind == sweep.INDEPENDENT
-    assert "publishing.md" in placeholder[0].note
+    assert len(npm) == 1
+    assert npm[0].kind == sweep.RELEASE
+    # JSON has no comments: the marker is a field npm keeps under `config`.
+    assert npm[0].marker_alternative == '"cellucid-version-marker": "CELLUCID_VERSION"'
+    assert npm[0].marker_reason
+    marked = '  "version": "1.2.3",\n  "config": { "cellucid-version-marker": "CELLUCID_VERSION" },\n'
+    assert sweep._is_marked(marked, 1, npm[0])
+    assert not sweep._is_marked('  "version": "1.2.3",\n', 1, npm[0])
 
 
 def _own_declarations() -> list:
@@ -190,7 +195,7 @@ def _checkout(root: Path) -> None:
     )
 
 
-def test_the_sweep_reports_drift_and_tolerates_deliberate_divergence(tmp_path) -> None:
+def test_the_sweep_reports_drift_and_tolerates_artifact_stamps(tmp_path) -> None:
     workspace = tmp_path / "workspace"
     _write(
         workspace / "cellucid-python" / "pyproject.toml",
@@ -217,10 +222,10 @@ def test_the_sweep_reports_drift_and_tolerates_deliberate_divergence(tmp_path) -
     for finding in result.findings:
         by_kind.setdefault(finding.declaration.kind, set()).add(finding.value)
 
-    # The stale R citation is drift; the npm placeholder and the old export are
-    # not, and must never be counted as such.
-    assert by_kind[sweep.RELEASE] == {"1.2.3", "1.2.2"}
-    assert by_kind[sweep.INDEPENDENT] == {"0.0.1"}
+    # The stale R citation and the stale npm package are drift; the old export
+    # is not, and must never be counted as such.
+    assert by_kind[sweep.RELEASE] == {"1.2.3", "1.2.2", "0.0.1"}
+    assert set(by_kind) == {sweep.RELEASE, sweep.ARTIFACT}
     assert by_kind[sweep.ARTIFACT] == {"0.0.9"}
     assert sweep.report(workspace) == 1
 

@@ -23,8 +23,12 @@ Public API definition:
 | Server | {class}`~cellucid.AnnDataServer` | class | {doc}`api/server` |
 | Web cache | {func}`~cellucid.get_web_cache_dir` | function | {doc}`api/server` |
 | Web cache | {func}`~cellucid.clear_web_cache` | function | {doc}`api/server` |
-| Sessions | {class}`~cellucid.CellucidSessionBundle` | class | {doc}`api/sessions` |
+| Sessions | {func}`~cellucid.read_session` | function | {doc}`api/sessions` |
+| Sessions | {class}`~cellucid.CellucidSession` | class | {doc}`api/sessions` |
 | Sessions | {func}`~cellucid.apply_cellucid_session_to_anndata` | function | {doc}`api/sessions` |
+| Sessions | {class}`~cellucid.ApplyPlan` | class | {doc}`api/sessions` |
+| Sessions | {class}`~cellucid.ApplyReport` | class | {doc}`api/sessions` |
+| Sessions | {func}`~cellucid.history_applied` | function | {doc}`api/sessions` |
 | Subsampling | {func}`~cellucid.subsample_cells` | function | {doc}`api/subsample` |
 | Vector fields | {func}`~cellucid.compute_transition_drift` | function | {doc}`api/vector_fields` |
 | Vector fields | {func}`~cellucid.add_transition_drift_to_obsm` | function | {doc}`api/vector_fields` |

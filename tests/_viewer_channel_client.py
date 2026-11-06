@@ -154,9 +154,11 @@ class FakeViewer:
         return json.loads(payload.decode("utf-8"))
 
     def receive_command(self) -> dict[str, Any]:
-        """The next command, text or binary: a binary one as its header with
-        its ``cells`` (an empty list for ``setVisibility`` of every cell), the
-        header's length checked to put the cells on a 4-byte boundary."""
+        """The next command, text or binary: a binary ``action`` as its header
+        with each of its ``arrays`` given its ``elements`` (read from the body
+        in order), the header's length checked to put the body on a 4-byte
+        boundary and the body checked to hold exactly the arrays; a
+        ``load_session`` as its header with the file it carries (``file``)."""
         opcode, payload = self.receive()
         if opcode == TEXT:
             return json.loads(payload.decode("utf-8"))
@@ -165,8 +167,20 @@ class FakeViewer:
         assert header_length % 4 == 0
         header = json.loads(payload[4 : 4 + header_length].decode("utf-8"))
         body = payload[4 + header_length :]
-        cells = list(struct.unpack(f"<{len(body) // 4}I", body))
-        return {**header, "cells": cells}
+        if header["type"] == "load_session":
+            # A session file pushed in: its header, and the file as its body.
+            return {**header, "file": bytes(body)}
+        formats = {"uint8": "B", "uint16": "H", "uint32": "I", "float32": "f", "float64": "d"}
+        arrays = []
+        offset = 0
+        for entry in header["arrays"]:
+            code = formats[entry["type"]]
+            size = struct.calcsize(code) * entry["length"]
+            elements = list(struct.unpack(f"<{entry['length']}{code}", body[offset : offset + size]))
+            arrays.append({**entry, "elements": elements})
+            offset += size
+        assert offset == len(body), "the body holds exactly the arrays the header lists"
+        return {**header, "arrays": arrays}
 
     def receive_close(self) -> tuple[int, str]:
         """The server's close frame, its code and reason.

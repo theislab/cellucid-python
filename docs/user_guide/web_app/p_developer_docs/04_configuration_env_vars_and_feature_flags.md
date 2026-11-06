@@ -7,6 +7,11 @@ Cellucid is primarily a **static browser app**, so most configuration is done vi
 - **explicit global overrides** (developer-only `window.__…` flags for local testing)
 
 There is no general “dotenv environment variable” configuration for the frontend, because there is no build step required to run it.
+The test suites read a few environment variables (where the sibling
+repositories are, which interpreter runs a Python or R viewer spec, which
+ports the browser suite binds); they are listed in
+{doc}`14_testing_ci_and_release_process` (“Sibling repositories and
+environment variables”, “Running two browser suites at once”).
 
 :::{note}
 Privacy/security expectations for storage are documented for users in:
@@ -62,6 +67,14 @@ Tokens are **never** stored in the URL.
 Only the repo reference may be stored (and can also be persisted in `localStorage` for convenience).
 :::
 
+### Agent approval link
+
+`#cellucid_connect=<code>` (a fragment, never sent to a server): the link the
+Cellucid relay's waiting page opens so this tab can approve an agent. A head
+script (`cellucid/assets/js/app/agent/bridge/connect-fragment.js`, a classic
+script) takes the code out of the address before any module runs; the
+Connect panel then claims it ({doc}`32_agents_in_the_tab`).
+
 ### Debug / diagnostics params
 
 | Param | Example | Meaning |
@@ -90,6 +103,13 @@ parameter — by design. Check it to find out whether the current origin reports
 | `cellucid_viewer_background` | Viewer background mode (`white`, `grid`, `studio`, `atelier`, `abyss`, `aurora`, `black`, `grid-dark`, `studio-dark`, `nebula`, `abyss-dark`, `aurora-dark`; the enum is `cellucid/assets/js/rendering/viewer-backgrounds.js`) | `cellucid/assets/js/app/ui/core/theme-init.js`, viewer/render controls |
 | `cellucid_antialias` | Antialiasing preference — `auto` (also what an absent key means), `on`, or `off`. `auto` resolves from the dataset's cell count on every dataset publication | `cellucid/assets/js/app/ui/core/antialias-preference.js`, `cellucid/assets/js/app/ui/modules/render-controls.js` |
 | `cellucid_last_quote_index` | Welcome modal “quote rotation” state | `cellucid/assets/js/app/ui/onboarding/welcome-modal.js` |
+| `cellucid:history-settings` | History settings in this browser: `recordCamera`, `recordLayout` (the two detail switches), `recordNewDatasets`, `askWhilePaused`, `autosave`, `reportPictures` (all on by default) and `personName` (the person's name in what they share; unset by default); never part of a session or a step | `cellucid/assets/js/app/history/history-settings.js` |
+| `cellucid_session_sections` | Which of the Session panel's collapsible sections (Subsampling, Data mapping) are open, per viewer; never a session or the address | `cellucid/assets/js/app/ui/modules/session-sections.js` |
+| `cellucid:agent-relay:tab-secret` | 32 random bytes that pair this browser with the Cellucid relay, so an agent reaches the person's open tab; made on the first agent connection, deleted by **Forget** | `cellucid/assets/js/app/agent/bridge/tab-secret.js` |
+| `cellucid:agent-key:<provider>` | The chat bar's API key for a provider (`anthropic`, `openai`), here only when the person ticked **Remember** (else in `sessionStorage`, below); sent only to that provider's API origin, never into the DOM after entry, the history, a session file or the URL; **Forget** removes it | `cellucid/assets/js/app/agent/chat/keys.js` |
+| `cellucid:agent-chat` | The chat bar's preferences: provider, model per provider, effort per model, the person's instructions, the token budget, open | `cellucid/assets/js/app/agent/chat/preferences.js` |
+| `cellucid:agent-permissions` | The person's permissions for agents: Ask, Allow or Deny per kind (`change`, `heavy`, `writes-file`, `deletes-saved`, `large-download`, `publishes`, `pauses-recording`); grants "for this chat" or "for this connection" are kept for the page only | `cellucid/assets/js/app/agent/presence/permissions.js` |
+| `cellucid:agent-data` | Per dataset identity: the switch "Agents see names and summaries only" and whether the notice of what agents send was answered; each write merges into what is stored, other tabs follow it (`storage` events) | `cellucid/assets/js/app/agent/data-scope.js` |
 | `debug` | Analysis-module debug toggle | `cellucid/assets/js/app/analysis/shared/debug-utils.js` |
 | `cellucid:cellxgene-census-release` | The CELLxGENE Census release this browser read last, so a `cellxgene:` link probes its file in that release while the release list loads | `cellucid/assets/js/data/sources/providers/cellxgene.js` |
 | `cellucid:opening-cost:v2` | What showing a cell costs this page, measured (cell counts and milliseconds of earlier openings), so a progressive opening sizes its first view; kept in memory and here as a convenience | `cellucid/assets/js/data/opening-cost.js` |
@@ -104,7 +124,6 @@ Community annotation (localStorage-backed):
 | `cellucid:community-annotations:repo-map` | “datasetId + user → chosen annotation repo” mapping, with its branch mode | Convenience only; no secrets |
 | `cellucid:community-annotations:auto-pull:v1` | Auto-pull preference | Convenience only |
 | `cellucid:community-annotations:lock:*` | Cross-tab “single editor per scope” lease locks | Safety feature to prevent silent data loss |
-| `cellucid:community-annotations:cache:*:files:shas` | SHA index for cached GitHub files | Content is in IndexedDB; this is only the small index |
 | `cellucid:community-annotations:cache:*:session` | **The working annotation session**: profile, votes, comments, suggestions, deleted suggestions, moderation merges, last sync time | **Dataset-derived content, not a preference.** Scope is datasetId + repo@branch + GitHub user id |
 
 :::{warning}
@@ -121,10 +140,11 @@ privacy model: {doc}`../o_accessibility_privacy_security/02_privacy_model`.
 
 | Database | Store | Contents |
 |---|---|---|
-| `cellucid_community_annotation_file_cache` | `files` | Raw annotation JSON downloaded from GitHub (`app/community-annotations/file-cache.js`) |
+| `cellucid_community_annotation_file_cache` | `files`, `pulls` | `files`: per cache scope (dataset id, `owner/repo@branch`, GitHub user id) and Git blob id, what one file a Pull read holds for the open dataset (`projectUserFile` / `projectMergesFile`), or why the Pull left it out; `pulls`: the commit and the `annotations` / `annotations/users` tree ids of the scope's last completed Pull, so an unchanged repository is not read again (`app/community-annotations/file-cache.js`). There is no index in `localStorage`: the blob ids a scope knows are the store's keys |
 | `cellucid-decoders` | `decisions` | One record: which decoder decodes each codec family and chunk size class fastest in this browser (`deflate:15` → `fflate`), under a version naming the WebAssembly module's digest, the decoder lists, the user agent and the core count (`formats/io/decoder-memory.js`); read by the reader thread's decode pool so only a first visit measures; listed and forgotten by the Stored dialog |
-| `cellucid-highlight-drafts` | (one key–value store) | Per dataset id, the highlight pages and groups made on it, each group's cells as file rows, and the dataset's name (`app/highlight-draft.js`); listed and removed by the Stored dialog |
-| `cellucid-local-files` | `handles` | Per dataset id, the browser's handle of a file or folder opened from this computer, its name, kind, size and modification time (a folder's file count and digest), and when it was opened; Chromium-based browsers only (`app/local-file-handles.js`); listed and removed by the Stored dialog |
+| `cellucid-history` | `entries`, `trackers`, `steps`, `turns`, `journal`, `chats`, `messages`, `values`, `parts`, `arrays` | The histories this browser keeps (`app/history/autosave-store.js`): the autosave of each dataset's history, written as it changes, and the named saves. `entries`: one record per saved state (kind, name, dataset, the session header that says how to reopen it, step count and size, the page writing it); `trackers`, `steps`, `turns`, `journal` (Recently deleted), `chats` and `messages` (the conversations kept with a tracker, one record per message): one record each, keyed by saved state and tracker; `values`: each state value once by its content hash; `parts`: each shared sub-value once by name; `arrays`: each typed array once by its digest (cell sets in the cell-set encoding); a write is one transaction over all of them. One page writes a saved state (a Web Lock and the store's writer check). Listed in State › Session › **Load…** and the Stored dialog, removed there |
+| `cellucid-library` | `datasets` | My datasets (`app/library/my-datasets.js`): one record per dataset opened in this browser, keyed by its identity: its name, where it opens from (a link in its public form, never what it carried to grant access; a file by name, never a path), its storage, cells and genes, the cells it was last open with, first and last opened, how often. Forgotten from My datasets' **All…** dialog and the Stored dialog |
+| `cellucid-local-files` | `handles` | Per dataset id, the browser's handle of a file or folder opened from this computer, its name, kind, size and modification time (a folder's file count and digest), and when it was opened; Chromium-based browsers only (`app/library/local-file-handles.js`); forgotten with its dataset in My datasets, and by the Stored dialog's My datasets row |
 
 Marker-discovery results are cached in memory for the
 dataset load they were computed on and never written to IndexedDB
@@ -152,13 +172,17 @@ Session storage is used for **short-lived secrets and per-tab identity**.
 
 | Key | Purpose | Notes |
 |---|---|---|
+| `cellucid:agent-key:<provider>` | The chat bar's API key for a provider, kept for this tab (the default, without **Remember**) | Gone when the tab closes; `cellucid/assets/js/app/agent/chat/keys.js` |
 | `cellucid:github-app-auth:session` | GitHub access token, its expiry **and** the signed-in user payload, in one record | Community annotations; a GitHub App user token that expires after 8 hours, forgotten then; Sign out revokes it through the worker (`/auth/revoke`) |
 | `cellucid:google-auth:session` | Google access token (`drive.file`), its expiry and granted scope | Google Drive files; about an hour, renewed with one click; Sign out revokes it at `oauth2.googleapis.com/revoke` |
 | `cellucid:microsoft-auth:session` | Microsoft access token, its expiry and granted scopes (never the refresh token) | OneDrive files; about an hour. The refresh token lives in the page's memory only and renews the access without a click for up to 24 hours within the page; after a reload one click signs in again. Microsoft offers no revocation |
 | `cellucid:community-annotations:tab-id:v1` | Unique tab id for scope locks | Used by scope-lock lease mechanism |
+| `cellucid:tab-local-dataset` | The id of the dataset this tab shows when it was opened from this computer | A reload of the tab offers *Reopen <name>* for it (`app/library/local-file-handles.js` `rememberTabDataset`) |
+| `cellucid:phone-sheet` | Whether this tab last left the phone panel open | `app/ui/core/phone-sheet-memory.js`, read by `ui/core/viewport-init.js` before the stylesheet applies |
+| `cellucid:opening-under-way` | A dataset opening is under way in this tab | `app/page-memory.js`: the next load that finds it halves the memory allowance (a tab the browser ended mid-opening) |
 
 `sessionStorage` holds the app's three sign-ins, each a short-lived access
-token; closing the tab destroys them. Browsers write `sessionStorage` to the
+token, and the tab's own notes above; closing the tab destroys them. Browsers write `sessionStorage` to the
 profile on disk for session restore, which is why nothing long-lived (no
 refresh token) is kept there.
 
@@ -222,8 +246,11 @@ These are intended for local development and troubleshooting only.
 | `window.__CELLUCID_DEBUG__ = true` | Enables analysis-module debug logging | `cellucid/assets/js/app/analysis/shared/debug-utils.js` |
 | `window.__CELLUCID_GITHUB_WORKER_ORIGIN__` | Override GitHub auth worker origin (local dev only) | `cellucid/assets/js/app/community-annotations/github-auth.js` |
 | `window._cellucidViewer`, `window._cellucidState` | The live viewer and state, for console debugging | `cellucid/assets/js/app/main.js` |
+| `window._cellucidHistories` | The dataset histories (`createDatasetHistories`): `current()` is the history of the dataset shown, what the browser specs drive and read | `cellucid/assets/js/app/main.js` |
 | `window._cellucidBenchmarkHarness` | The configuration-matrix benchmark harness, published when the Benchmark panel is first opened | `cellucid/assets/js/app/main.js` |
 | `window.cellucidAnalyticsEnabled` | Read-only: whether this origin reports analytics | `cellucid/assets/js/app/ui/core/ga-init.js` |
+| `window.__CELLUCID_RELAY_ORIGIN__` | The relay origin the agent bridge connects to, on a local development host only (else `DEFAULT_RELAY_ORIGIN`) | `cellucid/assets/js/app/agent/bridge/relay-client.js` |
+| `window.__CELLUCID_AGENT_SCRIPT__` | A scripted model for the chat bar (browser specs); offered only on a development host | `cellucid/assets/js/app/agent/providers/scripted.js` |
 
 :::{important}
 For security, `window.__CELLUCID_GITHUB_WORKER_ORIGIN__` is rejected on non-local hosts unless it matches the compiled-in default origin.

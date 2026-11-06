@@ -37,7 +37,7 @@ Camera Path animates between camera positions that you save explicitly:
    below **Loop playback**.
 
 Autoplay is off by default. Enabling it starts a ready path immediately. A
-saved session records the setting; after a complete successful **Load**,
+saved session records the setting; after a complete successful load,
 an enabled ready path starts without another Play action. **Loop playback**
 controls whether it repeats or stops at the final keyframe. With zero or one
 saved position, the top playback bar is not available and Autoplay waits until
@@ -151,7 +151,7 @@ Practical implication: if you want “start over visually”, use the **button**
 
 Cellucid uses multiple persistence layers:
 
-- **Session bundles (`.cellucid-session`)**: **Save** and **Load** capture camera
+- **Session files (`.cellucid-session`)**: **Share…** and **Load…** keep camera
   state, Camera Path keyframes, timing, interpolation, navigation interaction
   controls, Loop playback, Autoplay, and the other current UI control values.
 - **Browser preferences (`localStorage`)**: small UI preferences like background/theme can persist across reloads.

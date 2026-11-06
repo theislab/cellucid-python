@@ -110,7 +110,9 @@ which prevents a session for the old identity from being applied implicitly.
 ### Must stay stable if you want things to “carry over”
 
 **1) Dataset id**
-- Used throughout the web app as the primary dataset key (URL selection, session fingerprints, caches).
+- Used throughout the web app as the primary dataset key (URL selection,
+  session fingerprints, caches, the saved states this browser keeps, and the
+  entry of the dataset under **My datasets**, {ref}`my-datasets`).
 
 **2) Cell ordering / row alignment**
 - Cellucid assumes that arrays like embeddings, `obs` fields, and gene expression all refer to the same cell order.

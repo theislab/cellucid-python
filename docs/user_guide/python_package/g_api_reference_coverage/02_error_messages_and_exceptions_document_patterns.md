@@ -121,7 +121,7 @@ Document:
 Where documented:
 - {doc}`api/server`, {doc}`api/cli`
 
-### Session bundles
+### Session files
 
 Document:
 - invalid magic header (wrong file)

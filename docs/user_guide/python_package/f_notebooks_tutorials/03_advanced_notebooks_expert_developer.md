@@ -2,7 +2,7 @@
 
 These tutorials are for power users and developers who want to:
 - treat the viewer as an interactive front-end for analysis pipelines
-- round-trip state via session bundles (viewer → Python → AnnData)
+- round-trip state via session files (viewer → Python → AnnData)
 - inspect and test the exact notebook message schemas
 - validate and debug vector fields (velocity/drift overlays)
 
@@ -15,7 +15,7 @@ These tutorials are for power users and developers who want to:
 
 ## What you will learn
 
-- Session bundle capture/restore and how it depends on dataset identity
+- Session file capture/restore and how it depends on dataset identity
 - Robust event handling patterns (timeouts, deduping, multiple viewers)
 - Vector field invariants (shape, dimension, scale) and failure modes
 - Debugging the notebook widget, and the browser-tab server + web UI cache stack

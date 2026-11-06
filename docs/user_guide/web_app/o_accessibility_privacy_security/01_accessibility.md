@@ -193,6 +193,7 @@ control label.
 | Key | Action |
 |---|---|
 | `?` | Open the in-app “Keyboard shortcuts” section |
+| `/` | Open the agent chat at its message field ({doc}`../g_agents/01_chat_bar`); in the history list, search the history instead |
 | `h` | Toggle sidebar visibility |
 | `f` | Toggle fullscreen |
 | `r` | Reset the camera |

@@ -10,6 +10,10 @@ You have two equivalent entry points:
 - **CLI:** `cellucid serve …` (recommended for most users; detects the format)
 - **Python:** {func}`~cellucid.serve_anndata` / {class}`~cellucid.AnnDataServer`
 
+The page either opens (the printed Viewer URL, with the viewer's id and
+token) holds a viewer channel, so an agent app on this computer can work in
+it through `cellucid mcp` ({doc}`mcp`).
+
 Both take any file or folder Cellucid reads — an `.h5ad` file, an AnnData
 Zarr store (folder or zipped), an `.h5mu` or MuData Zarr store, a `.loom`
 file, a 10x `.h5` file or Cell Ranger `outs/` folder, a MatrixMarket folder

@@ -32,6 +32,8 @@ class HookRegistry:
         - ready: Viewer finished initial load
         - command_error: A command sent from the notebook failed in the viewer
         - data_mapping: The viewer's data mapping was resolved or changed
+        - history_changed: The viewer's history changed (a step, a move, an
+          edit, a tracker, a loaded session)
         - message: Raw message (catches all events)
 
     Example:
@@ -56,7 +58,7 @@ class HookRegistry:
 
         Args:
             event: Event name ('selection', 'hover', 'click', 'ready',
-                'command_error', 'data_mapping', 'message')
+                'command_error', 'data_mapping', 'history_changed', 'message')
             callback: Function to call when event fires. Receives event dict.
 
         Returns:
@@ -176,6 +178,8 @@ class ViewerState:
     click: dict[str, Any] | None = None
     command_error: dict[str, Any] | None = None
     data_mapping: dict[str, Any] | None = None
+    #: The latest ``history_changed``: ``{"kind", "tracker", "head", "step", "branch"}``.
+    history: dict[str, Any] | None = None
 
     last_event_type: str | None = None
     last_event: dict[str, Any] | None = None

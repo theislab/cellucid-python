@@ -108,11 +108,12 @@ proxy or `google.colab` call is involved.
 ### What success looks like
 
 ```{figure} ../../../_static/screenshots/jupyter/show-anndata-driven-from-python.png
-:alt: The Cellucid viewer driven from Python, after viewer.set_color_by("clusters") and viewer.highlight_cells() on the Ductal cells: the Pancreas sample coloured by clusters with the Ductal cells highlighted.
+:alt: The Cellucid viewer driven from Python, after viewer.color_by(...) and viewer.highlight_cells(...) on the Ductal cells: the Pancreas sample coloured by clusters with the Ductal cells highlighted.
 :width: 1440px
 
-The viewer after Python called `viewer.set_color_by("clusters")` and
-highlighted the Ductal cells. This capture was taken in a browser tab; in a
+The viewer after Python called
+`viewer.color_by(field={"source": "obs", "key": "clusters"})` and highlighted
+the Ductal cells. This capture was taken in a browser tab; in a
 notebook the same app sits *inside* the output cell, and scrolls with the
 notebook.
 ```
@@ -154,10 +155,11 @@ notebook widget:
 - hooks (`@viewer.on_selection`, …) run, and `viewer.state` updates, whenever
   the kernel is idle;
 - a call that waits for the viewer's answer (`wait_for_ready()`,
-  `wait_for_event()`, a session request's `result()`) cannot be answered
-  inside the cell that waits, so it raises at once and says what to do instead;
-- commands (`highlight_cells`, `set_color_by`, …) are sent at once, or
-  delivered in order as soon as the viewer connects.
+  `wait_for_event()`, an action's or a session request's `result()`) cannot
+  be answered inside the cell that waits, so it raises at once and says what
+  to do instead;
+- actions (`highlight_cells`, `color_by`, …) are sent at once, or delivered
+  in order as soon as the viewer connects.
 
 ### A browser tab instead
 
@@ -398,26 +400,43 @@ If the overlay is missing in the UI and the list is empty:
 
 ## Programmatic Control (Python → Viewer)
 
-Once you have a `viewer`, you can drive UI state from Python.
+Once you have a `viewer`, you can drive UI state from Python: everything a
+person can do in the viewer is an action, and every action is a method (each
+a step of the viewer's history, labelled as the notebook's).
 
 Common actions:
 
 ```python
-# Highlight a few cells (indices are 0-based row indices into your dataset)
-viewer.highlight_cells([0, 10, 42], color="#ff0000")
+# Highlight a few cells (0-based rows of your dataset, a boolean mask, or obs names)
+viewer.highlight_cells(cells=[0, 10, 42], color="#ff0000")
 
 # Color by an obs column (must exist in the dataset)
-viewer.set_color_by("cell_type")
+viewer.color_by(field={"source": "obs", "key": "cell_type"})
 
-# Hide some cells (or set visible=True to show them again)
-viewer.set_visibility([0, 10, 42], visible=False)
+# Hide some cells (or visible=True to show them again; cells=None: every cell)
+viewer.cells_visibility_set(cells=[0, 10, 42], visible=False)
 
-# Reset camera
-viewer.reset_view()
+# Reset the camera of the live view
+viewer.camera_reset(view="live")
 
 # Show a column you computed as a field, and a gene set
 viewer.push(adata.obs["leiden"], key="leiden_notebook")
-viewer.push_gene_set("T cell markers", ["CD3E", "CD3D", "CD2"])
+viewer.gene_set_save(name="T cell markers", genes=["CD3E", "CD3D", "CD2"])
+```
+
+Each returns a request at once; `request.result()` (in a notebook, in a later
+cell) is the viewer's answer, and raises with the viewer's reason when it did
+not apply the action. Reads work the same way: `viewer.fields_list()`,
+`viewer.history_get()`, … ({doc}`../../python_package/e_jupyter_hooks/06_python_to_frontend_commands`).
+
+Actions sent inside a turn are one turn of the viewer's history: the State
+panel shows them as one group, labelled as this notebook's, and undoes them
+together:
+
+```python
+with viewer.turn("Mark the clusters"):
+    viewer.color_by(field={"source": "obs", "key": "leiden"})
+    viewer.push(adata.obs["leiden"], key="leiden_notebook")
 ```
 
 ```{important}
@@ -444,13 +463,12 @@ viewer.data_mapping_origin   # "default", "best_guess", "session", "user" or "no
 
 To change it, name the arrays at launch (`embedding_keys=`, `knn_key=`,
 `expression_source=`, …) or use **Session › Data mapping** in the viewer.
-`viewer.set_data_mapping(...)` replaces the top-level fields you name, checks
-the result and sends it without waiting -- at once, or, in a cell run before
-the viewer reported its mapping, as soon as it does -- in a notebook widget
+`viewer.mapping_set(...)` (the `mapping.set` action) changes the groups you
+name and leaves the others as they are, without waiting, in a notebook widget
 and a browser-tab viewer alike:
 
 ```python
-viewer.set_data_mapping(
+viewer.mapping_set(
     embeddings={
         "enabled": [{"key": "X_pca", "columns": [0, 1]}],
         "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [0, 1]}, "3d": None},
@@ -458,11 +476,10 @@ viewer.set_data_mapping(
 )
 ```
 
-A field this kind of mapping does not have raises `TypeError` and an invalid
-value raises `ValueError`; the applied mapping is `viewer.data_mapping` in a
-later cell, and a mapping the viewer refuses — an array that fails its
-load-time check, for example — arrives as a `command_error` with the
-viewer's reason.
+A group this action does not have raises `TypeError`; the applied mapping is
+`viewer.data_mapping` in a later cell, and a mapping the viewer refuses — an
+array that fails its load-time check, for example — fails the request with
+the viewer's reason.
 
 ## Reacting to the UI (Hooks: Viewer → Python)
 
@@ -476,6 +493,8 @@ Supported hooks:
 - `@viewer.on_command_error` (a command this notebook sent was rejected by the
   viewer)
 - `@viewer.on_data_mapping` (the viewer resolved or changed which arrays it plots)
+- `@viewer.on_history_change` (the viewer's history changed: a step, undo or a
+  jump, a note, a tracker, a loaded session)
 - `@viewer.on_message` (raw debugging)
 
 Hooks run when the kernel is idle (between cells).
@@ -542,27 +561,36 @@ print(viewer.state.hover)      # last hover event (or None)
 print(viewer.state.click)      # last click event (or None)
 ```
 
-### Session bundle (durable saved state)
+### Session (the history, durable)
 
-In a notebook, ask for the current `.cellucid-session` in one cell:
+In a notebook, ask for the current `.cellucid-session` -- the viewer's whole
+history -- in one cell:
 
 ```python
-request = viewer.request_session_bundle()
+request = viewer.request_session()
 ```
 
 and collect it as a Python object in the next:
 
 ```python
-bundle = request.result()
-bundle.save("my-study.cellucid-session")
+session = request.result()
+session.save("my-study.cellucid-session")
+session.tracker().steps[["id", "label", "origin"]]   # every step, by whom
 
-# Apply to AnnData (adds obs columns; stores metadata in adata.uns["cellucid"])
-adata2 = bundle.apply_to_anndata(
-    adata,
-    expected_dataset_id="my-study-v1",
-    inplace=False,
-)
+# Apply the state the viewer shows to adata: a plan first, then the change
+plan = session.apply(adata)          # dry run: what would change, one row each
+plan.table
+report = plan.apply()                # writes the rows into adata, records the apply
 ```
+
+The plan lists every label, field, gene set and highlight group the step
+holds, each `write`, `unchanged`, `replace` or `not-applied` (with why).
+Applying the same step again changes nothing. A column you made yourself is
+never replaced. Filters, colours, views and the camera are reported, not
+applied. Each apply that writes is recorded in
+`adata.uns["cellucid"]["history_applied"]` (`cellucid.history_applied(adata)`
+reads it). `viewer.load_session("my-study.cellucid-session")` pushes a saved
+file back into the viewer, its trackers beside yours.
 
 ```{important}
 Session application names cells by **original position** (each cell's row in
@@ -720,7 +748,7 @@ recipe is in
 wait for the viewer's answer, which cannot arrive while the cell runs. Read
 `viewer.state` or `viewer.results` in a later cell, register a hook, or for a
 session collect `request.result()` (or
-`viewer.apply_session_to_anndata(adata, request)`) in the next cell.
+`viewer.apply_session_to_anndata(adata, request)`, the plan) in the next cell.
 
 ### Symptom: “The viewer says Cellucid found nothing to plot”
 

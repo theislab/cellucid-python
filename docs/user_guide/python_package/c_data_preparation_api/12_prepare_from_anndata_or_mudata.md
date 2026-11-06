@@ -127,8 +127,9 @@ adata = ad.read_h5ad("pbmc_cellucid.h5ad")
 
 A session saved in the viewer applies to the object it was saved on, a MuData
 included: {func}`~cellucid.apply_cellucid_session_to_anndata` checks it against
-the cells and the modality its data mapping names, and adds the highlight
-groups and user-defined fields to `mdata.obs`.
+the cells and the modality its data mapping names, plans the change, and
+writes the labels, highlight groups and user-defined fields to `mdata.obs`
+and the record of the apply to `mdata.uns`.
 
 ## Next
 

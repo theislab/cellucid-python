@@ -70,13 +70,19 @@ for a *folder*; **File…** asks for a single *file*.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Subsampling and Data mapping sections, each one line with its summary.
+:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, My datasets naming the open sample, the Open… button and the Link or server bar; the Stored line; and the collapsed Subsampling and Data mapping sections.
 :width: 532px
 
 Where **Open…** sits in the whole Session panel. Every loading path has its own
-label under **Open data**, and **Save** / **Load** sit under **Session file**,
-just below.
+label under **Open data**.
 ```
+
+**File or folder** is one of the four ways to open data under **Open data**
+in the Session panel: **Sample dataset** and (once a dataset is listed)
+**My datasets** sit above it, **Link or server** below it
+([Interface reference](01_loading_options_overview.md#interface-reference)).
+Once a file is open, it is listed under **My datasets**, to open again later
+(below).
 
 :::{important}
 **If you cancel the file chooser, Cellucid says nothing at all.** No error, no
@@ -95,48 +101,63 @@ folder opened again in the same tab reads what was kept the first time
 ({doc}`17_open_r_objects`).
 
 (reopen-local-file)=
-### Reopening a file after a reload, or from a session
+### Opening a file again
 
-In Chrome, Edge and other Chromium-based browsers (with Cellucid open as a
-page of its own, not inside a frame), **Open… › File…** and **Open… ›
+Every file or folder you open is listed under **Open data › My datasets**
+({ref}`my-datasets`). How it opens again depends on the browser.
+
+**In Chrome, Edge and other Chromium-based browsers** (with Cellucid open as
+a page of its own, not inside a frame), **Open… › File…** and **Open… ›
 Folder…** use the browser's own file pickers, and the browser hands Cellucid
 a *handle* of what you chose, or dropped. Once the dataset opened, the handle
 is kept in this browser (IndexedDB) under the dataset's id, with the file's
 name, size and modification time; no path and nothing of the content
-({doc}`../o_accessibility_privacy_security/02_privacy_model`). Then:
+({doc}`../o_accessibility_privacy_security/02_privacy_model`). Then one click
+opens it again:
 
+- **From My datasets**: choose it in the menu (it reads *File* or *Folder*
+  and when it was last opened), or press **Open** or **Continue** in
+  **All…**.
 - **After a reload** of a tab that showed it, a notification says
   *"cells.h5ad" was open in this tab before the page was reloaded.* with
   **Reopen cells.h5ad**. (The page itself opens what its address names, as
   before; the dataset the tab showed is noted in the tab's own
   `sessionStorage`, never in the address.)
-- **Loading a session saved on it** (**Session file › Load**) opens it, then
-  applies the session. When the browser still lets Cellucid read the file,
-  this needs no click; otherwise the session offers **Reopen cells.h5ad**
-  and is applied once you click it and the file is open.
+- **Loading a session saved on it** (**State › Session › Load… › Open a session file…**) opens
+  it, then applies the session. When the browser still lets Cellucid read the
+  file, this needs no click; otherwise the session offers **Reopen
+  cells.h5ad** and is applied once you click it and the file is open.
 
 Whether the browser still lets Cellucid read the file is the browser's
 decision: Chrome keeps that leave while any tab of the site stays open (a
-reload included, so there **Reopen** opens the file at once), and across
-visits when you chose *Allow on every visit*. Otherwise the click on
-**Reopen** is what lets the browser ask (*Allow this time*, *Allow on every
-visit* or *Don't allow*); it asks once, then the file opens exactly as a
-picked one, and the highlights draft of that dataset is offered back as
-usual. When the file
-cannot be reopened, the opening says why and what to do — choose it again
-with **Open… › File…** (or **Folder…**):
+reload included, so there the click opens the file at once), and across
+visits when you chose *Allow on every visit*. Otherwise your click is what
+lets the browser ask (*Allow this time*, *Allow on every visit* or *Don't
+allow*); it asks once, then the file opens exactly as a picked one, and, when
+this browser kept its history, you are offered to continue where you left
+off, as for any dataset
+({doc}`../m_state_history/03_saved_states_and_autosave`). When the file
+cannot be opened again, the opening says why and what to do — choose it
+again with **Open… › File…** (or **Folder…**):
 
 - you did not allow reading it (the handle stays, to be offered again);
 - it is no longer where it was opened from (moved, renamed or deleted);
 - it changed since it was opened here (another size or modification time,
   or for a folder any of its files): a changed file may hold another
-  dataset, so it is not reopened under the old one's name.
+  dataset, so it is not opened under the old one's name.
 
-A file that moved or changed has its handle forgotten. **Session › Open
-data › Stored › Manage…** lists every file kept to reopen and forgets the
-ones you choose ({ref}`stored-in-this-browser`). Firefox and Safari give a
-page no handle of a chosen file: there nothing is kept or offered, and after
-a reload, or for a session saved on a local file, you choose the file again
+A file that moved or changed has its handle forgotten; it stays in My
+datasets, to be chosen again. **Forget** in **My datasets › All…** forgets a
+dataset and its handle; **Remove** on the My datasets row of **Session ›
+Stored › Manage…** forgets every one ({ref}`stored-in-this-browser`).
+Forgetting a handle never touches the file.
+
+**In Firefox and Safari** the browser gives a page no handle of a chosen
+file, so only its name is kept. In My datasets the file reads *choose it
+again*: the click opens **Open… › File…** (or **Folder…**) for you, and a
+notification says which file to choose: *Choose "cells.h5ad" to open it
+again: this browser does not let a page reopen a file by itself.* After a
+reload, or for a session saved on a local file, you choose the file again
 with **Open…**.
 
 ## Load a Zarr Store Folder

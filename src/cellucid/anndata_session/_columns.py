@@ -22,7 +22,7 @@ was built, so a failure leaves the object as it was.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -111,35 +111,47 @@ def continuous_column(
     return pd.Series(placed, index=index)
 
 
-def place_rows(values: pd.Series, rows: np.ndarray, index: pd.Index) -> pd.Series:
-    """A column of some rows (``values``, one per row of ``rows``) placed in a
-    column of every row: the others unknown -- ``<NA>`` for a membership
-    (nullable ``boolean``), missing for a category, ``NaN`` for numbers."""
-    rows = np.asarray(rows, dtype=np.int64)
-    n_obs = len(index)
-    if pd.api.types.is_bool_dtype(values.dtype):
-        flags = np.zeros(n_obs, dtype=bool)
-        known = np.zeros(n_obs, dtype=bool)
-        flags[rows] = values.to_numpy(dtype=bool, na_value=False)
-        known[rows] = values.notna().to_numpy()
-        return pd.Series(pd.arrays.BooleanArray(flags, ~known), index=index, copy=False)
+def without_unknown(values: pd.Series, known: np.ndarray | None) -> pd.Series:
+    """A column with every cell outside ``known`` (ascending original
+    positions; None: every cell) missing: no category for a categorical,
+    ``NaN`` for numbers. A session that knows the state of some cells only
+    (the cells the viewer had open) says nothing about the others."""
+    if known is None:
+        return values
+    unknown = np.ones(len(values), dtype=bool)
+    unknown[np.asarray(known, dtype=np.int64)] = False
     if isinstance(values.dtype, pd.CategoricalDtype):
-        codes = np.full(n_obs, -1, dtype=np.int64)
-        codes[rows] = values.cat.codes.to_numpy()
-        return pd.Series(pd.Categorical.from_codes(codes, dtype=values.dtype), index=index)
-    numbers = np.full(n_obs, np.nan, dtype=values.to_numpy().dtype if values.dtype.kind == "f" else np.float64)
-    numbers[rows] = values.to_numpy()
-    return pd.Series(numbers, index=index)
+        codes = values.cat.codes.to_numpy().astype(np.int64, copy=True)
+        codes[unknown] = -1
+        return pd.Series(pd.Categorical.from_codes(codes, dtype=values.dtype), index=values.index)
+    numbers = values.to_numpy(copy=True)
+    if numbers.dtype.kind != "f":
+        raise TypeError("Only a categorical or a floating-point column has a missing value for an unknown cell")
+    numbers[unknown] = np.nan
+    return pd.Series(numbers, index=values.index)
 
 
-def write_columns(target: Any, plans: Sequence[_ColumnPlan], *, remove: Sequence[str] = ()) -> None:
-    """Put every planned column on ``target.obs`` (replacing a column of the
-    same name) and drop the columns in ``remove``, in one assignment: the
-    columns are all built before this runs, and ``obs`` changes once."""
+def write_columns(
+    target: Any,
+    plans: Sequence[_ColumnPlan],
+    *,
+    remove: Sequence[str] = (),
+    replace: Sequence[_ColumnPlan] = (),
+    rename: Mapping[str, str] | None = None,
+) -> None:
+    """Change ``target.obs`` in one assignment: drop the columns in ``remove``,
+    put each of ``replace`` in place of the column of its name, rename the
+    columns ``rename`` names (old name to new, all at once, each keeping its
+    place), then put every planned column on (replacing a column of the same
+    name). Every column is built before this runs, so ``obs`` changes once."""
     next_obs = target.obs.copy(deep=False)
     for name in remove:
         if name in next_obs.columns:
             next_obs = next_obs.drop(columns=[name])
+    for plan in replace:
+        next_obs[plan.name] = plan.values
+    if rename:
+        next_obs = next_obs.rename(columns=dict(rename))
     for plan in plans:
         next_obs[plan.name] = plan.values
     target.obs = next_obs

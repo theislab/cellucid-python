@@ -71,17 +71,21 @@ answered as a Cellucid viewer…”.
 
 ## Symptom: a call raises “… a notebook widget hears the viewer only between cells”
 
-`wait_for_ready()`, `wait_for_event()`, a session request's `result()` and
-`viewer.apply_session_to_anndata(adata, request)` wait for the viewer's
-answer, and in a notebook nothing the viewer says can arrive while the
-cell that waits is running. They raise at once and name the alternative:
+`wait_for_ready()`, `wait_for_event()`, a session request's and a session
+load's `result()` and `viewer.apply_session_to_anndata(adata, request)` wait
+for the viewer's answer, and in a notebook nothing the viewer says can arrive
+while the cell that waits is running. They raise at once and name the alternative:
 
 - readiness: `viewer.state.ready` in a later cell, or `@viewer.on_ready`;
 - the next selection: `viewer.selection` in a later cell, or `@viewer.on_selection`;
 - results (highlights, labels, scores, gene sets): `viewer.pull(adata)` in a
   later cell ({doc}`../g_api_reference_coverage/api/round_trip`);
-- a session bundle: `request = viewer.request_session_bundle()`, then
-  `request.result()` in the next cell.
+- an action's answer: keep its request (`request = viewer.fields_list()`),
+  then `request.result()` in the next cell;
+- a session: `request = viewer.request_session()`, then
+  `request.result()` in the next cell;
+- a session loaded into the viewer: `loading = viewer.load_session(path)`,
+  then `loading.result()` in the next cell.
 
 ---
 
@@ -142,41 +146,44 @@ If `max >= adata.n_obs`, you are definitely mismatched.
 
 ---
 
-## Symptom: Python commands don’t affect the UI (highlight/color/reset do nothing)
+## Symptom: Python actions don’t affect the UI (highlight/color/reset do nothing)
 
 ### Likely causes (ordered)
-1. The viewer **rejected** the command — the field, index or colour was not one
-   it could apply.
-2. The viewer has not connected yet: commands wait in Python and are delivered,
+1. The viewer **refused** the action — the field, category, cell or colour was
+   not one it could apply.
+2. The viewer has not connected yet: actions wait in Python and are delivered,
    in order, once it does (the viewer loads after the cell that showed it ends).
 3. The output you are looking at belongs to another (or a stopped) viewer.
 
 ### How to confirm
-- A rejected command prints to `sys.stderr` as soon as the viewer reports it:
+- The action's request says it: `request.result()` (in a later cell) raises
+  `ActionError` with the viewer's reason.
+- A refused action also prints to `sys.stderr` as soon as the viewer reports it:
   ```text
-  [cellucid] viewer.set_color_by(...) did not take effect in the viewer: ...
+  [cellucid] viewer.color_by(...) did not take effect in the viewer: ...
   ```
-  If you missed it, list the rejections after the fact:
+  If you missed it, list the refusals after the fact:
   ```python
   viewer.debug_connection()["recent_events"]["command_errors"]
   ```
-  A non-empty list means the command arrived and was refused — fix the
+  A non-empty list means the action arrived and was refused — fix the
   argument, not the connection.
 - `viewer.debug_connection()["channel_connected"]` says whether a viewer page
   is connected now.
 
 ### Fix
-1. If the command was rejected, correct the argument the reason names — most
-   often a field ID the loaded dataset does not have.
+1. If the action was refused, correct the argument the reason names — most
+   often a field or category name the loaded dataset does not have (the
+   reason lists the ones it has).
 2. If the output is stale, stop that viewer (`viewer.stop()`), then create and
    show a current one.
 
 ### Prevention
-- Send commands from a hook that runs when the viewer is ready:
+- Send actions from a hook that runs when the viewer is ready:
   ```python
   @viewer.on_ready
   def _ready(event):
-      viewer.set_color_by("cell_type")
+      viewer.color_by(field={"source": "obs", "key": "cell_type"})
   ```
 - In a script, collect rejections and assert on them at a point you control,
   rather than reading a printed line:
@@ -193,19 +200,19 @@ If `max >= adata.n_obs`, you are definitely mismatched.
 
 ---
 
-## Symptom: session bundle capture fails
+## Symptom: session capture fails
 
 ### Likely causes
 1. In a notebook, it was asked for and collected in the same cell; use
-   `request = viewer.request_session_bundle()` and `request.result()` in the
+   `request = viewer.request_session()` and `request.result()` in the
    next cell.
 2. The viewer's channel is not connected.
-3. The temporary directory has less free space than the bundle;
+3. The temporary directory has less free space than the session;
    `result()` raises “The session bundle could not be saved: …”.
 
 ### Fix
 - Ask again in one cell and collect in the next.
-- To bring results onto AnnData, `viewer.pull(adata)` needs no bundle.
+- To bring results onto AnnData, `viewer.pull(adata)` needs no session.
 
 ---
 

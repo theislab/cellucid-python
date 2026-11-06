@@ -151,20 +151,32 @@ Key design constraint:
 
 ---
 
-## Session serialization interaction
+## State, history and sessions
 
-Figure Export UI state is intentionally excluded from generic UI control serialization.
+The Figure export section is excluded from the sidebar's control inventory
+(`data-state-serializer-skip="true"` in `cellucid/index.html`): its controls
+are not settings one by one, and its transient state (a preview, an open
+dialog) is never kept. Its settings are instead one record of the `settings`
+state domain (`figureExport`: `exportSessionSettings()` captures it,
+`importSessionSettings()` puts it back, both validated by
+`figure-export/utils/session-settings.js`), so a history step and a session
+file hold them with every other setting
+({doc}`29_action_layer_domains_and_history`).
 
-Why:
-- export UI includes transient “preview results” state and modals
-- persisting it would make sessions fragile and confusing (“why did an old preview reopen?”)
+No action changes the panel's settings, and nothing observes a change made in
+the panel: such a change is not a step of its own. The next step that captures
+the `settings` domain holds it (a person's settings change recorded by
+observation folds it into that step; a dispatched `setting.set` keeps it as
+"Changed outside the history"), and a Save records it as "Changed outside the
+history".
 
-Mechanisms:
-- DOM subtree exclusion using `data-state-serializer-skip="true"` in `cellucid/index.html`
-- additional skip logic inside the figure export UI module
+The figure renderer also draws the read `view.picture` (a PNG of a view,
+returned as data and never downloaded), which the printable history report
+uses for its pictures (`app/history/exports/report.js`).
 
 See:
-- `cellucid/assets/js/app/state-serializer/README.md`
+- `cellucid/assets/js/app/state-serializer/README.md` (the control inventory)
+- `cellucid/assets/js/app/state/domains/settings.js`
 - {doc}`10_sessions_persistence_and_serialization`
 
 ---

@@ -9,7 +9,8 @@ There is no required bundler step to run it locally:
 
 - `cellucid/index.html` starts the app from its boot script
   (`<script id="cellucid-page-boot">`, CELLUCID_PAGE_BOOT), which imports the
-  entry once the document is parsed.
+  entry once the document is parsed, which is once its stylesheet is in
+  (`<script id="cellucid-style-gate">`, CELLUCID_STYLE_GATE).
 - On this machine (`localhost`, `127.0.0.1`, `[::1]`: a development server,
   the browser tests' server, the Python and R packages' servers) the entry is
   `assets/js/app/main.js`, and the browser loads the ES modules directly from
@@ -266,8 +267,10 @@ Always verify that a missing asset is a real `404` (not `200` with HTML).
 
 ### 4) `.cellucid-session` files and proxies
 
-Session bundles are binary `.cellucid-session` files.
-Some proxies compress or transform unknown binary types.
+Session files are binary `.cellucid-session` files (session format 4: the
+history of a dataset). Some proxies compress or transform unknown binary types.
+A starting view a dataset catalog names is pinned by its exact byte length and
+SHA-256, so a host that transforms it gets it refused.
 
 If you host sessions:
 - Prefer serving them as raw bytes (no transformations).

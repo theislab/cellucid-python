@@ -17,10 +17,10 @@ inventing message types or accepting undeclared fields.
 Both directions travel on the viewer channel, which the viewer authenticates
 once with its exact `viewerId` and `viewerToken`: carried by the notebook's
 own connection for a widget, a WebSocket to this machine for a browser-tab
-viewer. Python's commands are the command-specific record only (a
-highlight or a visibility change travels as one binary frame of cell indices);
-the viewer's events come back as JSON text frames, and selections as binary
-cell indices. The server checks each closed event record and gives it to the
+viewer. Python's commands are the command-specific record only (an action
+whose parameters hold cells or a column travels as one binary frame of its
+arrays); the viewer's events come back as JSON text frames, and selections,
+an action's answer, results and sessions as binary frames. The server checks each closed event record and gives it to the
 Python viewer that owns the channel.
 
 Neither direction accepts arbitrary message types.
@@ -48,6 +48,7 @@ The `event` discriminator is one of:
 - `pong`
 - `debug_snapshot`
 - `session_bundle`
+- `action_result`
 - `command_error`
 - `data_mapping`
 - `color_by`
@@ -115,21 +116,25 @@ verified-web-generation probes. A notebook widget's `debug_connection()`
 waits for nothing and reports the widget's side instead (`transport`,
 `connected_outputs`, `channel_connected`, `state`, `recent_events`).
 
-## Use the supported command helpers
+## Use the generated action methods
 
-Prefer the typed helpers for user actions:
+Every action of the viewer is a typed method, generated from the action
+catalogue, and its parameters are checked before anything is sent:
 
 ```python
-viewer.highlight_cells([1, 2, 3], color="#ff0000")
-viewer.clear_highlights()
-viewer.set_color_by("cell_type")
-viewer.set_visibility([1, 2, 3], visible=False)
-viewer.reset_view()
+viewer.highlight_cells(cells=[1, 2, 3], color="#ff0000")
+viewer.highlight_clear_all()
+viewer.color_by(field={"source": "obs", "key": "cell_type"})
+viewer.cells_visibility_set(cells=[1, 2, 3], visible=False)
+viewer.camera_reset(view="live")
 ```
 
-The low-level `send_message(...)` entry point is still closed. It accepts the
-current command records used by those helpers and the internal diagnostics; an
-unknown type or an undeclared field raises before anything is sent.
+`viewer.act(type, **params)` sends the same action named in data, and
+`cellucid.jupyter.action_catalog()` lists every action with its parameter
+schema. The low-level `send_message(...)` entry point is still closed: it
+accepts exactly the protocol's command records (`action`, the session request
+and the diagnostics); an unknown type or an undeclared field raises before
+anything is sent.
 
 ## Failure checks
 
@@ -164,7 +169,10 @@ that viewer's channel (WebSocket close code 1008, policy violation).
 
 ## Adding a new protocol variant
 
-A new message is a coordinated contract change, not a runtime extension:
+A new action needs nothing here: defined once in the web app's catalogue, it
+reaches Python by regenerating the catalogue copy and the methods
+({doc}`../h_developer_docs/11_hooks_events_protocol_and_schema`). A new
+message type is a coordinated contract change, not a runtime extension:
 
 1. Define one exact field and value schema.
 2. Implement and validate the web producer or consumer.

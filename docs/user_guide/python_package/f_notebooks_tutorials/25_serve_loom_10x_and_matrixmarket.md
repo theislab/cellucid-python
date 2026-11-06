@@ -113,7 +113,7 @@ import cellucid
 viewer = cellucid.show_anndata("outs", dataset_name="PBMC 1k (Cell Ranger outs)", dataset_id="pbmc-1k-outs")
 ```
 
-For any of these, the hooks, selections and session bundles of
+For any of these, the hooks, selections and session files of
 {doc}`23_programmatic_highlighting_and_selection_callbacks` work as for an
 AnnData.
 

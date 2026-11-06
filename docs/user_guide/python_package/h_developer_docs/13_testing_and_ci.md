@@ -13,8 +13,22 @@ The suite covers input-format classification and serving every registry
 format (`test_input_formats.py`, `test_serve_input_formats.py`), the
 Cellucid-ready AnnData and MuData writers, exact scientific value and identity
 contracts, HTTP routes and server lifecycle, the viewer channel
-(`test_viewer_channel_contract.py`) and Jupyter messaging, sessions, vector
-fields, cache and path confinement, documentation, cross-platform repository
+(`test_viewer_channel_contract.py`) and Jupyter messaging, session files,
+the history and the apply (`test_sessions.py`, against the golden history in
+`tests/fixtures/history_golden/` that the web app and cellucid-r read too;
+`test_session_layout.py`, the chunk layout the web app's writer makes: parts
+shared, cyclic, expanding past what a page holds, unreferenced or renamed,
+steps and values in many pieces, chunks stored as they are, parameters naming
+lazy arrays;
+`test_history_words.py`, the methods text and pseudocode rules the golden
+branches do not reach, string for string with cellucid-r;
+`test_history_model.py`, the generated model against
+`history_model.schema.json`), the local MCP server (`test_mcp.py`: the
+pinned `mcp_tools.json`, the shared `local_agents.json` fixture, the agent
+messages of the viewer channel, a viewer's publication and loopback endpoint
+and its refusals, and `cellucid mcp` over stdio against a fake page:
+initialize, lists, calls, errors, cancellation, elicitation, list changes, a
+viewer stopping), vector fields, cache and path confinement, documentation, cross-platform repository
 paths, and release artifacts. The MuData tests need `mudata`, which the `dev`
 extra brings with it (they are skipped without it). On Python 3.11 pip
 installs mudata 0.3 (mudata 0.4 needs Python 3.12); `tests/conftest.py` sets its
@@ -24,6 +38,23 @@ modality's columns in the modality, as mudata 0.4 does.
 the oldest Python `requires-python` admits, including the f-strings only Python
 3.12 accepts. Changes to a public contract require a focused regression test at
 the owning boundary.
+
+Some tests compare with the web app or run its readers: the golden history and
+the history model schema byte for byte (`test_sessions.py`,
+`test_history_model.py`), the session README's and codecs' constants
+(`test_sessions.py`, `test_session_layout.py`), and the web app's AnnData and
+priority readers on what `prepare()` writes
+(`test_prepare_data_and_mudata_contract.py`,
+`test_prepare_priority_order_contract.py`). They find the web app at
+`CELLUCID_WEB_ROOT` (a checkout or worktree of the `cellucid` repository),
+else in the `cellucid` checkout beside this repository (`tests/_web_root.py`).
+A web checkout that is named or present must hold the file a test reads: one it
+lacks fails the test. Only when there is no web checkout at all, as in this
+repository's own CI, are they skipped, saying so.
+
+```bash
+CELLUCID_WEB_ROOT=/path/to/cellucid python -m pytest
+```
 
 ---
 
@@ -91,11 +122,13 @@ Current workflows:
 - `test.yml`: installs `.[dev]` (which brings `mudata`) and runs the complete pytest suite,
   Ruff, mypy, and distribution checks on Python 3.11–3.14 on Ubuntu, and on
   3.11, 3.12 and 3.14 on macOS and on Windows
-- `pypi-publish.yml`: proves tag provenance, validates source and docs,
-  normalizes and verifies the source-distribution digest, installs both
+- `pypi-publish.yml`: runs when a GitHub Release is published (and on
+  nothing else); proves the release and tag provenance, validates source and
+  docs, normalizes and verifies the source-distribution digest, installs both
   artifacts on all three operating systems, and publishes through trusted
-  identity on tags `v*`
-- `readthedocs.yml`: triggers a ReadTheDocs build via API
+  identity ({doc}`14_release_process`)
+- `readthedocs.yml`: triggers the Read the Docs `latest` build via API on a
+  push to `main`
 
 ---
 

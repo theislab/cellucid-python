@@ -13,18 +13,19 @@ format rather than with any one host.
 ## Loading and session controls
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Subsampling and Data mapping sections, each one line with its summary.
+:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, My datasets naming the open sample, the Open… button and the Link or server bar; the Stored line; and the collapsed Subsampling and Data mapping sections.
 :width: 532px
 
 The Session panel with the Pancreas sample open. The **Dataset** box at the
 top describes the open dataset; **Open data** holds every way to open
 another: the **Sample dataset** list, **Open…** for a file or folder, and the
-**Link or server** bar. **Save** and **Load** sit under **Session file**, and
-**Data mapping** below them.
+**Link or server** bar (and **My datasets**, once a dataset you opened is
+listed). **Subsampling** and **Data mapping** sit below, collapsed. Saving and
+loading a session file is in the sidebar's **State** section.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel-dark.png
-:alt: The same Session panel in the dark theme: the Dataset box, Open data with the Sample dataset dropdown, Open… and the Link or server bar, Session file with Save and Load, and the collapsed Subsampling and Data mapping sections, each one line with its summary.
+:alt: The same Session panel in the dark theme: the Dataset box, Open data with the Sample dataset dropdown, My datasets, Open… and the Link or server bar, the Stored line, and the collapsed Subsampling and Data mapping sections.
 :width: 532px
 
 The same panel in the dark theme.

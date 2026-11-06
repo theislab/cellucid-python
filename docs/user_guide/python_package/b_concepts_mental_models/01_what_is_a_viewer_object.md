@@ -75,9 +75,13 @@ Both also own:
 - a **viewer ID** (`viewerId`) and **token** (`viewerToken`) the viewer page uses to open its channel,
 - hook registries for `on_selection`, `on_hover`, `on_click`, `on_ready`,
   `on_command_error` (a command this notebook sent was refused by the viewer),
-  `on_data_mapping`, and `on_message`,
+  `on_data_mapping`, `on_history_change` (the viewer's history changed: a
+  step, a move, an edit, a tracker, a loaded session), and `on_message`,
 - a small, thread-safe **latest-event snapshot** (`viewer.state`) and every
   result the viewer holds (`viewer.results`, `viewer.pull(adata)`),
+- the viewer's history, live (`viewer.history`: its latest change; notebook
+  turns with `with viewer.turn("..."):`; a session file pushed in with
+  `viewer.load_session(path)`),
 - lifecycle methods (`viewer.display()`, `viewer.stop()`).
 
 ---
@@ -107,17 +111,18 @@ alternatives.
 The kernel handles the widget's messages **between cells**. So the viewer
 loads once the cell that showed it finishes, hooks run while the kernel is
 idle, and a call that waits for the viewer in the same cell
-(`wait_for_ready()`, `wait_for_event()`, a session request's `result()`)
-raises at once and says what to do instead. Commands -- `push()`,
-`set_data_mapping()`, highlights -- never wait: they go as soon as the viewer
-can take them, and the viewer's answer arrives as live state. In a later
+(`wait_for_ready()`, `wait_for_event()`, an action's or a session request's
+`result()`) raises at once and says what to do instead. Actions -- `push()`,
+`color_by()`, highlights -- never wait: they go as soon as the viewer can take
+them, and the viewer's answer arrives with the request (`request.result()` in
+a later cell) and as live state. In a later
 cell:
 
 ```python
 viewer.state.ready     # None until the dataset has opened
 ```
 
-### 3) Interact (hooks + commands)
+### 3) Interact (hooks + actions)
 
 Hooks (frontend → Python):
 
@@ -127,12 +132,12 @@ def handle_selection(event):
     print("Selected cells:", len(event["cells"]))
 ```
 
-Commands (Python → frontend) are sent at once, or delivered in order when the
-viewer connects:
+Actions (Python → frontend: every one a method) are sent at once, or delivered
+in order when the viewer connects; each is a step of the viewer's history:
 
 ```python
-viewer.set_color_by("cell_type")
-viewer.highlight_cells([0, 1, 2], color="#ff00aa")
+viewer.color_by(field={"source": "obs", "key": "cell_type"})
+viewer.highlight_cells(cells=[0, 1, 2], color="#ff00aa")
 ```
 
 ### 4) Pull results back
@@ -199,7 +204,7 @@ It is normal to have multiple viewers in one notebook.
 
 ```{important}
 Selections/highlights are sent as **cell indices** (row positions). If your dataset changes row order, indices refer to different cells.
-For durable state transfer, use `viewer.pull(adata)` or session bundles, and stable dataset identity practices: {doc}`04_dataset_identity_and_reproducibility`.
+For durable state transfer, use `viewer.pull(adata)` or session files, and stable dataset identity practices: {doc}`04_dataset_identity_and_reproducibility`.
 ```
 
 ---

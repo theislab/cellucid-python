@@ -50,7 +50,8 @@ Events include:
 the results (`result`, `result_removed`, `results`: every highlight group,
 label field, score and gene set, which `viewer.pull(adata)` writes onto `obs`),
 and the replies `pong`, `debug_snapshot` and `session_bundle` to a browser-tab
-viewer's `debug_connection()` and to `request_session_bundle()`.
+viewer's `debug_connection()` and to `request_session()`, and
+`action_result`, the answer to each action the notebook sent.
 
 `message` is not one of them. It is a hook that receives every event the
 viewer sends and nothing else — there is no custom or app-specific event type. An
@@ -102,9 +103,9 @@ Now select cells in the viewer (lasso, etc.) and confirm Python prints.
 def _highlight_selection(event):
     cells = event["cells"]
     if cells:
-        viewer.highlight_cells(cells, color="#ff2d55")
+        viewer.highlight_cells(cells=cells, color="#ff2d55")
     else:
-        viewer.clear_highlights()
+        viewer.highlight_clear_all()
 ```
 
 ---
@@ -119,7 +120,7 @@ callback: select in the viewer, then read the selection in the next cell.
 ```python
 selection = viewer.selection          # None before the first selection
 print("Selected:", len(selection), "cells with the", selection.source)
-viewer.highlight_cells(selection.obs_names, color="#00c853")
+viewer.highlight_cells(cells=selection.obs_names, color="#00c853")
 ```
 
 `viewer.selection` carries the cells as rows of `obs` (`selection.cells`)
@@ -184,30 +185,31 @@ This is helpful when:
 
 ---
 
-## Python → viewer commands (what you can do)
+## Python → viewer actions (what you can do)
 
-These convenience methods send commands to the viewer on its channel:
+Every action of the viewer is a method; each sends one action on the viewer's
+channel and returns its request:
 
 ```python
-viewer.highlight_cells([1, 2, 3], color="#ff0000")
-viewer.clear_highlights()
-viewer.set_color_by("leiden")  # obs field name
-viewer.set_visibility([1, 2, 3], visible=False)  # hide
-viewer.reset_view()
+viewer.highlight_cells(cells=[1, 2, 3], color="#ff0000")
+viewer.highlight_clear_all()
+viewer.color_by(field={"source": "obs", "key": "leiden"})   # an obs field by name
+viewer.cells_visibility_set(cells=[1, 2, 3], visible=False)  # hide
+viewer.camera_reset(view="live")
 ```
 
-If you need low-level control:
+For an action named in data, `viewer.act(type, **params)` is the same:
 
 ```python
-viewer.send_message({"type": "highlight", "cells": [1, 2, 3], "color": "#ff0000", "label": None})
+viewer.act("highlight.cells", cells=[1, 2, 3], color="#ff0000")
 ```
 
 ```{note}
-A message sent before the viewer is displayed waits and is delivered, in order, once the viewer connects; `send_message` returns `False` while it waits and `True` when it was sent at once. The `show_anndata(...)` helper displays automatically in notebook contexts.
+An action sent before the viewer is displayed waits and is delivered, in order, once the viewer connects. The `show_anndata(...)` helper displays automatically in notebook contexts.
 ```
 
 To show your own columns and gene sets in the viewer, push them:
-`viewer.push(adata.obs["leiden"])`, `viewer.push_gene_set("T cells", genes)`
+`viewer.push(adata.obs["leiden"])`, `viewer.gene_set_save(name="T cells", genes=genes)`
 ({doc}`43_push_clusters_refine_and_pull`).
 
 ---
@@ -268,7 +270,7 @@ Likely causes:
 - your cell indices are wrong (reordered dataset)
 
 Fix:
-- name the cells by obs name (`viewer.highlight_cells(adata.obs_names[mask])`)
+- name the cells by obs name (`viewer.highlight_cells(cells=adata.obs_names[mask])`)
 - print a few indices and sanity-check by clicking cells
 
 ### Symptom: “My notebook becomes slow over time”

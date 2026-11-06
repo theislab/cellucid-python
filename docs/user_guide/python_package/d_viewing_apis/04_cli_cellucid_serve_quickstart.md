@@ -65,11 +65,15 @@ You should see a banner like:
 ```text
 CELLUCID SERVER RUNNING
 Local URL:  http://127.0.0.1:8765
-Viewer URL: http://127.0.0.1:8765/?anndata=true
+Viewer URL: http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 ```
 
-Copy the printed **Viewer URL** (ending in `?anndata=true`) exactly; the bare
-Local URL is the server origin for diagnostics, not the launch URL.
+Copy the printed **Viewer URL** exactly; the bare Local URL is the server
+origin for diagnostics, not the launch URL. Its `viewerId` and `viewerToken`
+open the page's viewer channel, through which an agent app on this computer
+can work in it (`cellucid mcp`, {doc}`18_local_agents_mcp`); the address without
+them (`http://127.0.0.1:8765/?anndata=true`) opens the same dataset with no
+channel.
 
 ### Step 2 — Open the viewer in your browser
 
@@ -169,11 +173,11 @@ machine has a hostname that means something outside it:
 
 ```text
   Local URL:    http://127.0.0.1:8765
-  Viewer URL:   http://127.0.0.1:8765/?anndata=true
+  Viewer URL:   http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 
   Bound to every network interface. From another machine:
   Machine URL:  http://compute-node.example.org:8765
-  Viewer URL:   http://compute-node.example.org:8765/?anndata=true
+  Viewer URL:   http://compute-node.example.org:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 ```
 
 Through an SSH tunnel, open the **loopback** Viewer URL: the tunnel's near end

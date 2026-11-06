@@ -14,19 +14,44 @@ Send it from the viewer object that owns the displayed frame. This is
 especially important when a notebook contains multiple viewers or a cell was
 re-run: each viewer has its own channel.
 
-## Session-bundle request rejected
+## Session request rejected
 
-A session bundle answers exactly one pending request and is single-use; one
-that arrives after the request was cancelled or stopped waiting is dropped.
-Start a new request instead: `request = viewer.request_session_bundle()`, and
+A session answers exactly one pending request and is single-use; one that
+arrives after the request was cancelled or stopped waiting is dropped.
+Start a new request instead: `request = viewer.request_session()`, and
 `request.result()` -- in a notebook in the next cell, since the widget hears
 the viewer only between cells.
 
-## A command returned without changing the viewer
+## A session file pushed into the viewer did not load
 
-Commands are one-way: `viewer.set_color_by(...)` returns `None` whether the
-viewer applied it or refused it. A refusal comes back as a `command_error`
-event, printed to `sys.stderr` and listed by
+`viewer.load_session(path)` returns its request at once. Collect it --
+`request.result()`, in a notebook in a later cell -- and it raises
+`RuntimeError` with the viewer's reason when the viewer did not load the
+file: a session saved on another dataset, a damaged file, or a viewer that
+shows a dataset this notebook did not open. A missing path raises
+`FileNotFoundError` before anything is sent.
+
+## A turn raised
+
+`with viewer.turn(label):` needs a label (what the turn does, in a few
+words), and turns do not nest: opening one inside another raises
+`RuntimeError` naming the turn already open. Close the first, or put the
+actions in one turn.
+
+## `viewer.history` says nothing yet
+
+`viewer.history.last_change` is `None` until the viewer tells its first
+change of the history (`history_changed`); in a notebook that arrives
+between cells. Read it in a later cell, or run code on each change with
+`@viewer.on_history_change`.
+
+## An action returned without changing the viewer
+
+An action returns its request at once: `viewer.color_by(...)` does not wait
+for the viewer. Collect it -- `request.result()`, in a notebook in a later
+cell -- and it raises `ActionError` with the viewer's reason when the viewer
+refused it. A refusal also comes back as a `command_error` event, printed to
+`sys.stderr` and listed by
 `viewer.debug_connection()["recent_events"]["command_errors"]`. Handle it in
 code with `@viewer.on_command_error`.
 

@@ -19,6 +19,7 @@ Cellucid’s current “visibility stack” is built from these filter types:
 | Filter type | Created in the UI by… | Applies to… | Typical use |
 |---|---|---|---|
 | Category visibility filter | Categorical legend checkboxes | obs categorical fields | Hide clusters/samples/batches you don’t want to see |
+| Filter by cell count | Categorical legend: click a category's count, type a number | one category of a categorical field | Keep a random N cells of a category that crowds out the others |
 | Numeric range filter | Continuous legend Min/Max sliders (Filter / Live filtering) | obs continuous fields | QC gating (e.g., `n_counts`, `pct_mito`, scores) |
 | Gene expression range filter | Gene legend Min/Max sliders | the active gene (var) | “Show only cells expressing gene X above Y” |
 | Outlier filter | Legend → **Outlier filter** slider | categorical obs fields of the file, once a latent space is chosen | Hide fringe/outlier-like cells within categories |
@@ -265,6 +266,68 @@ stays listed under **Filters** until you remove or disable it.
 - **Remove** resets the outlier slider to `100%`.
 
 See {doc}`02_outlier_filtering_per_active_field` for a deeper explanation and troubleshooting.
+
+---
+
+## 5) Filter by cell count (the legend's count)
+
+### UI name / where it lives
+
+In the categorical legend, each category's **count** (`1,200 cells`) is a
+button. Its tooltip reads *Keep only some cells of Beta*.
+
+### What it does
+
+It keeps only N cells of one category shown, a random sample, and hides the
+rest of that category. Use it when one large category crowds out the others,
+or to compare categories at the same size.
+
+1. Click the category's count. A small box takes its place, reading `all`.
+2. Type a number, for example `200`, and press {kbd}`Enter` ({kbd}`Escape`, or
+   clicking elsewhere, cancels).
+3. The count now reads `200 / 1,200 cells` in the link colour; its tooltip
+   says *Keeps a random 200 cells of Beta (seed 0); click to change, or type
+   all*.
+
+To show every cell again, click the count and type `all`, or any number at
+least as large as the count.
+
+### Semantics (exact)
+
+- **A seeded random sample.** The N cells are a random sample drawn with a
+  seed (0 from the legend): the same count and seed always keep the same
+  cells, whichever cells are open and in whatever order.
+- **A larger count adds cells**: every cell a smaller count kept stays, and
+  more join it; a smaller count keeps some of those shown.
+- **Drawn from the category's open cells**, before any other filter: a filter
+  on another field still hides some of them, so fewer than N can be shown
+  ({doc}`06_edge_cases_filtering`).
+- The filter stack stays an **AND**: these cells are shown only if they pass
+  every other enabled filter too.
+
+### Filters list entry
+
+On the field's row, after its hidden categories:
+
+- `Field: keeping 200 of Beta` (at most two categories named, then ` +N more`),
+  or `cell_type: hiding Alpha; keeping 200 of Beta` with both
+
+### Enable/disable vs remove
+
+- **Disable** the field's row: every cell of the category comes back, and the
+  count is kept, to apply again when you tick the row.
+- **Remove** (×), **Show all** or **Hide all**: every count of the field is
+  cleared.
+
+### Undo, sessions and the history
+
+Each count you type is one step of the history (*Kept 200 cells of Beta in
+cell_type*): **Undo** takes it back ({doc}`../m_state_history/01_the_history`).
+A session file and the saved states this browser keeps hold the count and its
+seed, so the same cells are shown when they are opened. From a notebook,
+`viewer.filter_category_cell_count(field={"source": "obs", "key":
+"cell_type"}, category="Beta", count=200, seed=1)` sets one with any seed
+(`count=None` shows every cell again).
 
 ---
 

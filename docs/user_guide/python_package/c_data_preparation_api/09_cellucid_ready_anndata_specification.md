@@ -173,7 +173,11 @@ What the file says about itself. Every key is optional to a reader, and a file
 without `uns['cellucid']` opens as any AnnData does; a key that is present must
 be exactly right, and a key not listed here makes the web app refuse the file,
 so a misspelt default never passes unnoticed. The writers always write
-`schema`, `id` and `name`.
+`schema`, `id` and `name`. The last three keys are the records the Python and
+R packages keep on the object a person works with (what a pull or an apply
+wrote), and that the web app's **Save AnnData with this state…** writes into
+its copy, so that object or file opens again in the viewer after a pull or an
+apply.
 
 | Key | Type | Meaning |
 |---|---|---|
@@ -185,8 +189,10 @@ so a misspelt default never passes unnoticed. The writers always write
 | `source` | mapping `{name, url}` | Where the data comes from; `url` optional, an absolute `http(s)` address. |
 | `defaults` | mapping, below | The launch defaults the dataset opens with. |
 | `outlierQuantiles` | mapping, below | Every categorical obs field's latent outlier quantiles in one latent space. |
-| `session` | mapping | The record {func}`~cellucid.apply_cellucid_session_to_anndata` keeps of a session applied to the file; the viewer never reads it. |
 | `priority` | mapping `{seed, specVersion, nObs, levels}` | The file stores its cells in priority order ({ref}`priority order <priority-order>`): `seed` (integer, 0 to 2^32 − 1) the seed of the ranks, `specVersion` (integer `1`) the version of the {doc}`subsampling specification <../../web_app/p_developer_docs/19_subsampling_specification>` the ranks follow, `nObs` (integer) the cell count the file was written with, `levels` (integer list, ascending, each at least 1: those of `nObs`) the prefix sizes `varm['cellucid_prefix_counts']` counts at. Unlike every other key, a `priority` that does not describe the file's cells is never refused: the file is read as one Cellucid did not write ({ref}`priority order <priority-order>`, "Verified before use"). |
+| `history_applied` | text | The records {func}`~cellucid.apply_cellucid_session_to_anndata` (cellucid-r: `cellucid_apply_session()`; the web app's browser copy, `package` `web`) appends, one per apply that wrote something: a JSON list as text ({func}`~cellucid.history_applied` reads it). The viewer never reads it. |
+| `gene_sets` | mapping by gene set name `{genes, description, origin, pulled_from, id}` | The gene sets a pull, an applied history or a browser copy wrote (an applied history's and a copy's with `origin` `session`; a copy's `pulled_from` `viewer`); an apply and a copy also mark each set it writes as a boolean `var` column, `cellucid_gene_set__<name>` (§4, {ref}`browser copy <browser-copy-profile>`). The viewer never reads it. |
+| `pulled` | mapping by column name `{kind, id, pulled_from, ...}` | What each `obs` column a pull wrote came from: the result it holds (`kind`, `id`, and its label, key or page) and `pulled_from` (`"viewer"` or the file's name). The viewer never reads it. |
 
 Text is stored as one `string` scalar (the web app also reads a one-element
 list of text as that text) and must be drawable exactly as stored: no control or zero-width
@@ -697,6 +703,93 @@ The output is written beside its target under a temporary hidden name
 interrupted or failed write never leaves a half-written file where a viewer
 would open it. An existing output is replaced only with `force=True` (R:
 `force = TRUE`), and a folder that is not a Zarr store is never replaced.
+
+(browser-copy-profile)=
+### The browser copy
+
+The web app has a third writer: a copy of the dataset it has open as one
+`.zarr.zip` (`cellucid/assets/js/data/anndata/write/copy.js`,
+`writeAnnDataCopy`), with the state shown written in. The History ⋯ menu's
+**Save AnnData with this state…** and the action `history.anndata.save`
+(agents, Python's `viewer.history_anndata_save()`, R's
+`cellucid_history_anndata_save()`) reach it
+({ref}`history-save-anndata`). It reads every format the app opens (each
+presented as AnnData), copies every cell whichever cells are open, and
+writes a Cellucid-ready AnnData (or a Cellucid-ready MuData, §5, for a
+dataset of several modalities) in its layout, keeping the data as the source
+stores it:
+
+- **Guaranteed, as on this page:** Zarr format 2 in one stored ZIP (ZIP64
+  where a size, an offset or the entry count needs it); the chunks of §3 by
+  role; zlib level 6, after the byte shuffle on every array but text,
+  one-byte values and the expression values; the consolidated metadata the
+  last entry; every expression matrix (`X`, each layer, `raw/X`) gene-major
+  (a `csr_matrix` is written as a `csc_matrix`, its rows ascending within
+  each gene); `obs`, `obsm`, `obsp`, `var`, `varm`, `varp` and `uns`
+  present; `uns['cellucid']` with `schema`, and with `id` and `name` from
+  the dataset as it was opened when the file names none; integer `uns`
+  scalars `<i8`; a priority order the source verifies kept (its record, the
+  position column and the prefix counts, computed from the rows for a
+  transposed `X`); element names as stored, never normalised.
+- **Kept as in the source, not made to this page:** the cells' order (a file
+  not in priority order stays as it is); every value's type and bits (`X`
+  stays `float64`, or an integer type, if it was; `float16` stays `float16`;
+  the byte order becomes little-endian); every layer, `raw`, every `obsm`
+  array and graph, every `uns` element (a record array's text as fixed-width
+  Unicode, as anndata writes one to Zarr); the columns' encodings. A dense
+  expression matrix too large for one band of 2^18 rows within the browser's
+  memory is chunked in bands of fewer rows (still 2^18 values a chunk).
+- **Left out, with a note in the copy's result:** an HDF5 attribute that is
+  an object reference (an address in the source file), an element of `uns`
+  the browser cannot decode, a compound or opaque array (no AnnData Zarr
+  holds one); in a MuData, the `<modality>:<key>` columns and arrays the
+  viewer shows at the root, which are the modalities' own and are kept under
+  `mod/`.
+
+**The state written in** is the apply plan cellucid-python's
+{func}`~cellucid.apply_cellucid_session_to_anndata` and cellucid-r's
+`cellucid_apply_session()` follow, row for row (pinned by the shared golden
+history's `expected.apply.sequence`, rows and `var_columns`, in the three
+test suites), applied to the step shown:
+
+- `obs`: obs columns and categories the history renamed, renamed in place;
+  one column per user-defined field (by its key) and one boolean column per
+  highlight group of every page (`cellucid_highlight__<page>__<group>`,
+  nullable). A cell the viewer did not open (a subsample's other cells) is
+  missing in a field's column and `<NA>` in a highlight's. A column a person
+  made is never replaced.
+- `var`: one boolean column `cellucid_gene_set__<name>` per gene set written
+  or replaced, on the var of the gene axis the data mapping reads (`X` or a
+  layer; in a MuData, the mapping's modality's var), true on the rows whose
+  gene, as the mapping names genes, the set lists (the rule below).
+- `uns['cellucid']['gene_sets']`: each gene set, by name (`origin`
+  `session`, `pulled_from` `viewer`).
+- `uns['cellucid']['history_applied']`: one record appended, `package`
+  `web`, its `session_sha256` that of the "Current state only" session file
+  of the state saved; none when nothing new is written.
+- Never written: `obs['cellucid_original_position']`. A change that would
+  write, rename or replace it is refused (the rows' original positions in a
+  file stored in priority order), as `uns['cellucid']['priority']` is.
+
+The gene-set columns follow one rule in the three apply writers: the name is
+`cellucid_gene_set__` and the set's name with each run of characters other
+than ASCII letters and digits made one `_`, trimmed (`gene_set` when nothing
+is left), `_2`, `_3` on clashes, given over every set of the step in order.
+A gene the dataset does not have is left out (with a warning, or a left-out
+line in the browser). A mapping reading `raw` or no expression gets no var
+columns (the sets stay in `uns`). A set an earlier apply wrote and that is
+replaced (`overwrite`) has its column replaced in place; a var column of
+that name beside a set no apply wrote is the dataset's own and is never
+replaced. A set the step no longer holds gets no row: its record and column
+stay.
+
+Every name a change makes a path follows the element-name rule of §1 (the
+web app's `write/names.js` is the same rule as `require_element_key`), and
+every change is checked before a byte is written. A gene set whose name holds
+`/` is therefore refused by all three writers; a path-safe form for such
+names is not decided yet. The copy is deterministic: the same source and
+changes give the same bytes. Its memory, measurements and tests:
+{doc}`../../web_app/p_developer_docs/25_decisions_exports`.
 
 (cellucid-ready-mudata)=
 ## 5. Cellucid-ready MuData

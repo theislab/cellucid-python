@@ -31,9 +31,10 @@ Filtering is about **visibility**:
 | You want to… | Best filter | Where it lives | Notes |
 |---|---|---|---|
 | Hide specific clusters/samples/batches | Category visibility filter | Categorical legend checkboxes | Fast and intuitive; use `Show all` to undo |
+| Keep only N cells of a large category | Filter by cell count | Click the category's count in the categorical legend, type N | A seeded random sample; type `all` to show every cell again |
 | Gate by QC / score ranges | Numeric range filter | Continuous legend Min/Max sliders | Turn Live filtering off for large datasets |
 | Hide “fringe” cells within clusters | Outlier filter | Legend box, for a categorical field, once a latent space is chosen | `95%` is a common starting point |
-| Show only gene-expressing cells | Gene expression range filter | Gene legend Min/Max sliders | Applies only while that gene is active |
+| Show only gene-expressing cells | Gene expression range filter | Gene legend Min/Max sliders | Keeps applying after you colour by another field, until removed |
 
 ---
 
@@ -60,7 +61,7 @@ Once you actually filter something, that last block fills up:
 :alt: The Filters block holding three rows of different kinds at once: an S_score range row ending in its cell count, cut off with an ellipsis, a clusters hiding row, and a clusters: outlier ≤ 95% row with no count.
 :width: 496px
 
-Three of the four filter types active at once on the same 3,696 cells. Filters
+Three kinds of filter active at once on the same 3,696 cells. Filters
 combine with **AND**: a cell is drawn only if it survives every ticked row.
 ```
 

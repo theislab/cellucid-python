@@ -1,8 +1,12 @@
 # Frontend → Python events
 
-The embedded viewer sends one of nine closed event records to Python, all on
-the viewer channel ({doc}`05_architecture_viewer_channel`): most as one JSON
-text frame each, a selection and a session bundle as binary frames. The
+The embedded viewer sends closed event records to Python, all on the viewer
+channel ({doc}`05_architecture_viewer_channel`): most as one JSON text frame
+each; a selection, an action's answer, a result and a session as binary
+frames. This page covers the interaction, diagnostic, action, session and
+history events; the results a person makes (highlights, fields, gene sets) are
+{doc}`../g_api_reference_coverage/api/round_trip`, and every record is in
+{doc}`16_reference`. The
 channel was authenticated with `viewerId` and `viewerToken` when the viewer
 opened it and belongs to that viewer, so no event carries either; Python
 dispatches each record to the viewer that owns the channel.
@@ -30,7 +34,11 @@ def handle_ready(event):
 
 @viewer.on_command_error
 def handle_command_error(event):
-    print(event["command"], event["reason"])
+    print(event["command"], event["requestId"], event["reason"])
+
+@viewer.on_history_change
+def handle_history_change(event):
+    print(event["kind"], event["head"])
 ```
 
 `@viewer.on_message` receives every accepted event in a common envelope:
@@ -148,14 +156,34 @@ Text frame:
 
 `userAgent` may be `None`; every other field is required.
 
+### `action_result`
+
+The viewer's answer to one action ({doc}`06_python_to_frontend_commands`): one
+binary frame, header `{"type": "action_result", "requestId": …, "step": …}`,
+then the action's outcome as UTF-8 JSON -- a read's result can be as large as
+it asks for (a picture of a view, the values of many cells), so it never
+travels as a text frame. Python decodes the body and builds this record:
+
+```python
+{
+    "requestId": "exact-request-id",
+    "step": {"id": "s4", "label": "Coloured by cell_type"},   # or None: a read, or nothing changed
+    "outcome": None,                                          # a change's outcome, or a read's result
+}
+```
+
+It completes the `ActionRequest` of that `requestId`: `request.result()`
+returns `outcome` and `request.step` is `step`. The body must be UTF-8 JSON
+with finite numbers; anything else closes the channel (1008).
+
 ### `session_bundle`
 
-The viewer sends the bundle `viewer.request_session_bundle()` asked for as
-one binary frame (header
-`{"type": "session_bundle", "requestId": …}`, then the `.cellucid-session`
-bytes). Python streams it to a temporary file,
-validates it, consumes the one pending request it answers, and builds this
-record:
+The viewer sends the session `viewer.request_session()` asked for as one
+binary frame (header `{"type": "session_bundle", "requestId": …}`, then the
+`.cellucid-session` bytes of format 4: the whole history). Python streams it
+to a temporary file, reads and checks it whole
+({class}`~cellucid.CellucidSession`), consumes the one pending request it
+answers, and builds this record:
 
 ```python
 {
@@ -166,16 +194,17 @@ record:
 }
 ```
 
-An invalid bundle is removed and reported as a `command_error` naming
-`requestSessionBundle`, so the request's `result()` raises with the reason
-instead of waiting for its timeout. A bundle nobody is waiting for any
-more (its request timed out or was cancelled) is read and dropped; the channel
-stays open.
+An invalid file is removed and reported as a `command_error` naming
+`requestSessionBundle` and the request, so the request's `result()` raises
+with the reason instead of waiting for its timeout. A session nobody is
+waiting for any more (its request timed out or was cancelled) is read and
+dropped; the channel stays open.
 
 ### `command_error`
 
-A command this notebook sent — `set_color_by`, `highlight_cells`,
-`set_visibility` and the rest — was rejected by the viewer instead of applied.
+A command this notebook sent -- an action (`viewer.color_by(...)`,
+`viewer.act(...)`), a session request -- was refused by the viewer instead of
+carried out.
 
 ```{note}
 The viewer sends this event only to a `cellucid` that lists `command_error`
@@ -188,8 +217,9 @@ Text frame:
 ```json
 {
   "type": "command_error",
-  "command": "setColorBy",
-  "reason": "Jupyter set-color-by command requires exactly one field \"cell_type\""
+  "command": "action",
+  "requestId": "exact-request-id",
+  "reason": "There is no field \"cell_typ\"; fields like it: cell_type."
 }
 ```
 
@@ -197,26 +227,29 @@ Hook payload:
 
 ```python
 {
-    "command": "setColorBy",
-    "reason": "Jupyter set-color-by command requires exactly one field \"cell_type\"",
+    "command": "action",
+    "requestId": "exact-request-id",
+    "reason": "There is no field \"cell_typ\"; fields like it: cell_type.",
 }
 ```
 
-`command` must be one of the ten command types in
-{doc}`06_python_to_frontend_commands`; a record naming anything else is
+`command` must be one of the command types in
+{doc}`06_python_to_frontend_commands` (`action`, `load_session`,
+`requestSessionBundle`, `freeze`, `ping`, `debug_snapshot`); a record naming anything else is
 rejected, so no browser-supplied text reaches your notebook as a command name.
-`reason` is one line: the viewer shortens it to 240 characters, and Python
-accepts at most 500.
+`requestId` is the failed command's request -- an action's
+`request.request_id` -- or `None` for a command that names none (`freeze`).
+`reason` is one line: the viewer shortens it to 1000 characters, and Python
+accepts at most 4000.
 
-Commands are one-way and carry no request id, so this event names the command
-*type* that failed, not the individual call. If two `set_color_by` calls are in
-flight, the event does not say which one failed.
+The event completes the request it names: the action's `request.result()`
+raises `ActionError` with `reason`.
 
 **If no `command_error` hook is registered, Cellucid prints the failure to
-`sys.stderr`:**
+`sys.stderr`, naming the method that sent it:**
 
 ```text
-[cellucid] viewer.set_color_by(...) did not take effect in the viewer: Jupyter set-color-by command requires exactly one field "cell_type"
+[cellucid] viewer.color_by(...) did not take effect in the viewer: There is no field "cell_typ"; fields like it: cell_type.
 [cellucid] The viewer is unchanged. Handle this in code with @viewer.on_command_error.
 ```
 
@@ -233,24 +266,17 @@ def record(event):
 
 Do not raise from this hook. Like every hook it runs on the viewer channel's
 thread, so raising only logs the error and drops the event instead of failing
-your cell (see {doc}`08_writing_robust_callbacks`). Raise
-from your own code instead, at a point you choose:
+your cell (see {doc}`08_writing_robust_callbacks`). To fail on a refusal,
+collect the request instead, at a point you choose:
 
 ```python
-viewer.set_color_by("cell_type")
-...
-if rejected:
-    raise RuntimeError(rejected[-1]["reason"])
+request = viewer.color_by(field={"source": "obs", "key": "cell_type"})
+# next cell
+request.result()      # raises ActionError with the viewer's reason
 ```
 
-There is no acknowledgement for a command that *did* apply, so an empty list
-is not proof of success — only a non-empty one is proof of failure. Prefer
-collecting over `viewer.wait_for_event("command_error", ...)`: the waiter
-returns the next event after the call, so a rejection that arrives between the
-command and the wait is missed.
-
 `viewer.debug_connection()["recent_events"]["command_errors"]` lists the most
-recent rejections after the fact.
+recent refusals after the fact.
 
 ### `data_mapping`
 
@@ -258,7 +284,8 @@ The viewer reports its *data mapping* (always `kind: "anndata"`) — the
 enabled embeddings and each dimension's default, the bound vector fields (each
 `{"key": <obsm key>, "embedding": {"key", "columns"}}`), the neighbour graph,
 the gene names, the expression matrix and the latent space.
-It sends one after the dataset loads and another whenever the mapping changes.
+It sends one after the dataset loads and another whenever the mapping changes,
+whoever changed it -- a person, a session, or this notebook's `mapping_set`.
 The first view never waits for gene names, so the first report is sent once
 the gene names of the matrix the dataset opens with are read (right after
 the first view); its `geneNames` is always `"index"` or `"column:<name>"`.
@@ -274,7 +301,6 @@ Text frame:
 ```json
 {
   "type": "data_mapping",
-  "requestId": null,
   "origin": "default",
   "mapping": {
     "kind": "anndata",
@@ -293,14 +319,11 @@ Text frame:
 }
 ```
 
-Hook payload: the record without `type` — `requestId`, `origin`, and
-`mapping`.
+Hook payload: the record without `type` — `origin` and `mapping`.
 
 - `origin` is one of `default`, `best_guess`, `session`, `user`, and
-  `notebook`.
-- `requestId` is a string exactly when `origin` is `notebook`: that event
-  answers the `setDataMapping` command `viewer.set_data_mapping()` sent, and names its request.
-  For every other origin it is `null`.
+  `notebook` (this notebook's `viewer.mapping_set(...)`, the `mapping.set`
+  action, whose own answer is its `action_result`).
 - `mapping` must pass the same validation sessions use
   (`cellucid.data_mapping.validate_data_mapping`); an invalid one rejects
   the whole record before any hook runs. The validated canonical copy is what
@@ -315,10 +338,72 @@ viewer.data_mapping          # the latest mapping, or None before the first repo
 viewer.data_mapping_origin   # why it is what it is
 ```
 
+### `history_changed`
+
+The viewer tells every change of its history: a step recorded (by the
+person, an agent or this notebook), the step shown moved (undo, redo, a jump,
+another branch), the history's structure edited (a rename, a note, a
+bookmark, a delete, a restore), a tracker started, used, renamed or removed,
+or a session loaded.
+
+Text frame:
+
+```json
+{
+  "type": "history_changed",
+  "kind": "step",
+  "tracker": "t1",
+  "head": "s5",
+  "step": "s5",
+  "branch": "b1"
+}
+```
+
+Hook payload: the record without `type`.
+
+- `kind` is one of `step`, `moved`, `edited`, `tracker` and `loaded`.
+- `tracker` is the id of the tracker in use; `head` the step shown.
+- `step` is the step recorded for `kind: "step"`, else `None`.
+- `branch` is the id of the active branch, or `None` when the viewer names
+  none.
+
+```python
+@viewer.on_history_change
+def handle(event):
+    if event["kind"] == "step":
+        print("recorded", event["step"])
+
+viewer.state.history          # the latest record, or None before the first
+viewer.history.last_change    # the same, through LiveHistory
+```
+
+### `session_loaded`
+
+The viewer's answer to `viewer.load_session(path)`, once the file's trackers
+are in its history.
+
+Text frame:
+
+```json
+{
+  "type": "session_loaded",
+  "requestId": "exact-request-id",
+  "tracker": {"id": "t3", "name": "Annotation"},
+  "head": "s7"
+}
+```
+
+It completes the `LoadSessionRequest` of that `requestId`:
+`request.result()` returns `{"tracker": ..., "head": ...}`. A refusal is a
+`command_error` naming `load_session` and the request, and `result()` raises
+`RuntimeError` with its reason. There is no decorator for it;
+`viewer.register_hook("session_loaded", callback)` and `@viewer.on_message`
+see it.
+
 ## Delivery and failure semantics
 
-- A text frame holds at most 1 MiB of UTF-8 JSON; `selection` and
-  `session_bundle` arrive only as binary frames.
+- A text frame holds at most 1 MiB of UTF-8 JSON; `selection`, `result`,
+  `action_result` and `session_bundle` arrive only as binary frames.
 - The channel was opened by a registered viewer with its exact token.
 - The event name, full field set, and every payload value are validated before
   hook dispatch; a record that fails closes the channel (1008) and dispatches

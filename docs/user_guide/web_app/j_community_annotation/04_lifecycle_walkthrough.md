@@ -75,8 +75,8 @@ your repositories; that is the next step, and you choose which ones.
 
 :::{important}
 The sign-in token expires after 8 hours and is held in this tab's
-`sessionStorage` only. Closing the browser tab discards it, **Sign out**
-revokes it at GitHub, and a shareable `?annotations=owner/repo` link never
+`sessionStorage` only. Closing the browser tab discards it, **Disconnect
+GitHub** revokes it at GitHub (and disconnects this dataset's repository), and a shareable `?annotations=owner/repo` link never
 carries it. Every collaborator signs in as themselves.
 :::
 
@@ -192,9 +192,13 @@ here, `Pulled latest annotations.` **Auto pull** can repeat this every 10, 15, o
 60 minutes while the tab stays open.
 ```
 
-A Pull is transactional. If any file is unreadable, oversized, or fails schema
-validation, the pull is refused and the annotation view you already had is left
-untouched — you never end up with half of someone's votes.
+One broken file never stops a Pull. A contributor's file that is unreadable,
+oversized, or fails schema validation is left out of the consensus as a whole
+— you never end up with half of someone's votes — and a warning says how many
+files were left out, with each file and its reason under its details. A Pull
+that cannot run at all (the repository is not set up from the template, or its
+settings file is invalid) is refused, and the annotation view you already had
+is left untouched.
 
 ---
 
@@ -295,14 +299,14 @@ Nothing you have done so far is visible to anyone else. Everything up to this
 point lives in your browser.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-17-publish.png
-:alt: The same Sync step after Publish, its status line reading "Publish complete." under the Pull latest and Publish buttons.
+:alt: The same Sync step after Publish, its status line reading "Published." under the Pull latest and Publish buttons.
 :width: 1040px
 
-**Publish** writes your work to GitHub and reports `Publish complete.` when the
-write has been accepted.
+**Publish** writes your work to GitHub and reports `Published.` when the write
+has been accepted (`Opened a pull request: …` when it went to a pull request).
 ```
 
-Publishing writes exactly one file: your own
+An annotator's Publish writes exactly one file: their own
 `annotations/users/ghid_<your-github-id>.json`. That is the whole reason the
 repository is laid out one-file-per-person — two people annotating at the same
 time never touch the same file, so there is nothing to merge and nothing to
@@ -335,6 +339,9 @@ edited, and the merge is a separate, auditable record. Votes inside a merged
 bundle are de-duplicated when the totals are rendered, so a person who voted for
 both of two merged suggestions still counts once.
 
+Exactly equal labels need no merge: two proposals of the same text in one
+category count as one suggestion, the same way.
+
 ---
 
 ## Step 13 — What you see when something is wrong
@@ -345,6 +352,10 @@ You get the step 1 panel: under **Repository** it reads `Not connected.` and
 offers **Connect repo**. There is no half-signed-in state in which some controls work.
 
 ### You can read the repository but not write to it
+
+You can Pull, vote, comment and propose as usual. **Publish** then uses a fork
+and a pull request when the repository allows forking, and is disabled when it
+does not; ask the author for write access or to allow forking.
 
 ### Your role cannot be determined
 
@@ -377,7 +388,7 @@ Three causes, in order of likelihood:
 |---|---|---|
 | Your GitHub sign-in token (expires after 8 hours) | `sessionStorage` | No |
 | Your votes, suggestions, comments, profile | Annotation-specific local storage | Yes |
-| Files downloaded by Pull | IndexedDB, with the SHA index in local storage | Yes |
+| Files downloaded by Pull | IndexedDB, by Git blob id | Yes |
 | The shared record | The GitHub repository | Yes, for everyone |
 
 Community annotation state is deliberately **not** part of a

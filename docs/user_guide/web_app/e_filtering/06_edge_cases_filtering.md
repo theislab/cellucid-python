@@ -8,6 +8,7 @@
 - When some filters apply only conditionally (active gene / outlier-supporting fields)
 - How multiview changes what “my filters” means
 - What degenerate fields look like: one category, one value, or none of a kind
+- Why a category kept to N cells can show fewer, or every cell again
 
 **Prerequisites:**
 - A dataset loaded
@@ -300,6 +301,39 @@ scale), so its bounds are a grid, if a fine one.
 
 - Type the bound in the number box beside the slider: it applies exactly as
   typed, and the filter list and figure provenance state it exactly.
+
+---
+
+## 11) Filter by cell count: fewer cells than typed, or every cell again
+
+### What you see
+
+- You typed `200` into a category's count, but it reads fewer
+  (`35 / 300 cells`).
+- A category you kept to 200 cells shows all of them again.
+
+### Why it happens
+
+- The 200 cells are drawn from all of the category's open cells, before any
+  other filter. A filter on another field (a range, a hidden category of
+  another field, an outlier filter) still hides some of them, so fewer than
+  200 are shown, and the count's second number is what the other filters
+  leave.
+- A number at least as large as the category's count (what the other filters
+  leave) shows every cell: there is nothing to sample.
+- **Show all**, **Hide all**, and removing the field's row under **Filters**,
+  clear every count of the field. A field you make by merging or deleting
+  categories starts with every cell of every category shown: no count
+  carries over to it.
+- Unticking the field's row under **Filters** turns its counts off with its
+  hidden categories; ticking it again brings them back.
+
+### What to do
+
+- Relax the other filters, or type a larger number.
+- To get the sample back after clearing it, **Undo**
+  ({doc}`../m_state_history/01_the_history`), or type the same number again:
+  from the legend (seed 0), the same number keeps the same cells.
 
 ---
 

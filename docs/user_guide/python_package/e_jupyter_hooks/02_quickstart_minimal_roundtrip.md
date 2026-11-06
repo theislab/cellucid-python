@@ -114,7 +114,7 @@ Run:
 
 ```python
 if cells:
-    viewer.highlight_cells(cells, color="#ff00ff")
+    viewer.highlight_cells(cells=cells, color="#ff00ff")
 ```
 
 You should see the selection become highlighted (exact visual style depends on the web app UI).
@@ -172,4 +172,4 @@ Then use the symptom-based guide:
 - Commands catalog (Python → viewer): {doc}`06_python_to_frontend_commands`
 - Events catalog (viewer → Python): {doc}`07_frontend_to_python_events`
 - Viewer state + waiting: {doc}`09_viewer_state_and_wait_for_event`
-- Session bundles (no-download): {doc}`10_session_bundles_request_session_bundle`
+- Sessions (no download): {doc}`10_session_bundles_request_session_bundle`

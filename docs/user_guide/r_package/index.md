@@ -5,22 +5,25 @@ This guide documents the **`cellucid` R package** (repo: `cellucid-r`): how to l
 ```{note}
 The viewer runs from R: `cellucid_view()` and `cellucid_serve()` serve the
 object from memory (in a Jupyter notebook `cellucid_view()` shows it in the
-cell's output as a notebook widget, with no server), `cellucid_highlight()`,
-`cellucid_on()` and their siblings send commands and receive events over the
-viewer's channel, `cellucid_pull()` writes every highlight, label, score and
+cell's output as a notebook widget, with no server), one function per action
+of the viewer (`cellucid_color_by()`, `cellucid_highlight_cells()`, …,
+`cellucid_act()`) acts on it as a step of its history, `cellucid_on()` and its
+siblings receive events over the viewer's channel, `cellucid_pull()` writes every highlight, label, score and
 gene set made in the viewer onto the object and `cellucid_push()` sends a
-column into it, and `cellucid_apply_session()` writes a saved session back
-onto the object ({doc}`d_viewing_loading/index`). There is no Shiny or
+column into it, `cellucid_read_session()` reads a saved session's history
+(trackers, branches, steps, notes and turns) and `cellucid_apply_session()`
+applies any step of it back onto the object, a plan first
+({doc}`d_viewing_loading/index`). There is no Shiny or
 htmlwidgets integration.
 
 For the web UI experience after opening a store (filtering, analysis, sessions, community annotation), see {doc}`../web_app/index`.
 ```
 
-:::{admonition} Active package version — 0.9.6
+:::{admonition} Active package version — 0.9.7
 :class: note
 <!-- CELLUCID_VERSION -->
 
-Version **0.9.6** is the active Cellucid for R source and documentation
+Version **0.9.7** is the active Cellucid for R source and documentation <!-- CELLUCID_VERSION -->
 version and the CRAN submission release. The
 [CRAN package index](https://cran.r-project.org/web/packages/available_packages_by_name.html)
 is authoritative for registry availability. Check an installed environment
@@ -49,7 +52,7 @@ matching CRAN and official-source installation paths.
 :link: installation
 :link-type: doc
 
-Install version 0.9.6 from the source currently available to you, verify the <!-- CELLUCID_VERSION -->
+Install version 0.9.7 from the source currently available to you, verify the <!-- CELLUCID_VERSION -->
 loaded package, and diagnose dependency or environment problems.
 :::
 

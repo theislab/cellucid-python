@@ -256,7 +256,7 @@ This is useful in teaching notebooks where you want the viewer to land in a know
 ```python
 @viewer.on_ready
 def _set_default_color(_event):
-    viewer.set_color_by("leiden")
+    viewer.color_by(field={"source": "obs", "key": "leiden"})
 ```
 
 ```{note}

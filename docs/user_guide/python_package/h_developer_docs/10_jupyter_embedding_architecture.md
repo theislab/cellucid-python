@@ -100,11 +100,14 @@ The kernel handles a widget's messages on its own thread between cells. So
 the viewer loads after the cell that showed it ends, hooks run while the
 kernel is idle, and a call that would wait for the viewer on that thread
 (`wait_for_ready`, `wait_for_event`, a session request's `result`) raises at once
-(`Widget._require_answerable`) with what to do instead. Commands never wait:
-`set_data_mapping` and `push` hold what they cannot send yet and send it on
-the `data_mapping` or `ready` event. `request_session_bundle()` asks now; its
-`result()` -- or `apply_session_to_anndata(adata, request)` --
-collects in a later cell.
+(`Widget._require_answerable`) with what to do instead. Actions never wait:
+each returns its `ActionRequest` at once, and its `result()` collects the
+answer in a later cell; `push` holds a column it cannot build yet (a format
+only the browser reads, before the viewer said how many cells it has) and
+sends it on the `ready` event. `request_session()` asks now; its `result()`
+-- or `apply_session_to_anndata(adata, request)`, which returns the plan --
+collects in a later cell. `load_session(path)` sends the file now; its
+`result()` collects the viewer's answer in a later cell.
 
 ---
 
@@ -126,38 +129,43 @@ Key method:
 
 ## The viewer channel
 
-### Python → frontend: commands
+### Python → frontend: actions and commands
 
 When you call:
 
 ```python
-viewer.highlight_cells([1, 2, 3], color="#ff0000")
+viewer.highlight_cells(cells=[1, 2, 3], color="#ff0000")
 ```
 
-Python validates the command (`_wire._require_frontend_message`) and sends it
-on the channel (`cellucid._viewer_channel.send_viewer_command`): a command
-that names cells (`highlight`, `setVisibility`, `setField`) as one binary
-frame (the cells as little-endian `uint32`, strictly ascending), every other
-command as one JSON text frame. Before the viewer has connected, the command
-waits in the viewer's outbox and is sent, in order, when it connects.
+the generated method (`_actions_generated.ViewerActions`) calls
+`viewer.act("highlight.cells", ...)`, which checks and converts the
+parameters by the action catalogue (`_actions.action_params`: cells by row,
+mask or obs name as `uint32` original positions), registers the request its
+answer completes, and sends one `action` command. Python validates the
+command (`_wire._require_frontend_message`) and sends it on the channel
+(`cellucid._viewer_channel.send_viewer_command`): an action whose parameters
+hold arrays as one binary frame (the JSON header names each array's place in
+the parameters, then the arrays, little-endian), every other command as one
+JSON text frame. Inside `with viewer.turn("QC"):` every action names the
+turn (`turn`, `turnLabel`), so the viewer records its steps as one turn of
+the history. Before the viewer has connected, the command waits in the
+viewer's outbox and is sent, in order, when it connects.
 
-Commands are used for:
-- highlighting cells
-- changing color-by
-- visibility toggles
-- reset camera
-- pushing a field (`setField`) or a gene set (`setGeneSet`)
-- “freeze” before shutdown
-- requesting a session bundle
-- changing the data mapping, pings and debug snapshots
+Every change and every read is an `action` (colouring, highlighting,
+filtering, labels, pushed fields and gene sets, the camera, the data mapping,
+analyses, the history). The other commands are `freeze` before shutdown,
+`requestSessionBundle` for the session, `load_session` (a session file
+pushed into the viewer, one binary frame), and `ping` / `debug_snapshot`.
 
 ### Frontend → Python: events (hooks)
 
 The viewer sends events on the same channel:
 - JSON text frames (hover, click, ready, pong, debug snapshot, command
-  errors, data mapping, color-by, result removals and the results inventory)
+  errors, data mapping, color-by, result removals, the results inventory,
+  history changes and a loaded session's answer)
 - binary frames for selections (little-endian `uint32` cell indices, strictly
-  ascending), results (cells, then values) and session bundles
+  ascending), results (cells, then values), action answers (the outcome as
+  UTF-8 JSON) and sessions
 
 The channel belongs to one viewer, so events name none; Python hands each to
 that viewer, one at a time and in order, on the channel's thread.
@@ -165,12 +173,16 @@ that viewer, one at a time and in order, on the channel's thread.
 In Python, `AnnDataViewer._handle_frontend_message`, in this order:
 - validates the event (`_wire._require_inbound_jupyter_event`; a bad one
   closes the channel with `1008`),
-- records the event into `viewer.state` (latest snapshot) and the results
-  into `viewer.results`, hands it to the `wait_for_event(...)` calls waiting
-  for it, and keeps the most recent events for `debug_connection()`,
+- records the event into `viewer.state` (latest snapshot; the latest
+  `history_changed` is `viewer.state.history`, read by `viewer.history`) and
+  the results into `viewer.results`, hands it to the `wait_for_event(...)`
+  calls waiting for it, an action's answer to its `ActionRequest` and a
+  `session_loaded` to its `LoadSessionRequest`, and keeps the most recent
+  events for `debug_connection()`,
 - triggers hook callbacks registered via:
   - `@viewer.on_selection`, `@viewer.on_hover`, `@viewer.on_click`,
-    `@viewer.on_ready`, `@viewer.on_command_error`, `@viewer.on_data_mapping`, and
+    `@viewer.on_ready`, `@viewer.on_command_error`, `@viewer.on_data_mapping`,
+    `@viewer.on_history_change`, and
     `@viewer.on_message` (`on_message` callbacks first).
 
 The event is recorded before any hook runs. A hook that raises is logged
@@ -184,7 +196,7 @@ Protocol details are documented here:
 
 ---
 
-## Results and session bundles (the round trip)
+## Results and sessions (the round trip)
 
 Every result the viewer holds (highlight groups, user-defined fields, scores,
 gene sets, the visible and the opened cells) arrives as a `result` event when
@@ -196,16 +208,21 @@ A whole session is captured on request:
 
 1) Python sends a command on the channel:
    - `{type: "requestSessionBundle", requestId: "..."}`
-2) The frontend serializes a `.cellucid-session` bundle in-memory.
+2) The frontend writes the history as a `.cellucid-session` file of format 4
+   in memory (every tracker, its steps and the values they show; the chat
+   bar's conversations are left out).
 3) The frontend sends the bytes back on the channel as one binary frame
-   (header `{type: "session_bundle", requestId: "..."}`, then the bundle);
+   (header `{type: "session_bundle", requestId: "..."}`, then the file);
    the widget carries it in pieces.
 4) Python:
    - checks a pending request is waiting for it,
-   - streams the frame to a temp file and validates the bundle,
+   - streams the frame to a temp file and reads and checks it whole
+     (`cellucid.read_session`),
    - completes the request with a `session_bundle` event (includes path), or a
-     `command_error` for an invalid bundle.
-5) `request.result()` returns a `CellucidSessionBundle` handle.
+     `command_error` with its `requestId` for an invalid file.
+5) `request.result()` returns the `CellucidSession`;
+   `viewer.apply_session_to_anndata(adata, request)` returns the plan of
+   applying the step shown, and `plan.apply()` writes it.
 
 This design keeps:
 - memory bounded (streamed to disk),

@@ -28,6 +28,17 @@ MIB_INLINE = re.compile(r"\b1024\s*\*\s*1024")
 CLASSES = {"FORMAT", "PLAT", "HOST", "PERF", "MSG"}
 
 ALLOWLIST: dict[str, tuple[str, str]] = {
+    "src/cellucid/_agent_link.py:COMMAND_BODY_LIMIT_BYTES": (
+        "HOST",
+        "Bounds one command a local process posts to a viewer's agents endpoint: one tool call "
+        "a model wrote (a model writes at most a few hundred kilobytes in one answer); the relay's "
+        "MCP endpoint reads the same bound.",
+    ),
+    "src/cellucid/_agent_link.py:EVENT_WAIT_LIMIT_SECONDS": (
+        "PERF",
+        "How long the endpoint holds an events request open before answering none; the client asks "
+        "again at once, so it decides scheduling, never what is refused.",
+    ),
     "src/cellucid/prepare_data/_gene_major.py:FLOAT32_EXACT_INTEGER_LIMIT": (
         "FORMAT",
         "The largest integer float32 holds exactly (2**24); counts above it are stored as float64.",
@@ -69,25 +80,26 @@ ALLOWLIST: dict[str, tuple[str, str]] = {
         "HOST",
         "Bounds a command_error reason string the viewer reports over the wire.",
     ),
-    "src/cellucid/session_bundle.py:MAX_FRAME_BYTES": (
+    "src/cellucid/session.py:MAX_FRAME_BYTES": (
         "FORMAT",
-        "A session bundle frame length is a little-endian u32.",
+        "A session file frame length is a little-endian u32.",
     ),
-    "src/cellucid/session_bundle.py:MAX_SAFE_INTEGER": (
+    "src/cellucid/session.py:MAX_VALUE_TEXT": (
+        "PLAT",
+        "The longest text one session value may expand to: V8's longest string (2**29 - 24), the web app's MAX_VALUE_TEXT; "
+        "a file whose parts would expand a value past it is refused before it is expanded.",
+    ),
+    "src/cellucid/session.py:MAX_SAFE_INTEGER": (
         "FORMAT",
         "The largest integer a JavaScript number holds exactly (2**53 - 1).",
+    ),
+    "src/cellucid/session.py:_MAX_UINT32": (
+        "FORMAT",
+        "A subsample specification's counts and seed are uint32 (data/subsample.js).",
     ),
     "src/cellucid/session_codecs.py:MAX_SAFE_INTEGER": (
         "FORMAT",
         "The largest integer a JavaScript number holds exactly (2**53 - 1).",
-    ),
-    "src/cellucid/session_codecs.py:MAX_UINT16": (
-        "FORMAT",
-        "The largest value of a uint16 code array.",
-    ),
-    "src/cellucid/session_codecs.py:MAX_UINT32": (
-        "FORMAT",
-        "The largest value of a uint32 code array.",
     ),
     "src/cellucid/_viewer_channel.py:MAX_EVENT_TEXT_BYTES": (
         "HOST",

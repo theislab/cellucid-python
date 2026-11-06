@@ -78,7 +78,7 @@ all 3,696 cells*. The published counts of every built-in sample are listed in
 
 1) After dismissing the welcome overlay, inspect the **Session** accordion:
    the **Dataset** box, **Open data**, **Stored** (once something is kept),
-   **Session file**, and two sections collapsed to one line each,
+   and two sections collapsed to one line each,
    **Subsampling** ("100 % cells") and **Data mapping** ("1 embedding ·
    UMAP 2D"); click a header to open it.
 2) Keep the loaded Suo sample, or choose another entry under **Sample
@@ -180,7 +180,7 @@ clears the selection without the menu.
 
 Pick one:
 
-- **Save** under **Session file** (Session accordion) to download a `.cellucid-session` bundle you can reopen later.
+- **Share…** under **State › Session** to download a `.cellucid-session` file holding the steps you took, to reopen later. Every step is also kept in this browser as you go, and **State › History** undoes any of them ({doc}`../m_state_history/index`).
 - **Figure export** to export a publication‑ready figure of the current view(s).
 
 For a bug report, scroll to the sidebar footer and include its exact **Build**

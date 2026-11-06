@@ -1,64 +1,112 @@
-# Default sessions named by a catalog
+# Starting views named by a catalog
 
 Choosing an official sample should open a useful biological view, not make you
 recreate the same setup before you can explore. A dataset catalog
-(`datasets.json`) can therefore name one small, reviewed **default session**
-for each dataset it lists. Cellucid applies it automatically when the dataset
-is opened from that catalog; it is not a second dataset and it is not a manual
-**Load** step. The built-in samples use this, and so can any catalog you
-publish ({doc}`../b_data_loading/02_local_demo_tutorial`).
+(`datasets.json`) can therefore name one small, reviewed **starting view** for
+each dataset it lists, in its `session` entry. Cellucid puts it back by itself
+when the dataset is opened from that catalog; it is not a second dataset and
+it is not a manual **Load…** step. The built-in samples use this, and so can any
+catalog you publish ({doc}`../b_data_loading/02_local_demo_tutorial`).
 
 ## What happens when you choose a dataset from a catalog
 
 1. Cellucid opens the dataset's AnnData file and loads it.
 2. The positions, fields, metadata, and other scientific data become the live
    dataset.
-3. Only after the dataset has been published, Cellucid reads the default
-   session the catalog names for it — if it names one.
+3. Only after the dataset has been published, Cellucid reads the starting
+   view the catalog names for it, if it names one.
 4. It downloads that one file, stops reading past the byte length the catalog
    declares, refuses a file of any other length, verifies its SHA-256 against
    the catalog, and confirms that the selected dataset has not changed.
-5. Cellucid applies the verified static starting view. It says nothing when
-   it does: the view is part of opening the sample, not a session you
-   loaded, so the camera and colours simply change. Only a view that cannot
-   be applied is reported, once, as **Sample view unavailable**.
+5. Cellucid applies the verified static starting view, then starts the
+   dataset's history. The starting view is not a step: it is where the
+   history begins, its first entry (**Opened**), so **Undo** never goes back
+   past it.
+
+Cellucid says nothing when it applies the view: it is part of opening the
+sample, not a session you loaded, so the camera and colours simply change.
+Only a view that cannot be applied is reported, once, as **Sample view
+unavailable** ("The dataset is open, but its published sample view could not
+be applied.").
+
+A view of another session format, as can happen for minutes while a release is
+deployed, is not read and is no failure: the dataset opens on its default view
+with one short line that its starting view isn't available right now.
 
 This order matters: an unverified view file is never treated as scientific
-data. If the named session is missing, the wrong length, or fails its digest,
-Cellucid reports that failure after the dataset is available; it does not
-guess another filename or substitute a different view.
+data. If the named file is missing, the wrong length, or fails its digest,
+Cellucid reports that after the dataset is available; it does not guess
+another filename or substitute a different view.
 
-A published default session is a seven-chunk starting state, not a manual user
-bundle. Downloading it and choosing **Load** is unsupported and the strict
-generic reader rejects it. To create a portable manual state, choose the
-dataset, wait for its default view, and then use **Save**.
+## What a starting view is
 
-That is also why a file from **Save** cannot simply be renamed and published. A
-save differs from a published default in two ways, and the reader refuses both
-while the file itself stays perfectly well-formed:
+A starting view is a session file of the current format (format 4) with **one
+tracker of one root and no step**: the state the dataset opens in, not a
+history. Cellucid checks that on the file's manifest, before it reads any step
+or value:
 
-- **Chunks.** A save writes the whole static chunk registry; a published
-  default carries seven of them (everything but the Camera Path). The reader refuses a bundle carrying the extra
-  chunks, and one of them, a recorded Camera Path, is refused by name.
-- **Source.** A save records where its data came from (a local file, a server,
-  a link). A published default is applied to the dataset it is listed beside,
-  so it records no source, and the dataset it was captured against must be the
-  one the catalog lists. Every session bundle records that dataset, and the
-  reader compares it before applying anything.
+- **one tracker**, whose first entry is the step shown and its only one;
+- **no source**: it ships beside its dataset, so it does not say where the
+  dataset opens from;
+- **no cells**: it is captured on every cell and applies to any subsample of
+  its dataset. On a subsample the cell-order digest is not compared (the
+  catalog pins the file by SHA-256 instead); everything else in the dataset
+  fingerprint is;
+- and, checked once its one step is read, its one state holds **neither the
+  cells to open nor the layout**: which cells are open stays your choice (or
+  the link's), and your panels, sidebar and **theme** stay yours.
 
-The publishing step of the sample repository
-([`cellucid-datasets`](https://github.com/theislab/cellucid-datasets),
-`scripts/publish_session_preset.mjs`) performs both, importing the rules from
-the viewer rather than restating them. It refuses to drop a chunk that still
-holds content instead of discarding it silently, and it checks the capture's
-dataset against the dataset it publishes for, so a capture taken against
-different data is refused rather than relabelled. If you maintain your own
-catalog, use that script rather than editing a save by hand, then write the
-file's new `bytes` and `sha256` into `datasets.json`.
+It is read like any other session file: the same signature, manifest and
+fingerprint checks, and the same check that the dataset has every field the
+view uses. So a starting view must carry the dataset's cell-order record and
+data mapping, and it must have been captured in the dataset's default data
+mapping, with at most more embeddings turned on.
+
+The same dataset read again on other cells (**Cells to open**) keeps its
+history and puts no starting view back.
+
+There is no need to download a starting view and load it: opening the
+dataset from its catalog applies it. Loaded by hand (**Load… › Open a session
+file…**), it is read like any other session file, and its one tracker,
+**Starting view**, is added beside yours. To share a view you made from a
+sample, choose the sample, work from its starting view, and use **Share…**.
+
+## How a starting view is made and published
+
+A file from **Share…** is not a starting view: it holds your history (every
+tracker and step), the cells it was open on and your layout. Publishing turns
+the step it shows into the one state of a starting view and drops the rest.
+The sample repository
+([`cellucid-datasets`](https://github.com/theislab/cellucid-datasets)) does
+this in two scripts, both using the viewer's own code rather than restating
+its rules:
+
+1. `scripts/capture_session_preset.mjs` opens the sample from a local copy of
+   the catalog in a headless browser (its current starting view is put back,
+   exactly as on the site), optionally turns on more embeddings
+   (`--enable <obsm key>:<columns>`) and dispatches actions of the viewer
+   (`--action '{"type": …, "params": …}'`, repeatable, for example to colour
+   by a field or set the camera), and saves the history as a session file. You
+   can instead open the sample in the app, frame the view by hand and choose
+   **Share…** › **Save file**.
+2. `scripts/publish_session_preset.mjs` checks the capture against the store
+   and publishes it. It reads the store's cell and gene counts and default
+   data mapping and recomputes the cell-order digest from the store's
+   coordinates, so a capture taken against other data is refused rather than
+   relabelled. The viewer's publish step (`trimToPublishedDefault`) then makes
+   the step shown the one state, drops every other step, and names the view
+   with the identity the catalog serves the dataset under. It refuses a
+   capture whose steps made content (highlights, gene sets, a camera path,
+   cells hidden one by one, renamed or deleted fields and categories, fields
+   you made), naming it, because dropping the steps would lose that content
+   silently. The script writes the file and its catalog entry.
+
+If you maintain your own catalog, use those scripts rather than editing a file
+by hand, then check the file's new `bytes` and `sha256` in `datasets.json`.
 
 ## The catalog entry
 
-A dataset's default session is its `session` entry in `datasets.json`:
+A dataset's starting view is its `session` entry in `datasets.json`:
 
 ```json
 {
@@ -78,20 +126,20 @@ A dataset's default session is its `session` entry in `datasets.json`:
 }
 ```
 
-- `path` is the session file's path inside the catalog folder; it ends in
+- `path` is the file's path inside the catalog folder; it ends in
   `.cellucid-session` and stays below the folder.
 - `bytes` is that file's exact length: the viewer stops reading past it and
-  refuses a file of any other length, so a published session has no size
-  limit of its own.
+  refuses a file of any other length, so a published starting view has no
+  size limit of its own.
 - `sha256` pins the exact bytes of the file, as 64 lowercase hexadecimal
   characters.
 
-All three are required. A dataset without `session` opens without a default
+All three are required. A dataset without `session` opens without a starting
 view, and no request is made for one.
 
-A published session is regenerated whenever the reviewed view or the session
+A starting view is published again whenever the reviewed view or the session
 format changes, and its `bytes` and `sha256` change with it. Read the current
-values out of the catalog rather than copying them from documentation — that
+values out of the catalog rather than copying them from documentation; that
 is why the example above shows the field's shape instead of a digest.
 
 The built-in samples' catalog is
@@ -101,42 +149,50 @@ For what each sample is, what to cite, and how far its build is pinned, see
 
 ## What the reviewed view changes
 
-Each official default session:
+Each built-in sample's starting view:
 
-- activates the `cell_type` observation field;
-- restores a modest, static close-up in the 3-D **Orbit** camera;
-- uses the light theme and the **Studio (light)** background; and
-- starts without active filters or kept snapshots.
+- colours the view by the `cell_type` observation field;
+- shows the dataset's default 3-D embedding in the 3-D **Orbit** camera, at a
+  reviewed static position;
+- uses the **Studio (light)** background, the `Points` render mode and the
+  `Full (lighting + fog)` shader;
+- has one view, with no kept views, no filters, no highlights and no
+  centroid labels; and
+- holds an empty camera path with **Autoplay** off.
 
-The Pancreas view also enables the first two components of its PCA as a 2D
-view: that PCA is the dataset's latent space, which Cellucid does not list as a
-view on its own.
+It does not set the theme: the theme is part of your layout, which a starting
+view leaves alone.
+
+The Pancreas view also turns on the first two components of its PCA as a 2-D
+embedding: that PCA is the dataset's latent space, which Cellucid does not
+list as an embedding on its own.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/official-01-sample-state-applied.png
-:alt: The whole application window shortly after the Pancreas built-in sample was chosen, showing the embedding coloured by cell type in a 3-D orbit view on the light Studio backdrop, with the Session accordion open beside it.
+:alt: The whole application window shortly after the Pancreas built-in sample was chosen, showing the embedding coloured by cell type in a 3-D orbit view on the Studio (light) background, with the sidebar beside it.
 :width: 1440px
 
 The Pancreas sample moments after it was chosen. Nothing was clicked beyond
-picking the sample: the dataset published first, then its verified default
-session put the view into 3-D **Orbit** on the light studio background with
-`cell_type` active. **Save** and **Load** were not involved.
+picking the sample: the dataset published first, then its verified starting
+view put the view into 3-D **Orbit** on the **Studio (light)** background with
+`cell_type` active, and the history started from it. **Share…** and **Load…**
+were not involved.
 ```
 
-You can confirm each of those four from the sidebar in the figure: the
-**Visualization** accordion shows `Light` theme, `Studio (light)` background and
-`Points` render mode, and the dataset opens on its 3-D embedding with the
-navigation mode set to orbit.
+You can confirm these from the sidebar: **Visualization** shows the `Studio
+(light)` background and the `Points` render mode, the dataset opens on its 3-D
+embedding with the navigation mode set to orbit, and **State › History**
+starts at **Opened**.
 
-These are deliberately **static-only** presets. They contain no
-`cinematic/camera` chunk, so they never restore a recorded Camera Path,
-**Loop playback**, or **Autoplay**. The static camera position can change when
-the state is applied, but moving-camera playback remains off.
+These are deliberately **static** views. Their camera path is empty, so they
+never start a recorded camera path, **Loop playback**, or **Autoplay**. The
+camera position changes when the view is applied, but no moving-camera
+playback starts.
 
-## Which datasets get a default session
+## Which datasets get a starting view
 
-Only a dataset opened from a catalog — the sample catalog the dataset picker
-reads, or a catalog opened from a link in the **Link or server** bar — whose catalog entry names
-a `session` gets one. Nothing else is probed:
+Only a dataset opened from a catalog (the sample catalog the dataset picker
+reads, or a catalog opened from a link in the **Link or server** bar) whose
+catalog entry names a `session` gets one. Nothing else is probed:
 
 - a file or folder chosen with **Open…** or dropped from your computer, in
   any format Cellucid reads;
@@ -150,7 +206,7 @@ traffic. A file's own `uns['cellucid']` cannot name a session either: a
 `session` key there is ignored
 ({doc}`../b_data_loading/07_file_format_expectations`).
 
-For those sources, configure the view you want and use the ordinary
+For those sources, set up the view you want and use the ordinary
 {doc}`03_save_restore_ux` workflow. Your own `.cellucid-session` remains a
 manual, identity-matched working-state file. See
 {doc}`07_versioning_compatibility_and_dataset_identity` for the matching rules.

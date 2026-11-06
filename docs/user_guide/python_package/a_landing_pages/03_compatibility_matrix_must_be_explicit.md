@@ -48,8 +48,8 @@ What a notebook needs:
 The widget's messages reach Python **between cells**, as every widget's do:
 hooks fire and `viewer.state` updates while the kernel is idle, and a call that
 waits for the viewer in the same cell (`wait_for_ready()`, `wait_for_event()`,
-a session request's `result()`) raises at once with what to do instead;
-commands such as `push()` and `set_data_mapping()` never wait. Details: {doc}`../e_jupyter_hooks/03_supported_environments_matrix`.
+an action's or a session request's `result()`) raises at once with what to do
+instead; actions such as `push()` and `color_by()` never wait. Details: {doc}`../e_jupyter_hooks/03_supported_environments_matrix`.
 
 ## Browser-tab viewers (scripts, SSH, HPC)
 

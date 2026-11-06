@@ -176,12 +176,12 @@ Output directory for every file: `_static/screenshots/sessions_sharing/`.
   something else moved too").
 - **File:** `session-lifecycle-06-before.png` · `:width: 1440px`
 
-### Step 7 — open the Session panel and press Save
+### Step 7 — open the State section and press Share…
 
 - **Interaction:** scroll the sidebar to `#session-state-controls`.
-- **Crop:** `#session-state-controls` only — the `Session file` title, the
-  `i` info button, and the two buttons `#save-state-btn` / `#load-state-btn`.
-- **Cursor:** yes, **on `#save-state-btn`**.
+- **Crop:** `#session-state-controls` only — the `Session` title, the
+  `i` info button, and the two buttons `#history-share-btn` / `#history-load-btn`.
+- **Cursor:** yes, **on `#history-share-btn`**.
 - **File:** `session-lifecycle-07-save-state-button.png` · `:width: 246px`
 - **Note:** this tight crop is what pages `01`, `03`, `11` and ``index`` actually
   need; the borrowed `data-loading-session-panel.png` shows the whole loading
@@ -189,37 +189,38 @@ Output directory for every file: `_static/screenshots/sessions_sharing/`.
 
 ### Step 8 — the in-app confirmation
 
-- **Interaction:** click `#save-state-btn`.
+- **Interaction:** click `#history-share-btn`, then `#history-share-save`
+  ("Save file") in `#history-share-dialog`.
 - **Crop:** `#notification-center`, the single success toast.
 - **Cursor:** no.
 - **File:** `session-lifecycle-08-saved-toast.png` · `:width: 400px`
-- **Exact string** (from `ui/modules/session-controls.js`): `Session saved
-  successfully`. On failure the toast reads `Failed to save session` while the
-  console logs `Failed to save state:` — {doc}`/user_guide/web_app/l_sessions_sharing/10_troubleshooting_sessions`
-  currently tells readers to look for the console string in the panel.
+- **Exact string** (from `ui/modules/state/share-dialog.js`): `Saved <file>.`,
+  the file named after the dataset (`Pancreatic endocrinogenesis.cellucid-session`).
+  On failure the toast reads `Sharing the history failed: <reason>` and the
+  console logs `[state] Sharing the history failed`.
 
 ### Step 9 — the artifact the user actually receives
 
-The **Save** path is `downloadBlob()` → an anchor `click()` → a browser
-download (`downloadBlob()` in `session-serializer.js`, called from
-`downloadSession()`). There is **no** in-app artifact, no
+The **Share…** path is the `history.share` action
+(`app/history/persistence-actions.js`): the serializer's `writeShare` → a
+browser download. There is **no** in-app artifact, no
 link, and no server upload. The browser's download shelf and the OS file dialog
 are browser chrome — Playwright cannot capture them, and both would expose
 `/Users/<username>/`.
 
 - **Capture instead:** a terminal screenshot, prepared as follows.
   - `cd ~/Downloads` and set `PS1='$ '` so no path or username is rendered.
-  - Run: `ls -lh cellucid-session-*.cellucid-session` then
-    `head -c 96 cellucid-session-*.cellucid-session | xxd | head -6`.
-  - The hexdump shows the ASCII signature `CELLUCID_SESSION/3\n`, the 32-bit
+  - Run: `ls -lh *.cellucid-session` then
+    `head -c 96 'Pancreatic endocrinogenesis.cellucid-session' | xxd | head -6`.
+  - The hexdump shows the ASCII signature `CELLUCID_SESSION/4\n`, the 32-bit
     manifest length, and the opening of the JSON manifest — exactly the framing
     documented in {doc}`/user_guide/web_app/l_sessions_sharing/12_reference`.
 - **Crop:** the terminal window, ~900 px wide, dark theme.
 - **Cursor:** no.
 - **File:** `session-lifecycle-09-artifact-terminal.png` · `:width: 900px`
 - **Redaction checklist before publishing:** shortened prompt (no host, no
-  user, no path), no other files in the `ls` output, timestamp in the filename
-  is fine (it is generated, not personal).
+  user, no path), no other files in the `ls` output (the file is named after
+  the dataset, which is not personal).
 
 ### Step 10 — reset to a clean app
 
@@ -234,9 +235,12 @@ are browser chrome — Playwright cannot capture them, and both would expose
   no filters, no highlights — and the reader can see there is nothing left over
   to fake the restore.
 
-### Step 11 — press Load
+### Step 11 — press Load…, then Open a session file…
 
-- **Crop:** `#session-state-controls`.
+- **Interaction:** click `#history-load-btn`; the Load dialog
+  `#saved-states-dialog` opens with `#load-state-btn` ("Open a session
+  file…") under **From a file**.
+- **Crop:** `#saved-states-dialog`.
 - **Cursor:** yes, **on `#load-state-btn`**.
 - **File:** `session-lifecycle-11-load-state-button.png` · `:width: 246px`
 - **Do not capture the OS file picker.** It is out of Playwright's reach and it
@@ -301,7 +305,7 @@ does not mistake it for a failure:**
     **`Session fully restored.`** (with a trailing period; the docs write it
     without one).
   - Nothing else. The restore used to publish the same sentence a second time
-    as an info toast, and the `#load-state-btn` handler added a third success
+    as an info toast, and the file button's handler added a third success
     toast, `Session loaded successfully`; both duplicates were removed, and
     the prose in {doc}`/user_guide/web_app/l_sessions_sharing/03_save_restore_ux` and
     {doc}`/user_guide/web_app/l_sessions_sharing/10_troubleshooting_sessions` was corrected with them.
@@ -309,8 +313,8 @@ does not mistake it for a failure:**
 ### Optional step 15 — the same file, another embedding on screen
 
 Run once more without reloading: in `View 1 shows`
-(`#view-representation-select`) choose the 2D UMAP, then `#load-state-btn` →
-the same file. The session opens and the view shows the 3D UMAP again: a
+(`#view-representation-select`) choose the 2D UMAP, then `#history-load-btn` →
+`#load-state-btn` → the same file. The session opens and the view shows the 3D UMAP again: a
 session names the embedding each view shows, so switching embeddings is no
 longer a reason to refuse it. Details under
 {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_and_dataset_identity` below.
@@ -346,7 +350,7 @@ longer a reason to refuse it. Details under
 - **verdict** — **REPLACE** (+ **DIAGRAM**, + **STALE-RISK**)
 - **needs** —
   1. Replace the borrowed panel with `session-lifecycle-07-save-state-button.png`
-     (`:width: 246px`, cursor on `#save-state-btn`).
+     (`:width: 246px`, cursor on `#history-share-btn`).
   2. **DIAGRAM** for "the three persistence layers": in-memory (volatile) /
      `.cellucid-session` file / browser localStorage. This is a concept with no
      on-screen representation; a screenshot cannot show it. Mermaid block,
@@ -407,7 +411,7 @@ longer a reason to refuse it. Details under
 
 ## {doc}`/user_guide/web_app/l_sessions_sharing/03_save_restore_ux`
 
-- **explains** — The click-by-click **Save** / **Load** procedure, what
+- **explains** — The click-by-click **Share…** / **Load…** procedure, what
   happens under the hood, and naming/milestone best practice.
 - **has** — 1 figure, line 162, `data_loading/data-loading-session-panel.png`,
   `:width: 246px` (line 164). **Borrowed**, third use of the same file.
@@ -425,12 +429,11 @@ longer a reason to refuse it. Details under
     successfully**." There is no panel status; both strings are toasts in
     `#notification-center`.
   - The page correctly warns that the catalog's `default.cellucid-session` is
-    rejected by the manual loader. Session format 3 (the presets are
-    republished in it): a published default carries exactly seven chunks
-    (`core/field-overlays`, `core/state`, `ui/dockable-layout`,
-    `ui/figure-export`, `analysis/windows`, `analysis/docked`,
-    `highlights/meta`) in that order and no `cinematic/camera`, which the
-    manual profile requires. A **Save** writes eight singletons.
+    rejected by the manual loader. Session format 4 (the presets are
+    republished in it, 2026-11-03): a published starting view is one tracker
+    of one root with no step, no conversation, no source and no cells, and its
+    root holds every state domain but `cells` and `layout`; a **Share…** writes
+    the whole history (every tracker, its steps and every value they name).
 
 ## {doc}`/user_guide/web_app/l_sessions_sharing/04_official_sample_states`
 
@@ -487,7 +490,7 @@ longer a reason to refuse it. Details under
   needed.** Cellucid's "share a link" means *a link to the dataset* — a public
   URL or a GitHub `owner/repo/path` typed into the **Link or server** bar
   (`#data-address`) — **not** a shareable app URL that encodes state. There is no
-  session-in-URL feature, and **Save** is a plain file download. Photographing the browser's URL bar would therefore illustrate
+  session-in-URL feature, and **Share…** is a plain file download. Photographing the browser's URL bar would therefore illustrate
   nothing on this page while risking a `localhost:PORT` or file path. Show the
   **in-app input fields** instead, which is where the link actually lives.
 - **needs** — Three images, each answering one of the page's three artifact
@@ -546,7 +549,7 @@ longer a reason to refuse it. Details under
   | 1 | **Different dataset** — names both cell and gene counts | Save a session on `pancreas` (3,696 / 3,753). Reload, load `dataset:local-demo:garcia` (219,731 / 5,754). **Load** the pancreas file. (`he` and `kanemaru` are unusable here: their published sample views currently fail to apply in headless Chromium and add two unrelated errors to the crop.) | **Yes — highest value.** The commonest real-world mistake, and the message names four concrete numbers. |
   | 2 | **An embedding this dataset does not have** — "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have." | Open an `.h5ad` with an `X_tsne`, show it in a view, save. Open the same file without `X_tsne` (or an export without it), **Load**. | **Yes — second highest.** It names the one array to restore, so a user does not conclude the dataset is corrupt. (A session saved while another embedding was on screen is no longer refused; see step 15.) |
   | 3 | **Coordinates differ** (re-ordered rows *or* re-computed embedding) | Needs a second file with the same id and sizes but permuted rows. Read `cellucid/tests/browser/fixtures/catalog/current-ui.h5ad` (120 cells, 6 genes, 2D only) with anndata, permute its rows (`adata[order]`), keep `uns['cellucid']` unchanged, and write it to a scratch store. Save a session against the original, load the permuted clone, **Load**. | **Yes**, but as the *third* image — it is rarer and its message is long. Note the fixture is 2D-only, so error #2 cannot be provoked on it. |
-  | 4 | **Not a session file** (`NOT_A_SESSION_FILE_MESSAGE` in `session/bundle/format.js`) | **Load** any file that does not start with `CELLUCID_SESSION/3\n`. | **Optional.** The message is self-explanatory in prose. |
+  | 4 | **Not a session file** (`NOT_A_SESSION_FILE_MESSAGE` in `session/bundle/format.js`) | Load (**Load… › Open a session file…**) any file that does not start with `CELLUCID_SESSION/4\n`. | **Optional.** The message is self-explanatory in prose. |
 
 - **needs** —
   - Crop for all four: `#notification-center`, the single red toast, full text
@@ -632,7 +635,7 @@ longer a reason to refuse it. Details under
      `session-cancel-dismissed.png` · `:width: 400px`.
   2. **Official default rejected** (final section): download
      the Pancreas session the catalog names (`session.path` in
-     `cellucid-datasets/anndata/datasets.json`), choose **Load**, supply it.
+     `cellucid-datasets/anndata/datasets.json`), choose **Load… › Open a session file…**, supply it.
      Crop the red toast in `#notification-center`. Cursor: no. The property that
      makes it get refused is the seven-chunk profile the manifest names
      `published-default` (`PUBLISHED_DEFAULT_STATIC_CHUNK_PROFILE` in the
@@ -727,11 +730,11 @@ longer a reason to refuse it. Details under
      cropped to just the `xxd` output, so a reader can match the diagram to real
      bytes: `session-bundle-hexdump.png` · `:width: 900px`.
   - No app capture is appropriate; this page has no UI.
-- **notes** — To re-verify once the presets are regenerated in session format
-  2: every official `default.cellucid-session` begins with
-  `CELLUCID_SESSION/3\n`, carries a six-key `datasetFingerprint` including
-  `cellOrder` and a 16-hex digest plus `requires`, and lists exactly the seven
-  chunks the page names, in the stated order. Each sample's `session` entry in the catalog carries its `sha256`. The implementation pointers at the end of the page all resolve to
+- **notes** — Re-verified for session format 4 (2026-11-03): every official
+  starting view (`anndata/<id>.cellucid-session`) begins with
+  `CELLUCID_SESSION/4\n`, carries a six-key `datasetFingerprint` including
+  `cellOrder` and a 16-hex digest plus `requires`, and holds one tracker of
+  one root with no step, whose root omits `cells` and `layout`. Each sample's `session` entry in the catalog carries its `sha256`. The implementation pointers at the end of the page all resolve to
   existing files.
 
 ---

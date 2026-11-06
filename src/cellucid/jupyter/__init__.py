@@ -14,9 +14,10 @@ Usage:
         dataset_id="example",
     )
 
-    # Control the viewer from Python
-    viewer.highlight_cells([100, 200, 300], color="#ff0000")
-    viewer.set_color_by("cell_type")
+    # Control the viewer from Python: every action of the viewer is a method
+    viewer.highlight_cells(cells=[100, 200, 300], color="#ff0000")
+    viewer.color_by(field={"source": "obs", "key": "cell_type"})
+    request = viewer.fields_list()  # a read: request.result() in a later cell
 
     # React to user interactions
     @viewer.on_selection
@@ -25,22 +26,25 @@ Usage:
 
 Communication (bidirectional):
     Python → Frontend:
-        - viewer.highlight_cells()
-        - viewer.set_color_by()
-        - viewer.set_visibility()
-        - viewer.clear_highlights()
-        - viewer.reset_view()
-        - viewer.set_data_mapping()
-        - viewer.request_session_bundle()
+        - one method per action of the catalogue (viewer.color_by(),
+          viewer.highlight_cells(), viewer.history_get(), ...), each returning
+          an ActionRequest; viewer.act(type, **params) for any of them
+        - viewer.push() (a pandas column as a field)
+        - viewer.request_session()
+        - viewer.load_session() (a session file's trackers, added beside the person's)
+        - with viewer.turn("QC"): (every action inside is one turn of the history)
+        - viewer.history (LiveHistory: the history's actions, its latest change)
         - viewer.send_message()
 
     Frontend → Python:
+        - ActionRequest.result(): an action's outcome, a read's result
         - @viewer.on_selection
         - @viewer.on_hover
         - @viewer.on_click
         - @viewer.on_ready
         - @viewer.on_command_error
         - @viewer.on_data_mapping
+        - @viewer.on_history_change
         - @viewer.on_message
 
     ``show_anndata()`` returns a :class:`Widget` (an anywidget): both
@@ -55,10 +59,20 @@ The module is a package. Its submodules are:
 
 ``_wire``
     Exact value checks for every message on the viewer channel.
+``_actions``
+    The action catalogue (``cellucid/action_catalog.json``, the web app's
+    document byte for byte) and the one conversion of every action's
+    parameters; :data:`OMIT`.
+``_actions_generated``
+    :class:`ViewerActions`: one method per action, written by
+    ``scripts/generate_actions.py`` from the catalogue (never by hand).
 ``_hooks``
     :class:`HookRegistry` and :class:`ViewerState`.
+``_history``
+    :class:`LiveHistory` (``viewer.history``) and :class:`LoadSessionRequest`.
 ``_viewer``
-    :class:`AnnDataViewer` (the viewer API, and a browser-tab viewer) and
+    :class:`AnnDataViewer` (the viewer API, and a browser-tab viewer),
+    :class:`ActionRequest`, :class:`SessionRequest` and
     :func:`show_anndata`, notebook-context detection, the viewer-channel
     bridge, and interpreter-exit cleanup.
 ``_widget``
@@ -68,8 +82,18 @@ The module is a package. Its submodules are:
 
 from typing import TYPE_CHECKING, Any
 
+from ._actions import OMIT, Omit, action_catalog
+from ._actions_generated import ViewerActions
+from ._history import LiveHistory, LoadSessionRequest
 from ._hooks import HookCallback, HookRegistry, ViewerState
-from ._viewer import AnnDataViewer, SessionBundleRequest, cleanup_all, show_anndata
+from ._viewer import (
+    ActionError,
+    ActionRequest,
+    AnnDataViewer,
+    SessionRequest,
+    cleanup_all,
+    show_anndata,
+)
 
 if TYPE_CHECKING:
     from ._widget import Widget
@@ -86,12 +110,20 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "OMIT",
+    "ActionError",
+    "ActionRequest",
     "AnnDataViewer",
     "HookCallback",
     "HookRegistry",
-    "SessionBundleRequest",
+    "LiveHistory",
+    "LoadSessionRequest",
+    "Omit",
+    "SessionRequest",
+    "ViewerActions",
     "ViewerState",
     "Widget",
+    "action_catalog",
     "cleanup_all",
     "show_anndata",
 ]

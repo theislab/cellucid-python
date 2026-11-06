@@ -22,12 +22,12 @@ Before a repository is connected, the compact panel reads **Repository**,
 
 - **Connect repo**: opens the four-step connection wizard.
 
-After a repository is connected, the **GitHub sync** action reflects
-authentication state:
-
-- **Connect GitHub…**: the repository connection exists locally, but the tab is
-  not signed in.
-- **GitHub sync…**: the tab is signed in and the repository is connected.
+After a repository is connected (which needs this tab signed in to GitHub),
+the panel shows the dataset by its name (its id in the repository on hover),
+your GitHub user and the repository, and one **GitHub sync…** button that
+opens the dialog with **Pull latest** and **Publish**. A tab that is not
+signed in shows `Not connected.` and **Connect repo**; signing in again as the
+same GitHub user brings the connection back.
 
 When offline, GitHub actions are disabled. Existing annotation local state can
 still be edited, but it cannot be Pulled or Published.
@@ -52,12 +52,29 @@ them are the working surface.
 
 Depending on your state, the panel can show:
 
-- **Dataset**: the current dataset id (this must match `annotations/config.json`).
+- **Dataset**: the current dataset by its name; hover it for the dataset id
+  the repository files it under (this id must match `annotations/config.json`).
 - **GitHub**: whether you’re connected, and your GitHub login.
 - **Repo**: the connected repo (optionally including `@branch`).
 - **Copy share link** (icon action): copies a link with `?annotations=owner/repo@branch` prefilled.
 
-If you are reporting a problem, a screenshot of this status panel often contains the information needed to debug (dataset id + repo/branch + login).
+Below the rows, one line at a time says what needs you:
+
+- **`3 changes not published`** with **Publish**: your votes, suggestions,
+  comments, deletions or profile edits (and, for an author, repository
+  settings or merges) that this browser has and GitHub does not. Hover the
+  line for the kinds ("2 votes, 1 suggestion"). It counts against your file as
+  this browser last pulled or published it; after clearing the local cache it
+  is not shown until the next Pull.
+- **`Open in another tab — annotation paused here`** with **Use here**: the
+  same dataset, repository and GitHub user are being annotated in another tab
+  of this browser. One tab annotates at a time, so nothing is overwritten;
+  everything else of the dataset works in both tabs. **Use here** moves
+  annotation to this tab, and the other tab shows the same line (what it had
+  is kept).
+- a failure in one plain sentence (GitHub's own words behind **Details**).
+
+If you are reporting a problem, a screenshot of this status panel often contains the information needed to debug (dataset + repo/branch + login; hover the dataset for its id).
 
 ---
 
@@ -76,8 +93,14 @@ Notes:
 - This uses a GitHub App OAuth flow (no token paste).
 - The token expires after 8 hours and is stored only in this tab's
   `sessionStorage` (closing the tab signs you out; a reload does not).
-  **Sign out** revokes it at GitHub; if GitHub cannot be reached, a
-  notification says the token stays valid until it expires.
+  **Disconnect GitHub** (the icon beside GitHub in this dialog) revokes it at
+  GitHub and disconnects this dataset's repository too; if GitHub cannot be
+  reached, a notification says the token stays valid until it expires.
+- A token GitHub refuses (it expired or was revoked elsewhere) signs you out
+  here with one line: "Your GitHub sign-in expired or was revoked. Sign in
+  again to Pull or Publish; your unpublished changes stay in this browser."
+  The repository connection is kept: signing in again as the same GitHub user
+  connects it again, with your unpublished changes.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-02-signin.png
 :alt: Step 1 of 4 of the GitHub sync wizard: a header showing the dataset with GitHub and Repo both not connected, the four steps Sign in, Install app, Choose repository and Sync with Sign in current, the line "Cellucid gets no repository access until you install its GitHub App on repositories you choose.", and a Continue with GitHub button.
@@ -129,6 +152,11 @@ What “connect” means:
   - `annotations/schema.json`
   - `annotations/moderation/merges.schema.json`
   - `annotations/users/`
+- the three schema files must be exactly the
+  [cellucid-annotation](https://github.com/theislab/cellucid-annotation)
+  template's, which Cellucid checks by their Git blob ids without downloading
+  them; a schema that differs stops the Pull with a message naming the file to
+  copy again
 
 ### 4) Sync
 
@@ -162,38 +190,60 @@ buttons is where every outcome is reported verbatim.
 ```
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-17-publish.png
-:alt: The same Sync step after Publish, its status line reading "Publish complete." under the Pull latest and Publish buttons.
+:alt: The same Sync step after Publish, its status line reading "Published." under the Pull latest and Publish buttons.
 :width: 1040px
 
-The same panel after **Publish**. `Publish complete.` means GitHub accepted the
-write.
+The same panel after **Publish**. `Published.` means GitHub accepted the write
+to the repository. When you cannot write to the repository, Publish opens (or
+updates) a pull request instead and says `Opened a pull request: <link>. The
+repository has your changes once its authors merge it.`; nothing new to write
+says `Nothing new to publish: GitHub already has your changes.`
 ```
 
 ### What Pull does (technical)
 
 Pull:
 
-- lists `annotations/users/*.json` and downloads only files whose GitHub `sha` changed since your last Pull
-- downloads optional `annotations/moderation/merges.json` when present; only
-  authors may publish changes to that document
-- writes validated raw-file bodies to the required persistent IndexedDB cache
-  and their SHA index to local storage; Cellucid never switches to an in-memory
-  cache
+- reads the repository at one commit: the branch's commit and the listings of
+  `annotations/` and `annotations/moderation/` come in one request, and
+  everything after is read by Git object id from that commit, so one Pull
+  never mixes two commits
+- stops there when nothing under `annotations/` changed since your last
+  completed Pull (one or two requests in all)
+- checks the three schemas by blob id, reads `annotations/config.json` and
+  lists `annotations/users/` by its tree id
+- downloads only the user files (and the optional
+  `annotations/moderation/merges.json`; only authors may publish changes to
+  that document) whose blob id changed, many files per request
+- validates each file as it arrives and keeps it in the required persistent
+  IndexedDB cache, batch by batch, so an interrupted Pull resumes where it
+  stopped; Cellucid never switches to an in-memory cache
 - compiles the merged view in the browser
 - applies author settings from `annotations/config.json` (annotatable columns, thresholds, closed fields)
 
-Pull is fail-closed and atomic. A missing configured categorical field or an
-invalid or oversized active document fails the complete Pull without changing
-annotation state. There is no limit on how many user files a repository holds
-or on their total size: changed files are cached a batch at a time, and the
-merged view is compiled by streaming the cache one file at a time. Cellucid
-checks configured fields before selecting the raw-cache scope or downloading
-user/moderation files, so that mismatch cannot mutate the raw-file cache. No
-partial merged annotation view is applied.
+One file never stops a Pull. A user file or merges file that is not valid is
+left out of the consensus on its own and reported in one warning (how many
+files, with each file and its reason under its details); a path under
+`annotations/users/` that is not a `ghid_<id>.json` file, or a case variant of
+a layout path, is ignored and listed the same way. A missing configured
+categorical field, an invalid `annotations/config.json`, a schema that is not
+the template's, or a users listing GitHub reports as truncated fails the
+complete Pull without changing annotation state. There is no limit on how many
+user files a repository holds or on their total size: changed files are cached
+a batch at a time, and the merged view is compiled by streaming the cache one
+file at a time. Cellucid checks configured fields before selecting the
+raw-cache scope or downloading user/moderation files, so that mismatch cannot
+mutate the raw-file cache.
+
+Requests are paced by the request budget GitHub reports; when GitHub names a
+wait, the progress notification says so. A request is never cut by a fixed
+time limit: only a connection on which nothing arrives at all is given up and
+asked again.
 
 ### What Publish does (technical)
 
-Publish always writes **your** user file:
+Publish always writes **your** user file, with every change of yours not
+published yet:
 
 - `annotations/users/ghid_<id>.json`
 
@@ -206,15 +256,41 @@ Publishing modes:
 
 - **Direct push** if GitHub reports you can push.
 - **Fork + Pull Request** if you cannot push but the repo allows forking.
+  You make the fork on GitHub (Cellucid never creates one) and install the
+  Cellucid GitHub App on your account with access to it (*All repositories*,
+  or *Only select repositories* with the fork selected).
 
 Cellucid chooses one route from current permissions before publishing. If that
 route fails, the failure is reported; a different route is not substituted.
+
+With **Fork + Pull Request**, you have one pull request per base branch, from
+the head branch `cellucid-annotations/ghid_<id>/…` in your fork. Every Publish
+resets that branch to the base branch's current tip and writes your whole user
+file on it (every dataset you annotate there, the open pull request's pending
+sections included), so the pull request's diff is your one file and an earlier
+squash-merged pull request never makes it conflict. An open pull request is
+reused. An agent's vote or suggestion, published alone, is added to the file
+the open pull request already proposes, so it never drops that pull request's
+other changes.
+
+If the connection drops while a write is under way, GitHub may or may not
+have it: Cellucid says `GitHub may already have applied this change;
+Cellucid pulls now to see.` and pulls at once, so what it knows of your file is
+GitHub's again before the next Publish. **Stop** on an agent's vote while it
+is written works the same way (see Agents below).
 
 Common publish pitfalls:
 
 - branch protection blocks direct pushes,
 - forking disabled blocks PR flow,
-- fork exists but is not accessible to the app token (install the app on your personal account).
+- no fork yet: Publish says `You have no fork of <owner>/<repo> yet: fork it on
+  GitHub, then Publish again.` under the sync line, with a **Fork on
+  GitHub** link,
+- a fork GitHub is still copying: `GitHub is still copying your fork …;
+  Publish again in a minute.`,
+- a fork the app cannot write to: `Cellucid cannot write to your fork …`, with
+  an **Install the app** link (install it on your account with access to the
+  fork).
 
 ---
 
@@ -239,8 +315,8 @@ Notes:
 
 - These fields are optional and are written to your GitHub user file only on Publish.
 - Annotation repo validation disallows email fields (privacy).
-- For eligible exact input with no surrounding whitespace and at most 240
-  Unicode code points, typing at least three Unicode code points in either
+- For eligible exact input with no surrounding whitespace (of any length),
+  typing at least three Unicode code points in either
   **Name** or **ORCID** starts a 250 ms-debounced direct browser request to
   `https://pub.orcid.org`, unless the exact query is served from the 60-second
   per-modal cache. An exact ORCID iD uses `/v3.0/{id}/person`; other text uses
@@ -311,8 +387,14 @@ This section builds a local categorical obs column for visualization:
   - **Consensus threshold**
   - **Min annotators**
 - Button: **Build derived column**
+- For each built column whose consensus changed since (a Pull, a vote): one
+  line `<column>: consensus changed since built (N categories)` with
+  **Rebuild**
 
-This does not publish anything; it is a local view helper.
+The key starts as `community_<column>` and the settings at the column's rule
+in the repository. This does not publish anything; it is a local view helper
+and a step of the history that records its outcomes, rule and source, and
+replays by name ({doc}`02_author_guide`, section 11).
 
 ---
 
@@ -344,13 +426,16 @@ Two different clears exist (they do different things):
   - risk: you can lose unpublished work
 
 - **Clear downloads**
-  - clears locally cached raw GitHub files (`annotations/users/*`, `annotations/moderation/merges.json`)
+  - clears what Pull keeps from GitHub for this scope: the open dataset's part
+    of each file read from `annotations/users/*` and
+    `annotations/moderation/merges.json`, the reasons files were left out, and
+    the record of the last completed Pull; the next Pull reads everything again
   - use this if Pull behavior seems wrong due to a corrupted cache
   - safe: does not remove your local votes/suggestions/comments
 
 The annotation “session” above is separate from Cellucid's portable
 `.cellucid-session` files. Community Annotation is intentionally excluded from
-the ordinary bundles **Save** and **Load** handle. GitHub tokens remain tab-scoped in
+the session files **Share…** and **Load…** handle. GitHub tokens remain tab-scoped in
 `sessionStorage` and expire after 8 hours; annotation intent and pulled-file caches retain their own
 dataset/repo/branch/user scope. See
 {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
@@ -430,8 +515,14 @@ Vote toggling:
 
 Duplicates:
 
-- cards with duplicate labels may be highlighted
-- votes can split across duplicates until an author merges them
+- suggestions with exactly the same label (compared after Unicode NFC
+  normalization; case, spacing and punctuation are not folded) are one
+  suggestion: the earliest proposal is shown, and each person's votes across
+  them count once (their majority; a tie is no vote)
+- adding a suggestion, or renaming one, to a label already shown in the
+  category is refused
+- labels that differ (`T cell` and `T-cell`) can split votes until an author
+  merges them
 
 Merged bundles (author moderation):
 
@@ -442,10 +533,15 @@ Merged bundles (author moderation):
 - a direct vote on the merged target wins; otherwise Cellucid delegates the
   majority of that user's votes across the merged members, with a tie producing
   no effective vote
+- an author merges a suggestion into another by dragging its card onto the
+  other, or from the keyboard with the card's **Merge…** button: choose the
+  target suggestion, add an optional note, and confirm
 
 Comments:
 
-- comment box accepts up to 500 characters
+- the annotation contract sets no length limit on comments, labels, evidence
+  or any other text; only the contributor's whole file is bounded
+  (1,000,000 UTF-8 bytes)
 - **Enter** submits a comment
 - **Shift+Enter** inserts a newline without submitting
 - unsent comments and suggestions, and open edits of your own comments,
@@ -457,6 +553,67 @@ Comments:
   merged, closed, or on another page).`
 
 
+
+---
+
+## Renamed columns and categories
+
+A column or category you renamed in this browser (the field toolbar, the
+legend, a history step) keeps its dataset name in the repository: votes,
+suggestions and the consensus are filed under the dataset's names, so other
+people see them, and a rename (or a history jump, a session or the autosave
+that brings one back) never moves anything in the repository. The legend and
+the voting dialog show your name; the dialog's header adds the repository's
+(`Alpha renamed (in the repository: cell_type • alpha)`). While a column is
+open for voting, it cannot be renamed or edited, whatever name it shows.
+
+---
+
+(community-annotation-agents)=
+## Agents and community annotation
+
+An agent (the chat bar, Claude or ChatGPT through the connector, a local app
+through `cellucid mcp`) and a Python or R notebook can read the community
+annotation of the dataset shown and vote, through the same session as the
+voting dialog. Connecting a repository and signing in to GitHub stay yours.
+
+**Reading** (`annotation_suggestions`, no permission needed): for each
+category of a column, its suggestions (label, ontology term, who suggested it
+as the dialog names them, votes, your own vote, and whether it is delegated
+from votes on merged suggestions) and its consensus (status, leading label,
+voters) under the repository's settings, plus when this browser last pulled.
+Columns and categories are named as you see them. A large column comes in
+pages, each whole (`next` starts the following one). What the agent reads
+goes to its provider, other people's GitHub logins and names included
+({ref}`privacy-agents`).
+
+**Voting** (`annotation_vote`) publishes that one vote and nothing else:
+
+- you are asked first (Publishing is **Ask** by default), whoever asks: the
+  question names the vote ("vote "Alpha cell" up for alpha"), the repository
+  it goes to (or that it opens a pull request when you cannot write to the
+  repository), and how many of your other changes stay unpublished;
+- only your file as GitHub holds it plus this vote is written: your drafts,
+  your other votes not yet published and, for an author, the repository
+  settings and merges are not published (they wait for your own **Publish**);
+- a vote that is already so (published and here) asks nothing and writes
+  nothing;
+- an agent's vote never opens a dialog (your profile's fields are optional;
+  the file is named by your GitHub login), waits for a Pull under way, and
+  pulls first when your file changed on GitHub since the last Pull;
+- a suggestion is named by its id or its label; suggestions with the same
+  label are one suggestion (the earliest proposal), so a label names one;
+- the agent is told where the vote went: the repository, a pull request (with
+  its link), or nowhere (it was already so).
+
+**Undo turn cannot take back a published vote.** The agent's line counts what
+it published ("1 vote published, not undoable"), the turn keeps the vote in
+its record in the history, and Undo turn says the vote stays published.
+Change it back by voting again.
+
+**Stop while a vote is written**: if GitHub may already have it, Cellucid
+pulls at once and the agent is told what the Pull shows: published, or kept
+in this browser and not published. Your next Publish works either way.
 
 ---
 
@@ -487,16 +644,29 @@ This section is organized by “what you’re trying to do”. Always start by c
 - Cause: you have no push permission and the repo has `allow_forking` disabled.
 - Fix: ask the author to enable forking or grant write access.
 
-#### Fork + PR publish fails (common hidden cause)
+#### Fork + PR publish fails
 
-- Cause: your fork is not accessible to the GitHub App token (app not installed on your personal account).
-- Fix: install the Cellucid GitHub App on your personal account (ideally “all repositories”), then retry.
+- "You have no fork of …": fork the repository on GitHub (the **Fork on GitHub** link), then Publish again.
+- "Cellucid cannot write to your fork …": the app is not installed on your account with access to the fork. Install it (**Install the app**; *All repositories*, or *Only select repositories* with the fork selected), then Publish again.
+- "GitHub is still copying your fork …": Publish again in a minute.
 
-#### “Possible conflict” on Publish
+#### “Remote user file changed since your last Pull” on Publish
 
-- Cause: your remote user file appears newer than your last sync (common if you published from another device).
-- Recommended fix: Pull latest, confirm your intended state, then Publish again.
-- If you choose “Overwrite remote”: your local intent wins and remote is replaced.
+- Cause: your user file on GitHub is newer than the one your last Pull read
+  (common if you published from another device).
+- Fix: Pull latest, confirm your intended state, then Publish again. There is
+  no option to overwrite: Cellucid never replaces a remote file it has not
+  read.
+
+#### “Your published file … is not a valid annotation file”
+
+- Cause: your own file on GitHub fails the annotation contract (for example a
+  file written for the earlier, version-2 contract). Pull leaves it out, and
+  Publish will not overwrite it.
+- Fix: fix or remove the file on GitHub (or ask an author to), then Pull and
+  Publish again.
+- An agent's vote does this itself: it pulls, then publishes the vote on the
+  file as it is now.
 
 #### Pull succeeds but I don’t see new votes
 
@@ -522,17 +692,33 @@ Checklist:
 - If installed with “Only select repositories”, add the repo explicitly.
 - In the GitHub sync modal: use **Reload**.
 
-#### Pull fails on an invalid or oversized active file
+#### Pull warns that files were left out
 
-- Cause: one or more active annotation documents are invalid JSON, violate
-  their schema, exceed 1,000,000 decoded UTF-8 bytes, or make the Pull exceed
-  its active-user-file count or aggregate-user-file byte limit.
-- Result: the whole Pull fails; Cellucid does not expose a partial merged view
-  or replace the last valid downloaded cache.
+- Cause: one or more user files or the merges file are invalid JSON, violate
+  their schema, exceed 1,000,000 UTF-8 bytes, or were written for the earlier
+  contract (version 2); or paths under `annotations/` are not annotation files.
+- Result: the Pull completes without those files; the warning says how many
+  were left out and its details list each file with its reason. A file is not
+  downloaded again until it changes.
 - Fix:
   - run the template validation script in the annotation repo (`python scripts/validate_user_files.py`)
-  - fix or revert the offending files
+  - fix or remove the offending files
   - communicate with the contributor if needed
+
+#### Pull fails: a schema “is not the schema this Cellucid reads”
+
+- Cause: `annotations/schema.json`, `annotations/config.schema.json` or
+  `annotations/moderation/merges.schema.json` differs from the template's
+  file (an older version, an edit, or other line endings).
+- Fix: copy the named file again, unchanged, from
+  [theislab/cellucid-annotation](https://github.com/theislab/cellucid-annotation)
+  (with `.gitattributes`), commit it, and Pull again.
+
+#### Pull fails: GitHub truncated the listing of `annotations/users/`
+
+- Cause: GitHub lists at most 100,000 entries or 7 MB of a tree
+  ([GitHub: get a tree](https://docs.github.com/en/rest/git/trees#get-a-tree)).
+- Result: Cellucid stops rather than compiling the part it saw.
 
 #### Pull/Publish fails due to storage restrictions
 
@@ -563,3 +749,13 @@ If you self-host the GitHub auth worker:
 
 - CORS failures usually mean your site origin is not in `ALLOWED_ORIGINS`.
 - OAuth redirect failures usually mean the GitHub App callback URL does not match `https://<worker-origin>/auth/callback`.
+- Sign-in that always fails after GitHub's authorization page usually means
+  the GitHub App does not expire user tokens: keep **Expire user
+  authorization tokens** on; the Worker refuses a token that never expires.
+- “… runs an older version (contract N) than this Cellucid (contract 3); its
+  owner must redeploy the Worker.”: deploy the Worker from the same Cellucid
+  source as the page. A newer Worker asks you to reload Cellucid instead.
+- **Add repo** opening the wrong GitHub App: the app's slug is compiled into
+  the connection wizard (`GITHUB_APP_INSTALL_URL` in
+  `assets/js/app/ui/modules/community-annotation/github-connection-flow.js`);
+  set it to your app.

@@ -5,8 +5,728 @@ All notable changes to Cellucid will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.9.6]
+## [0.9.7]
 <!-- CELLUCID_VERSION -->
+
+Version 0.9.7 is a patch release on 0.9.6. Files prepared and dataset
+catalogs written by 0.9.6 are read as before. **Session files are format 4**:
+a session file saved by 0.9.6 or earlier (format 3 or before) is refused,
+saying which format it is. The viewer protocol is schema 5: use the Python and
+R packages of this release with the web app of this release. **Community
+annotation repositories take the version-3 schemas** of
+`cellucid-annotation`, and its Worker is contract 3 (a self-hosted Worker must
+be redeployed). The main changes are:
+
+### Highlights
+
+- **History v2.** Every change a person, an agent or a notebook makes is one
+  step of one history, shown as a branch graph in the new **State** section:
+  branches and trackers, recording on and off, groups and squashed steps,
+  notes and bookmarks, search, Recently deleted, comparing and replaying a
+  history on another dataset.
+- **Share and load whole analyses.** **State › Session › Share…** writes the
+  history, the current state only or the steps only, with exactly the parts
+  chosen; **Load…** adds a file's trackers beside yours and can be undone.
+  Python and R read every file the web app writes.
+- **Save AnnData with this state.** The History **⋯** menu writes a new
+  Cellucid-ready AnnData `.zarr.zip` of the open dataset with your labels,
+  fields, highlights and gene sets written in, by the same rules as applying
+  a session in Python and R.
+- **Agents.** A chat bar with your own Anthropic or OpenAI key, a connector
+  for Claude and ChatGPT, and a local MCP server for agent apps on your
+  computer (`cellucid mcp` in Python, `cellucid_mcp()` in R). All three use the
+  same tools and permissions, show confirm cards, record their steps as
+  turns, and let you take a turn back with one Undo turn.
+- **What agents are sent stays yours.** A one-time notice says what an agent
+  reads. The per-dataset switch **Agents see names and summaries only** keeps
+  single-cell values, extremes and pictures out of what any agent is sent.
+  Text written by others reaches an agent marked as data, never as
+  instructions.
+- **Every action, from Python and R.** The web app's action catalogue (177
+  actions) is shipped with both packages as one generated function or method
+  per action, each one step of the viewer's history.
+
+### Web app
+
+#### The history
+
+- **One history of every change.** Every change is a step: colouring,
+  filters, labels, highlights, views, the camera (one step per gesture),
+  sidebar settings, panels, windows and theme, analyses (their view, plot,
+  size and window), figure exports, camera-path playback and **Cells to
+  open**. Going back shows labels, fields and analysis results as they were,
+  without computing anything again. **Undo** / **Redo**, `Ctrl/⌘+Z` and
+  `Ctrl/⌘+Shift+Z` (`Ctrl+Y` off a Mac) also work with a slider or checkbox
+  focused. Text fields keep their own undo. Each undo or redo is announced to
+  screen readers.
+- **The branch graph.** Lanes, fork stubs, agent and notebook turns as one
+  row, groups as one node, folded runs ("Camera ×6"), a paused marker, and ★
+  bookmark, ✎ note and ⚠ stale marks. A click selects a row, a double-click
+  (or a double tap) shows its state, and **›** opens its details (action,
+  parameters, the parts of the state it changed, who took it). Right-click
+  opens the row menu at the pointer. Shift+click and Shift+↑/↓ select a range,
+  and `Ctrl/⌘+G` groups it. Steps are numbered in one way everywhere (the
+  opening is not counted: "4 steps · 1 undone"). The graph draws only the rows
+  in view: with 10,000 steps it opens in about 30 ms, and a frame takes about
+  8 ms while scrolling.
+- **Branches and trackers.** Acting after an undo starts a branch; the undone
+  steps stay on theirs. The branch picker shows the branches, and **Branch
+  map…** shows every branch as a lane graph and a table: find, archive or
+  delete several at once. A branch can be renamed, archived, locked or made
+  main, compared with another side by side as kept views, or checked with
+  **Verify** (replay it and compare every part of the state). **Start another
+  tracker…** keeps an independent history of the same dataset. A step's
+  **Compare…** lists what differs between it and another step, part by part.
+- **Recording on and off.** The **Recording** switch pauses the history: your
+  changes still apply, and resuming adds them as one squashed step. Going back
+  while paused asks **Keep / Discard / Cancel** (History settings can turn the
+  question off). An agent asks before pausing ("Pausing the history"). What
+  changed while paused is kept in this browser, so **Continue** after a closed
+  tab or a crash brings it back.
+- **Groups and squash.** **Group** puts a named folder over consecutive steps
+  of one branch ("QC", "Clustering"), with notes of its own; the row and
+  selection menus offer **Add to group "X"**. **Merge into one step…**
+  (squash) replaces consecutive steps with one step holding their net change
+  (refused across a fork), and its question offers **Group instead**.
+  **Clear history, keep the state…** starts afresh from what is shown. A
+  squashed step says why it was made and who acted; the notes and bookmarks
+  of the steps merged move to it.
+- **Notes, bookmarks and search.** Steps, branches, groups and turns take
+  notes (a small Markdown subset, shown as text; an agent's turn gets a
+  one-line summary), and a step takes a bookmark. **Search** (`/`) finds
+  steps, notes and bookmarks; **Filter** narrows them by who acted (an agent,
+  Python, R, a replay), by kind, by the part of the state changed, by day, or
+  to steps with a note, bookmarked, or stale or flagged. A group's row says
+  where the step shown is among its steps ("at 4 of 7"), and a step's details
+  offer **Show this step's view** (its cameras, even while camera moves are
+  not recorded; the tour flies to them too).
+- **Recently deleted.** Deleting a step re-applies the later steps without it;
+  a step that needed it is kept and flagged with the reason. Deleted steps,
+  branches, trackers, squashes and loads go to **Recently deleted…**, where
+  each can be restored. Every history edit shows a notice with **Undo**, and
+  each new notice replaces the last.
+- **Replay on another dataset.** **Replay a saved history…** applies a saved
+  history's steps to the dataset shown, finding fields, categories and genes
+  by name. The **Replay report** says what became of each step (applied,
+  unchanged, unmatched, skipped or stopped) and what was missing, and opens by
+  itself when something did not apply. A field, category or gene not found
+  offers **Use instead ▾**, and **Replay again with these names** replays the
+  same steps from the same source in a new tracker that keeps the names
+  chosen. Genes and a category highlight's category are mapped too.
+- **History settings** (⚙): **Camera moves**, **Panels, windows and theme**,
+  **Record history for new datasets**, **Ask before going back while paused**,
+  **Your name in shared histories**, **Autosave in this browser** and
+  **Pictures of the steps chosen**. Each is kept in this browser.
+- **Kept in this browser as you work.** Steps are written to IndexedDB
+  `cellucid-history` as they are made, and each write holds only what changed.
+  Reopening a dataset offers **Continue where you left off?** (Continue /
+  Start fresh). Two tabs never mix their steps: a saved state continued in
+  another tab opens as a copy there. When storage fills, autosave pauses and
+  says so; removing saved states anywhere resumes it. The highlight drafts
+  0.9.6 kept in this browser are gone: saved states replace them, and their
+  IndexedDB database `cellucid-highlight-drafts` is deleted when the page
+  starts.
+- **Memory warnings, not walls.** Once the history holds more than the device
+  has room for, the status line shows `⚠ 1.2 GB` and says once which parts
+  take the most; the **History memory** dialog lists every part, largest
+  first, with **Show** and **Recently deleted…**.
+- **Tour, pseudocode, methods and report.** The **⋯** menu plays the history
+  as a guided tour, copies it as pseudocode or a methods paragraph, and prints
+  a report. Each of these reads any branch and names groups, squashed steps,
+  bookmarks, notes and the tracker's abstract. The report draws its pictures
+  from the live view when it is printed; no step stores a picture. **Show the
+  state at…** shows the last step of the branch shown at or before a time.
+  Under reduced motion the tour flies nowhere: each step is shown at once.
+- **Run again only where it brings a result up to date.** A stale step's
+  details offer **Run again** only for an analysis (`analysis.run`) and a
+  highlight of a category or a range (`highlight.category`,
+  `highlight.range`), the actions the catalogue marks `rerun`. A category or
+  range group run again, or asked for again on its page, is updated in place
+  with the cells the view shows now ("Updated the cells of …"), not added a
+  second time; the same cells make no step, and no visible cell is refused
+  with the group kept as it was. Other stale steps (a copied field, a kept
+  view, a keyframe) no longer offer it: doing them again added a second one.
+- **The selection tool travels with sessions** but is never a step: undo and
+  jumps leave it alone. A tool this page lacks is left out, saying so.
+- **Keep N cells of a category.** Click a category's count in the legend and
+  type a number to keep that many of its cells, a seeded sample (`all` shows
+  every cell again). This is a filter like any other: undoable and saved.
+
+#### Sessions and sharing
+
+- **The session file is the history (format 4).** **State › Session ›
+  Share…** writes **History** (the trackers and branches chosen; a branch
+  brings the steps it starts from), **Current state** (one step, "Shared
+  state"; notes, conversations, who acted and times left out by default) or
+  **Steps only** (a replay plan with no cell-level values, which opens as a
+  replay). Include notes and bookmarks, conversations and Recently deleted
+  only when chosen. Times can be exact, rounded to the day or left out, and
+  the dataset as its source or its name only. Analysis results are kept or
+  left out (left out, their settings are kept, and each analysis shown is
+  run again as a step once the file opens, saying why when its inputs differ
+  from the shared result's).
+  **What's inside** lists exactly what the file holds. The file records what
+  wrote it (the Cellucid version, the catalogue digest and each action's
+  parameters version). A history recorded with older parameters keeps
+  replaying.
+- **Load… adds beside.** **State › Session › Load…** lists the saved states
+  of this browser and opens a session file. A loaded file's trackers are
+  added beside yours (renamed apart on a clash) and its active tracker is
+  shown; nothing of yours is replaced. The notice after a load has **Undo**.
+  A file is checked whole before anything changes. A session saved with
+  Autoplay on plays its camera path once loaded.
+- **What a share leaves out is left out of its values too.** Without exact
+  times, a user field's creation time, an analysis result's computing time
+  and a conversation's own times are rounded or left out as the steps' are;
+  without conversations, no turn names a conversation or message.
+- **Session files scale.** A 100,000-step history saves and opens. Shared
+  sub-values are stored once, each chunk is compressed only where that pays,
+  and arrays that only step parameters name are read after the step shown is
+  on screen.
+- **Starting views** of the five sample datasets are format-4 files (one
+  tracker of one root).
+
+#### My datasets
+
+- **My datasets** (Session › Open data): the datasets opened in this browser,
+  each reopened with one click with the cells it was last open with. Samples,
+  links, repository datasets, Cellucid servers and files and folders are
+  listed; where the browser keeps no handle, you choose the file again. The
+  menu shows the five most recent. **All…** shows where each comes from, its
+  storage and saved states, with **Continue** and **Forget**. Kept only in
+  this browser (IndexedDB `cellucid-library`): a link in its public form,
+  never its credentials, a file's path or its content. The startup's default
+  sample and a notebook's dataset are not listed. **Forget** removes a
+  dataset's saved states only when ticked. The Stored dialog shows My
+  datasets as one row and lists the saved states.
+- **Export… and Import…** write and read a `.cellucid-library` file with the
+  datasets and saved states chosen, for Cellucid in another browser.
+  Importing adds beside what this browser keeps, everything or nothing. A
+  library file dropped on the page or chosen in **Open… › File…** is
+  imported; a session file there is refused, saying it goes to **State ›
+  Session › Load…**.
+
+#### Agents
+
+- **The chat bar.** Bring your own Anthropic or OpenAI key, kept for the tab,
+  or in this browser with **Remember**. Requests go straight from the browser
+  to the provider. Choose the model and effort from what the provider offers.
+  The chat bar streams answers, shows expandable tool rows, and has Edit, Try
+  again, Stop, Copy and Export. It counts tokens per turn and per chat
+  against a budget, offers custom instructions and a `/` shortcut, and has a
+  **Sent** view of what went to the provider. Conversations are kept with the
+  history and, when chosen, in shared files. Opening another dataset or
+  loading a session mid-turn stops the turn and keeps it with its dataset,
+  unless the agent opened the dataset itself. The chat bar fails on its own,
+  without stopping anything else.
+- **Selection chip and choices.** A chip ("Selection: N cells ×") attaches
+  the current highlight's page, group names and counts to each message, never
+  the cells. An agent can offer 2 to 5 choices as buttons; a click sends the
+  choice and keeps your draft.
+- **Connect Claude or ChatGPT.** The **Agents** section gives the connector
+  address, exactly `https://mcp.cellucid.com` (the Cellucid relay answers MCP
+  at its root), and a box for a code typed on another device. An approval
+  dialog pairs the tab, and **Manage…** lists, removes and forgets
+  connections. Calls go to the tab focused last and survive a dropped link or
+  a relay restart. A picture card (`ui://cellucid/view`) shows the view and
+  the step it was taken after, with Refresh and Open in Cellucid. Pictures are
+  sent as images. An agent can list datasets and open one (`datasets.list`,
+  `dataset.open`): it is asked before a whole-file download, which names its
+  size; `datasets.list` gives each of My datasets' size and what this browser
+  keeps of it. An agent, Python or R can delete a saved state of this browser
+  by its id (`history.saved.delete`, asked as deleting what was saved); the
+  Load dialog's Delete goes through the same action.
+- **Agents can do what a person can outside the history.** Play and stop the
+  guided tour (`history.tour.start`, `history.tour.stop`); make the printable
+  report as an `.html` file or as text (`history.report`); export the figure
+  (`figure.export`), the highlighted cells as CSV or `.h5ad`
+  (`cells.export`) and a field as CSV (`field.export`); list and remove what
+  this browser keeps (`stored.list`, `stored.remove`) and forget a dataset
+  of My datasets (`my-datasets.forget`); give Share's public link
+  (`dataset.share-link`); read community annotation suggestions, vote and
+  suggest a label (`annotation.suggestions`, `annotation.vote`,
+  `annotation.suggest`, once the person has connected the repository and
+  signed in). These are of a new effect, `outside`, with
+  `history.share`, `history.save`, `history.saved.delete` and
+  `history.anndata.save`: they record no step, Undo does not take them back,
+  and each is asked first as writing a file, deleting what was saved or
+  publishing. With **names and summaries only** on, an export still runs:
+  the file goes to the person, and the agent is told its name, size and
+  counts.
+- **Permissions.** For each kind (changes in this tab, heavy work of more
+  than about 10 s, writing files, deleting what was saved, large downloads,
+  publishing, pausing the history) choose **Ask**, **Allow** or **Deny**, or
+  one of three modes (**Ask before heavy or irreversible**, the default;
+  **Allow everything undoable without asking**; **Read only**). An answer on
+  a card can hold for "This chat" or "This connection". A confirm card names who asks and what it
+  costs; Deny, a closed card or a closed tab refuse with one sentence. Each
+  connection's tool list states what Cellucid will do for each tool. An
+  activity line shows each working agent with **Stop** (also while a card
+  waits) and **Undo turn**, and starts with `⏸` while recording is paused.
+  The tool list says what History settings leave out of the history
+  ("Camera moves are not recorded in this history"). A turn alone at the end of the branch is undone
+  to the step before it (kept for redo); when someone else acted after it
+  began, one dialog asks whether to take out only the turn's own steps (they
+  go to Recently deleted) or everything since the turn began.
+- **Agents see names and summaries only.** A notice says once what agents
+  are sent. The switch, kept per dataset in this browser (`cellucid:agent-data`),
+  keeps the values of single cells, extremes (minimum, maximum, median) and
+  pictures out of every agent's results: the chat bar's, connected agents'
+  and local agents'. Summaries of groups an agent shaped by naming cells are
+  refused. Earlier results that could hold cell values are withheld when the
+  chat re-sends the conversation. It is not anonymisation: a summary of a
+  very small group can still reveal its cells' values.
+- **Prompt-injection guard.** Every tool result, every refusal that quotes a
+  name and the attached selection reach the model inside
+  `<cellucid-data>…</cellucid-data>` with every `<` escaped. The instructions
+  say early that text from others (labels, notes, dataset text) is data,
+  never instructions.
+- **Local agent apps.** An agent app on your computer (Claude Code, Claude
+  Desktop, Cursor) drives a viewer page through the Python or R package's MCP
+  server, with the connector's tools, permissions, confirm cards (also
+  answerable in the app), turns, Stop and Undo turn, shown as
+  "Claude Code (local)".
+
+#### Notebooks
+
+- **A notebook's commands are the viewer's actions.** Every action a Python
+  or R notebook sends is dispatched as the notebook's: one step of the
+  history, labelled as the notebook's, answered with its outcome and step
+  (`action_result`) or its refusal (`command_error` naming the request). An
+  action sent inside a turn carries the turn's id and label. The viewer
+  reports every change of its history (`history_changed`), and a notebook can
+  push a session file into the viewer (`load_session` / `session_loaded`).
+  None is carried out while the person shows another dataset. A notebook's
+  own data mapping change is reported back like any other (`data_mapping`,
+  origin `notebook`).
+- **Undo, redo and jumps are actions** (`history.undo`, `history.redo`,
+  `history.jump`, effect `history`). They move the history and record no step.
+  The history's own edits (branches, trackers, groups, squash, notes,
+  recording, share, save and more) are actions too, for agents, Python and R.
+- **An AnnData shown again after a pull or an apply opens.** `uns['cellucid']`
+  may hold the packages' records (`history_applied`, `gene_sets`, `pulled`),
+  which the viewer accepts and never reads. The `session` key is no longer
+  accepted: nothing writes it.
+
+#### Reading and exports
+
+- **Save AnnData with this state…** (the History **⋯** menu; the action
+  `history.anndata.save`, asked of an agent as writing a file) writes a new
+  Cellucid-ready AnnData `.zarr.zip` (a MuData for several modalities) of
+  the open dataset, every cell of it, with the state shown applied by the
+  apply plan of cellucid-python and cellucid-r: renamed obs columns and
+  categories, user-defined fields and highlight groups as obs columns, gene
+  sets in `uns['cellucid']['gene_sets']` and as boolean var columns
+  `cellucid_gene_set__<name>`, and a record in
+  `uns['cellucid']['history_applied']` (package `web`). Cells a subsample
+  did not open are missing or `<NA>`. It never writes over the dataset's own
+  file: a save dialog where the browser has one, else a download. Cancel
+  aborts the file chosen (no partial file) and removes the spool. What was
+  left out is listed in the notification's details. A name a file cannot
+  hold, a matrix still streaming in and the dataset's own file are refused
+  in one sentence. The writer (`data/anndata/write/`, behind
+  `BaseAnnDataAdapter.writeAnnDataCopy`) keeps the data as the source stores
+  it, writes every expression matrix gene-major, and checks every name
+  before a byte is written; it never writes, renames or replaces
+  `obs['cellucid_original_position']`.
+- **`uns` tables** of older AnnData files read correctly, and names in either
+  Unicode form are found. Figure-export ZIP files take ZIP64 where they need
+  it. Data kept in this browser by an earlier version is removed once, since
+  its layout changed.
+- **PNG export** works under the site's content security policy (`blob:`
+  allowed).
+
+#### Community annotation
+
+- **One broken file no longer stops a Pull.** A user file or merges file
+  that is not valid is left out of the consensus on its own, kept with its
+  reason by blob id (not downloaded again until it changes), and reported in
+  one warning with each file and its reason under its details; your own file
+  is named first, and Publish will not overwrite it. For the open dataset only
+  the profile and that dataset's section of a user file are read, so a broken
+  section of another dataset no longer fails the file. Paths under
+  `annotations/users/` that are not `ghid_<id>.json`, and case variants such
+  as `annotations/Users/`, are ignored and listed.
+- **Pull reads one commit and only what changed.** The branch's commit and
+  the listings of `annotations/` come in one request; everything after is read
+  by Git object id from that commit, so a Pull never mixes two commits. A Pull
+  where nothing under `annotations/` changed takes one or two requests (was
+  about seven); changed files are read many per request, in batches packed by
+  their sizes (a first Pull of 5,000 files took 5,001 requests). Each batch is
+  kept as it arrives, so an interrupted Pull resumes where it stopped (before,
+  a repository under 32 MB cached nothing until the end). The file cache keeps
+  each file's dataset view by blob id in IndexedDB; the index of file SHAs in
+  `localStorage` is gone, and the session keeps only the SHAs of the files it
+  publishes onto.
+- **No fixed timeouts.** Every request to the Worker, GitHub's sign-in and
+  repository lists, CAP and ORCID goes through the app's one transport: it is
+  given up only when nothing arrives for the link's stall timeout, retried
+  when that is transient, and paced by GitHub's `X-RateLimit-*` and
+  `Retry-After` (a wait GitHub names is shown in the progress notification).
+  A 1 MB publish on a slow uplink, or a steady 21-second download, no longer
+  fails at 15 or 20 seconds.
+- **Equal labels are one suggestion.** Suggestions with the same label in a
+  category (compared after Unicode NFC; nothing else folded) count as one: the
+  earliest proposal is shown, and each person's votes across them count once
+  (their majority; a tie is no vote). Two people proposing "T cell" were
+  reported as disputed, and a 4-to-3 majority split over two "T cell" cards
+  could elect the minority label. Adding or renaming a suggestion to a label
+  already shown is refused. A bucket nobody voted on is always pending, also
+  with `minAnnotators: 0`. Consensus with moderation merges is computed once
+  per change (it re-validated every merge on every call: 2.9 s for 5,000 users
+  and 2,000 merges), and what Cellucid writes or exports is ordered by code
+  units, the same in every browser.
+- **Fork publishing no longer loses or conflicts annotations.** A
+  contributor without write access has one pull request per base branch
+  (head branch `cellucid-annotations/ghid_<id>/…` in their fork), carrying
+  their whole file: every dataset they publish goes into it. Each Publish
+  starts from the open pull request's file, resets the head branch to the
+  base branch's current tip and writes the file on it, so the diff is that
+  one file and an earlier squash-merged pull request never makes it conflict
+  (before, each dataset had its own branch and pull request, and a reused
+  branch stayed at an old tip). A direct publish that races another device
+  creating the same file is reported as a conflict.
+- **Cellucid no longer creates forks; the GitHub App asks for no
+  Administration permission.** Creating a fork through the API needs
+  Administration write, so the Worker's fork-creation route and the client's
+  creation and five-minute readiness wait are removed. A contributor without
+  write access forks the repository on GitHub; Cellucid finds the fork (its
+  own name, else the repository's forks). Without one, Publish stops with
+  `You have no fork of <owner>/<repo> yet: fork it on GitHub, then Publish
+  again.` and a **Fork on GitHub** link to
+  `https://github.com/<owner>/<repo>/fork`; a fork GitHub is still copying says `Publish again in a
+  minute` (no fixed wait); a fork the app cannot write to (not installed on
+  the contributor's account with access to it) says so with an **Install the
+  app** link instead of disconnecting the repository as a lost access. App
+  permissions: Contents read/write, Pull requests read/write, Metadata read.
+- **Repository contract version 3** (`cellucid-annotation` main). User files
+  and the merges file are version 3 (`user-v3`, `merges-v3`; config stays
+  `config-v1`). Every suggestion id names its owner, `ghid_<id>_<rest>`
+  (Cellucid writes `ghid_<id>_<random UUID>`), and must start with its
+  `proposedBy`, so no contributor can write an id that collides with or
+  claims another's; deletion markers name only the owner's own suggestions.
+  No text has a length limit any more (labels were 120 characters, evidence
+  2,000, comments 500, …): the only bound is the file, 1,000,000 UTF-8 bytes,
+  the most GitHub's Contents API serves as JSON. Integers are at most
+  9,007,199,254,740,991 (Min annotators was clamped to 50 in the panel). One
+  whitespace class (JavaScript's `\s` together with Python's
+  `str.isspace()`) is used by the schemas, the validator and the app, and
+  JSON nesting is bounded at 512 levels in both. Cellucid accepts a repository
+  only when its three schema files are byte for byte the template's, checked
+  by Git blob id without downloading them; a schema that differs is named
+  with how to copy it. Version-2 repositories are refused with that message;
+  a version-2 user file is left out of the consensus with its reason (there
+  is no migration). Local annotation state saved by an earlier Cellucid is
+  reported, not read: clear it and Pull (published annotations stay on
+  GitHub).
+- **The template repository** (`cellucid-annotation`): authors copy
+  `annotations/`, `scripts/validate_user_files.py`,
+  `.github/workflows/validate.yml` and `.gitattributes`. The shipped
+  `validate.yml` runs only the validator, with read-only permissions (it ran
+  the template's own tests first, which stopped it in every repository set up
+  from the instructions); the template's tests run from a separate
+  `tests.yml`. The validator also checks the schemas byte for byte, rejects
+  stray files under `annotations/users/` and case variants, and reports huge
+  integers and deep nesting as errors instead of crashing. One shared
+  385-case accept/reject corpus holds the validator and the app to the same
+  verdict.
+- **Worker contract 3.** New routes `/graphql/snapshot` and `/graphql/blobs`
+  (GraphQL queries the Worker writes itself), the users folder read by tree
+  id (the recursive tree route, cut at 7.5 MB, is gone), and a forced move of
+  the contributor's own `cellucid-annotations/ghid_<id>/` branch in their own
+  fork. Every write is bound to the signed-in user (their own user file, their
+  own branches, pull requests from them); a refused write is `403`
+  `not-applied`. Installations and repositories are listed one GitHub page
+  per request with no 10,000 cap. GitHub's `ETag`, `Retry-After` and
+  `X-RateLimit-*` headers are relayed, reads accept `If-None-Match`, and
+  preflights are cached for 7200 seconds. A request has no total deadline: it
+  is stopped only after 13 seconds without progress. A failed token exchange
+  shows GitHub's reason (GitHub answers it under HTTP 200), and the redirect
+  after installing the app ends on a short "installed" page instead of
+  `400 Missing state`. Writes are checked with native JSON parsing, so a
+  1 MB publish stays within the Workers Free plan's CPU. An older Worker is
+  reported as one its owner must redeploy, a newer one asks for a reload, and
+  an unreachable one is no longer called incompatible.
+- **The Worker moved to `https://api.cellucid.com`** (a Cloudflare custom
+  domain), so a WAF rate-limiting rule can cover it. The GitHub App's callback
+  is `https://api.cellucid.com/auth/callback`.
+- ORCID: one untidy record no longer empties a search, and the search text
+  has no length limit. External links (installing the GitHub App, its
+  settings) open reliably.
+- **An agent's vote publishes only itself.** `annotation.vote` writes the
+  person's file as published now plus that one vote (in a pull request when
+  they cannot write to the repository, added to the file that pull request
+  already proposes); their unpublished drafts and an author's staged settings
+  and merges stay in the browser. A vote that changes nothing publishes
+  nothing, the question names the vote, where it goes and what stays
+  unpublished, and an agent's call never opens a dialog. New
+  `annotation.suggest` proposes a label the same way (with the person's
+  upvote; a label already suggested is refused with its id). Python's and R's
+  `annotation_vote` and `annotation_suggest` ask the person first like an
+  agent. Every confirmed action states its parameters in the card and in the
+  connector's question. Stop or a dropped connection during the write says
+  the vote may already be published, and Cellucid pulls at once.
+- **"N changes not published · Publish"** in the panel counts the person's
+  unpublished votes, suggestions, comments, deletions, profile changes and an
+  author's settings and merges, item by item against the file as last pulled
+  or published.
+- **A local rename is a display name.** Votes, suggestions, the legend, the
+  voting dialog, the agent's read and vote and the consensus column key on the
+  dataset's own field and category names, so a category renamed in this tab no
+  longer hides others' suggestions or publishes under the new name, and the
+  annotated field stays locked through history jumps and session loads.
+- **A second tab on the same dataset** pauses annotation there ("Open in
+  another tab — annotation paused here", **Use here**), and the dataset
+  controls keep working. A sign-in GitHub refuses (expired) signs out and
+  keeps the repository and the unpublished work.
+- **The consensus column** (`field.consensus`) records the source field's
+  category → label mapping, the rule (threshold, minimum annotators) and
+  where the votes came from (repository, commit, pull time, voters), and is
+  rebuilt from them on replay; it defaults to the field's repository rule and
+  `community_<field>`. Categories agreeing on one label (the NFC rule
+  suggestions are bundled by) are one category of it. History steps that
+  carry one code per cell replay only on the dataset they were recorded on.
+- Names other people wrote (labels, field and category names) stay marked as
+  data in every refusal an agent reads. The voting dialog's case-folding
+  "Duplicate label" marker is gone: equal labels are one suggestion, and
+  labels that differ are merged by an author. The cross-tab lock has no text
+  caps, and the per-scope SHA indexes earlier versions kept in
+  `localStorage` are deleted once when community annotation starts.
+
+#### Fixes
+
+- Enter in the agent chat takes the message at once, with Stop on offer; it used to wait for the model list first, with the message still in the input.
+- A guided tour stopped before the panel draws again returns to the step that was shown.
+- `analysis.run` right after setting an analysis's options waits for the groups or categories still being read, and runs. It was refused with "Reading the groups…", the Run row's progress line, when the read had not ended. It is refused only with a reason a read cannot change.
+- On a slow GPU, a camera settling between pointer moves no longer redraws every pane.
+- A number key pressed while a view is still switching embedding is done next, not dropped; with no embedding of that dimension it says so at once.
+- In Safari, on a link where the stylesheet arrives after the page, Cellucid
+  no longer starts before its styles are in (the analysis tools could fail to
+  load there, "The analysis tools could not load"): the page is read past its
+  stylesheet only once the stylesheet is in, in every browser.
+- A stylesheet that does not load is said on the startup failure screen
+  ("Cellucid could not load", Try again) instead of starting the app without
+  its styles.
+- When an agent's turn ends, its last reply is in the chat the moment Send
+  comes back; it was drawn a frame later.
+- A tab closed while the history was being written could, in Firefox, leave
+  a saved state with a part of that write: it then could not be continued
+  ("This saved state is missing messages of a conversation; it cannot be
+  opened"). A write is now kept whole or not at all in every browser, and one
+  handed to the browser is finished even when the tab closes right after.
+- The Autosave tip and the documentation say what a closed tab can lose: the
+  change of its last moment, a fraction of a second, and nothing written
+  before it.
+- Downloading the web app for a local viewer accepts a JavaScript file a
+  host serves as `text/javascript` (RFC 9239) where the asset list says
+  `application/javascript`, in Python and R alike; a file of another kind (an
+  HTML error page) is still refused.
+- Undo after deleting categories in place, and undo after colouring, keeping
+  a view and renaming a category, work again.
+- Reading an analysis's options, result or estimate no longer changes the
+  analysis, so undo returns exactly to where it started. An analysis action on
+  a hidden panel is refused with a sentence saying it is not shown.
+- Analysis windows' places, sizes and folding are layout, as every other
+  panel's; opening or copying a window waits for its first update.
+- Deleting the last step of a branch no longer breaks the history.
+- Redo pressed right after Undo (`Ctrl/⌘+Z`, then `Ctrl/⌘+Shift+Z`) is no
+  longer dropped while the undo is still being shown: whether there is
+  anything to undo or redo is asked of the history, not of the panel.
+- **Replay again** no longer starts on top of the first replay, and a
+  replay's mapping now maps genes and a category highlight's category.
+- The State panel no longer rebuilds a step's details on a redraw that
+  changed nothing, so a note being written is never lost.
+- A session's cell sets are read in the three encodings Cellucid writes;
+  the reader of category-relative sets that nothing wrote is removed (web,
+  Python and R).
+- Switching to another tab no longer breaks what follows. A hidden page lets go
+  of the fields no view shows, and the next colouring, undo, jump or Verify
+  failed with `Observation category field 4 requires exact dataset-length
+  codes` (or the same for a continuous field). A field let go of is read again
+  when used; a category filtered by cell count now stays in memory, as every
+  other filter does.
+- A field you made (a duplicate, a pushed column) is no longer lost when you
+  switch tabs. It exists nowhere else, so it stays in memory.
+- **Verify** gives no verdict when a step could not run because its field could
+  not be read: it says so in one sentence and puts back what you were looking
+  at, where it could stop on the scratch tracker and report the wrong thing.
+- A history operation that fails on an internal check says that a problem inside
+  Cellucid stopped it, with the check's text under Details, and no longer shows
+  a stack trace.
+- A hosted dataset redeployed while open keeps working. A redeployed site gives
+  every file new validators although its bytes are the same, and every open tab
+  said the dataset had changed; what was read is now compared, and only other
+  bytes count as a change. A real change is refused as before, and no longer
+  offers **Try again** or **Read the rest**, which could never succeed: the
+  message says to open the dataset again.
+- A dataset whose published sample view is of another session format, as happens
+  for minutes during a release, opens on its default view with one short line
+  instead of an error.
+
+### Python
+
+- **Every action of the viewer (viewer protocol schema 3 to 5).** The action
+  catalogue ships with the package (`cellucid/action_catalog.json`, byte for
+  byte the web app's, SHA-256 pinned in the three repositories). The viewer
+  has one generated method per action (`viewer.color_by(field=...)`,
+  `viewer.highlight_cells(cells=...)`, `viewer.history_get()`,
+  `viewer.history_undo()`, `viewer.dataset_open(...)`, …) and
+  `viewer.act(type, **params)` for any action named in data. Each returns an
+  `ActionRequest` at once: `result(timeout=60.0)` is the viewer's answer and
+  raises `ActionError` with its reason; `step` is the history step the action
+  made. Cells are given as rows, a boolean mask or obs names. A notebook's
+  viewer refuses `dataset.open`. Optional parameters are left out (`OMIT`)
+  unless given, and `cellucid.jupyter.action_catalog()` returns the
+  catalogue.
+- **Wire.** The viewer's commands are `action` (text, or binary with its
+  typed arrays), `requestSessionBundle` (answered with session format 4),
+  `ping`, `debug_snapshot`, `freeze` and the agent commands; schema 2's
+  `setColorBy`, `setVisibility`, `highlight`, `clearHighlights`,
+  `resetCamera`, `setDataMapping`, `setGeneSet` and `setField` are gone. The
+  new binary event `action_result` carries an action's outcome and step;
+  `command_error` names the failed command's `requestId`, and `data_mapping`
+  and `result` no longer carry one. `GET /_cellucid/protocol` lists the
+  binary commands and events.
+- **Removed, no aliases:** `highlight_cells(cell_indices, color, label)` (now
+  the generated `highlight_cells(cells=..., color=..., label=..., page=...)`),
+  `clear_highlights()` (→ `highlight_clear_all()`), `set_color_by(field)`
+  (→ `color_by(field={"source": "obs", "key": ...})`), `set_visibility(...)`
+  (→ `cells_visibility_set(...)`), `reset_view()` (→ `camera_reset(view="live")`),
+  `set_data_mapping(**fields)` (→ `mapping_set(...)`), `push_gene_set(...)`
+  (→ `gene_set_save(name=..., genes=...)`), `request_session_bundle()` and
+  `SessionBundleRequest` (→ `request_session()` and `SessionRequest`),
+  `CellucidSessionBundle` and `cellucid.session_bundle`. `viewer.push(values,
+  key)` stays and returns its request.
+- **Reading web sessions.** `cellucid.read_session(path)` (a
+  `CellucidSession`) reads every format-4 file the web app writes (history,
+  current state only, steps only; bounded chunks, parts, lazy parameter
+  arrays) and checks all of it first against the history model
+  (`cellucid/history_model.schema.json`, pinned in the three repositories). A
+  damaged file says what is wrong; a file from a newer Cellucid asks you to
+  update the package; a format-3 file is refused with the web app's sentence.
+  The history is read with `cellucid.history`: `session.trackers`,
+  `session.tracker(name_or_id)`, its `steps` table (with `kind`, `v` and
+  `group`), `branches`, `groups`, `turns`, `notes`, `journal`, `stale()`,
+  `methods(branch)` and `pseudocode(branch)` in the web app's wording, and
+  `tracker.step(id)` with `state()` and `diff(other)`. `Session.chrome` holds
+  the selection tool, read only. `notes_table()`, a squashed step's
+  `squashed` (`cause`, `count`, `by`, `carried`) and each tracker's `paused`
+  are read too.
+- **Applying a history, a plan first.**
+  `apply_cellucid_session_to_anndata(adata, session, *, tracker=None,
+  branch=None, step=None, dry_run=True, overwrite=False, keep_session=False)`
+  (and `session.apply(...)`) returns an `ApplyPlan`, one row per change with
+  its status. `plan.apply()` (or `dry_run=False`) writes it and returns an
+  `ApplyReport`. Applying the same step again changes nothing; a column you
+  made is never replaced, and `overwrite=True` replaces only an earlier
+  apply's columns. Each apply is recorded in
+  `uns['cellucid']['history_applied']` (`cellucid.history_applied(adata)`).
+  Works on AnnData and MuData. A steps-only file is read, not applied. Only
+  what the chosen step needs is checked: the cells (count, subsample and
+  order), the dataset id when `uns` names one, the data mapping and the
+  fields the step uses. `pull()` of a session file writes the state it shows,
+  checked the same way.
+  Each gene set written or replaced is also a `bool` column of `var`,
+  `cellucid_gene_set__<name>` (the highlight columns' naming rule), on the
+  gene axis the data mapping reads (`X` or a layer; a MuData: the mapping's
+  modality), `True` on the set's genes; missing genes, a mapping reading
+  `raw` and a `var` column of that name the dataset owns are warned. The
+  columns are pinned by the shared golden history
+  (`apply.sequence[].var_columns`), as the web app's copy writes them. A plan
+  that would write, rename or replace `obs['cellucid_original_position']` is
+  refused, dry runs included.
+  Removed, no aliases: `state_at()`, `steps()`, `apply_to_anndata()`,
+  `dataset_source`, `required_fields`, `expected_dataset_id` (also of
+  `pull()`), `apply_labels`, `add_highlights`, `inplace`,
+  `ApplySummary` and the other options of the old apply.
+- **The viewer's history, live.** `with viewer.turn("Normalise and
+  cluster"):` makes every action sent inside one turn of the history (turns
+  do not nest). `viewer.history` (`LiveHistory`) follows `history_changed`,
+  and `on_history_change` hooks it. `viewer.load_session(path)` pushes a
+  session file into the viewer. `viewer.apply_session_to_anndata(adata,
+  request, *, tracker, branch, step, dry_run=True, overwrite, keep_session,
+  timeout, cleanup_file)` plans or applies the session a `request_session()`
+  brought, as above.
+- **`cellucid mcp`** (`pip install 'cellucid[mcp]'`; `cellucid.mcp.run_mcp()`):
+  a local MCP server over stdio for Claude Code, Claude Desktop and Cursor.
+  It drives the newest viewer open on this computer, `--viewer` names one, and
+  `--open PATH` serves a file in a viewer of its own. Every viewer with a
+  channel, `cellucid serve` / `serve_anndata()` pages included, is published
+  to agent apps on this computer through a record readable by your user only
+  (`CELLUCID_AGENTS_DIR` overrides the folder; `CELLUCID_AGENTS=off` publishes
+  nothing) and a token-checked loopback endpoint. The tools are generated
+  from the catalogue (`cellucid/mcp_tools.json`). The `cellucid_status` tool
+  lists the viewers found, and one sentence says what is missing when none
+  is reachable. A call the app cancels is stopped in the viewer; a page
+  reloaded or closed mid-call fails the call at once, and a page back makes
+  the app list the tools again. The Viewer URL `cellucid serve` prints
+  carries `viewerId` and `viewerToken` (the bare `/?anndata=true` address
+  still opens the dataset). An agents folder that is not your user's alone
+  is refused.
+- `cellucid serve` and `show_anndata()` refuse a `.cellucid-session` or
+  `.cellucid-library` file, saying what it is.
+
+### Releases
+
+- **One way to release every package**: publish a GitHub Release named
+  `vX.Y.Z` in its repository. `pypi-publish.yml` (PyPI) now runs on a
+  published release only, not on a tag push, and `validate_release.py
+  --release-event` refuses a draft, a release marked pre-release for an
+  `X.Y.Z` version, and a release naming another tag; the tag, `main`, source
+  and artifact gates are unchanged. `readthedocs.yml` no longer runs on a tag
+  push (it built `latest` only). `cellucid-r`'s `release.yaml` ("Publish to
+  CRAN") lost its manual trigger and makes the same refusals. The npm
+  name-reservation package is released under the Cellucid version by
+  `cellucid`'s new `npm-publish.yml` (npm trusted publishing, provenance),
+  and `sweep_versions.py` holds its version to the release (the "independent"
+  class is gone). A failed run is re-run with **Re-run jobs**.
+- The headings of the released 0.9.3 to 0.9.6 carry their publication dates;
+  the bump that opens a version dates the one released before it.
+
+### Docs
+
+- **State and History** (web app) rewritten for History v2: the branch graph
+  and its row rule, branches and trackers, recording, groups and squash,
+  notes, bookmarks and search, Recently deleted, replay on another dataset,
+  sharing and loading, History settings and saved states. **Save AnnData
+  with this state** (what the copy holds, its refusals, Cancel, reading it in
+  Python, showing it from R) and **Run again** are described there.
+- The Python and R apply pages and the Cellucid-ready AnnData specification
+  describe the gene-set `var` columns and the priority-order column rule.
+- **My datasets** and **Keep N cells of a category** are documented.
+- New chapter **Agents** (web app): the chat bar, connecting Claude or
+  ChatGPT, permissions, and what agents are sent. New pages **Local agents
+  (MCP)** for Python and R, the `cellucid mcp` CLI section and API page, and
+  developer page **Local agent connection**.
+- **Sessions & Sharing**, the privacy model and the site's privacy policy
+  describe format 4, Share… and Load…, every browser store
+  (`cellucid-history`, `cellucid-library`, …) and every agent storage key.
+- **Community annotation** (web app): the version-3 repository contract
+  (owner-prefixed suggestion ids, no text-length limits, schemas checked byte
+  for byte, the files to copy and the shipped CI), what a Pull leaves out and
+  what stops it, how a Pull and a fork publish work, equal labels as one
+  suggestion, the Worker's contract 3, the GitHub App's token expiration
+  (it must stay on; the author guide said to disable it, which breaks
+  sign-in) and its permissions (no Administration: contributors fork on
+  GitHub and install the app on their account with access to the fork), the
+  GitHub App slug a self-hosted deployment must set, the GitHub
+  login a user file publishes, and a new *Limits* section (GitHub's file,
+  tree-listing and hourly bounds, Cloudflare's Free plan, direct-mode trust,
+  writes not bound to the connected branch). Removed: a 10,000-file / 64 MB
+  Pull limit and an "Overwrite remote" choice that do not exist.
+- **Releasing Cellucid** (Contributing): the one release habit, the three
+  repositories in order, the checklist, re-running a release, how changelog
+  dates are set, and the one-time PyPI, CRAN and npm setup. The Python and R
+  release pages, `PUBLISHING.md`, `cellucid-r/publishing.md` and
+  `cellucid/npm/publishing.md` describe the GitHub Release only; tag pushes
+  and uploads by hand are gone from them.
+- Developer docs: the action layer, state domains and history (the journal,
+  reads and staleness, the drift guards, the split control walk), the
+  generated action reference, the agent data guard, the browser AnnData copy
+  in the Cellucid-ready AnnData specification, and the Python and R session
+  readers.
+
+## [0.9.6] - 2026-11-01
 
 Version 0.9.6 is a patch release on 0.9.5. Files prepared, sessions saved and
 dataset catalogs written by 0.9.5 are read as before. The viewer protocol is
@@ -191,6 +911,11 @@ this release. The main changes are:
   next opening reads the file again.
 - **Safari keeps converted files and gene indexes across visits** like
   Chromium and Firefox; only private windows keep them in memory for the tab.
+- **Safari: the Stored list reads a kept dataset without a failed load in
+  the console.** The list read each kept dataset's last-used time while a
+  reader opening that dataset was writing it; Safari refuses such a read
+  now and then and logs it as a failed load. The read and the write now
+  wait for each other.
 
 #### Rendering at scale
 
@@ -386,7 +1111,7 @@ this release. The main changes are:
 - Every page was checked against this release's behaviour (served stores,
   kept stores, sessions, analyses on a share, rendering limits).
 
-## [0.9.5]
+## [0.9.5] - 2026-10-26
 
 Version 0.9.5 is a patch release on 0.9.4 that breaks with every earlier
 release: no export, session file or dataset catalog written for 0.9.4 is read.
@@ -657,7 +1382,7 @@ The main changes are:
 - **Web app**: Opening a file no longer hangs in WebKit. The inflation of a compressed chunk on the reader thread (`formats/io/inflate.js`) released its stream reader's lock, and WebKit (314030@main, also landed on a Safari release branch) runs `ReadableStreamDefaultReader.releaseLock()`'s JavaScript while it holds a lock its garbage collector takes when it visits the reader: a collection that started inside the release never finished, and every later collection in the tab, the page's included, waited behind it. The file stayed "Opening …" for good and closing the page hung (sampled native stacks: the reader thread parked in that lock inside `releaseLock`, the main thread in `JITWorklist::suspendAllThreads`); under CPU load it hung within 1 to 5 opens of the 70,000-category fixture, and the browser suite's WebKit shard failed on it. No browser code releases a stream reader any more (`tests/browser-stream-reader-release-contract.test.mjs`): a read-to-the-end or cancelled reader is dropped, and 100 opens in a row under the same load all opened. Closing the app also stops the dataset change still opening and the file or connection it reads (`retire()` of the dataset-change coordinator) instead of waiting for them to answer, and an opening that makes no progress for 60 s, the startup stall interval, says which step it waits on and the reads still open with what has arrived of each, in its notification and in the console (`[cellucid:opening] Opening a.h5ad stalled while reading the file's structure: nothing has changed for 1 min 0 s, while reading the structure of a.h5ad (0 B of 512 KB arrived).`), without stopping it; while a startup step's own deadline runs, that deadline reports the stall instead, once.
 - **Web app**: The genes an analysis computes in its workers (marker genes, differential expression, the gene-moments pass of a module score, the dot plot, UCell) no longer pass through the page. Each gene went from the AnnData reader worker to the page and from the page to an analysis worker, and WebKit counts every array a worker sends the page as the page's own allocation: a run over every gene drove the page's garbage collector, whole-heap collections included, while the analysis ran, each collection holding the page's thread. A run now opens a gene route, one `MessageChannel` per analysis worker, and the reader delivers each task's genes straight to the worker that computes them (`data/gene-delivery.js`, `app/analysis/data/gene-route.js`); the page sends which genes each task takes, hears their bytes and takes in each task's statistics, packed. A task takes several genes (sixteen tasks per worker over the run), one read serves a task on each worker, and a worker the pool replaces during a run has its genes read again. Measured on the 20,000-cell, 200-gene markers run: 13 MB of gene values in and 13 MB out of the page per run became none, the page's allocation per run halved, and 40 reader requests became 13 (8 workers).
 
-## [0.9.4]
+## [0.9.4] - 2026-10-21
 
 Version 0.9.4 is a patch release on 0.9.3. The export format stays 3, so
 exports written by 0.9.3 open unchanged; `prepare(obs_categorical_dtype="uint32")`
@@ -766,7 +1491,7 @@ The main changes are:
 - **Web app**: Data mapping: choosing something in the panel (an embedding, a column, Genes, Neighbour graph, Latent space, Vector fields) no longer scrolls the sidebar or drops the focus. The checklist was rebuilt on every change, and Safari's scroll anchoring then scrolled the sidebar by about a screen; rows are now updated in place, and unchanged text, options and lists are not rewritten. Pressing **Default** keeps the keyboard focus on it. (data mapping)
 - **Web app**: The antialiasing tooltip and documentation now quote current measurements: in a dense 2D view antialiasing costs about twice the GPU time of a frame (it said about ten times).
 
-## [0.9.3]
+## [0.9.3] - 2026-10-20
 
 Version 0.9.3 is a patch release on 0.9.2. It introduces export format 3, so
 exports written by 0.9.2 or earlier must be prepared again: a viewer reads
@@ -1724,6 +2449,7 @@ declared `0.0.9`. Release 0.9.1 restores one exact version across both systems.
   - Jupyter integration (`show()`, `show_anndata()`)
 - Export functionality for web deployment
 
+[0.9.7]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.7
 [0.9.6]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.6
 [0.9.5]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.5
 [0.9.4]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.4

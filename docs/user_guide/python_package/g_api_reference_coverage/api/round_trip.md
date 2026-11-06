@@ -20,9 +20,9 @@ for Seurat, SingleCellExperiment and data frames
 | the last selection, with obs names | {attr}`AnnDataViewer.selection` |
 | every gene set the viewer holds | {meth}`AnnDataViewer.gene_sets` |
 | a column (labels or a score) shown in the viewer | {meth}`AnnDataViewer.push` |
-| a gene set offered in the viewer | {meth}`AnnDataViewer.push_gene_set` |
+| a gene set offered in the viewer | {meth}`viewer.gene_set_save(name=..., genes=...) <cellucid.jupyter.ViewerActions.gene_set_save>` |
 | a GMT file | {func}`write_gmt` / {func}`read_gmt` |
-| cells highlighted from Python, by obs name | {meth}`AnnDataViewer.highlight_cells` |
+| cells highlighted from Python, by row, mask or obs name | {meth}`viewer.highlight_cells(cells=...) <cellucid.jupyter.ViewerActions.highlight_cells>` |
 
 ---
 
@@ -43,19 +43,20 @@ notebook the widget hears the viewer between cells, so a lasso drawn and
   instead of the notebook's), `results` and everything reading it raise,
   naming the dataset to open again: that dataset's cells are not `adata`'s.
 - **Pushes and mappings wait for the viewer, not the cell.** `push`,
-  `push_gene_set` and {meth}`AnnDataViewer.set_data_mapping` send at once and
-  return. A column of a format only the browser reads goes once the viewer
-  has said how many cells it has, and a data mapping once the viewer has
-  reported its own -- so a notebook run top to bottom ("Run All") works. The
-  field or set is listed in `viewer.results`, and the mapping is
-  {attr}`AnnDataViewer.data_mapping`, from a later cell; anything refused
-  arrives as a `command_error` (printed unless a hook handles it).
-- **Sessions in two steps.** A session bundle is asked for, then collected
-  -- the one way, in a notebook (in a later cell) and a browser tab alike:
-  `request = viewer.request_session_bundle()`, then `request.result()` or
-  `viewer.apply_session_to_anndata(adata, request)` (R:
-  `cellucid_request_session()`, then `cellucid_session_result()` or
-  `cellucid_apply_session(object, request)`).
+  `gene_set_save` and `mapping_set` (like every action) send at once and
+  return their request. A column of a format only the browser reads goes once
+  the viewer has said how many cells it has -- so a notebook run top to bottom
+  ("Run All") works. The field or set is listed in `viewer.results`, and the
+  mapping is {attr}`AnnDataViewer.data_mapping`, from a later cell; anything
+  refused fails its request (`request.result()` raises with the reason) and
+  is printed unless a `command_error` hook handles it.
+- **Sessions in two steps.** A session (the viewer's history) is asked for,
+  then collected -- the one way, in a notebook (in a later cell) and a browser
+  tab alike: `request = viewer.request_session()`, then `request.result()` or
+  `viewer.apply_session_to_anndata(adata, request)`, which returns the plan
+  (`plan.apply()` writes it) (R: `cellucid_request_session()`, then
+  `cellucid_session_result()` or `cellucid_apply_session(object, request)`,
+  then `cellucid_apply_plan()`).
 
 ## Fast path
 
@@ -69,7 +70,7 @@ summary.columns                       # every obs column written, and what it ho
 adata.uns["cellucid"]["gene_sets"]    # every gene set, by name
 
 viewer.push(adata.obs["leiden"])      # the clusters, as a field in the viewer
-viewer.push_gene_set("T cells", ["CD3E", "CD3D", "IL7R"])
+viewer.gene_set_save(name="T cells", genes=["CD3E", "CD3D", "IL7R"])
 t_cells = viewer.subset(adata, "Lasso selection")
 ```
 
@@ -134,10 +135,14 @@ cellucid.pull(adata, "~/Downloads/cellucid-exports")   # a folder, a file, or a 
   once: a pull that fails leaves `adata` as it was. A MuData takes the
   columns on its global `obs`.
 
-{func}`apply_cellucid_session_to_anndata` writes a saved session's highlight
-groups and fields with the same column rules; `pull` of a
-`.cellucid-session` file plans its columns the same way, names them with
-every other column of the pull, and adds the session's notebook gene sets.
+{func}`apply_cellucid_session_to_anndata` plans, then writes, the state at
+any step of a saved session (its highlight groups and fields, with the same
+column rules, its gene sets and its renames). `pull` of a `.cellucid-session`
+file writes the highlight groups and user-defined fields of the state the
+session shows (its active tracker's head), checked against `adata` as an
+apply checks it (the dataset, the cells and their order, the fields that
+state uses), names them with every other column of the pull, and adds the
+session's gene sets; the renames are the apply's to write.
 
 ---
 
@@ -185,22 +190,24 @@ value per cell. Categorical, string, object and `bool` values become a
 categorical field (a `bool` column's labels are `"false"` and `"true"`, as R
 pushes a logical one); numbers a continuous one. Pushing the same key again
 replaces it; a field of that key the notebook did not push is never replaced
-(the viewer refuses it with a `command_error`). A pushed column is saved with the
-session (`user-defined/values/<id>` holds a continuous one's values).
+(the viewer refuses it, and the request's `result()` raises the reason). A pushed column is saved with the
+session (a step of its history, the column's values in that step's state).
 
-{meth}`AnnDataViewer.push_gene_set` adds a gene set (or replaces the one of
-that name), its genes by identifier (`adata.var_names`) or by the names the
-viewer shows when a var column names them (identifiers first): Gene signature and Dot plot offer it under **From notebook**, and
-it is saved with the session (`gene-sets/notebook`).
+{meth}`viewer.gene_set_save(name=..., genes=...) <cellucid.jupyter.ViewerActions.gene_set_save>`
+(the `gene-set.save` action) adds a gene set (or replaces the one of that
+name), its genes by identifier (`adata.var_names`) or by the names the viewer
+shows when a var column names them (identifiers first): Gene signature and
+Dot plot offer it under **From notebook**, and it is saved with the session
+(its `gene-sets` state).
 
 ---
 
 ## The wire (for developers)
 
 Results travel on the viewer channel ({doc}`../../e_jupyter_hooks/05_architecture_viewer_channel`,
-protocol schema 2, `viewer-protocol.json`):
+protocol schema 4, `viewer-protocol.json`):
 
-- the `result` event (binary): a header `{type, requestId, epoch, revision,
+- the `result` event (binary): a header `{type, epoch, revision,
   kind, id, nObs, meta, cells, values}` and a body of `cells` original
   positions (`uint32`, strictly ascending, none when `cells` is `null`) then
   `values` (one per named cell, or per cell of the dataset when `cells` is
@@ -222,10 +229,10 @@ protocol schema 2, `viewer-protocol.json`):
   event of another epoch starts afresh. Within an epoch revisions grow with
   every result and removal: a frame whose revision the notebook already holds
   is one it applied;
-- `setField` (binary: a pushed column) and `setGeneSet` are answered by the
-  result they made (carrying their `requestId`), or by `command_error`; so
-  are `highlight`, `setVisibility`, `setField` and `setGeneSet` refused while
-  the viewer shows another dataset;
+- a pushed column (`field.push`, a binary `action`) and a gene set
+  (`gene-set.save`) are actions: each is answered by its `action_result`
+  (the outcome names the field or set it made; the `result` it made follows
+  as for any result) or by a `command_error` with its `requestId`;
 - `color_by {field, source, symbol, cells_read}`: a gene by its identifier,
   and the name the viewer shows for it when a var column names the genes
   (`symbol`; `null` otherwise, and for an obs field); for a gene read for a
@@ -261,6 +268,6 @@ protocol schema 2, `viewer-protocol.json`):
 The viewer methods ({meth}`AnnDataViewer.pull`,
 {attr}`AnnDataViewer.results`, {attr}`AnnDataViewer.selection`,
 {attr}`AnnDataViewer.obs_names`, {meth}`AnnDataViewer.subset`,
-{meth}`AnnDataViewer.gene_sets`, {meth}`AnnDataViewer.push`,
-{meth}`AnnDataViewer.push_gene_set`) are documented with the class in
-{doc}`viewers`.
+{meth}`AnnDataViewer.gene_sets`, {meth}`AnnDataViewer.push`, and the action
+methods such as `gene_set_save` and `highlight_cells`) are documented with the
+class in {doc}`viewers`.

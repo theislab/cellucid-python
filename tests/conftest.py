@@ -62,3 +62,22 @@ def _a_scratch_folder_is_removed_with_nothing_mapped(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(shutil, "rmtree", checked)
     yield
     assert still_mapped == [], f"removed while still memory-mapped: {still_mapped}"
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _viewers_are_published_to_a_folder_of_the_suite(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """Publish the suite's viewers to agents (``cellucid mcp``) in a folder of
+    its own, never in the user's agents folder: an agent app on this
+    computer must not find a test's viewer."""
+    import os
+
+    folder = tmp_path_factory.mktemp("agents")
+    previous = os.environ.get("CELLUCID_AGENTS_DIR")
+    os.environ["CELLUCID_AGENTS_DIR"] = str(folder)
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("CELLUCID_AGENTS_DIR", None)
+        else:
+            os.environ["CELLUCID_AGENTS_DIR"] = previous

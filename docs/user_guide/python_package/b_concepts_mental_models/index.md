@@ -70,7 +70,7 @@ Where data lives (disk/server/browser), how the viewer loads it, and how hooks r
 :link: 03_state_persistence_and_scope
 :link-type: doc
 
-Live viewer state vs durable session bundles vs reproducible dataset files (and what resets when).
+Live viewer state vs durable session files vs reproducible dataset files (and what resets when).
 :::
 
 :::{grid-item-card} {octicon}`shield-check;1.5em;sd-mr-1` Dataset identity
@@ -84,7 +84,7 @@ How to choose stable dataset IDs, version dataset files, and avoid “session ap
 :link: 05_sessions_to_anndata_bridge
 :link-type: doc
 
-Capture a `.cellucid-session` bundle into Python (no download) and apply highlights/fields to AnnData.
+Capture a `.cellucid-session` file into Python (no download) and apply highlights/fields to AnnData.
 :::
 
 :::{grid-item-card} {octicon}`law;1.5em;sd-mr-1` Sessions → AnnData (design)

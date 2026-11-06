@@ -5,7 +5,9 @@ republished with the same name and counts but a different row order cannot
 silently re-point every saved selection at different cells. The digest is over
 the coordinates of one embedding, so the record names that embedding: an
 AnnData ``obsm`` key with the 0-based columns read. The record and the data mapping are both required;
-the viewer refuses a session without them and so does this reader. The digest
+the viewer refuses a session without them and so does this reader, in the
+web app's words (``assertDatasetFingerprint``), each prefixed "This session
+file is damaged". The digest
 itself cannot be re-derived here, which is the viewer's job; its shape is.
 """
 
@@ -16,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from cellucid.session_bundle import _validate_fingerprint
+from cellucid.session import _validate_fingerprint
 
 _KEYED_MAPPING: dict[str, Any] = {
     "kind": "anndata",
@@ -125,36 +127,36 @@ _EMBEDDING = {"key": "X_tsne", "columns": [0, 1]}
 @pytest.mark.parametrize(
     ("cell_order", "message"),
     [
-        ("not-an-object", "must be an object"),
-        ({"embedding": _EMBEDDING, "dimension": 2}, "missing digest"),
-        ({"embedding": _EMBEDDING, "digest": "a" * 16}, "missing dimension"),
-        ({"dimension": 2, "digest": "a" * 16}, "missing embedding"),
+        ("not-an-object", "cellOrder must be an object"),
+        ({"embedding": _EMBEDDING, "dimension": 2}, "missing: digest"),
+        ({"embedding": _EMBEDDING, "digest": "a" * 16}, "missing: dimension"),
+        ({"dimension": 2, "digest": "a" * 16}, "missing: embedding"),
         (
             {"embedding": _EMBEDDING, "dimension": 2, "digest": "a" * 16, "extra": 1},
-            "unknown extra",
+            "unexpected: extra",
         ),
-        ({"embedding": _EMBEDDING, "dimension": 0, "digest": "a" * 16}, "must be exactly 1, 2, or 3"),
-        ({"embedding": _EMBEDDING, "dimension": 4, "digest": "a" * 16}, "must be exactly 1, 2, or 3"),
+        ({"embedding": _EMBEDDING, "dimension": 0, "digest": "a" * 16}, "dimension must be a safe integer from 1 through 3"),
+        ({"embedding": _EMBEDDING, "dimension": 4, "digest": "a" * 16}, "dimension must be a safe integer from 1 through 3"),
         (
             {"embedding": _EMBEDDING, "dimension": True, "digest": "a" * 16},
-            "must be exactly 1, 2, or 3",
+            "dimension must be a safe integer from 1 through 3",
         ),
         ({"embedding": _EMBEDDING, "dimension": 2, "digest": "A" * 16}, "16 lowercase hexadecimal"),
         ({"embedding": _EMBEDDING, "dimension": 2, "digest": "a" * 15}, "16 lowercase hexadecimal"),
         ({"embedding": _EMBEDDING, "dimension": 2, "digest": "a" * 17}, "16 lowercase hexadecimal"),
         ({"embedding": _EMBEDDING, "dimension": 2, "digest": "g" * 16}, "16 lowercase hexadecimal"),
-        ({"embedding": _EMBEDDING, "dimension": 2, "digest": 1}, "16 lowercase hexadecimal"),
+        ({"embedding": _EMBEDDING, "dimension": 2, "digest": 1}, "digest must be a nonempty trimmed string"),
         (
             {"embedding": "X_tsne", "dimension": 2, "digest": "a" * 16},
-            "cellOrder.embedding must be an object",
+            "cellOrder embedding must be an object",
         ),
         (
             {"embedding": {"key": "X_tsne"}, "dimension": 2, "digest": "a" * 16},
-            "cellOrder.embedding fields: missing columns",
+            "cellOrder embedding fields: missing columns",
         ),
         (
             {"embedding": {"key": "", "columns": None}, "dimension": 2, "digest": "a" * 16},
-            "cellOrder.embedding.key must be a non-empty string",
+            "cellOrder embedding.key must be a non-empty string",
         ),
     ],
 )
@@ -166,7 +168,7 @@ def test_a_malformed_cell_order_is_rejected(cell_order: Any, message: str) -> No
 @pytest.mark.parametrize(
     ("embedding", "dimension", "message"),
     [
-        ({"key": "X_pca", "columns": None}, 2, "cellOrder.embedding.columns must be a list"),
+        ({"key": "X_pca", "columns": None}, 2, "cellOrder embedding.columns must be a list"),
         ({"key": "X_pca", "columns": [0, 1, 2]}, 2, "must list exactly 2 columns"),
         ({"key": "X_pca", "columns": [1, 1]}, 2, "each axis needs a different column"),
         ({"key": "X_pca", "columns": [0, -1]}, 2, "non-negative integers"),
@@ -188,12 +190,12 @@ def test_an_anndata_cell_order_lists_one_column_per_axis(
 def test_every_fingerprint_field_is_required(missing: str) -> None:
     incomplete = _fingerprint()
     del incomplete[missing]
-    with pytest.raises(ValueError, match=f"missing {missing}"):
+    with pytest.raises(ValueError, match=f"missing: {missing}"):
         _validate_fingerprint(incomplete)
 
 
 def test_an_unknown_fingerprint_field_is_still_rejected() -> None:
-    with pytest.raises(ValueError, match="unknown somethingElse"):
+    with pytest.raises(ValueError, match="unexpected: somethingElse"):
         _validate_fingerprint(_fingerprint(somethingElse=1))
 
 
@@ -266,12 +268,12 @@ def test_the_returned_fingerprint_is_a_copy() -> None:
 
 
 def test_an_unknown_source_type_is_refused() -> None:
-    with pytest.raises(ValueError, match="unknown sourceType"):
+    with pytest.raises(ValueError, match="unexpected: sourceType"):
         _validate_fingerprint(_fingerprint(sourceType="local-demo"))
 
 
 def test_the_dataset_name_is_a_trimmed_string_or_null() -> None:
     assert _validate_fingerprint(_fingerprint(name=None))["name"] is None
     for name in ("", " Pancreas", 3):
-        with pytest.raises(ValueError, match="datasetFingerprint.name"):
+        with pytest.raises(ValueError, match="datasetFingerprint name must be a nonempty trimmed string"):
             _validate_fingerprint(_fingerprint(name=name))

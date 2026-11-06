@@ -35,7 +35,7 @@ def _result(kind: str, result_id: str, meta: dict[str, Any], cells: list[int] | 
             revision: int) -> bytes:
     value_type = None if values is None else {"u1": "uint8", "f4": "float32"}[values.dtype.str[1:]]
     body = (b"" if cells is None else np.asarray(cells, "<u4").tobytes()) + (b"" if values is None else values.tobytes())
-    header = {"type": "result", "requestId": None, "epoch": "0123456789abcdef", "revision": revision, "kind": kind, "id": result_id, "nObs": 4,
+    header = {"type": "result", "epoch": "0123456789abcdef", "revision": revision, "kind": kind, "id": result_id, "nObs": 4,
               "meta": meta, "cells": None if cells is None else len(cells), "values": value_type}
     return _frame(header, body)
 
@@ -128,13 +128,20 @@ def test_a_lasso_then_pull_in_the_next_cell_needs_no_waiting(widget: Widget, ada
     assert widget.gene_sets() == {"T": ["CD3E"]}
 
     # Cell 2 also pushes: the frame goes out at once, nothing waits.
-    widget.push(adata.obs["cell_type"], key="cell_type_nb")
-    widget.push_gene_set("B", ["MS4A1"])
+    request = widget.push(adata.obs["cell_type"], key="cell_type_nb")
+    widget.gene_set_save(name="B", genes=["MS4A1"])
     pushed = [message for message in page.sent if message["t"] == "binary"]
     header_length = struct.unpack("<I", pushed[-1]["buffers"][0][:4])[0]
     header = json.loads(pushed[-1]["buffers"][0][4 : 4 + header_length])
-    assert header["type"] == "setField" and header["key"] == "cell_type_nb" and header["categories"] == ["a", "b"]
-    assert any(m["t"] == "text" and json.loads(m["text"])["type"] == "setGeneSet" for m in page.sent)
+    assert header["type"] == "action" and header["action"] == "field.push" and header["requestId"] == request.request_id
+    assert header["params"]["key"] == "cell_type_nb" and header["params"]["categories"] == ["a", "b"]
+    assert any(
+        m["t"] == "text" and json.loads(m["text"]).get("action") == "gene-set.save" for m in page.sent
+    )
+    # Its answer arrives between cells: this cell cannot wait for it.
+    with pytest.raises(RuntimeError, match="later cell"):
+        request.result(timeout=30)
+    request.cancel()
 
     # Between cells: the person deletes the lasso; the next pull drops its column.
     page.text({"type": "result_removed", "epoch": "0123456789abcdef", "revision": 4, "kind": "highlight", "id": "highlight_1"})
@@ -168,11 +175,11 @@ def test_a_widget_refuses_results_of_a_dataset_it_did_not_serve(widget: Widget, 
 
 def test_in_a_widget_a_session_is_asked_for_in_one_cell_and_applied_in_the_next(widget: Widget, adata: ad.AnnData) -> None:
     Page(widget).connect()
-    request = widget.request_session_bundle()
+    request = widget.request_session()
     started = time.monotonic()
     with pytest.raises(RuntimeError, match="later cell|next cell"):
         widget.apply_session_to_anndata(adata, request)
-    with pytest.raises(TypeError, match="request_session_bundle"):
+    with pytest.raises(TypeError, match="request_session"):
         widget.apply_session_to_anndata(adata, "a session")
     assert time.monotonic() - started < 1.0
     request.cancel()

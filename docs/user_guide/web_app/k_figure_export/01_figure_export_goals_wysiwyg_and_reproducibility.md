@@ -145,7 +145,7 @@ Use this workflow when you want to be able to recreate a figure weeks later (or 
    - Frame export crop settings (if used)
 
    :::{important}
-   Figure export settings are saved in sessions. Save a session right after exporting and **Load** brings back the same views and the same export settings; the exported file's embedded metadata records them too.
+   Figure export settings are steps of the history, so they are saved in sessions: share a session right after exporting, and loading it brings back the same views and the same export settings; the exported file's embedded metadata records them too.
    :::
 
 4) **Export and verify**

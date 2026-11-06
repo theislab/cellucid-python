@@ -167,7 +167,14 @@ def test_release_version_and_embedding_dimensions_are_coherent() -> None:
 
 def test_pypi_release_requires_gated_artifacts_and_trusted_identity() -> None:
     workflow = (REPOSITORY_ROOT / ".github/workflows/pypi-publish.yml").read_text(encoding="utf-8")
+    # One trigger: a published GitHub Release. A tag push publishes nothing.
+    assert "\non:\n  release:\n    types: [published]\n\npermissions:" in workflow
+    assert "push:" not in workflow
+    assert "tags:" not in workflow
     assert "workflow_dispatch" not in workflow
+    assert "github.ref_name" not in workflow
+    assert '--release-event "${GITHUB_EVENT_PATH}"' in workflow
+    assert '[[ "${GITHUB_REF}" == "refs/tags/${RELEASE_TAG}" ]]' in workflow
     assert "PYPI_API_TOKEN" not in workflow
     assert "password:" not in workflow
     assert "id-token: write" in workflow
@@ -189,6 +196,12 @@ def test_pypi_release_requires_gated_artifacts_and_trusted_identity() -> None:
     assert "python -m twine check --strict dist/*" in workflow
     assert "os: [ubuntu-latest, macos-latest, windows-latest]" in workflow
     assert "artifact: [wheel, sdist]" in workflow
+
+
+def test_no_workflow_reacts_to_a_tag_push() -> None:
+    for path in sorted((REPOSITORY_ROOT / ".github/workflows").glob("*.yml")):
+        workflow = path.read_text(encoding="utf-8")
+        assert "tags:" not in workflow, path.name
 
 
 def test_event_callback_failure_propagates_to_the_http_boundary() -> None:

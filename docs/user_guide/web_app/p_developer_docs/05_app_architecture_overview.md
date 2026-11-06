@@ -33,7 +33,9 @@ main.js (orchestrator)
   ├─ initUI()           → app/ui/core/ui-coordinator.js (DOM + modules)
   ├─ data sources       → data/data-source-manager.js (sample catalog, files, server, links, viewer)
   ├─ data loaders       → data/data-loaders.js (AnnData adapters over the reader worker)
-  ├─ sessions           → app/session/session-serializer.js (.cellucid-session bundles)
+  ├─ sessions           → app/session/session-serializer.js (.cellucid-session, format 4)
+  ├─ histories          → app/history/dataset-history.js (a history per dataset shown)
+  ├─ state domains      → app/state/domains/index.js (installStateDomains)
   ├─ analysis           → app/analysis/* (compute backends + plots + UI)
   └─ admits deferred controls once their listeners exist
 
@@ -44,11 +46,14 @@ DataState (state coordinator)
 
   the one-way rule
   ───────────────
-  UI module ──event──▶ DataState ──explicit method──▶ viewer ──▶ GPU
-       ▲                    │
-       └────event───────────┘
-  A UI module never reaches past DataState into the viewer, and the viewer
-  never reads the DOM. Both shortcuts have been the source of regressions.
+  control ──dispatch──▶ action ──handler──▶ DataState ──explicit method──▶ viewer ──▶ GPU
+     ▲                    │ (app/actions/)       │
+     │                    └──recorded──▶ history │ (app/history/)
+     └────────────────event──────────────────────┘
+  A control dispatches the action it stands for and calls no mutating state
+  method; a UI module never reaches past DataState into the viewer, and the
+  viewer never reads the DOM. These shortcuts have been the source of
+  regressions.
 ```
 
 Design goal: **keep “hot” work** (per-frame render and per-point math) inside the renderer and state managers, not in `main.js` or UI modules.
@@ -63,9 +68,15 @@ The high-level startup flow is:
    naming its bytes), runs its classic bootstraps (`ui/core/preconnect-init.js`,
    `ga-init.js`, `theme-init.js`, `viewport-init.js`, `code-load-watch.js`,
    `file-drop-guard.js`), then loads `assets/js/app/main.js` as an ES module.
+   The parser stops at the style gate (`<script id="cellucid-style-gate">`,
+   CELLUCID_STYLE_GATE, straight after the stylesheet link) until the
+   stylesheet and all it imports are in, so no engine parses `<body>` or fires
+   DOMContentLoaded, the boot's cue, in a page without its styles (WebKit
+   does not hold DOMContentLoaded for a stylesheet by itself).
    `main.js` marks the root `data-code-started` once its whole static graph has
-   run; an uncaught error before that mark, or a module that did not download,
-   is the code-load watch's **Cellucid could not load** card.
+   run; an uncaught error before that mark, a module that did not download, or
+   a stylesheet that did not, is the code-load watch's **Cellucid could not
+   load** card.
 2) `main.js` creates a WebGL2 viewer: `createViewer({ canvas, labelLayer, viewTitleLayer })`.
    The full signature also accepts `onViewFocus`; the bootstrap does not pass it.
    If the canvas yields no `webgl2` context this throws immediately and the
@@ -95,7 +106,11 @@ The high-level startup flow is:
      var inventories and the graph description the AnnData adapter builds from
      it
    - points buffers (embedding positions, colors, outlier quantiles, etc.)
-   - the default session, when the dataset's catalog names one
+   - the dataset's history, made once the dataset is published; the starting
+     view its catalog names, when it names one, put back without a step; then
+     the first tracker starts. A dataset the person chose (a link, a file, a
+     sample picked; not the startup's default sample) is recorded in My
+     datasets
    A failure of this load that nothing superseded is the terminal startup
    failure; otherwise startup publishes `ready` when it settles.
 
@@ -181,19 +196,63 @@ Deep dive: {doc}`08_ui_modules_map`.
 
 ---
 
+## Actions, state domains and the history
+
+Every state change a person, an agent, a Python or R host or a replay can make
+is an **action** of one catalogue (`app/actions/`), dispatched through one
+dispatcher that checks its parameters, orders it against the actions running
+on the same state, records it as one **step** of the history and rolls a
+failed one back. A control dispatches the action it stands for
+(`dispatchFromControl`); settings controls and camera gestures are recorded by
+observation. The state is split into fifteen **state domains** (`cells`,
+`mapping`, `field-overlays`, … `layout`), each with one owner in
+`app/state/domains/` that captures and restores its value through the
+`DataState` methods the controls use. The **history** (`app/history/`) keeps
+trackers of step trees and every domain value by content hash, so undo, redo
+and a jump put values back instead of recomputing. Deep dive:
+{doc}`29_action_layer_domains_and_history`.
+
+An **agent** (the chat bar with the person's API key, Claude or ChatGPT
+through the Cellucid relay, or a local app through `cellucid mcp`) acts
+through the same catalogue: each action is one tool, every call runs through
+one tool call (`app/agent/bridge/tool-call.js`) as origin `agent`, the
+person's permissions decide whether it runs, asks or is refused
+(`app/agent/presence/`), and its steps undo as one turn. Deep dive:
+{doc}`32_agents_in_the_tab`.
+
+---
+
 ## Persistence and reproducibility
 
 Cellucid has multiple persistence-like mechanisms; they are different and must not be conflated:
 
-1) **Session bundle** (`.cellucid-session`)
-   - A downloadable, shareable file that can restore UI + state.
-   - Code: `cellucid/assets/js/app/session/` and `cellucid/assets/js/app/state-serializer/`.
+1) **Session file** (`.cellucid-session`, session format 4)
+   - A downloadable, shareable file holding the dataset's history: its
+     trackers, their steps and every state value they refer to (or, as
+     chosen in State › Session › **Share…**, the current state only, or the
+     steps only as a replay plan). **Load…** adds its trackers beside the
+     person's and shows the active step.
+   - Code: `cellucid/assets/js/app/session/` (the file) over
+     `cellucid/assets/js/app/history/` (what it holds).
+     `cellucid/assets/js/app/state-serializer/` is only the sidebar's control
+     inventory (`ui-controls.js`), which the `settings` and `layout` domains
+     read.
 
-2) **Browser storage** (preferences/caches)
+2) **History kept in this browser** (the autosave and named saves)
+   - Every step written to IndexedDB `cellucid-history` as it is made; reopening
+     the dataset offers to continue (`app/history/autosave.js`).
+
+3) **My datasets**
+   - The datasets opened in this browser and how each opens again, in IndexedDB
+     `cellucid-library` (`app/library/my-datasets.js`); exported and imported
+     with their saved states as one `.cellucid-library` file
+     (`app/library/library-file.js`).
+
+4) **Browser storage** (preferences/caches)
    - Theme, debug flags, some community-annotation caches, etc.
    - Documented in: {doc}`04_configuration_env_vars_and_feature_flags` and {doc}`../o_accessibility_privacy_security/02_privacy_model`.
 
-3) **URL state** (deep links)
+5) **URL state** (deep links)
    - `?dataset=…`, `?remote=…`, `?data=gh:…`, `?annotations=…` (full list: {doc}`04_configuration_env_vars_and_feature_flags`).
    - Code: `cellucid/assets/js/app/url-state.js`.
 
@@ -211,6 +270,9 @@ These are the most common sources of accidental regressions:
 - **Batch expensive recomputations**: when restoring filters or applying many
   changes, bracket the mutation with `DataState.beginBatch()` and
   `DataState.endBatch()`.
+- **A value captured for the history is never written again**: a domain
+  owner copies what the app writes in place, and caches by identity what it
+  replaces, so capturing an unchanged domain costs nothing per cell.
 
 ---
 

@@ -14,7 +14,8 @@ Two classes share one viewer API:
 
 They are designed for two-way interaction:
 - **Viewer → Python:** hooks/events like `@viewer.on_selection`
-- **Python → Viewer:** commands like `viewer.highlight_cells(...)`
+- **Python → Viewer:** actions -- every action of the viewer is a method,
+  like `viewer.highlight_cells(...)` -- each a step of the viewer's history
 
 If you prefer a minimal interface, start with {doc}`jupyter`.
 
@@ -63,21 +64,33 @@ def on_ready(event):
 
 ### 2) Drive the UI from Python (Python → viewer)
 
+Every action of the viewer -- everything a person can do, and everything an
+agent reads -- is a method, generated from the action catalogue
+({ref}`the full list <generated-action-methods>`):
+
 ```python
-viewer.set_color_by("cell_type")
-viewer.highlight_cells([0, 1, 2], color="#00ff00")
-viewer.reset_view()
+viewer.color_by(field={"source": "obs", "key": "cell_type"})
+viewer.highlight_cells(cells=[0, 1, 2], color="#00ff00")
+viewer.camera_reset(view="live")
+fields = viewer.fields_list()            # a read
 ```
 
-These calls return `None` without waiting for the viewer. If the viewer refuses
-one, it reports a `command_error` back to Python, which Cellucid prints to
-`sys.stderr` unless you take it over.
+Each returns an {class}`~cellucid.jupyter.ActionRequest` without waiting for
+the viewer; `request.result()` (in a notebook, in a later cell) is the
+viewer's answer -- a read's result, or a change's outcome -- and raises
+{class}`~cellucid.jupyter.ActionError` with the viewer's reason when it did
+not apply the action. A refusal nobody collects is printed to `sys.stderr`
+unless you take it over:
 
 ```python
 @viewer.on_command_error
 def on_command_error(event):
-    print("Rejected:", event["command"], event["reason"])
+    print("Refused:", event["requestId"], event["reason"])
 ```
+
+`viewer.act(type, **params)` sends any action named in data
+(`viewer.act("color.by", field=...)`); {func}`cellucid.jupyter.action_catalog`
+lists them all ({doc}`../../e_jupyter_hooks/06_python_to_frontend_commands`).
 
 ### 3) Robust scripts: wait for readiness
 
@@ -91,22 +104,47 @@ viewer.wait_for_ready(timeout=30)
 `@viewer.on_ready` or read `viewer.state.ready` in a later cell — see
 {doc}`jupyter`.)
 
-### 4) Pull results, or capture a session bundle
+### 4) Pull results, or capture a session
 
 ```python
 summary = viewer.pull(adata)                 # highlights, labels, scores -> adata.obs
-request = viewer.request_session_bundle()
-bundle = request.result(timeout=60)          # in a notebook: in the next cell
+request = viewer.request_session()
+session = request.result(timeout=60)         # in a notebook: in the next cell
+plan = session.apply(adata)                  # what applying the step shown would change
 ```
 
 See {doc}`round_trip` for the round trip, and {doc}`sessions` for applying a
-bundle back to AnnData.
+session back to AnnData.
 
-
-### 5) Read and change the data mapping
+### 5) The history: turns, changes, sessions loaded
 
 ```python
-viewer.set_data_mapping(
+with viewer.turn("Mark the T cells"):            # one turn of the history, undone together
+    viewer.color_by(field={"source": "obs", "key": "cell_type"})
+    viewer.highlight_cells(cells=adata.obs["cell_type"] == "T cell", label="T cells")
+
+@viewer.on_history_change
+def on_history_change(event):
+    print(event["kind"], event["head"])
+
+viewer.history.last_change                       # the latest change, or None
+viewer.history_undo()                            # the history's actions are methods too
+loading = viewer.load_session("analysis.cellucid-session")
+```
+
+A turn's actions carry its id (`python-` and 12 hexadecimal digits) and
+label; turns do not nest. `viewer.history` is a
+{class}`~cellucid.jupyter.LiveHistory`: the latest `history_changed` event
+and a hook on each; the history is changed through the generated `history_*`
+methods. `viewer.load_session(...)` adds a session file's trackers beside the
+person's own and returns a {class}`~cellucid.jupyter.LoadSessionRequest`
+(`loading.result()` in a later cell:
+`{"tracker": {"id", "name"}, "head"}`).
+
+### 6) Read and change the data mapping
+
+```python
+viewer.mapping_set(
     embeddings={
         "enabled": [{"key": "X_tsne", "columns": [0, 1]}],
         "defaults": {"1d": None, "2d": {"key": "X_tsne", "columns": [0, 1]}, "3d": None},
@@ -114,12 +152,12 @@ viewer.set_data_mapping(
 )
 ```
 
-Nothing waits. The viewer reports its mapping once the dataset loads (and
-again whenever it changes): `set_data_mapping()` merges the fields into it,
-checks the result (an invalid value raises, nothing sent) and sends it -- at
-once, or, called before the viewer reported a mapping, as soon as it does.
-The applied mapping is `viewer.data_mapping` from a later cell; a mapping the
-viewer refuses arrives as a `command_error`.
+Nothing waits. `mapping_set()` (the `mapping.set` action) changes the groups
+it names and leaves the others as they are (`knn=None` is "no neighbour
+graph"; leaving `knn` out keeps the one shown). The viewer reports its
+mapping once the dataset loads and again whenever it changes: the applied
+mapping is `viewer.data_mapping` from a later cell; a mapping the viewer
+refuses fails the request with the reason.
 
 ```python
 print(viewer.data_mapping["embeddings"])   # a later cell
@@ -159,10 +197,46 @@ server and web build (`viewer_url`, `server_url`, `clear_web_cache`,
    :members:
 ```
 
-### `SessionBundleRequest`
+(generated-action-methods)=
+### Action methods (generated)
+
+Every action of the catalogue, as a method of both classes. They are
+generated from the catalogue the package ships (`scripts/generate_actions.py`,
+never written by hand), so this list is exactly the viewer's actions.
 
 ```{eval-rst}
-.. autoclass:: cellucid.jupyter.SessionBundleRequest
+.. autoclass:: cellucid.jupyter.ViewerActions
+   :members:
+```
+
+### `ActionRequest`, `ActionError` and `OMIT`
+
+```{eval-rst}
+.. autoclass:: cellucid.jupyter.ActionRequest
+   :members:
+
+.. autoexception:: cellucid.jupyter.ActionError
+
+.. autodata:: cellucid.jupyter.OMIT
+   :annotation:
+
+.. autofunction:: cellucid.jupyter.action_catalog
+```
+
+### `SessionRequest`
+
+```{eval-rst}
+.. autoclass:: cellucid.jupyter.SessionRequest
+   :members:
+```
+
+### `LiveHistory` and `LoadSessionRequest`
+
+```{eval-rst}
+.. autoclass:: cellucid.jupyter.LiveHistory
+   :members:
+
+.. autoclass:: cellucid.jupyter.LoadSessionRequest
    :members:
 ```
 

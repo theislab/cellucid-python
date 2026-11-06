@@ -5,6 +5,7 @@
 **What you’ll learn:**
 - A practical “what leaves my machine?” model for each loading workflow
 - What Cellucid stores locally (browser memory, cache, `localStorage`, `sessionStorage`, IndexedDB, the origin-private file system)
+- What AI agents (the chat bar, Claude and ChatGPT through the connector, a local agent app) are sent
 - Where privacy surprises happen (session bundles, share links, figure metadata)
 - Safe defaults for sensitive datasets (clinical / proprietary)
 
@@ -21,15 +22,20 @@ Cellucid does not upload your dataset’s *contents* anywhere, but:
   (cell-count range, dimensions) — never its name, file name or contents (see the
   next section),
 - some features **store state locally** in the browser (preferences, caches,
-  Community Annotation, and the parts of the datasets you opened, kept so they
-  reopen faster until you remove them under Session › Stored),
+  Community Annotation, the history of every step you take with each dataset,
+  the list of datasets you opened, and the parts of the datasets you opened,
+  kept so they reopen faster until you remove them under Session › Stored),
+- an **AI agent you let work in Cellucid** sends what it reads (names,
+  counts, summaries and, when it asks, values of cells or a picture of the
+  plot) to the provider of its model, unless the dataset is set to **Agents
+  see names and summaries only** ({ref}`privacy-agents`),
 - and some exported artifacts **embed metadata** (sessions, PNG/SVG provenance) that can reveal sensitive context.
 
 If you are using sensitive data, the safe workflow is usually:
 
 > self-host or run the app locally + open local files (any format Cellucid
-> reads) + avoid links and community features + review exported artifact
-> metadata before sharing.
+> reads) + avoid links, community features and AI agents + review exported
+> artifact metadata before sharing.
 
 :::{important}
 This page is not legal advice. If you have compliance requirements (HIPAA/GDPR/IRB/corporate policy), use this page to build a concrete checklist for your organization.
@@ -39,15 +45,16 @@ This page is not legal advice. If you have compliance requirements (HIPAA/GDPR/I
 
 ## The privacy “threat model” (what can leak)
 
-In practice, information can leak from a visualization workflow through five routes:
+In practice, information can leak from a visualization workflow through six routes:
 
 1) **Network requests** (your browser talks to a server)
 2) **Usage analytics** (the app tells a third party what you did)
 3) **Local browser storage** (state persists on your machine)
 4) **Exported artifacts** (files you share)
-5) **Screenshots/screen recordings** (often includes hidden identifiers like file paths)
+5) **AI agents** (what an agent reads goes to its model's provider)
+6) **Screenshots/screen recordings** (often includes hidden identifiers like file paths)
 
-This page focuses on (1)–(4). Before sharing a screenshot, remove patient or
+This page focuses on (1)–(5). Before sharing a screenshot, remove patient or
 sample identifiers, private repository names, usernames, tokens, URLs that
 identify private infrastructure, and local filesystem paths.
 
@@ -203,7 +210,8 @@ If you only read one thing, read this.
 | **Data links** (`data=...`: GitHub, CELLxGENE, GEO, Zenodo, Hugging Face, Figshare, Dropbox, Google Drive, OneDrive, any web address) | The host the link names | Yes (the parts a view needs are downloaded) | Coarse shape only — never the link | High if data is private; the host's access logs exist. A private Google Drive or OneDrive file would be read with your own sign-in, straight from Google or Microsoft ({doc}`../b_data_loading/16_private_drive_onedrive`); until a site's owner registers it with Google and Microsoft, that site says Drive and OneDrive are "not configured on this site yet" |
 | **Notebook widget** (`show_anndata()`, `cellucid_view()` in Jupyter) | The notebook kernel, through the notebook's own connection | Only between your browser and your notebook server (the app's code comes from www.cellucid.com; the data never goes there) | No — the widget's page is a viewer page (`?viewer=embedded`), which never loads analytics | Low: no port is opened; the token never appears in an address |
 | **Python or R browser-tab viewer** (`AnnDataViewer`, `serve_anndata()`, `cellucid_view()` in RStudio) | The local server the program started | Yes (browser ↔ that server, plus one WebSocket for commands and events) | No — a viewer page never loads analytics, and it is not on a production hostname | Usually low on your own computer; on a shared machine every other user of it can read the served data (see {ref}`shared-machines`) |
-| **Community annotation** (GitHub sync) | GitHub API + repo contents, through Cellucid's auth proxy | Yes | That the feature was used | You are explicitly publishing annotations/votes to GitHub; treat as public unless repo is private and access-controlled |
+| **Community annotation** (GitHub sync) | GitHub API + repo contents, through Cellucid's auth proxy | Yes | That the feature was used | You are explicitly publishing annotations/votes to GitHub, in a file that names your GitHub numeric id and login and any profile fields you fill in; treat as public unless repo is private and access-controlled |
+| **AI agents** (the chat bar, Claude or ChatGPT through the connector, `cellucid mcp`) | Wherever the dataset is read from (any row above) | What an agent reads goes to its model's provider: names, counts, summaries and, unless the dataset is set to names and summaries only, values of cells and pictures of the plot; never the dataset's files | Nothing of the agent's work | The provider's terms apply to what it receives; see {ref}`privacy-agents` |
 
 Two nuances that matter:
 
@@ -215,6 +223,7 @@ Two nuances that matter:
 
 ---
 
+(privacy-stored-locally)=
 ## What Cellucid stores locally (and why)
 
 There are three different “lifetimes” of data inside a browser:
@@ -224,9 +233,16 @@ There are three different “lifetimes” of data inside a browser:
 Examples:
 - loaded point/embedding buffers
 - loaded obs/var field arrays
-- current filter/highlight state (unless you save a session)
+- what was read of a file, within the tab's memory budget
 
-This data disappears when you reload/close the tab.
+This data disappears when you reload/close the tab. What you *do* with a
+dataset (filters, highlights, colours, analyses: every step of its history)
+is not only in memory: while **Autosave in this browser** is on (the
+default, in **State › History › History settings**), each step is also
+written to this browser's IndexedDB
+(`cellucid-history`, below) a moment after it is made, so a reload, a closed
+tab or a crash loses at most the change of its last moment
+({doc}`../m_state_history/03_saved_states_and_autosave`).
 
 ### 2) HTTP cache (browser-managed)
 
@@ -258,11 +274,15 @@ Implication:
 Cellucid uses browser storage for a few reasons:
 - persist small preferences (theme/background) so the UI is stable across reloads
 - keep lightweight “convenience mappings” (e.g., last-used Community Annotation repo)
+- keep the history of what you do with each dataset, and the list of datasets
+  you opened, so a closed tab keeps your work and a dataset opens again with
+  one click
 - cache larger payloads (Community Annotation file cache) to avoid re-fetching from GitHub
 
 What matters for privacy:
 - **Storage is local to your machine and browser profile**, but it can persist for a long time.
 - In managed environments, storage can be blocked or cleared automatically.
+- Nothing of it is uploaded: no Cellucid server and no account is involved.
 
 #### `localStorage` (persists until cleared)
 
@@ -270,10 +290,33 @@ Contents:
 - theme preference (light/dark) (`cellucid_theme`)
 - viewer background preference (`cellucid_viewer_background`)
 - the antialiasing choice (`cellucid_antialias`)
-- whether an opening was under way in this tab (`cellucid:opening-under-way`,
-  session storage, nothing but the mark: a tab the browser ended while it
-  opened a dataset opens fewer cells next time)
-- a debug toggle (`CELLUCID_DEBUG`)
+- whether the Session panel's **Subsampling** and **Data mapping** sections
+  are open (`cellucid_session_sections`)
+- the history's settings (`cellucid:history-settings`, **State › History ›
+  History settings**): whether camera moves and panels are recorded, whether
+  new datasets are recorded, whether going back while paused asks first,
+  **Autosave in this browser**, whether the printable report draws pictures
+  of the chosen steps, and **Your name in shared histories** (the one value
+  here a person types: it is written into the histories you share, as the
+  author of your steps); nothing about a dataset
+- the chat bar's choices (`cellucid:agent-chat`): the provider, the model of
+  each provider, the effort of each model, your instructions for agents, the
+  token budget and whether the chat was open; never a key
+- an API key you chose to **Remember on this browser**
+  (`cellucid:agent-key:<provider>`, also in `sessionStorage`, below), until
+  **Forget**
+- the agent permissions (`cellucid:agent-permissions`): Ask, Allow or Deny
+  per kind
+- per dataset (by its id), whether it is set to **Agents see names and
+  summaries only** and whether its notice of what agents send was answered
+  (`cellucid:agent-data`)
+- this browser's pairing with the Cellucid relay
+  (`cellucid:agent-relay:tab-secret`: 32 random bytes, made the first time
+  you connect Claude or ChatGPT; the relay keeps only a value derived from
+  it), until **Agents › Manage… › Forget this browser**
+- which quote the welcome screen showed last (`cellucid_last_quote_index`)
+- debug switches you set yourself in the browser console (`CELLUCID_DEBUG`,
+  and `debug` for the analysis code); Cellucid only reads them
 - the CELLxGENE Census release last read (`cellucid:cellxgene-census-release`,
   so a `cellxgene:` link opens one round trip sooner)
 - what showing a cell and running each analysis costs on this device
@@ -287,21 +330,24 @@ Contents:
   so the next opening from that host is sized from what it really
   delivered. At most 32 hosts, the least recently used dropped; removed
   under **Session › Stored › Manage…**
-- which decoder decodes each compression fastest in this browser
-  (IndexedDB `cellucid-decoders`): codec families, chunk size classes and
-  decoder names under a version naming the decoders, the browser and its
-  cores, nothing about a dataset or a link, so a later visit skips
-  measuring them; forgotten under **Session › Stored ›
-  Manage…**
-- Community Annotation: an auto-pull preference, which repository each dataset
-  uses (`cellucid:community-annotations:repo-map`), the tabs' short write leases
-  (`cellucid:community-annotations:lock:…`), a path→revision index, and — the
-  one that matters — a **per-scope annotation session**
+- the pace of a host that once blocked this network for asking too often
+  (`cellucid:host-pace:v1`): by the host's address, the least time between two
+  requests it was found to bear, and when and how often it blocked
+- Community Annotation: an auto-pull preference
+  (`cellucid:community-annotations:auto-pull:v1`), which repository each
+  dataset uses (`cellucid:community-annotations:repo-map`), the tabs' short
+  write leases (`cellucid:community-annotations:lock:…`), and — the one
+  that matters — a **per-scope annotation session**
+  (`cellucid:community-annotations:cache:…:session`)
 
-`localStorage` holds no secrets. It is not, however, “preferences only”: the
+`localStorage` holds no sign-in token. It is not, however, “preferences only”: the
 Community Annotation session entry is **dataset-derived content**. It holds your
 profile, your votes, your comments, your suggestions, deleted suggestions,
 moderation merges, and the last sync time, keyed by dataset and repository.
+
+An API key remembered there is a credential for your provider account: on a
+shared machine, leave **Remember on this browser** off (the key is then
+kept for the tab only), or **Forget** it when you are done.
 
 So `localStorage` can reveal:
 - which hosts you read data from (the host speeds, and the pace of a host that once blocked this network),
@@ -331,7 +377,16 @@ per-tab state:
   one click signs in again. Microsoft offers a single-page application no way to
   revoke its token: **Sign out** forgets both, and the access token lapses
   within its hour;
-- the Community Annotation tab's id (`cellucid:community-annotations:tab-id:v1`).
+- the chat bar's API key of each provider (`cellucid:agent-key:<provider>`),
+  unless **Remember on this browser** keeps it in `localStorage` too: a reload
+  keeps it, closing the tab forgets it; it is sent only to its provider
+  (`api.anthropic.com`, `api.openai.com`);
+- the Community Annotation tab's id (`cellucid:community-annotations:tab-id:v1`);
+- whether an opening was under way in this tab (`cellucid:opening-under-way`,
+  nothing but the mark: a tab the browser ended while it opened a dataset
+  opens fewer cells next time);
+- on a phone, whether the panel was left open or as its peek bar
+  (`cellucid:phone-sheet`).
 
 A sign-out the provider could not revoke (GitHub or Google unreachable, a
 Cellucid service deployed before revocation existed, or Microsoft) is said in a
@@ -349,64 +404,136 @@ What this means:
   a restart or a crash (and copy it when a tab is duplicated), which is why only
   short-lived tokens are kept there;
 - tokens are never written into `localStorage`, IndexedDB, a session bundle, a
-  figure, the address, the console or analytics.
+  figure, the address, the console or analytics, and an API key never into
+  IndexedDB, a session bundle, the history, the address or a request to
+  anything but its provider.
 
 Related: {doc}`../j_community_annotation/index` (token lifetime and storage).
 
 #### IndexedDB (larger local cache; persists until cleared)
 
-IndexedDB holds larger cached payloads that would be unreasonable to store in
-`localStorage`. Cellucid keeps three things there:
+IndexedDB holds larger records that would be unreasonable to store in
+`localStorage`. Cellucid keeps five databases there:
 
-- **Community Annotation file cache** — the raw annotation JSON downloaded from
-  GitHub, for speed and offline-ish behaviour.
-- **Highlight drafts** — per dataset (by its id), the highlight pages and
-  groups made on it, each group's cells as their rows in the file, so a
-  reload, a closed tab or a crash does not lose selections no saved session
-  holds. Written shortly after each highlight change, removed when no
-  highlight is left or when a session saved or loaded holds the highlights
-  shown (until they change), and only offered back (never applied by itself) when
-  the same dataset opens again. Each records the dataset's name, so
-  **Session › Stored › Manage…** lists the drafts (*Unsaved
-  highlights*: per dataset, its size and when it was last saved) and removes
-  the ones you choose.
-- **Files to reopen** (Chrome, Edge and other Chromium-based browsers, when
-  Cellucid is not inside a frame) — per dataset opened from this computer
-  (by its id), the browser's *handle* of the file or folder you chose with
-  **Open…** or dropped (`cellucid-local-files`): the browser's own reference
-  to that file, which only this site in this browser profile can use, with
-  its name, whether it is a file or a folder, its size and modification time
-  (a folder's file count and a digest of every file's path, size and
-  modification time) and when it was last opened. No path and none of the
-  file's content is written, and the handle never leaves this browser: not
-  into a session, an export or the address. It lets a reload, or a session
-  saved on that file, reopen it with one click, *Reopen <name>*; reading it
-  again needs the browser's leave, which it keeps while a tab of the site is
-  open (or on every visit, if you allowed that) and otherwise asks you for on
-  that click. A file that moved, was deleted or changed
-  since is not reopened (choose it again with **Open…**), and its handle is
-  forgotten. **Session › Stored › Manage…** lists them (*Files to
-  reopen*: name, file or folder, when last opened) and forgets the ones you
-  choose. Firefox and Safari give a page no such handle: there nothing is
-  kept, and a local file is chosen again as before.
+- **Saved states** (`cellucid-history`) — the history of each dataset, kept
+  as you work, and the states you saved under a name
+  ({doc}`../m_state_history/03_saved_states_and_autosave`). Ten stores,
+  written together so a crash keeps a whole write or none of it: `entries`,
+  one record per saved state (whether it is the autosave or a named save, its
+  name, its dataset's id and name, how to open that dataset again as a
+  session file says it, how many steps it holds, its size, and when it was
+  made and last written); `trackers`, `steps` and `turns`, each tracker with
+  its branches, notes and bookmarks, every step (what it did, its
+  parameters, when it was taken and by whom: you, an agent with its model
+  and turn, or a notebook) and each agent turn; `journal`, the history's own
+  edits and what is in **Recently deleted**; `chats` and `messages`, the
+  conversations with agents of the chat bar, message by message (without the
+  providers' reasoning or pictures); `values` and `parts`, the state after
+  each step, kept once however many steps share it; and `arrays`, the typed
+  arrays those hold. It is the content a session file holds: field and
+  category names, names you typed, highlighted cells, filters, colours,
+  views, and the results of the analyses you ran (marker statistics, a gene
+  signature's scores per cell, a dot plot's means per group). It holds none
+  of the dataset's own expression matrix, coordinates or obs columns. Written
+  at every step while **Autosave in this browser** is on (the default;
+  `cellucid:history-settings` above); off, nothing is written, and saving
+  under a name still works. Listed, opened and removed under **State ›
+  Session › Load…** and **Session › Stored › Manage…**.
+- **My datasets** (`cellucid-library`, store `datasets`) — one record per
+  dataset you opened in this browser, keyed by its id: its name; where it
+  opens from (a sample's id, a link in its public form with its provider and
+  whether the link carried something to grant access that was left out, a
+  server's address, or a file's or folder's name); its format, layout, file
+  name, host and size; its cells and genes; the cells it was last open with
+  (how many, and a subsample's method, size and seed); when it was first and
+  last opened, and how many times. Never the file's content, never a path,
+  and never what a link carried to grant access (a key, a signature, a
+  token): only that it carried one ({ref}`link-access-keys`). Listed in
+  **Open data › My datasets**, forgotten one by one there (**All… ›
+  Forget**) or all at once under **Session › Stored › Manage…**
+  ({doc}`../b_data_loading/01_loading_options_overview`). A dataset a
+  notebook or a Python or R viewer hands to its viewer is never recorded,
+  nor the sample Cellucid opens by itself at startup. **All… › Export…**
+  writes the datasets and the saved states you tick to a `.cellucid-library`
+  file, to take them to another browser: each dataset as this list keeps it
+  (never what a link carried to grant access) and each saved state whole,
+  with its notes, Recently deleted and conversations with agents.
+  **Import…** adds a file's datasets and saved states beside what this
+  browser keeps, replacing nothing. Such a file can hold private
+  conversations and the names of your datasets: treat it like a session
+  file.
+- **Files to reopen** (`cellucid-local-files`, store `handles`; Chrome, Edge
+  and other Chromium-based browsers, when Cellucid is not inside a frame) —
+  per dataset opened from this computer (by its id), the browser's *handle*
+  of the file or folder you chose with **Open…** or dropped: the browser's
+  own reference to that file, which only this site in this browser profile
+  can use, with its name, whether it is a file or a folder, its size and
+  modification time (a folder's file count and a digest of every file's
+  path, size and modification time) and when it was last opened. No path and
+  none of the file's content is written, and the handle never leaves this
+  browser: not into a session, an export or the address. It lets **My
+  datasets**, a reload (*Reopen <name>*), or a session saved on that file
+  open it again with one click; reading it again needs the browser's leave,
+  which it keeps while a tab of the site is open (or on every visit, if you
+  allowed that) and otherwise asks you for on that click. A file that moved,
+  was deleted or changed since is not opened (choose it again with
+  **Open…**), and its handle is forgotten. Forgetting a dataset in **My
+  datasets** forgets its handle; **Remove** on the My datasets row under
+  **Session › Stored › Manage…** forgets them all. Firefox and Safari give a
+  page no such handle: there nothing is kept, and a local file is chosen
+  again.
+- **Decoder choices** (`cellucid-decoders`) — which decoder decodes each
+  compression fastest in this browser: codec families, chunk size classes
+  and decoder names under a version naming the decoders, the browser and its
+  cores; nothing about a dataset or a link. A later visit skips measuring
+  them. Forgotten under **Session › Stored › Manage…**.
+- **Community Annotation file cache**
+  (`cellucid_community_annotation_file_cache`) — what each annotation file
+  downloaded from GitHub holds for the dataset open (its suggestions, votes,
+  comments and the contributor's profile), by Git blob id, with the reason
+  for any file a Pull left out, and the commit and tree ids of the last
+  completed Pull, for speed and offline-ish behaviour.
 
-Marker-discovery results (including the computed statistic arrays) are **not**
-stored there: they are kept in memory for the dataset load they were computed
-on and are gone when the tab closes. An AnnData file records no write time that
-would prove a stored result still matches its values.
+No analysis result is cached apart from the history: a result is kept with
+the step that ran it, so in `cellucid-history` while **Autosave in this
+browser** is on, and in a session file you share with **Results › Include**.
 
 Privacy implications:
+- The saved states are a record of your work on each dataset, in readable
+  form: the names you gave groups and categories, the cells you highlighted,
+  the analyses you ran and their results. On a shared machine they are
+  readable by this site in this browser profile until you remove them
+  (**Load…**, **Stored › Manage…**) or clear site data. Switch **Autosave in
+  this browser** off to write none (named saves are still kept). They also
+  hold your conversations with agents of the chat bar.
+- My datasets names the datasets you opened: file and folder names, links in
+  their public form, server addresses. The names of the files and folders kept
+  to reopen are readable the same way; reading one still needs the browser's
+  leave.
 - If you use Community Annotation on sensitive repos, cached copies of
   annotation JSON can exist locally until cleared.
-- On a shared machine, the names of the files and folders kept to reopen are
-  readable by this site in this browser profile until you forget them under
-  **Stored › Manage…** or clear site data; reading one still needs the
-  browser's leave.
 
-If IndexedDB is unavailable (private browsing, strict policy), Community
-Annotation **Pull** fails and says so, without replacing the annotation view
-on screen, no highlight draft is kept and no file is kept to reopen; nothing
-else needs IndexedDB.
+If IndexedDB is unavailable (private browsing in some browsers, strict
+policy): no saved state is kept, so nothing is offered to continue and the
+saved states list is empty; My datasets is kept for the page only and says
+so (*Kept for this page only: this window keeps nothing for this site.*); no
+file is kept to reopen; decoders are measured again on every visit; and
+Community Annotation **Pull** fails and says so, without replacing the
+annotation view on screen.
+
+#### Private and incognito windows
+
+A private or incognito window keeps nothing of this site after it closes:
+`localStorage`, IndexedDB and the origin-private file system all go with it.
+While it is open, the window keeps what its browser allows:
+
+- Where the browser gives the page IndexedDB for the window, the saved
+  states, My datasets and the files to reopen work until the window closes.
+- Where it gives the page no origin-private file system (below), the
+  **Stored** row says *Kept for this tab only*, and, while IndexedDB works,
+  My datasets says *Kept only until this window closes.*
+- Where it gives no IndexedDB at all (WebKit's private browsing, below), see
+  the paragraph above: no saved state, and My datasets for the page only.
 
 #### Origin-private file system (dataset-derived, kept across visits)
 
@@ -518,10 +645,20 @@ This typically clears:
    - Local Storage
    - Session Storage
    - IndexedDB (if present)
+   - Storage › the origin-private file system, or **Clear site data**
 4) Hard reload the page
 
 Advanced hint:
-- If you only want to clear Cellucid keys (not everything on the origin), target keys starting with `cellucid` / `CELLUCID_` and (for Community Annotation) `cellucid:community-annotations:`.
+- If you only want to clear Cellucid keys (not everything on the origin), target keys starting with `cellucid` / `CELLUCID_` and (for Community Annotation) `cellucid:community-annotations:`, and the IndexedDB databases `cellucid-history`, `cellucid-library`, `cellucid-local-files`, `cellucid-decoders` and `cellucid_community_annotation_file_cache`.
+
+### Option C (inside Cellucid): Session › Stored › Manage… › Remove all
+
+**Remove all** in the *Stored in this browser* dialog removes what Cellucid
+keeps to open datasets again and to pick up your work: the kept files, every
+saved state, My datasets with its file handles, the connection speeds and the
+decoder choices ({ref}`stored-in-this-browser`). It leaves what an open tab
+is using (until that tab closes), the preferences, the Community Annotation
+data and the sign-ins; Options A and B clear those too.
 
 ---
 
@@ -592,6 +729,25 @@ If you self-host the app, the “app host” changes, but the model is the same.
   Cellucid's name; on a shared machine, another user can take that port first
   (see {ref}`shared-machines`). A copy of the app on any other address says
   "not configured on this site yet" for Drive and OneDrive and sends nothing.
+- **The chat bar** (**Ask an agent**) sends each request from the tab
+  straight to the provider you chose (`api.anthropic.com` or
+  `api.openai.com`), with your own API key: your message, your instructions,
+  the conversation so far and the tool results. Nothing passes through a
+  Cellucid server. Only when you send a message.
+- **The Cellucid relay** (`mcp.cellucid.com`), only once
+  you connect Claude or ChatGPT (**Agents › Claude and ChatGPT**): this tab
+  keeps one WebSocket to it, proven by this browser's pairing secret, and it
+  carries each tool call to the tab and the result back to Claude or
+  ChatGPT, which send it on to their models. The relay keeps no call and no
+  result (they exist in its memory only while in flight, and are not
+  logged), no account and no chat; it keeps the connections you allowed (the
+  app, the agent's name, the app's host, times) and, for at most fifteen
+  minutes, a connection request waiting for your answer. No dataset file
+  passes through it ({doc}`../g_agents/02_connect_claude_and_chatgpt`).
+- **A local agent app** (`cellucid mcp`, `cellucid_mcp()`) talks to a viewer
+  on your computer over the viewer's own channel, with no relay; the app
+  sends what it reads to the provider it uses
+  ({doc}`../../python_package/d_viewing_apis/18_local_agents_mcp`).
 
 ### 4) What is not there
 
@@ -614,7 +770,20 @@ page is a viewer page (`?viewer=…`), which never reads it.
 
 Session bundles are designed to be shareable, but that means they can carry *derived* information.
 
-They contain:
+**State › Session › Share…** chooses what the file holds, and **What's
+inside** lists each kind of content with its count before you save:
+
+- **Share**: the **History** (the trackers and branches you tick, with every
+  value), the **Current state** only (one step, *Shared state*, with no
+  notes, conversations, authors or times), or the **Steps only** (a replay
+  plan for any dataset: no cells and no values);
+- **Include**: notes and bookmarks (on by default), **Conversations** with
+  agents (off by default), Recently deleted (off by default);
+- **Results**: the analyses' results kept, or computed again on open;
+- **Times**: exact, dates only, or none;
+- **Dataset**: its name and where it opens from, or its name only.
+
+A file shared as the history contains:
 - a dataset fingerprint: dataset id and name, cell count, variable count, the
   data mapping (which `obsm`, `obsp`, layer and `var` keys are used), and a
   **one-way digest** of the cell ordering
@@ -627,16 +796,32 @@ They contain:
 - highlight page/group names (your labels!)
 - highlight memberships (cell index sets)
 - user-defined category codes and field overlays
-- a creation timestamp
+- the history (session format 4): every step, with its parameters, when it
+  was taken and who took it (you, under **Your name in shared histories**
+  when you set one; an agent, with its model and turn; a notebook), and the
+  state after each step
+- the results of the analyses you ran, kept with their steps (marker
+  statistics, a dot plot's means per group, a gene signature's score for each
+  cell), unless **Results** is set to compute them on open
+- notes and bookmarks, and, only when you ticked them, the conversations with
+  agents and Recently deleted
+- a creation timestamp (rounded to the day or left out with **Times**)
 
-They do **not** contain expression values, coordinates, obs values, your
-identity, any sign-in token, or any path from the author’s machine (a local
-file's name, yes). The cell
-ordering appears only as a digest that cannot be turned back into coordinates.
+They do **not** contain the dataset's expression matrix, coordinates or obs
+columns, your identity (unless you set **Your name in shared histories**), any
+sign-in token or API key, or any path from the author’s machine (a local
+file's name, yes). The cell ordering appears only as a
+digest that cannot be turned back into coordinates. An analysis result is
+derived from the data, though: a signature score per cell or a group's mean
+expression travels with the session.
 
 So the residual risk is real but bounded: what you are sharing is *which cells*
-you selected and *what you called them*, not the data itself. On a sensitive
-dataset, a group named after a patient is the leak — not the file format.
+you selected, *what you called them* and *what your analyses found*, not the
+data itself. On a sensitive dataset, a group named after a patient is the
+leak — not the file format. The saved states this browser keeps
+(`cellucid-history`, above) hold the same content, and a `.cellucid-library`
+file from **My datasets › Export…** holds the saved states you ticked whole,
+conversations included.
 
 Read the dedicated page before sharing sessions from private datasets:
 - {doc}`../l_sessions_sharing/08_security_privacy_and_trust`
@@ -685,8 +870,9 @@ and drops every other one, the fragment, and any user name and password:
 Share links, badges and embed snippets (the Share dialog says when something
 was left out), session files, exported figures' metadata, notifications and
 failure messages, the console, the opening progress, the notebook kernel (a
-debug snapshot's address; a session applied to an AnnData or R object stores
-no `source` at all) and Community Annotation. Whoever opens a shared link or
+debug snapshot's address; a session applied to an AnnData or R object records
+no `source`, unless the apply keeps the session file itself, `keep_session`,
+which stores the file as it was saved) and Community Annotation. Whoever opens a shared link or
 session of such a file needs their own access to it.
 
 This is convenient, but it means URLs can leak information in:
@@ -698,6 +884,52 @@ If you are privacy-constrained, prefer sharing:
 - a session bundle via an approved channel, or
 - the dataset file via approved storage
 and keep URLs “clean”.
+
+---
+
+(privacy-agents)=
+## AI agents: what they are sent
+
+An agent works in Cellucid through the same actions as the interface, and
+what it reads goes to the provider of its model with the conversation. The
+full account is {doc}`../g_agents/03_permissions_and_what_agents_see`; in
+short:
+
+- **What leaves the browser.** Names, counts and summaries and, when an
+  agent asks, values of cells and pictures of the plot. Never the dataset's
+  files, a sign-in token or an API key (a key goes only to its own
+  provider). The chat bar sends from the tab to Anthropic or OpenAI; a
+  connected Claude or ChatGPT receives results through the relay, which
+  carries them through without keeping them; a local agent app receives them
+  from the viewer on your computer.
+- **Once per dataset** a notice says so, with the switch **Agents see names
+  and summaries only** (also under **Permissions › Change…**). It is kept per
+  dataset in this browser (`cellucid:agent-data`), applies to every agent
+  (the chat, the connector, local apps) and no agent can turn it off.
+- **With the switch on**, reads of single cells' values and pictures of the
+  plot are refused (a picture counts as cell-level: the plot draws each
+  cell); minimums, maximums and medians are left out of results; summaries
+  over groups an agent made by naming cells are refused (these marks are
+  kept for the page only, never saved in a session); a read Cellucid has not
+  classified is refused; and results read earlier in a chat that could hold
+  values are withheld when the conversation is sent again.
+- **It is not anonymisation.** A summary of a very small group the data or
+  you define (a narrow range, a filter, a rare category) can still reveal its
+  cells' values. No minimum group size is set.
+- **Other people's names in community annotation.** When an agent reads the
+  community annotation of a dataset (`annotation_suggestions`), the
+  suggested labels, their ontology terms and who suggested them (each person's
+  GitHub login and the display name and title they publish) go to the agent's
+  provider with the rest of what it reads (in the repository they are seen by
+  everyone who can read it).
+- **Text written by others is data.** Every result's data reaches an agent
+  between `<cellucid-data>` marks (every `<` inside escaped), and agents are
+  told never to take it as instructions.
+- **Kept in this browser:** the conversations of the chat bar, with the
+  history (`cellucid-history`); the chat's choices, permissions, the switch
+  and the relay pairing in `localStorage`; API keys in `sessionStorage`
+  (and `localStorage` with **Remember on this browser**). See
+  {ref}`privacy-stored-locally`.
 
 ---
 
@@ -840,20 +1072,32 @@ Use this as a starting point for approvals and internal documentation.
 4) **What local persistence exists?**
    - `localStorage` preferences, the speed of each host data was read from
      (and the pace of one that blocked this network)
-     **and Community Annotation session content**, the IndexedDB annotation
-     file cache, highlight drafts and handles of local files to reopen,
+     **and Community Annotation session content**; in IndexedDB, the saved
+     states (the history of every step on each dataset, with analysis results
+     and conversations with agents, while **Autosave in this browser** is on),
+     My datasets (names and
+     public links of the datasets opened), handles of local files to reopen,
+     decoder choices and the annotation file cache;
      converted R objects and MatrixMarket folders, whole-file downloads,
      downloaded parts of remote files (private Drive and OneDrive files
      included) and gene indexes in the origin-private file system (kept across
      visits until removed; Session › Stored › Manage…), short-lived
-     sign-in tokens in `sessionStorage`, browser HTTP cache (app files,
-     catalogs, sessions, signed-in Drive reads)
+     sign-in tokens in `sessionStorage`, an AI provider's API key in
+     `sessionStorage` (or `localStorage` with **Remember on this browser**),
+     browser HTTP cache (app files, catalogs, sessions, signed-in Drive reads)
 5) **If a local server is used, what is its bind address, and who else uses that machine?**
    - `127.0.0.1` (default) vs `0.0.0.0`. Reads are unauthenticated either way:
      on `127.0.0.1` every user of that machine can read the served data, on
      `0.0.0.0` anyone on the network ({ref}`shared-machines`).
 6) **What artifacts will be shared?**
-   - session bundles, exported figures, URLs; and what redaction rules apply
+   - session bundles, `.cellucid-library` files, exported figures, URLs; and
+     what redaction rules apply
+7) **Will AI agents be used on the data?**
+   - Which provider receives what agents read (Anthropic, OpenAI, or the
+     provider behind a local agent app), and under which terms; whether each
+     dataset is set to **Agents see names and summaries only**, knowing that
+     this keeps values of single cells, extremes and pictures out but is not
+     anonymisation ({ref}`privacy-agents`).
 
 ---
 

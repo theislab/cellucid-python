@@ -3,7 +3,7 @@
 These pages make explicit what Cellucid **does and does not do** in two areas that often get skipped in visualization tooling:
 
 - **Accessibility**: how to produce figures and workflows that work for diverse readers (color vision deficiency, low vision, keyboard-only use), plus current limitations of a WebGL canvas-based UI.
-- **Privacy model**: what stays local, what can touch the network depending on your loading workflow, what the public deployment reports to Google Analytics, what is stored in the browser, and what exported artifacts can contain.
+- **Privacy model**: what stays local, what can touch the network depending on your loading workflow, what the public deployment reports to Google Analytics, what AI agents are sent, what is stored in the browser, and what exported artifacts can contain.
 
 If you are in a regulated environment (clinical, IRB-controlled, corporate IP), the key idea is:
 
@@ -26,7 +26,8 @@ If you are in a regulated environment (clinical, IRB-controlled, corporate IP), 
 | You need to… | Do this first (safe default) | Then read |
 |---|---|---|
 | Use sensitive/clinical data without uploading it | **Self-host or run locally** (this alone switches off usage analytics), then open local files (H5AD, Zarr), avoid Community Annotation, and review figure metadata before sharing | {doc}`02_privacy_model` |
-| Answer “what does this send to third parties?” for a review board | Read the analytics section first — it is the only third-party egress, and it is hostname-gated | {doc}`02_privacy_model` |
+| Answer “what does this send to third parties?” for a review board | Read the analytics section first — it is the only third-party egress you do not start yourself, and it is hostname-gated; then the AI agents section, if agents will be used | {doc}`02_privacy_model` |
+| Let an AI agent work on sensitive data | Switch on **Agents see names and summaries only** for the dataset, and know it is not anonymisation | {doc}`../g_agents/03_permissions_and_what_agents_see` |
 | Share sessions safely with a team | Treat `.cellucid-session` files like sensitive derived artifacts; avoid patient IDs in labels | {doc}`../l_sessions_sharing/08_security_privacy_and_trust` |
 | Make figures readable for colorblind audiences | Keep the categories you rely on within the first 24 of a field; check the export preview’s colorblind simulation | {doc}`01_accessibility` + {doc}`../k_figure_export/04_quality_knobs_and_best_practices` |
 | Work keyboard-only | Navigation, filtering and analysis are all keyboard-operable; only pointer-based *selection* is not | {doc}`01_accessibility` |

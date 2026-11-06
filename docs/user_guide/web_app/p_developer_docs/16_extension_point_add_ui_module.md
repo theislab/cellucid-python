@@ -4,9 +4,11 @@ This guide is a step-by-step recipe for adding a **new sidebar UI module** to th
 
 It is intentionally “mechanical”: follow the steps and you’ll end up with a module that:
 - has clear DOM ownership,
-- integrates with `DataState` cleanly,
+- changes state only through actions, so every change is one undoable history
+  step that an agent and a Python or R host can make too,
 - does not regress performance,
-- can be persisted (or explicitly excluded) in sessions.
+- is held by a state domain (so steps, undo and sessions keep it), or is
+  explicitly excluded.
 
 ## When to use this extension point
 
@@ -32,7 +34,13 @@ Before writing code, answer:
    - If yes: it likely belongs in `cellucid/assets/js/rendering/`.
 
 3) Is it a **pure UI preference** (toggle, layout, display option)?
-   - It can be a UI module that calls existing state/viewer APIs.
+   - It can be a UI module over existing state/viewer APIs; a stable sidebar
+     control is a setting with no code (Step 1, "Settings and state").
+
+4) Which **action** does each control stand for, and which **state domain**
+   holds what it changes? An existing action (`app/actions/definitions/`) is
+   reused; a new one is defined first
+   ({doc}`29_action_layer_domains_and_history`, “How to add an action”).
 
 If you are unsure, read:
 - {doc}`05_app_architecture_overview`
@@ -100,13 +108,38 @@ swallows the click silently, and the user cannot distinguish that from a broken
 feature. Add `aria-describedby="data-source-status"` too, so a screen reader
 hears why it is inert.
 
-### Session persistence decision (early)
+### Settings and state decision (early)
 
-Decide whether your UI controls should be persisted by sessions:
+Decide what holds the value of each control:
 
-- If you want generic inputs persisted, **do nothing special** (the serializer can capture many `input/select` values by DOM id).
-- If your section contains transient state (previews, auth tokens, network state), exclude it:
-  - add `data-state-serializer-skip="true"` on the section or a subtree
+- **A setting, with no code.** Every `input` and `select` with a stable DOM id
+  outside a skipped subtree is in the control inventory
+  (`app/state-serializer/ui-controls.js`, read from the markup), and
+  `controlDomainOf` makes it a setting (the `settings` domain) unless it is an
+  accordion section or the theme (`layout`) or a centroid toggle (`views`).
+  A setting is then, with no code of yours: recorded as a `setting.set` step
+  when a person changes it (`ui/modules/settings-actions.js` observes its
+  `input` or `change`; a drag is one step), undone and
+  redone, saved in the history and in a session file, listed by
+  `settings.list` and set by `setting.set` for an agent or a host (its label,
+  section, kind, range or choices read from the markup). Its owner's listener
+  must already be attached when a restore runs: a restore writes the value and
+  dispatches the event the owner listens for, and a control whose owner refuses
+  the value fails the restore.
+- **Another domain's state.** A control whose value is held elsewhere (a
+  field picker, a filter, a highlight) dispatches its action, and the domain's
+  owner captures the value from the state; add its id to the inventory's
+  `DOMAIN_OWNED_IDS` (and to the list in `app/state-serializer/README.md`,
+  which `tests/session-docs-current-contract.test.mjs` holds to it) or mark its
+  subtree skipped, so it is not also a setting.
+- **Page chrome.** A toolbelt of buttons of which exactly one is pressed and
+  which decides how later gestures are read (the selection tool) is marked
+  `data-state-serializer-pressed-group`: kept by a save and the autosave and
+  put back after a load (a session's `chrome`), never a setting and never a
+  history step (`capturePageChrome` / `applyPageChrome`).
+- **Not state.** Transient state (previews, auth tokens, network state, a
+  dialog) is excluded: add `data-state-serializer-skip="true"` on the section
+  or a subtree.
 
 ### Help decision (also early)
 
@@ -132,7 +165,8 @@ list in {doc}`00_how_to_use_this_section` — both have documentation obligation
 outside this section.
 
 Reference:
-- `cellucid/assets/js/app/state-serializer/README.md`
+- `cellucid/assets/js/app/state-serializer/README.md` (the control inventory)
+- {doc}`29_action_layer_domains_and_history`
 
 ---
 
@@ -164,6 +198,20 @@ Follow the established shape:
 
 Design rules:
 - **One module owns one DOM subtree**.
+- **A control dispatches the action it stands for and calls no mutating state
+  method**: `dispatchFromControl(type, params, {failure, category})`
+  (`app/actions/control-dispatch.js`), which says a refusal or a failure once in
+  a notification and resolves `null` for it; for a slider or a colour picker,
+  `createLatestDispatch(type)`, so a drag dispatches only its latest value and
+  the action's `coalesce` makes it one step. Name targets as the action's
+  schema does (a field by `{source, key}`, a category by its label, a view
+  `"live"` or `"View N"`), never by position.
+- If your module implements an action (its orchestration lives here), provide
+  it when the module starts (`getActions().provide(type, handler)`) and call
+  the returned remover in `destroy`.
+- A change your module's owner makes before it can be recorded (a gesture)
+  is recorded with `getActions().recordObserved(type, params)`, synchronously
+  from its event.
 - Avoid direct cross-module DOM writes; communicate via state events or coordinator callbacks.
 - If you subscribe to `state.on(...)`, store unsubscribe functions and clean up if you support re-init.
 
@@ -182,7 +230,7 @@ In:
    - optional callbacks for cross-module updates
 
 If your module changes visibility, fields, or pages:
-- prefer calling state methods and let state events trigger existing coordinator updates.
+- dispatch the action, and let state events trigger existing coordinator updates.
 
 ---
 
@@ -220,19 +268,26 @@ If you add new tokens:
 
 ---
 
-## Step 6: Decide whether it should persist in sessions
+## Step 6: Decide whether it is undone and saved
 
 Ask:
-- If a user saves a session, would they reasonably expect this feature to restore?
+- If a user undoes, jumps to an earlier step or saves a session, would they
+  reasonably expect this feature to come back?
 
 If yes:
-- ensure state is represented declaratively (not as DOM-only ephemeral state)
-- add session contributor coverage if needed:
-  - `cellucid/assets/js/app/session/contributors/`
+- ensure the state is represented declaratively (not as DOM-only ephemeral
+  state) and is held by a state domain: a setting (Step 1) needs nothing more;
+  anything else is a domain's value or part of one, captured and restored by
+  its owner in `cellucid/assets/js/app/state/domains/`
+  ({doc}`29_action_layer_domains_and_history`, “How to add a piece of state”);
+  the session file stores it with no encoder of its own
+- add the action to its area's browser spec, which proves its `touches` by
+  apply, undo and redo on the page's own history
 
 If no:
 - explicitly exclude the UI subtree with `data-state-serializer-skip="true"`
 - document the exclusion in {doc}`10_sessions_persistence_and_serialization`
+  (“What a session does not keep”)
 
 ---
 
@@ -242,6 +297,8 @@ Before shipping, write down the top failure modes:
 - missing DOM ids
 - event handler attached twice
 - state changes not reflected in viewer
+- a change that is not a history step (a control calling a state method), or
+  one undo does not put back (`touches` too narrow)
 - session restore mismatches
 
 Add at least:

@@ -181,13 +181,15 @@ Because page combination is a deterministic set operation, it’s a good way to:
 
 Cellucid has a viewer channel to the program that opened it — `cellucid-python` (`show_anndata()` in a notebook, `AnnDataViewer` in a browser tab) or the R package's `cellucid_view()`. Conceptually, it supports two directions:
 
-### Python → UI (commands)
-Examples from `cellucid-python` include:
-- `viewer.highlight_cells([...])`
-- `viewer.set_color_by("cell_type")`
-- `viewer.set_visibility([...], visible=False)`
+### Python → UI (actions)
+Every action of the viewer is a method of the Python viewer (and a function of
+the R package); examples from `cellucid-python` include:
+- `viewer.highlight_cells(cells=[...])`
+- `viewer.color_by(field={"source": "obs", "key": "cell_type"})`
+- `viewer.cells_visibility_set(cells=[...], visible=False)`
 
-These commands identify cells by **cell index**. That means they only make sense when:
+These actions identify cells by **row index** (or obs name, which Python turns
+into the row). That means they only make sense when:
 - the dataset in the viewer is the one you think it is, and
 - indices are aligned with your Python object (AnnData ordering).
 

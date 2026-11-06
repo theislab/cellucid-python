@@ -57,7 +57,7 @@ viewer = show_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")
 ```
 
 The viewer opens in the output cell and can be driven from Python
-(`viewer.set_color_by("leiden")`). See
+(`viewer.color_by(field={"source": "obs", "key": "leiden"})`). See
 {doc}`../../python_package/a_landing_pages/04_quick_start_3_levels`.
 
 ## Route 3: view or write it from R

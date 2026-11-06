@@ -1350,6 +1350,69 @@ function buildFilteringScenarios() {
 /** @returns {Array<Object>} */
 function buildAnnotationAndSessionScenarios() {
   const READY = PANCREAS_READY;
+
+  // The State section and the history of the dataset shown
+  // (`app/history/dataset-history.js`, published as `window._cellucidHistories`
+  // once the dataset's first tracker starts). Steps are taken through the
+  // page's own dispatcher, as a person's controls take them.
+  const CELL_TYPE = { source: 'obs', key: 'cell_type' };
+  const HISTORY_READY = {
+    run: page => page.waitForFunction(() => window._cellucidHistories?.current()?.active != null),
+  };
+  const takeSteps = steps => ({
+    run: page => page.evaluate(async list => {
+      const { getActions } = await import('/assets/js/app/actions/index.js');
+      for (const [type, params] of list) await getActions().dispatch(type, params);
+    }, steps),
+  });
+  const HISTORY_MOVE = move => ({
+    run: page => page.evaluate(async how => {
+      await window._cellucidHistories.current()[how]();
+    }, move),
+  });
+  // The branch graph's step rows (`ui/modules/state/graph.js`), the opening
+  // included: it is virtualised, but a short history draws every row.
+  const STEP_ROWS = count => ({
+    run: page => page.waitForFunction(
+      n => document.querySelectorAll('#history-graph .hg-row[data-kind="step"]').length === n,
+      count
+    ),
+  });
+  // The State panel's way to a session file, as a person takes it (the web
+  // repository's `tests/browser/helpers/session-buttons.mjs`): Share… › Save
+  // file downloads one; Load… › Open a session file… opens the file chooser.
+  const clickSaveSession = async page => {
+    await page.click('#history-share-btn');
+    await page.waitForSelector('#history-share-dialog', { state: 'visible' });
+    await page.click('#history-share-save');
+  };
+  const clickLoadSession = async page => {
+    await page.click('#history-load-btn');
+    await page.waitForSelector('#saved-states-dialog', { state: 'visible' });
+    await page.click('#load-state-btn');
+  };
+  // Opening or closing a sidebar section is a step of the history (the
+  // layout), so the State scenarios scroll to the section, open by default,
+  // instead of rearranging the sidebar: the graph shows only the steps the
+  // scenario takes.
+  const STATE_OPEN = [
+    READY,
+    HISTORY_READY,
+    NOTIFICATIONS_DRAINED,
+    { scrollIntoView: '#state-section' },
+  ];
+  const SHOW_STATE = { scrollIntoView: '#state-section' };
+  // The History block at the top of the sidebar, so what opens below it (a
+  // step's details, the ⋯ menu) is inside the viewport an element crop is
+  // clamped to.
+  const HISTORY_AT_TOP = {
+    run: page => page.evaluate(() => document.querySelector('#history-block').scrollIntoView({ block: 'start' })),
+  };
+  const FIRST_STEPS = takeSteps([
+    ['filter.category.visibility', { field: CELL_TYPE, categories: ['Ductal'], visible: false }],
+    ['filter.category.cell-count', { field: CELL_TYPE, category: 'Beta', count: 300, seed: 0 }],
+    ['color.by', { field: { source: 'obs', key: 'clusters_coarse' } }],
+  ]);
   const CA = '#community-annotation-section';
   const PANEL = '#community-annotation-controls';
   const MODAL = '.community-annotation-modal-overlay [role="document"]';
@@ -1444,24 +1507,48 @@ function buildAnnotationAndSessionScenarios() {
   const saveThenRestore = ({ holdNotifications = false } = {}) => ({
     run: async page => {
       const download = page.waitForEvent('download');
-      await page.click('#save-state-btn');
+      await clickSaveSession(page);
       const file = await download;
-      const saved = await file.path();
+      // Saved under the name the page gave it: the loaded tracker's toast
+      // names the file it came from, and Playwright's own download path is a
+      // fresh UUID each run.
+      const { mkdtemp } = await import('node:fs/promises');
+      const { tmpdir } = await import('node:os');
+      const { join } = await import('node:path');
+      const saved = join(await mkdtemp(join(tmpdir(), 'cellucid-docs-')), file.suggestedFilename());
+      await file.saveAs(saved);
       await page.reload({ waitUntil: 'domcontentloaded' });
       const welcome = page.locator('#welcome-modal');
       await welcome.waitFor({ state: 'visible' });
       await page.keyboard.press('Escape');
       await welcome.waitFor({ state: 'hidden' });
       await PANCREAS_READY.run(page);
+      // Every step before the reload was kept in this browser, so the dataset
+      // opened again offers to continue it (a notification with no timer).
+      // A person loading a file declines it; the scenario does the same, so
+      // the center drains.
+      await HISTORY_READY.run(page);
+      const offered = await page.evaluate(async () => {
+        const list = await window._cellucidHistories.savedStates.list();
+        return list.some(entry => entry.kind === 'autosave' && !entry.current && entry.steps > 0);
+      });
+      if (offered) {
+        const startFresh = page.locator('#notification-center button', { hasText: 'Start fresh' });
+        await startFresh.waitFor({ state: 'visible', timeout: 30_000 });
+        await startFresh.click();
+      }
       await NOTIFICATIONS_DRAINED.run(page);
       if (holdNotifications) await holdNotificationTimers(page);
       const chooser = page.waitForEvent('filechooser');
-      await page.click('#load-state-btn');
+      await clickLoadSession(page);
       await (await chooser).setFiles(saved);
-      await page.waitForFunction(() => (
-        document.querySelector('#notification-center')?.textContent
-          ?.includes('Session fully restored.') === true
-      ));
+      // A completed restore publishes two notifications: the loaded
+      // tracker's ("Loaded … beside yours.", with Undo) and the restore's own
+      // progress entry ("Session fully restored.").
+      await page.waitForFunction(() => {
+        const text = document.querySelector('#notification-center')?.textContent ?? '';
+        return text.includes('Session fully restored.') && text.includes('beside yours.');
+      });
     },
   });
 
@@ -1840,8 +1927,8 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'community_annotation',
       name: 'lifecycle-17-publish',
       describes:
-        'The same Sync step after Publish, its status line reading "Publish '
-        + 'complete." under the Pull latest and Publish buttons.',
+        'The same Sync step after Publish, its status line reading '
+        + '"Published." under the Pull latest and Publish buttons.',
       dataset: 'pancreas',
       setup: async ({ page }) => {
         const module = await import('./community-annotation-mock.mjs');
@@ -1862,7 +1949,7 @@ function buildAnnotationAndSessionScenarios() {
           });
         } },
         { click: '.community-annotation-modal-overlay button:has-text("Publish")' },
-        { waitForText: '.community-annotation-modal-overlay', text: 'Publish complete.' },
+        { waitForText: '.community-annotation-modal-overlay', text: 'Published.' },
       ],
       shot: { mode: 'element', selector: MODAL, padding: 0 },
     },
@@ -1879,17 +1966,13 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'save-restore-01-session-controls',
       describes:
-        'The Session accordion showing the Dataset box for the loaded sample, '
-        + 'the Open data group with the Sample dataset dropdown, the Open… '
-        + 'button and the Link or server bar, the Session file group with Save '
-        + 'and Load below them, and the collapsed Data mapping group.',
+        'The State section with the Pancreatic endocrinogenesis sample open: '
+        + 'Session with Share… and Load…, and the History with the recording '
+        + 'switch, the branch shown and the graph of the steps taken so far, '
+        + 'the step shown marked.',
       dataset: 'pancreas',
-      steps: [
-        READY,
-        { openSection: '#session-section' },
-        { scrollIntoView: '#session-state-controls' },
-      ],
-      shot: { mode: 'element', selector: '#session-section', padding: 8 },
+      steps: [...STATE_OPEN, FIRST_STEPS, STEP_ROWS(4), SHOW_STATE],
+      shot: { mode: 'element', selector: '#state-section', padding: 8 },
     },
 
     {
@@ -1897,16 +1980,203 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'save-restore-02-save-state-action',
       describes:
-        'The Session file group with its (i), Save and Load side by side, and '
-        + 'the pointer on Save.',
+        'The Session group of the State section with its (i), Share… and '
+        + 'Load… side by side, and the pointer on Share….',
+      dataset: 'pancreas',
+      steps: [...STATE_OPEN, { scrollIntoView: '#session-state-controls' }],
+      shot: { mode: 'element', selector: '#session-state-controls', padding: 10 },
+      cursor: { on: '#history-share-btn', at: 'center', state: 'hover' },
+    },
+
+    // The State chapter (web_app/m_state_history): the history of the Pancreas
+    // sample, made through the page's own actions, so the graph, the
+    // branches and the dialogs show a real history.
+    {
+      id: 'state-history-step-details',
+      topic: 'state_history',
+      name: 'history-step-details',
+      describes:
+        'The History block of the State section after three steps, with the '
+        + 'second step shown by a double-click: the line under the recording '
+        + 'switch and the branch Main reads 3 steps · 1 undone, the step shown '
+        + 'is marked in the graph, and its details, opened with ›, say who '
+        + 'took it, when and on which branch, its code (keep_cells with the '
+        + 'field, category, count and seed), what it changed with What '
+        + 'changed ›, + Note, and Shown, Branch here, Compare… and ⋯.',
       dataset: 'pancreas',
       steps: [
-        READY,
-        { openSection: '#session-section' },
-        { scrollIntoView: '#session-state-controls' },
+        ...STATE_OPEN, FIRST_STEPS, STEP_ROWS(4),
+        // A click only selects a row; a double-click shows its step, and its
+        // › button opens the details under it.
+        { run: page => page.dblclick('#history-graph .hg-row[data-key="s:s2"] .hg-line') },
+        { waitFor: '#history-graph .hg-row[data-key="s:s2"][aria-current="step"]' },
+        { click: '#history-graph .hg-row[data-key="s:s2"] .hg-details-btn' },
+        { waitFor: '#history-graph .hg-row[data-key="s:s2"] .hg-details' },
+        HISTORY_AT_TOP,
+        { waitForStable: '#history-block', forMs: 1000 },
       ],
-      shot: { mode: 'element', selector: '#session-state-controls', padding: 10 },
-      cursor: { on: '#save-state-btn', at: 'center', state: 'hover' },
+      shot: { mode: 'element', selector: '#history-block', padding: 8 },
+    },
+    {
+      id: 'state-history-branches',
+      topic: 'state_history',
+      name: 'history-branches',
+      describes:
+        'The State section after two undos and a new step: the branch button '
+        + 'reads Branch 1, and the branch picker under it shows the tracker '
+        + 'button, Map, Main (starred as the main branch) and Branch 1 (from '
+        + 'step 1, the branch shown), each with its ⋯ menu, and Branch from the '
+        + 'step shown; below, the graph with Main folded into a stub where '
+        + 'Branch 1 leaves it.',
+      dataset: 'pancreas',
+      steps: [
+        ...STATE_OPEN, FIRST_STEPS, STEP_ROWS(4),
+        HISTORY_MOVE('undo'), HISTORY_MOVE('undo'),
+        takeSteps([['filter.category.visibility', { field: CELL_TYPE, categories: ['Alpha'], visible: false }]]),
+        // The branch picker opens from the branch button beside the
+        // recording switch.
+        { click: '#history-branch-btn' },
+        { waitFor: '#history-branches:not([hidden])' },
+        // The picker pushes the graph down under the pointer; a row under it
+        // shows its hover hint, which is not what this picture is of.
+        { run: page => page.mouse.move(0, 0) },
+        SHOW_STATE,
+        { waitForStable: '#state-section', forMs: 1000 },
+      ],
+      shot: { mode: 'element', selector: '#state-section', padding: 8 },
+    },
+    {
+      id: 'state-history-menu',
+      topic: 'state_history',
+      name: 'history-menu',
+      describes:
+        'The History block with its ⋯ menu open: Play as a tour, Compare two '
+        + 'steps…, Branch map…, Recently deleted…, Copy pseudocode, Copy '
+        + 'methods, Print report…, Save AnnData with this state…, Replay a '
+        + 'saved history…, Start another '
+        + 'tracker…, Show the state at… and Clear history, keep the state….',
+      dataset: 'pancreas',
+      steps: [
+        ...STATE_OPEN, FIRST_STEPS, STEP_ROWS(4), HISTORY_AT_TOP,
+        { click: '#history-menu-btn' },
+        { waitFor: '#history-menu:not([hidden])' },
+      ],
+      shot: { mode: 'region', selectors: ['#history-block', '#history-menu'], padding: 8 },
+    },
+    {
+      id: 'state-compare-two-steps',
+      topic: 'state_history',
+      name: 'compare-two-steps',
+      describes:
+        'The Compare two steps dialog: From and To each name a step, the line '
+        + 'under them says the steps are on one line of steps and how many parts '
+        + 'of the state differ, and each part that differs is listed with what '
+        + 'changed.',
+      dataset: 'pancreas',
+      steps: [
+        ...STATE_OPEN, FIRST_STEPS, STEP_ROWS(4),
+        { click: '#history-menu-btn' },
+        { click: '#history-menu [data-history-command="diff"]' },
+        { waitForText: '#history-diff-status', text: 'of the state' },
+        { waitForStable: '#history-diff-dialog', forMs: 1000 },
+      ],
+      shot: { mode: 'element', selector: '#history-diff-dialog', padding: 0 },
+    },
+    {
+      id: 'state-saved-states-dialog',
+      topic: 'state_history',
+      name: 'saved-states-dialog',
+      describes:
+        'The Load dialog: under Saved in this browser, a state saved under the '
+        + 'name "Without Ductal" and the autosave of the Pancreas history, each '
+        + 'with its kind, size, dataset, steps and when, Open (or Shown), Replay '
+        + 'here, rename and delete; the name field, the History / Current state '
+        + 'only / Steps only choice and Save; and under From a file, Open a '
+        + 'session file… and Replay a session file here….',
+      dataset: 'pancreas',
+      steps: [
+        ...STATE_OPEN, FIRST_STEPS, STEP_ROWS(4),
+        { run: async page => {
+          await page.evaluate(async () => {
+            const saved = window._cellucidHistories.savedStates;
+            // The autosave writes a moment after each step; the named save is
+            // taken once it holds every step.
+            const deadline = Date.now() + 30_000;
+            for (;;) {
+              const list = await saved.list();
+              if (list.some(entry => entry.kind === 'autosave' && entry.steps === 3)) break;
+              if (Date.now() > deadline) throw new Error('The autosave did not write the three steps.');
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            await saved.saveAs('Without Ductal');
+          });
+        } },
+        { click: '#history-load-btn' },
+        { run: page => page.waitForFunction(
+          () => document.querySelectorAll('#saved-states-list .saved-state').length === 2
+        ) },
+        { waitForStable: '#saved-states-dialog', forMs: 1000 },
+      ],
+      shot: { mode: 'element', selector: '#saved-states-dialog', padding: 0 },
+    },
+    {
+      id: 'state-report-dialog',
+      topic: 'state_history',
+      name: 'print-report-dialog',
+      describes:
+        'The Print report dialog: the switch Pictures of the steps chosen (on), '
+        + 'the steps of the history with the newest ticked, and Open report.',
+      dataset: 'pancreas',
+      steps: [
+        ...STATE_OPEN, FIRST_STEPS, STEP_ROWS(4),
+        { click: '#history-menu-btn' },
+        { click: '#history-menu [data-history-command="report"]' },
+        { waitFor: '#history-report-dialog[open]' },
+        { waitForStable: '#history-report-dialog', forMs: 1000 },
+      ],
+      shot: { mode: 'element', selector: '#history-report-dialog', padding: 0 },
+    },
+    {
+      id: 'state-continue-offer',
+      topic: 'state_history',
+      name: 'continue-offer',
+      describes:
+        'The notification Cellucid shows when a dataset whose history this '
+        + 'browser kept is opened again: "Continue where you left off? Kept in '
+        + 'this browser from … on this dataset: 3 steps.", with Continue and '
+        + 'Start fresh.',
+      dataset: 'pancreas',
+      steps: [
+        ...STATE_OPEN, FIRST_STEPS, STEP_ROWS(4),
+        { run: async page => {
+          await page.evaluate(async () => {
+            const saved = window._cellucidHistories.savedStates;
+            const deadline = Date.now() + 30_000;
+            for (;;) {
+              const list = await saved.list();
+              if (list.some(entry => entry.kind === 'autosave' && entry.steps === 3)) break;
+              if (Date.now() > deadline) throw new Error('The autosave did not write the three steps.');
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+          });
+          // The same dataset opened again in this browser: its kept history
+          // is offered, never put back by itself.
+          await page.reload();
+        } },
+        READY,
+        { run: page => page.waitForFunction(() => (
+          document.querySelector('#notification-center')?.textContent
+            ?.includes('Continue where you left off?') === true
+        ), undefined, { timeout: 60_000 }) },
+        // Only the offer stays (it has no timer); the opening's own
+        // notifications expire around it.
+        { run: page => page.waitForFunction(
+          () => document.querySelector('#notification-center')?.childElementCount === 1,
+          undefined, { timeout: 60_000 }
+        ) },
+        { waitForStable: '#notification-center', forMs: 1000 },
+      ],
+      shot: { mode: 'element', selector: '#notification-center', padding: 10 },
     },
 
     {
@@ -1997,8 +2267,8 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'save-restore-03-save-confirmation',
       describes:
-        'A notification reading "Session saved successfully" after Save '
-        + 'produced a session bundle.',
+        'A notification reading "Saved Pancreatic endocrinogenesis (scVelo)'
+        + '.cellucid-session." after Share… › Save file wrote the session file.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -2008,11 +2278,12 @@ function buildAnnotationAndSessionScenarios() {
         { run: async page => {
           await holdNotificationTimers(page);
           const download = page.waitForEvent('download');
-          await page.click('#save-state-btn');
+          await clickSaveSession(page);
           await download;
           await page.waitForFunction(() => (
-            document.querySelector('#notification-center')?.textContent
-              ?.includes('Session saved successfully') === true
+            /Saved .+\.cellucid-session\./.test(
+              document.querySelector('#notification-center')?.textContent ?? ''
+            )
           ));
         } },
       ],
@@ -2024,9 +2295,11 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'save-restore-04-restore-confirmation',
       describes:
-        'The one notification a completed restore publishes: the restore\'s '
-        + 'progress entry, now titled "Loaded" and reading "Session fully '
-        + 'restored.".',
+        'The two notifications a completed restore publishes: "Loaded '
+        + '"Tracker 1 (shared)" from Pancreatic endocrinogenesis '
+        + '(scVelo).cellucid-session beside yours." with Undo, and the '
+        + 'restore\'s progress entry, now titled "Loaded" and reading "Session '
+        + 'fully restored.".',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -2036,8 +2309,9 @@ function buildAnnotationAndSessionScenarios() {
         // three otherwise identical runs it landed above or below the
         // restore's entry, so the stack — and the bytes — changed from run to
         // run, and its N is a timing of the capture host besides.
-        // `saveThenRestore` already waits for "Session fully restored.", the
-        // only notification a completed restore publishes.
+        // `saveThenRestore` already waits for both notifications a completed
+        // restore publishes (the loaded tracker's and "Session fully
+        // restored.").
         { openSection: '#session-section' },
         saveThenRestore({ holdNotifications: true }),
         // Under 1000 ms on purpose: `holdNotificationTimers` defers every
@@ -2052,18 +2326,24 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'save-restore-07-restored-view',
       describes:
-        'The whole application window immediately after a session restore, '
-        + 'with the dataset drawn in the viewer and the sidebar showing the '
-        + 'restored control values.',
+        'The whole application window immediately after a session file was '
+        + 'loaded, with the dataset drawn in the viewer and the State section '
+        + 'showing the loaded history, the step shown marked.',
       dataset: 'pancreas',
       steps: [
         READY,
         { openSection: '#visualization-section' },
         { scrollIntoView: '#renderer-controls' },
         ...RENDERER_CHANGES,
-        { openSection: '#session-section' },
+        { closeSection: '#session-section' },
+        { openSection: '#state-section' },
         saveThenRestore(),
-        { openSection: '#coloring-filtering-section' },
+        // The loaded history puts back which sections were open; the State
+        // section is shown with it.
+        { closeSection: '#session-section' },
+        { closeSection: '#visualization-section' },
+        { openSection: '#state-section' },
+        { scrollIntoView: '#history-block' },
         NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
@@ -2076,8 +2356,8 @@ function buildAnnotationAndSessionScenarios() {
       describes:
         'The whole application window shortly after the Pancreas built-in '
         + 'sample was chosen, showing the embedding coloured by cell type in a '
-        + '3-D orbit view on the light Studio backdrop, with the Session '
-        + 'accordion open beside it.',
+        + '3-D orbit view on the Studio (light) background, with the sidebar '
+        + 'beside it.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -2115,13 +2395,14 @@ function buildAnnotationAndSessionScenarios() {
       name: 'refusal-02-not-a-session-file',
       describes:
         'A Cellucid notification reading "This file is not a Cellucid session '
-        + 'file of format 3 (it does not start with CELLUCID_SESSION/3).", with a'
+        + 'file of format 4 (it does not start with CELLUCID_SESSION/4).", with a'
         + ' dismiss button at its right, after a file that is not a session '
-        + 'bundle was chosen in Load.',
+        + 'file was chosen in Load.',
       dataset: 'pancreas',
       steps: [
         READY,
-        { openSection: '#session-section' },
+        { closeSection: '#session-section' },
+        { openSection: '#state-section' },
         { scrollIntoView: '#session-state-controls' },
         // Drained first: triggered while the sample's own notifications were
         // still expiring, the capture failed with "#notification-center moved
@@ -2144,7 +2425,7 @@ function buildAnnotationAndSessionScenarios() {
             'base64'
           ));
           const chooser = page.waitForEvent('filechooser');
-          await page.click('#load-state-btn');
+          await clickLoadSession(page);
           await (await chooser).setFiles(decoy);
           await page.waitForFunction(() => (
             document.querySelector('#notification-center')?.textContent
@@ -2187,7 +2468,7 @@ function buildAnnotationAndSessionScenarios() {
           await datasetReplaced(before).run(page);
           await NOTIFICATIONS_DRAINED.run(page);
           const download = page.waitForEvent('download');
-          await page.click('#save-state-btn');
+          await clickSaveSession(page);
           const saved = await (await download).path();
           await page.selectOption('#dataset-select', 'dataset:local-demo:garcia');
           await page.waitForFunction(() => (
@@ -2200,7 +2481,7 @@ function buildAnnotationAndSessionScenarios() {
           // A fixed pause here used to let them drain under the crop.
           await NOTIFICATIONS_DRAINED.run(page);
           const chooser = page.waitForEvent('filechooser');
-          await page.click('#load-state-btn');
+          await clickLoadSession(page);
           await (await chooser).setFiles(saved);
           await page.waitForFunction(() => (
             document.querySelector('#notification-center .notification[data-type="error"]') !== null
@@ -3608,8 +3889,9 @@ function buildDataLinkScenarios() {
         'The Session panel with the Pancreatic endocrinogenesis sample loaded: '
         + 'the Dataset box with its name, cells and genes, format and host, '
         + 'description and a collapsed Details; Open data with the Sample '
-        + 'dataset dropdown, the Open… button and the Link or server bar; Save '
-        + 'and Load under Session file; and the collapsed Data mapping group.',
+        + 'dataset dropdown, My datasets naming the open sample, the Open… '
+        + 'button and the Link or server bar; the Stored line; and the '
+        + 'collapsed Subsampling and Data mapping sections.',
       dataset: 'pancreas',
       steps: [PANCREAS_READY, NOTIFICATIONS_DRAINED, { openSection: '#session-section' }],
       shot: { mode: 'element', selector: '#session-section', padding: 6 },
@@ -3620,8 +3902,9 @@ function buildDataLinkScenarios() {
       name: 'data-loading-session-panel-dark',
       describes:
         'The same Session panel in the dark theme: the Dataset box, Open data '
-        + 'with the Sample dataset dropdown, Open… and the Link or server bar, '
-        + 'Session file with Save and Load, and the collapsed Data mapping group.',
+        + 'with the Sample dataset dropdown, My datasets, Open… and the Link or '
+        + 'server bar, the Stored line, and the collapsed Subsampling and Data '
+        + 'mapping sections.',
       dataset: 'pancreas',
       theme: 'dark',
       steps: [
@@ -5624,8 +5907,8 @@ function buildFormatAndViewerScenarios() {
       name: 'show-anndata-driven-from-python',
       describes:
         'The viewer cellucid.show_anndata() serves, opened at its viewer URL, '
-        + 'after Python called viewer.set_color_by("clusters") and '
-        + 'viewer.highlight_cells() on the Ductal cells: the Pancreas sample '
+        + 'after Python called viewer.color_by(...) and '
+        + 'viewer.highlight_cells(...) on the Ductal cells: the Pancreas sample '
         + 'coloured by clusters with the Ductal cells highlighted.',
       setup: pinHighlightGlow,
       entry: async urls => startPythonViewer(urls),
@@ -5650,8 +5933,8 @@ function buildFormatAndViewerScenarios() {
       name: 'cellucid-view-driven-from-r',
       describes:
         'Cellucid opened by cellucid_view() on a Seurat object in an R session, '
-        + 'after R called cellucid_color_by(viewer, "clusters") and '
-        + 'cellucid_highlight() on the Ductal cells: the points are coloured by '
+        + 'after R called cellucid_color_by(viewer, ...) and '
+        + 'cellucid_highlight_cells(viewer, ...) on the Ductal cells: the points are coloured by '
         + 'clusters with the Ductal cells highlighted, and the Dataset box names '
         + 'the object.',
       setup: pinHighlightGlow,
@@ -5755,8 +6038,8 @@ async function startRViewer(urls) {
     `  web_source_url = ${JSON.stringify(await webBuildOrigin())}, web_cache_dir = ${JSON.stringify(cache)})`,
     'cat("VIEWER_URL", viewer$viewer_url, "\\n"); flush(stdout())',
     'cellucid_wait_ready(viewer, timeout = 300)',
-    'cellucid_color_by(viewer, "clusters")',
-    'cellucid_highlight(viewer, colnames(pancreas)[pancreas$clusters == "Ductal"])',
+    'cellucid_color_by(viewer, field = list(source = "obs", key = "clusters"))',
+    'cellucid_highlight_cells(viewer, cells = colnames(pancreas)[pancreas$clusters == "Ductal"])',
     'cat("DRIVEN\\n"); flush(stdout())',
     'repeat httpuv::service(100)',
   ].join('\n');
@@ -6403,9 +6686,9 @@ async function startPythonViewer(urls) {
     `viewer = cellucid.show_anndata(${JSON.stringify(store)}, web_source_url=${JSON.stringify(await webBuildOrigin())}, web_cache_dir=${JSON.stringify(cache)})`,
     'print("VIEWER_URL", viewer.viewer_url, flush=True)',
     'viewer.wait_for_ready(timeout=300)',
-    'viewer.set_color_by("clusters")',
+    'viewer.color_by(field={"source": "obs", "key": "clusters"})',
     `clusters = ad.read_zarr(${JSON.stringify(store)}).obs["clusters"]`,
-    'viewer.highlight_cells(np.flatnonzero(clusters == "Ductal"), color="#e41a1c")',
+    'viewer.highlight_cells(cells=np.flatnonzero(clusters == "Ductal"), color="#e41a1c")',
     'print("DRIVEN", flush=True)',
     'while True:',
     '    time.sleep(1)',

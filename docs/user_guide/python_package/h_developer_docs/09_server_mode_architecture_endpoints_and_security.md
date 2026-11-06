@@ -100,13 +100,13 @@ curl -s http://127.0.0.1:8765/_cellucid/protocol | python -m json.tool
 ```json
 {
   "channel": "_cellucid/ws",
-  "commands": ["clearHighlights", "debug_snapshot", "freeze", "highlight",
-               "ping", "requestSessionBundle", "resetCamera", "setColorBy",
-               "setDataMapping", "setField", "setGeneSet", "setVisibility"],
-  "binaryCommands": ["highlight", "setField", "setVisibility"],
-  "events": ["click", "color_by", "command_error", "data_mapping",
-             "debug_snapshot", "hover", "pong", "ready", "result",
-             "result_removed", "results", "selection", "session_bundle"]
+  "commands": ["action", "agent_answer", "agent_call", "agent_cancel", "agent_list",
+               "debug_snapshot", "freeze", "load_session", "ping", "requestSessionBundle"],
+  "binaryCommands": ["action", "load_session"],
+  "events": ["action_result", "agent_answered", "agent_asking", "agent_result", "agent_tools",
+             "agent_tools_changed", "click", "color_by", "command_error", "data_mapping",
+             "debug_snapshot", "history_changed", "hover", "pong", "ready", "result",
+             "result_removed", "results", "selection", "session_bundle", "session_loaded"]
 }
 ```
 
@@ -117,9 +117,14 @@ curl -s http://127.0.0.1:8765/_cellucid/protocol | python -m json.tool
   channel. A viewer sends only the types named here.
 - `commands` — every command this installation may send to the viewer, which
   is also exactly the set of names a `command_error` may report as having
-  failed.
-- `binaryCommands` — the commands it sends as binary frames (those that name
-  cells). A viewer refuses a server without it and asks for an upgrade.
+  failed. The `agent_*` commands carry an agent app's tool calls
+  (`cellucid mcp`, {doc}`../../web_app/p_developer_docs/31_local_agent_connection`);
+  their answers are the `agent_*` events, delivered to the viewer's agent
+  port and never to the notebook's hooks.
+- `binaryCommands` — the commands it may send as binary frames (an `action`
+  whose parameters hold arrays: cells, a column's values; `load_session`, a
+  session file pushed into the viewer). A viewer refuses a
+  server without it and asks for an upgrade.
 
 The lists grow; there is deliberately no version number to compare against,
 so a viewer tests for the capability it needs rather than inferring it from a
@@ -144,13 +149,14 @@ and the viewer's events back
   the server's own host, a loopback name, or a host in `allowed_hosts`;
 - the first frame is `hello` with the viewer's id and token, answered
   `welcome`, or closed with `4401`;
-- commands are JSON text frames, and binary frames for `highlight`,
-  `setField` and `setVisibility` (uint32 cell indices, read in place by the
-  viewer; a pushed column's values after them), queued
-  in the viewer's outbox until it connects and flushed in order;
+- commands are JSON text frames, and binary frames for an `action` whose
+  parameters hold arrays (each array's elements after the header, read in
+  place by the viewer), queued in the viewer's outbox until it connects and
+  flushed in order;
 - events are JSON text frames (at most 1 MiB) and binary frames for
   `selection` (uint32 cell indices, read in place), `result` (a result's
-  cells and values) and `session_bundle` (streamed to a temporary file);
+  cells and values), `action_result` (an action's outcome as UTF-8 JSON) and
+  `session_bundle` (streamed to a temporary file);
 - the server pings every 20 s; `viewer.stop()` or the server stopping closes
   the channel with `1001`, a newer channel of the same viewer replaces it with
   `4409`, and a frame that breaks the rules closes it with `1008` (`1002`,
@@ -399,7 +405,7 @@ be protecting. It is also read-only: no state is created, consumed or
 authenticated. The `Host` check and the CORS rules above apply to it like any
 other route.
 
-### A session bundle answers one request, once
+### A session file answers one request, once
 
 A `session_bundle` frame is accepted only on an authenticated channel and only
 for a request Python registered (`register_session_bundle_request`) and is

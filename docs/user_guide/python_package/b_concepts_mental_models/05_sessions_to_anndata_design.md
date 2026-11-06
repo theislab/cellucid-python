@@ -2,7 +2,7 @@
 
 **Audience:** developer / power user  
 **Time:** 20–30 minutes  
-**Goal:** understand the protocol and guardrails behind `viewer.request_session_bundle()` and `apply_cellucid_session_to_anndata(...)`.
+**Goal:** understand the protocol and guardrails behind `viewer.request_session()` and `apply_cellucid_session_to_anndata(...)`.
 
 ```{note}
 This page is a “deep path” companion to {doc}`05_sessions_to_anndata_bridge`.
@@ -15,11 +15,11 @@ Most users should start there.
 
 ### 1) Jupyter: “no download” session capture
 
-In a notebook, Python can request the current session bundle from the frontend and receive it as a `CellucidSessionBundle` handle.
+In a notebook, Python can request the viewer's session (its whole history) from the frontend and receive it as a {class}`~cellucid.CellucidSession`.
 
 High-level flow:
 1) Python sends `{"type": "requestSessionBundle", "requestId": ...}` to the viewer on its channel (the notebook widget's comm, or `/_cellucid/ws` for a browser tab).
-2) The web app serializes the current session into raw `.cellucid-session` bytes.
+2) The web app writes the dataset's history as raw `.cellucid-session` bytes (session format 4).
 3) The web app sends those bytes back on the same channel as one binary frame
    (header `{"type": "session_bundle", "requestId": ...}`, then the bundle).
 4) Python streams the frame to a temp file (bounded memory) and validates it.
@@ -30,48 +30,79 @@ Why this matters:
 - Users never have to find/download a file from the browser.
 - The artifact is the same `.cellucid-session` format used by the web app.
 
-### 2) Python: streaming-friendly `.cellucid-session` reader
+### 2) Python: a `.cellucid-session` reader that checks everything first
 
-`CellucidSessionBundle`:
-- indexes chunk offsets once,
-- reads/decompresses chunk payloads on demand.
-
-This keeps memory usage predictable even when sessions include large binary chunks.
+`cellucid.read_session(path)` reads the file chunk by chunk, in order, and
+checks all of it before it returns: every chunk inflated to exactly its
+declared size, every array against its digest, every value against its hash,
+every record against the history model, every tracker's tree whole. A damaged
+file is refused whole, never read in part; a file written by a newer
+Cellucid than this package is refused as newer, never as damaged. It then
+answers from memory through the reading model ({mod}`cellucid.history`):
+`session.tracker(name_or_id)` is a `Tracker` (its steps as a table, its
+branches, turns, notes and journal), `tracker.step(id).state()` the state
+after a step, `step.diff(other)` what differs between two steps, and
+`session.conversations(tracker)` the conversations kept with a tracker.
+cellucid-r reads the same records function for function
+(`cellucid_read_session()`, `cellucid_tracker()`, `cellucid_steps()`, ...).
 
 ### 3) AnnData mutation (safe, minimal, DRY)
 
-`apply_cellucid_session_to_anndata(...)` currently materializes:
+`apply_cellucid_session_to_anndata(...)` plans the state at one step
+(default: the active tracker's head) as rows, and writes them only when asked
+(`dry_run=True` is the default; `plan.apply()` or `dry_run=False` writes):
+- **Labels** → renamed `.obs` columns and categories
 - **Highlights** → one boolean `.obs` column per highlight group
 - **User-defined categorical and continuous fields** → cell-aligned `.obs` columns
+- **Gene sets** → `adata.uns["cellucid"]["gene_sets"]`, and one boolean
+  `var` column each, `cellucid_gene_set__<name>`, on the gene axis the data
+  mapping reads
+- **Presentation** (filters, colours, views, the camera, analyses) → one row
+  per domain the step changed, reported and never applied
 
-Plus optional debugging/provenance under:
-- `adata.uns["cellucid"]["session"]`
+Each row's status is `write`, `unchanged`, `replace` (with `overwrite=True`,
+only a column or gene set an earlier apply wrote) or `not-applied` (with the
+reason). Every apply that writes appends one provenance record to
+`adata.uns["cellucid"]["history_applied"]` (JSON text holding a list).
+
+The rules are the same in cellucid-python, cellucid-r
+(`cellucid_apply_session()`) and the web app (whose **Save AnnData with this
+state…** writes a new `.zarr.zip` of the open dataset with the state shown
+applied, {ref}`history-save-anndata`), and the three are held to one shared
+expected plan (its rows and its gene-set `var` columns): the golden history
+`history_golden.cellucid-session` and its `history_golden.expected.json`,
+written by the web repository's `scripts/generate-history-golden.mjs` and
+pinned by digest in all three test suites.
 
 ---
 
 ## Why it’s implemented this way
 
-### “Bundle first”: one artifact everywhere
+### “Session file first”: one artifact everywhere
 
-Everything is built around the `.cellucid-session` bundle:
-- the web app's **Save** and **Load** buttons (**Session file**)
+Everything is built around the `.cellucid-session` file:
+- the web app's **Share…** and **Load…** buttons (**State › Session**)
 - Jupyter no-download capture
-- Python application to AnnData
+- Python and R application to an object
+- pushing a saved history into a viewer (`viewer.load_session(path)`; its
+  trackers are added beside the person's own)
 
 Benefits:
-- reproducibility: the session is a sharable file artifact,
-- debuggability: chunks can be inspected independently,
-- modularity: features can contribute chunks without a monolithic schema.
+- reproducibility: the session is a sharable file artifact, and its history
+  says who did what, step by step,
+- one shape: every state domain's value is stored the same way (a skeleton
+  and its arrays, by content hash), so a new feature's state needs no
+  encoder of its own in any reader.
 
-### Treat session bundles as untrusted input
+### Treat session files as untrusted input
 
 Even if the session “came from your own browser”, treat it as external input:
-- validate framing (MAGIC header),
+- validate framing (the signature, every frame length),
 - bound every decompression by the size its chunk declares (no gzip “zip
   bomb” can inflate past it),
-- bounds-check indices and code arrays,
-- validate each declared chunk's exact metadata, dependency order, byte
-  framing, codec, and decoded size before consuming it.
+- check every array against its digest and every value against its hash,
+- check every record against the history model and every tracker's tree whole,
+- bounds-check cells and codes when a state is applied.
 
 This is critical for:
 - robustness (sessions should not brick restore),
@@ -101,6 +132,17 @@ that names cells (a highlight, a visibility change) as one binary frame of
 `uint32` cell indices. A command sent before the viewer has connected waits
 and is sent, in order, when it does.
 
+### Notebook turns and the live history
+
+An `action` command names the notebook turn it belongs to: `turn` (its id,
+`python-` and 12 hexadecimal digits) and `turnLabel`, both text inside
+`with viewer.turn("..."):` and both null outside one. The viewer groups a
+turn's steps and undoes them together. Every change of the viewer's history
+reaches Python as a `history_changed` event (`kind`: `step`, `moved`,
+`edited`, `tracker` or `loaded`), and `viewer.load_session(path)` sends a
+session file as one binary `load_session` command, answered by
+`session_loaded` (the tracker shown and its head) or `command_error`.
+
 ### Session bundle frames
 
 Guardrails:
@@ -117,30 +159,44 @@ Guardrails:
 
 A `.cellucid-session` file is:
 
-1) MAGIC header: `CELLUCID_SESSION/3\n` (session format 3; a session of another format is refused naming it, any other signature as not a session)  
+1) the signature `CELLUCID_SESSION/4\n` (session format 4; a session of another format is refused naming it, any other signature as not a session)  
 2) `manifestByteLength` (u32 LE)  
 3) `manifest` JSON bytes (UTF‑8)  
 4) repeated chunks:
    - `chunkByteLength` (u32 LE)
-   - `chunkBytes` (codec applied, often gzip)
+   - `chunkBytes` (gzip'd, or as they are where gzip saves little)
 
 The manifest contains:
+- what wrote it (the Cellucid version and the digest of its action
+  catalogue), the action types its steps use, and what the share kept
+  (`scope`)
 - dataset fingerprint (id, display name, counts, cell order, data mapping)
 - the dataset source (sample, link, server, or local file name)
-- `requires`: the obs columns and genes the session uses
-- chunk IDs
-- chunk metadata (`kind`, `codec`, size guards)
+- `requires`: the obs columns and genes the shown state uses
+- the trackers (each the history model's `Tracker`: its branches, turns,
+  notes and head; its steps, journal and conversations as chunk ids) and the
+  active one
+- the chunks: each tracker's steps, the parts (sub-values several values
+  share, stored once), every array once by its digest, the values (by
+  content hash; the ones the active head shows first; none in a share of the
+  steps only), each tracker's journal, and the conversations when they were
+  included; long steps, parts and values are cut into several chunks
 
 In Python, you can inspect:
 
 ```python
-from cellucid import CellucidSessionBundle
+import cellucid
 
-bundle = CellucidSessionBundle("my.cellucid-session")
-bundle.dataset_fingerprint
-bundle.required_fields
-bundle.list_chunk_ids()[:20]
+session = cellucid.read_session("my.cellucid-session")
+session.dataset_fingerprint
+session.requires
+session.trackers
+tracker = session.tracker()
+tracker.steps.head()
+tracker.step(tracker.head_id).state()["field-overlays"]
 ```
+
+The full format is on {doc}`../g_api_reference_coverage/api/sessions`.
 
 ---
 
@@ -148,28 +204,28 @@ bundle.list_chunk_ids()[:20]
 
 ### Cell identity is index-based (today)
 
-Many dataset-dependent chunks align to **row position**:
-- highlight memberships are cell positions (sorted-delta varints, a bitset or
-  runs, whichever is smallest), or, for a whole category or most of one, a
-  reference to that category's cells checked by count and digest
-- user-defined codes are arrays aligned to dataset order (raw, runs, or packed
-  1, 2 or 4 bits per code)
+State values name cells by **original position** (the row in the order the
+dataset gives its cells):
+- a highlight group's cells are an ascending list of original positions
+- a user-defined field's codes or values are a column: one value per cell, or
+  per cell of an ascending list of original positions
 
-This is why exact fingerprint rejection exists.
+This is why fingerprint rejection exists.
 
-### Fingerprint rejection is exact
+### Fingerprint rejection checks what the chosen step needs
 
-The caller must supply `expected_dataset_id`. Python compares it with the
-bundle's `datasetId`, compares `cellCount` with the target AnnData, requires
-every key the `dataMapping` names to exist on it, compares `varCount` with
-the gene count of the axis that mapping reads, and requires every obs column and
-gene listed in the manifest's `requires`. Any mismatch raises `ValueError`
-before any mutation is published.
+Python compares the session's `datasetId` with `adata.uns["cellucid"]["id"]`
+when the object names one, compares `cellCount` with the target AnnData (the
+subsample's cells, for a session saved on one), requires every key the
+`dataMapping` names to exist on it, compares `varCount` with the gene count
+of the axis that mapping reads, takes the `cellOrder` digest when the object
+has that embedding, and requires every obs column and gene the chosen step's
+state uses. Any mismatch raises `ValueError` before anything is written.
 
 This prevents the worst failure mode:
 > applying “correct-looking” highlights to the wrong biological cells.
 
-### `cellOrder` and `dataMapping`: recorded by the viewer, checked here
+### `cellOrder` and `dataMapping`: recorded by the viewer, checked on apply
 
 The manifest fingerprint carries two records beside those three scalars, and both
 are required. `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
@@ -186,22 +242,18 @@ selections would then silently denote different cells.
 `"layer:<name>"`, or null), `log1p`, `highlyVariable`, `latent`, and
 `vectorFields`, plus `modality` for a dataset of several modalities (a MuData).
 
-The two readers check them differently:
+The two readers check them as follows:
 
-| | web app | Python |
+| | web app | Python (apply) |
 |---|---|---|
 | `cellOrder` and `dataMapping` present | required | required |
 | record shapes | validated | validated |
 | `dataMapping` keys exist on the dataset | checked | checked against the `AnnData` |
-| `cellOrder` digest value | compared against the stored embedding of the cells it opens | never checked |
+| `cellOrder` digest value | compared against the stored embedding of the cells it opens | compared against the `AnnData`'s stored embedding over the session's cells, when it has that embedding |
 
-Python does not check the digest. It is the viewer's check, taken on the cells
-it opens, while this API applies a session to an `AnnData` whose rows and
-embeddings the caller controls. Enforcing cell-order identity is the viewer's
-job.
-
-So a bundle this reader accepts may still be refused by the web app. That
-direction is expected.
+A digest is a sum over the cells: a mismatch says the cells differ (other
+cells, or another order), not which. An `AnnData` without the session's
+embedding is not checked for cell order.
 
 ## Troubleshooting (protocol-level)
 
@@ -214,12 +266,12 @@ Meaning:
 Fix:
 - request a new bundle again from the *current* viewer instance.
 
-### Symptom: “This file is not a Cellucid session file of format 3 …”
+### Symptom: “This file is not a Cellucid session file of format 4 …”
 
 Meaning:
 - the bytes the viewer sent on its channel for a `requestSessionBundle` are
   not a `.cellucid-session` file of the current format (or a file passed to
-  `CellucidSessionBundle(...)` is not one). On the channel, the frame is
+  `cellucid.read_session(...)` is not one). On the channel, the frame is
   dropped and `request.result()` raises `RuntimeError` ("The viewer
   did not capture the session bundle: The viewer sent an invalid session
   bundle: …") instead of waiting for its timeout.

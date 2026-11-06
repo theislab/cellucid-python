@@ -1,156 +1,152 @@
 """
-Exact value checks shared by every part of the session reader.
+Exact checks on the session values an application reads.
 
-A session bundle is untrusted input, so these are exact rather than permissive:
-booleans must be booleans and not truthy values, key sets must match exactly
-rather than be contained, and identifiers must match the wire pattern. Each
-takes a ``label`` so the failure names the field the caller was reading.
+A session file's values are checked against their hashes when the file is
+read (:class:`cellucid.CellucidSession`), which proves they are what was
+saved, not that they are what this version understands. These checks are
+exact rather than permissive: booleans must be booleans, key sets must match
+exactly, and a field name must be one the viewer accepts. Each takes a
+``label`` so the refusal names the value and field it was reading, and each
+refuses with ``ValueError``.
 """
 
 from __future__ import annotations
 
+import math
 import re
+from collections.abc import Collection
 from typing import Any
 
 import numpy as np
 
-from ._schema import _WIRE_ID_RE
+from ..session import _Array
 
 
-def _require_exact_bool(value: Any, *, label: str) -> bool:
+def _refuse(label: str, what: str) -> ValueError:
+    return ValueError(f"This session's {label} {what}")
+
+
+def _require_bool(value: Any, *, label: str) -> bool:
     if type(value) is not bool:
-        raise TypeError(f"{label} must be exactly True or False")
+        raise _refuse(label, "must be true or false.")
     return value
 
 
-def _require_nonempty_string(value: Any, *, label: str) -> str:
+def _require_text(value: Any, *, label: str) -> str:
     if not isinstance(value, str) or not value:
-        raise TypeError(f"{label} must be a non-empty string")
+        raise _refuse(label, "must be a non-empty text.")
     return value
 
 
-def _require_wire_id(value: Any, *, label: str) -> str:
-    identifier = _require_nonempty_string(value, label=label)
-    if _WIRE_ID_RE.fullmatch(identifier) is None:
-        raise ValueError(
-            f"{label} must use only ASCII letters, digits, '.', '_', or '-' "
-            "and be at most 180 characters"
-        )
-    return identifier
+def _require_optional_text(value: Any, *, label: str) -> str | None:
+    if value is None:
+        return None
+    return _require_text(value, label=label)
 
 
-def _require_nonnegative_int(value: Any, *, label: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"{label} must be an integer")
-    if value < 0:
-        raise ValueError(f"{label} must be non-negative")
-    return int(value)
-
-
-def _require_exact_keys(
-    value: Any,
-    expected: set[str],
-    *,
-    label: str,
-    optional_keys: set[str] | None = None,
-) -> dict[str, Any]:
+def _require_record(value: Any, *, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
-        raise TypeError(f"{label} must be an object")
-    allowed = expected | (optional_keys or set())
-    if not expected <= set(value) or not set(value) <= allowed:
-        missing = sorted(expected - set(value))
-        unknown = sorted(set(value) - allowed)
-        details: list[str] = []
-        if missing:
-            details.append("missing " + ", ".join(missing))
-        if unknown:
-            details.append("unknown " + ", ".join(unknown))
-        raise ValueError(f"{label} has invalid fields ({'; '.join(details)})")
+        raise _refuse(label, "must be a record.")
     return value
+
+
+def _require_list(value: Any, *, label: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise _refuse(label, "must be a list.")
+    return value
+
+
+def _require_exact_keys(value: Any, expected: Collection[str], *, label: str) -> dict[str, Any]:
+    record = _require_record(value, label=label)
+    missing = sorted(set(expected) - set(record))
+    unknown = sorted(set(record) - set(expected))
+    if missing or unknown:
+        details = [*(["missing " + ", ".join(missing)] if missing else []),
+                   *(["unknown " + ", ".join(unknown)] if unknown else [])]
+        raise _refuse(label, f"has other fields than this version reads ({'; '.join(details)}).")
+    return record
+
+
+def _require_finite_number(value: Any, *, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        raise _refuse(label, "must be a finite number.")
+    return float(value)
+
+
+def _require_source(value: Any, *, label: str) -> str:
+    if value not in ("obs", "var"):
+        raise _refuse(label, 'must be "obs" or "var".')
+    return str(value)
 
 
 #: What the viewer refuses in a field name (``StateValidator.validateFieldKey``
 #: in ``app/utils/state-validator.js``): control characters and zero-width
 #: characters. A ``:`` is allowed -- ATAC feature names use it.
 _FIELD_KEY_CONTROL = re.compile("[\u0000-\u001f\u007f-\u009f]")
-_FIELD_KEY_INVISIBLE = re.compile("[\u200b\u2060\ufeff]")
+_FIELD_KEY_INVISIBLE = re.compile("[​⁠﻿]")
 
 
 def _require_field_key(value: Any, *, label: str) -> str:
     """A field name as the viewer accepts one when a field is named or renamed."""
-    key = _require_nonempty_string(value, label=label)
+    key = _require_text(value, label=label)
     if key.strip() != key:
-        raise ValueError(f"{label} cannot have leading or trailing whitespace")
+        raise _refuse(label, "cannot have leading or trailing whitespace.")
     for pattern, what in ((_FIELD_KEY_CONTROL, "control"), (_FIELD_KEY_INVISIBLE, "zero-width")):
         found = pattern.search(key)
         if found is not None:
-            raise ValueError(
-                f"{label} cannot contain the {what} character U+{ord(found.group(0)):04X}"
-            )
+            raise _refuse(label, f"cannot contain the {what} character U+{ord(found.group(0)):04X}.")
     return key
 
 
-def _reserve_column(existing: set[str], name: str) -> None:
-    if name in existing:
-        raise ValueError(f"Column already exists: {name}")
-    existing.add(name)
+def _require_category_primitive(value: Any, *, label: str) -> str | bool | int | float:
+    """A category label: a string, finite number, or boolean (``validateCategoryLabel``)."""
+    if isinstance(value, str | bool):
+        return value
+    if isinstance(value, int | float) and math.isfinite(value):
+        return value
+    raise _refuse(label, "must be a string, finite number, or boolean.")
 
 
-def _require_optional_string(value: Any, *, label: str) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise TypeError(f"{label} must be a string or null")
+def _category_identity(value: Any) -> tuple[str, Any]:
+    """A category label's identity as JavaScript tells labels apart: ``1``
+    and ``"1"`` differ, ``1`` and ``1.0`` do not."""
+    if isinstance(value, bool | np.bool_):
+        return ("boolean", bool(value))
+    if isinstance(value, str):
+        return ("string", value)
+    if isinstance(value, int | float | np.integer | np.floating):
+        return ("number", float(value))
+    return ("other", repr(value))
+
+
+def _require_category_list(value: Any, *, label: str) -> list[str | bool | int | float]:
+    items = _require_list(value, label=label)
+    if not items:
+        raise _refuse(label, "must list at least one category.")
+    out: list[str | bool | int | float] = []
+    seen: set[tuple[str, Any]] = set()
+    for index, item in enumerate(items):
+        exact = _require_category_primitive(item, label=f"{label}[{index}]")
+        identity = _category_identity(exact)
+        if identity in seen:
+            raise _refuse(label, f"lists the category {exact!r} twice.")
+        seen.add(identity)
+        out.append(exact)
+    return out
+
+
+def _require_array(value: Any, types: Collection[str], *, label: str) -> _Array:
+    """A typed array of one of ``types`` (JavaScript type names)."""
+    if not isinstance(value, _Array) or value.type not in types:
+        raise _refuse(label, f"must be a {' or '.join(sorted(types))}.")
     return value
 
 
-def _require_category_list(
-    value: Any,
-    *,
-    label: str,
-    nonempty: bool,
-) -> list[str | bool | int | float]:
-    if not isinstance(value, list):
-        raise TypeError(f"{label} must be an array")
-    if nonempty and not value:
-        raise ValueError(f"{label} must be a non-empty array")
-    output: list[str | bool | int | float] = []
-    identities: set[tuple[str, Any]] = set()
-    for index, item in enumerate(value):
-        exact = _require_category_primitive(item, label=f"{label}[{index}]")
-        identity: tuple[str, Any]
-        if isinstance(exact, bool):
-            identity = ("boolean", exact)
-        elif isinstance(exact, str):
-            identity = ("string", exact)
-        else:
-            identity = ("number", float(exact))
-        if identity in identities:
-            raise ValueError(f"{label} must contain unique exact values")
-        identities.add(identity)
-        output.append(exact)
-    return output
-
-
-def _require_finite_number(value: Any, *, label: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise TypeError(f"{label} must be a finite number")
-    if not np.isfinite(value):
-        raise ValueError(f"{label} must be a finite number")
-    return float(value)
-
-
-def _require_highlight_identity(value: Any, *, prefix: str, label: str) -> str:
-    identity = _require_nonempty_string(value, label=label)
-    if re.fullmatch(rf"{re.escape(prefix)}[1-9]\d*", identity) is None:
-        raise ValueError(f"{label} must use the current {prefix}<positive integer> identity")
-    return identity
-
-
-def _require_category_primitive(value: Any, *, label: str) -> str | bool | int | float:
-    if isinstance(value, str | bool):
-        return value
-    if isinstance(value, int | float) and not isinstance(value, bool):
-        _require_finite_number(value, label=label)
-        return value
-    raise TypeError(f"{label} must be a string, finite number, or boolean")
+def _require_cell_list(value: Any, n_obs: int, *, label: str) -> np.ndarray:
+    """Cells by original position: an ascending ``Uint32Array``, each below ``n_obs``."""
+    cells = _require_array(value, ("Uint32Array",), label=label).data
+    if cells.size > 1 and not bool(np.all(cells[1:] > cells[:-1])):
+        raise _refuse(label, "must list cells strictly ascending.")
+    if cells.size and int(cells[-1]) >= n_obs:
+        raise _refuse(label, f"names the cell {int(cells[-1])}, and the dataset has {n_obs}.")
+    return cells

@@ -45,11 +45,13 @@ Follow these sections in order:
 
 Read everything, but pay special attention to:
 
-- Section 0.3 (people/process): who merges PRs, who merges duplicates, and how decisions are communicated.
+- Section 0.1 (people/process): who merges PRs, who merges duplicates, and how decisions are communicated.
+- Section 4 (what a file may hold, and what a Pull leaves out).
 - Section 5 (GitHub settings): fork/PR flow, CI validation, and branch strategy.
 - Section 9 (consensus parameters): how thresholds behave under disagreement.
 - Section 10 (merges): when to merge vs when to leave disputed.
 - Section 13 (rate limits, storage, and “it works for me” failures).
+- *Limits*: what GitHub and Cloudflare bound, and what Cellucid cannot check.
 :::
 
 ::::
@@ -118,7 +120,11 @@ Cellucid intentionally locks category renaming/merging while annotation voting i
   - **Direct publish** (contributors have push access), or
   - **Fork + Pull Request** (contributors do not have push access).
 - You have a plan for **branch consistency** (everyone must use the same branch).
-- You enable validation CI (recommended): it prevents broken JSON from breaking Pull for everyone.
+- You enable validation CI (recommended): it rejects a broken file in a pull
+  request before it is merged. CI cannot stop a direct write (a collaborator
+  with push access publishes before CI runs), so Cellucid never trusts the
+  repository to be valid: on Pull it leaves a broken file out on its own and
+  says which one (Section 4).
 
 :::{important}
 Community annotation is designed so each contributor writes only their own user file. Authors should avoid manually editing `annotations/users/*.json` unless you are doing a targeted repair and you understand the schema.
@@ -256,7 +262,8 @@ annotations/
   config.schema.json
   schema.json
   users/
-    (one JSON file per contributor)
+    .gitkeep      (one LF byte; keeps the empty folder in Git)
+    (one JSON file per contributor, ghid_<GitHub user id>.json)
   moderation/
     merges.json   (optional but recommended; authors publish it from the UI)
     merges.schema.json
@@ -265,31 +272,56 @@ annotations/
     validate.yml  (recommended)
 scripts/
   validate_user_files.py
+.gitattributes
 ```
 
 The browser requires both `annotations/config.schema.json` and
 `annotations/moderation/merges.schema.json` even though the active
 `annotations/moderation/merges.json` document itself is optional.
 
+**The three schema files must be the template's, byte for byte.** Cellucid
+identifies them by content: it reads each schema's Git blob id from the
+repository and accepts the repository only when all three are exactly the
+files published in
+[theislab/cellucid-annotation](https://github.com/theislab/cellucid-annotation)
+(user files version 3, merges version 3, config version 1). It never downloads
+them. A schema that differs in any byte (an older version, an edit, other line
+endings) stops Pull with a message that names the file and asks you to copy it
+again. `.gitattributes` keeps every file's line endings LF on every platform,
+so a checkout on Windows commits the same bytes; copy it with the schemas.
+
 ### Recommended “template-first” setup
 
-The workspace contains a ready-to-copy template repo:
+The template repository is
+[theislab/cellucid-annotation](https://github.com/theislab/cellucid-annotation).
+Copy only its layout files, at the same paths:
 
-- `cellucid-annotation/`
+- `annotations/` (with `annotations/users/.gitkeep`; replace the example
+  `annotations/config.json` entry with your own)
+- `scripts/validate_user_files.py`
+- `.github/workflows/validate.yml`
+- `.gitattributes`
+
+Leave the template's own `tests/`, `scripts/generate_contract_corpus.py`,
+`.github/workflows/tests.yml`, licence and policy files behind: they test and
+govern the template, not your annotation repository.
 
 ::::{tab-set}
 
 :::{tab-item} GitHub UI (No Command Line)
 
 1) Create a new GitHub repository (public or private).
-2) Copy the contents of `cellucid-annotation/` into the root of the new repo.
+2) Add the layout files listed above at the same paths, with their content
+   unchanged (the schemas byte for byte).
 3) Update `annotations/config.json` (Section 4).
 4) Commit + push.
 
 If you’re doing this in the GitHub web UI:
 
 - create the folders/files exactly as shown,
-- copy/paste file contents carefully (JSON is strict: no trailing commas).
+- copy/paste file contents carefully (JSON is strict: no trailing commas);
+  for the three schema files, upload the files themselves rather than pasting
+  them, so not a byte changes.
 
 :::
 
@@ -297,29 +329,35 @@ If you’re doing this in the GitHub web UI:
 
 1) Create an empty repo on GitHub.
 2) Clone it locally.
-3) Copy the template contents into the repo root.
+3) Copy the layout files into the repo root.
 4) Edit `annotations/config.json`.
 5) Commit + push.
 
-Example on macOS/Linux:
+Example on macOS/Linux (from a clone of `cellucid-annotation`):
 
 ```bash
-rsync -a --exclude '.git/' /path/to/cellucid-annotation/ /path/to/your-annotation-repo/
+cd /path/to/cellucid-annotation
+rsync -aR annotations scripts/validate_user_files.py .github/workflows/validate.yml .gitattributes /path/to/your-annotation-repo/
+cd /path/to/your-annotation-repo
 git add -A
 git commit -m "Initialize Cellucid annotation repo"
 git push
 ```
 
-The trailing slashes are intentional. Unlike a `*` copy, this also copies the
-template's `.github/` workflow directory while excluding only the template's
-own Git history.
+`rsync -R` keeps each path relative to the template root, so the files land
+at the same paths in your repository.
 
 Windows PowerShell equivalent:
 
 ```powershell
-Get-ChildItem -Force 'C:\path\to\cellucid-annotation' |
-  Where-Object Name -ne '.git' |
-  Copy-Item -Destination 'C:\path\to\your-annotation-repo' -Recurse -Force
+Set-Location 'C:\path\to\cellucid-annotation'
+$dest = 'C:\path\to\your-annotation-repo'
+foreach ($p in 'annotations', 'scripts\validate_user_files.py', '.github\workflows\validate.yml', '.gitattributes') {
+  $parent = Split-Path (Join-Path $dest $p)
+  New-Item -ItemType Directory -Force -Path $parent | Out-Null
+  Copy-Item -Recurse -Force $p $parent
+}
+Set-Location $dest
 git add -A
 git commit -m "Initialize Cellucid annotation repo"
 git push
@@ -401,7 +439,11 @@ For large groups, a dedicated branch reduces accidental changes to `main` and ma
 
 - `annotatableSettings[fieldKey]`
   - Per-field consensus rules.
-  - `minAnnotators` (integer, 0 or more): minimum unique voters required before a bucket can be anything other than “Pending”.
+  - `minAnnotators` (whole number, 0 or more; the only upper bound is
+    9,007,199,254,740,991, the largest integer a browser holds exactly):
+    minimum unique voters required before a bucket can be anything other than
+    “Pending”. A bucket nobody voted on is always “Pending”, even with
+    `minAnnotators: 0`.
   - `threshold` (number -1..1): minimum `confidence` to reach “Consensus”.
 
 - `closedFields`
@@ -429,6 +471,8 @@ Cellucid computes (per category bucket):
 Important edge cases:
 
 - If `voters < minAnnotators` → status is **Pending** (even if there is a strong early leader).
+- If nobody voted (`voters = 0`) → status is **Pending**, whatever `minAnnotators` and `threshold` say.
+- Suggestions with exactly the same label count as one suggestion (Section 10); `voters` counts each person once.
 - Suggestions are ranked by net vote first and upvote count second. A top tie
   exists only when suggestions have both equal net vote and equal upvote count;
   that tie is **Disputed**.
@@ -443,28 +487,80 @@ In the annotation repo (not in Cellucid), run:
 python scripts/validate_user_files.py
 ```
 
-This validates:
+This validates (Python 3.10 or newer; it reports every problem as an error,
+never as a crash):
 
+- that the three schemas are the canonical ones, byte for byte
 - `annotations/config.json`
-- `annotations/users/*.json`
+- every entry under `annotations/users/`: only `ghid_<id>.json` user files and
+  the `.gitkeep` sentinel may be there (no other file, folder or link)
 - `annotations/moderation/merges.json` (optional)
+- that no path is a case variant of a layout path (such as
+  `annotations/Users/`), which Cellucid never reads
 
 If this fails, fix the file(s) it reports before inviting annotators.
 
-### Pull bounds and atomic failure
+### What a file may hold
 
-Each active annotation JSON document is limited to 1,000,000 decoded UTF-8
-bytes, the most GitHub's Contents API returns as JSON. A Pull has no limit on
-how many user files there are or on their total size: changed files are
-fetched and cached a batch at a time, and the merged view is compiled by
+- **No text has a length limit**: labels, evidence, ontology ids, marker
+  genes, comments, merge notes, profile fields, dataset ids and names and
+  field keys can be as long as the file allows. Every text is *exact*: its
+  first and last characters are not whitespace, and it is never trimmed.
+  Whitespace is one character class everywhere (the schemas, the validator and
+  the app), the union of JavaScript's `\s` and Python's `str.isspace()`.
+- **The only size bound is the file**: every active annotation document
+  (`annotations/config.json`, each `annotations/users/ghid_<id>.json`, and
+  `annotations/moderation/merges.json`) is at most 1,000,000 UTF-8 bytes,
+  the most GitHub's repository Contents API returns as JSON
+  ([GitHub: get repository content](https://docs.github.com/en/rest/repos/contents#get-repository-content)).
+  One contributor's file holds every dataset they annotated in this
+  repository, so this bound covers all of them together.
+- **Integers** are at most 9,007,199,254,740,991.
+- **JSON nesting** is at most 512 levels in both validators (Python's JSON
+  reader recurses once per level and stops at the interpreter's recursion
+  limit, 1000 by default); no valid annotation file nests deeper than 7.
+- **Suggestion ids name their owner**: `ghid_<id>_<rest>`, where `ghid_<id>`
+  is the proposer's own identity (`proposedBy`) and `<rest>` is exact text
+  without `:` (Cellucid writes `ghid_<id>_<random UUID>`). Because the digits
+  end at that `_`, no contributor can write an id that collides with, or
+  claims to be, another contributor's suggestion. Votes, comments and merges
+  may name anyone's suggestion; a deletion marker (`deletedSuggestions`)
+  names only the file owner's own.
+
+### Pull: what stops it and what is left out
+
+A Pull has no limit on how many user files there are or on their total size
+(GitHub's own listing limit is under *Limits* below). It reads the repository
+at one commit, downloads only the files whose Git blob id changed since the
+last completed Pull, keeps each batch in the browser's file cache as it
+arrives (an interrupted Pull resumes there), and compiles the merged view by
 streaming the cache one file at a time.
 
-Any missing configured categorical field, invalid or oversized active
-document, or incomplete fetch fails the complete
-Pull without changing annotation state. Cellucid never publishes a partial
-merged view from an invalid repository. The configured-field check occurs
-before raw-cache scope selection or user/moderation downloads; repository
-preflight and fetch-validation failures also occur before cache mutation.
+**One file never stops a Pull.** A user file or merges file that is not
+valid (malformed JSON, over 1,000,000 bytes, failing its schema, a version
+other than 3) is left out of the consensus on its own: Cellucid keeps the
+reason with the file's blob id (so it is not downloaded again until it
+changes), shows one warning that says how many files were left out, and lists
+each file with its reason under the warning's details. For the open dataset,
+Cellucid reads a user file's profile and that dataset's section only, so a
+broken section of another dataset does not leave the file out here. A path
+under `annotations/users/` that is not a `ghid_<id>.json` file, and a case
+variant of a layout path (`annotations/Users/`), is ignored and listed the
+same way. If your own published file is the one left out, the warning says so
+first: Publish will not overwrite it until you fix or remove it on GitHub.
+
+**These stop a Pull**, because nothing can be compiled without them:
+
+- a schema file that is not the canonical one, a missing
+  `annotations/config.json` or `annotations/users/` folder, or a missing branch;
+- an invalid `annotations/config.json`;
+- a listing of `annotations/users/` that GitHub reports as truncated;
+- a configured categorical field the open dataset does not have. That check
+  fails the complete Pull without changing annotation state, and it runs
+  before selecting the raw-cache scope or downloading any user or moderation
+  files, so the mismatch cannot change the file cache.
+
+A Pull that stops leaves the annotation view as it was.
 
 ---
 
@@ -476,7 +572,13 @@ You have two viable models:
 
 1) **Direct publish** (annotators have write access)
    - Pros: simplest experience (Publish writes directly to `annotations/users/ghid_<id>.json`)
-   - Cons: requires adding many people as collaborators; less review control
+   - Cons: requires adding many people as collaborators; less review control.
+     Anyone with push access can also write any file with Git or GitHub's web
+     editor, including another contributor's `ghid_<id>.json`: Cellucid's
+     Worker refuses such a write made through Cellucid, but Cellucid reads
+     files by content and cannot tell who committed them. Give push access
+     only to people you trust with every file, and review the commit history
+     when in doubt.
 
 2) **Fork + Pull Request publish** (annotators do not have write access)
    - Pros: reviewable contributions, no direct writes to your repo
@@ -492,15 +594,47 @@ In other words, Cellucid uses a fork + Pull Request only when the repository
 allows forking. It selects exactly one route from repository metadata before
 mutation; a route failure is terminal and does not switch to the other route.
 
-### Fork + PR model: one extra requirement most teams miss
+### Fork + PR model: what a contributor does first
 
-For PR-based publishing, contributors need their fork to be accessible to the GitHub App token.
+Cellucid never creates a fork. A contributor without write access does two
+things on GitHub before their first Publish:
 
-Practical recommendation you can tell annotators:
+1. **Fork the repository**: `https://github.com/<owner>/<repo>/fork` (any
+   name; Cellucid finds a renamed fork among the repository's forks).
+2. **Install the Cellucid GitHub App on their own account with access to the
+   fork**: *All repositories*, or *Only select repositories* with the fork
+   selected (a fork made after the installation is added under *Settings* →
+   *Applications* → *Installed GitHub Apps* → *Configure*). A user token
+   reaches a repository only in an account where the app is installed
+   ([GitHub: authenticating on behalf of a user](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-with-a-github-app-on-behalf-of-a-user)),
+   and the head branch and the user file are written in the fork. Opening the
+   pull request uses the app's installation on your repository.
 
-- Install the Cellucid GitHub App on your **personal GitHub account** with access to **all repositories** (so newly created forks are included automatically).
+What Publish says otherwise:
 
-If they do not do this, the PR flow may fail in confusing ways (the UI can’t see the fork).
+- No fork: `You have no fork of <owner>/<repo> yet: fork it on GitHub, then
+  Publish again.`, with a **Fork on GitHub** link to
+  `https://github.com/<owner>/<repo>/fork` (also under *Details*). Nothing is written.
+- A fork GitHub is still copying (GitHub creates forks asynchronously):
+  `GitHub is still copying your fork <login>/<repo>; Publish again in a
+  minute.` Cellucid asks once and does not wait.
+- The app cannot write to the fork: `Cellucid cannot write to your fork
+  <login>/<repo>: install Cellucid's GitHub App on your account with access to
+  it, then Publish again.`, with an **Install the app** link.
+
+How a fork publish works, so the pull requests you receive make sense:
+
+- Each contributor has **one pull request per base branch**, from one head
+  branch in their fork named `cellucid-annotations/ghid_<id>/…`. It carries
+  their whole user file, so every dataset they annotate in this repository
+  goes into the same pull request.
+- On every Publish, Cellucid starts from the file in that open pull request
+  (it holds sections not merged yet) or, without one, from the file on your
+  branch, replaces the open dataset's section, then **resets the head branch
+  to your branch's current tip** and writes the file on it. The pull request's
+  diff is that one user file, and a pull request you squash-merged earlier
+  never makes the next one conflict. An open pull request is reused; a new one
+  is opened only when none is open.
 
 ### Enable validation CI
 
@@ -509,10 +643,19 @@ The template includes:
 - `scripts/validate_user_files.py`
 - `.github/workflows/validate.yml`
 
+The shipped `validate.yml` runs one command, `python scripts/validate_user_files.py`,
+on every push and pull request, with read-only repository access
+(`permissions: contents: read`). It needs nothing but the layout files, so it
+works in a repository that copied only those.
+
 Suggested GitHub settings:
 
 - Require the validation check to pass before merging PRs.
 - For fork-based contributions, allow GitHub Actions to run on PRs (org policies may apply).
+
+CI is a gate for pull requests and a report for everything else: a direct
+publish lands before CI runs. A file CI would reject is left out on Pull with
+its reason (Section 4), never silently used.
 
 ### Branch protection (advanced, but important)
 
@@ -548,14 +691,14 @@ Org repos often require an org admin to approve the installation.
 
 Cellucid's community annotation UI uses a small server component (the
 checked-in deployment is a Cloudflare Worker) to run GitHub App OAuth, proxy
-only the repository operations used by Cellucid, and relay fixed CAP persisted
-queries.
+only the repository operations used by Cellucid, run two GraphQL reads it
+writes itself, and relay fixed CAP persisted queries.
 
 If you are using **cellucid.com**, you typically do *not* need to do anything here.
 
 If your organization requires owning the auth infrastructure (recommended for many orgs), you can self-host.
 
-#### Exact version-2 route contract
+#### Exact version-3 route contract
 
 The Worker exposes the following ordered routes:
 
@@ -566,36 +709,107 @@ The Worker exposes the following ordered routes:
 - `/auth/installations`
 - `/auth/installation-repos`
 - `/cap/lookup-cells`
+- `/graphql/snapshot`
+- `/graphql/blobs`
 - `/api/repos/*`
 
 Opening `/` must return the exact compatible service identity and ordered route
 inventory, beginning
-`{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":2,`
+`{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":3,`
 and continuing with an `endpoints` array containing the routes above. Before
 OAuth or token disclosure, the browser checks that health document and stops
-on a stale or incompatible Worker.
+on a stale or incompatible Worker. An older Worker is reported as "The
+community-annotation service at `<origin>` runs an older version (contract N)
+than this Cellucid (contract 3); its owner must redeploy the Worker."; a newer
+one asks you to reload Cellucid. A Worker that cannot be reached at all is
+reported as unreachable, not as incompatible.
+
+What the routes do, in short (the setup guide has the exact contract):
+
+- `/graphql/snapshot` reads a branch's commit and the listings of
+  `annotations/` and `annotations/moderation/` in one GraphQL query the
+  Worker writes itself; `/graphql/blobs` reads many files by blob id in one
+  query. The browser never sends a GraphQL document.
+- `/auth/installations` and `/auth/installation-repos` answer one GitHub page
+  (100 items) per request (`?page=N`), so a list of any length is read page by
+  page.
+- `/api/repos/*` relays the repository requests Cellucid uses, among them a
+  users folder read by its tree id and the forced move of a contributor's own
+  pull-request head branch (`PATCH git/refs/heads/cellucid-annotations/ghid_<id>/…`
+  in the contributor's own fork).
+- Every write is bound to the signed-in user, whom the Worker looks up at
+  GitHub first: a user file `annotations/users/ghid_<n>.json` only by user
+  `n`, a branch under `cellucid-annotations/` only as that user's own
+  `cellucid-annotations/ghid_<id>/…` (created or moved only in a repository the
+  user owns), a pull request only from such a branch. A refused write is
+  `403` with outcome `not-applied`.
+- Every answer that relays GitHub carries GitHub's `ETag`, `Retry-After` and
+  `X-RateLimit-*` headers, so the browser paces its requests by GitHub's
+  budget; reads accept `If-None-Match`, and a `304` costs no transfer. Every
+  route caches a CORS preflight for 7200 seconds
+  (`Access-Control-Max-Age: 7200`, the longest Chromium keeps one).
+- A request has no total deadline: it is stopped (`504`) only when nothing
+  moved for 13 seconds (GitHub's own 10-second request timeout plus a
+  connection set-up), so a slow but steady upload or download is never cut.
 
 #### Exact Worker and GitHub App configuration
 
 The Worker requires exactly `ALLOWED_ORIGINS`, `GITHUB_CLIENT_ID`, and
 `GITHUB_CLIENT_SECRET`. It does not use an App id, private key, App JWT, or
-installation access token. It deploys on the Cloudflare Workers Free plan,
-whose CPU budget of about 10 ms per request a very large repository document can
-exceed; the Worker setup guide explains when to move to Workers Paid. Apply a
-rate-limiting rule to `/cap/*` for a public deployment.
+installation access token. It deploys on the Cloudflare Workers Free plan
+(about 10 ms of CPU and 50 subrequests per request). The checked-in Worker
+stays well inside both at any repository size: it relays file contents, trees
+and GraphQL answers without parsing them, checks a write with native JSON
+parsing, and needs at most two GitHub subrequests per request. A request that
+did exceed the CPU budget would be answered by Cloudflare with an HTML `503`
+page without CORS headers, which the browser can only report as an unreachable
+Worker; the setup guide explains how to diagnose that and when to move to
+Workers Paid.
 
-Configure the GitHub App with user-to-server token expiration disabled,
-webhooks disabled, account permissions unset, and these repository permissions:
+On the Free plan, abuse of the Worker cannot create a bill: it can only use up
+the account's daily request allowance (100,000 requests, reset at midnight
+UTC), after which Cloudflare answers with an error until the next day.
+Cloudflare's rate-limiting rules belong to a zone (a domain you have on
+Cloudflare), so they cover a custom domain and never a `*.workers.dev`
+hostname. cellucid.com's Worker is served at `https://api.cellucid.com` (its
+GitHub App callback is `https://api.cellucid.com/auth/callback`); a
+self-hosted deployment that wants a limit serves its Worker on its own
+Cloudflare domain the same way and adds a WAF rate-limiting rule for `/cap/*`
+there
+([Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [rate limiting rules](https://developers.cloudflare.com/waf/rate-limiting-rules/)).
+
+Configure the GitHub App with **Expire user authorization tokens** kept on
+(GitHub's default for a new app; an existing app opts in under *Optional
+Features* → *User-to-server token expiration*). The Worker accepts only an
+expiring user token and refuses a token that never expires, so sign-in fails
+with token expiration disabled. Also select **Request user authorization
+(OAuth) during installation**, disable webhooks, leave account permissions
+unset, and set these repository permissions:
 
 - Metadata: read-only
 - Contents: read and write
 - Pull requests: read and write
-- Administration: read and write
 
-Production uses the Worker origin compiled into the Cellucid client. A
-different runtime override is accepted only from a recognized local-development
-host. The exact Cellucid page origin must also be present in
-`ALLOWED_ORIGINS`.
+No Administration permission: Cellucid never creates a fork. Creating one
+through the API needs Administration write
+([GitHub: permissions required for GitHub Apps](https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps)),
+so a contributor without write access forks the repository on GitHub
+themselves, and Cellucid finds that fork when they publish.
+
+Two values are compiled into the Cellucid client, so a self-hosted deployment
+builds its own copy of the site:
+
+- the Worker origin, `DEFAULT_WORKER_ORIGIN` in
+  `assets/js/app/community-annotations/github-auth.js`. A different runtime
+  override is accepted only from a recognized local-development host. The
+  exact Cellucid page origin must also be present in `ALLOWED_ORIGINS`.
+- the GitHub App's slug in the **Add repo** link of the connection wizard,
+  `https://github.com/apps/cellucid-community-annotations/installations/new`
+  (`GITHUB_APP_INSTALL_URL` in
+  `assets/js/app/ui/modules/community-annotation/github-connection-flow.js`;
+  Publish's **Install the app** link uses it too).
+  Set it to your own app's slug; otherwise **Add repo** opens the installation
+  page of cellucid.com's app, not yours.
 
 For commands, precise origin rules, the complete health JSON, and live
 verification, follow `cellucid/docs/github-oauth-cloudflare-setup.md` in the
@@ -609,7 +823,7 @@ the accepted Worker source and then verify the live root and browser lifecycle.
 1) Load your dataset in Cellucid.
 2) Open the **Community annotation** accordion.
 3) Click **Connect repo**. If this dataset already has a repository connection,
-   use **Connect GitHub…** or **GitHub sync…** as shown.
+   use **GitHub sync…**.
 4) Complete **Continue with GitHub**, enable/reload repositories if needed,
    select the repo, click **Connect**, then **Pull latest**.
 5) Confirm you see author-only controls (e.g. **Annotated columns**).
@@ -751,7 +965,17 @@ If you expect disagreement (hard biology, rare types):
 
 Even with careful contributors, duplicate labels happen (e.g. `T cell` vs `T-cell`, synonyms, or capitalization variants).
 
-As an author, you can merge duplicates so votes are combined:
+Suggestions with **exactly the same label** need no merge. Inside a category,
+Cellucid treats them as one suggestion: labels are compared after Unicode
+normalization (NFC), so the same text typed with composed or decomposed
+accents counts as equal, but nothing else is folded (case, spacing and
+punctuation still differ). The earliest proposal is shown as the suggestion,
+and each person's votes across the equal labels count once (their majority; a
+tie counts as no vote). Cellucid also refuses to add, or rename a suggestion
+to, a label already shown in that category. Two people proposing "T cell"
+independently therefore support one label instead of splitting it into a tie.
+
+For labels that differ but mean the same thing, an author merges them so votes are combined:
 
 1) Open a category’s voting modal.
 2) Drag one suggestion card onto another.
@@ -781,28 +1005,35 @@ Do not merge when meaning differs:
 
 ### What is stored in `merges.json` (advanced)
 
-`annotations/moderation/merges.json` is an author-only log of merges.
+`annotations/moderation/merges.json` (version 3) is an author-only log of
+merges: `{"version": 3, "updatedAt": "<UTC timestamp>", "merges": [...]}`.
 
 Each merge entry includes:
 
+- `datasetId`: the dataset the merge belongs to. One repository can serve
+  several datasets that share a field and a category label, so a merge
+  applies only to the bucket of its own dataset.
 - `bucket`: which category bucket the merge applies to. Its format is
   `<fieldKey>:<categoryLabel>` when the field key contains no colon. When it
   does, Cellucid uses
   `fk~${encodeURIComponent(fieldKey)}:<categoryLabel>`; the `fk~` prefix and
   percent-encoding make the embedded colon unambiguous.
-- `fromSuggestionId` → `intoSuggestionId`: the mapping (merge “from” into “into”)
+- `fromSuggestionId` → `intoSuggestionId`: the mapping (merge “from” into
+  “into”). Both are suggestion ids in the owner-prefixed form
+  `ghid_<proposer id>_<rest>`; they may name any contributor's suggestions.
 - `by`: author identity (stored as `ghid_<githubUserId>`)
 - `at`: timestamp
 - `editedAt` (optional): if you later edit the merge note
 - `note` (optional): a short rationale shown in the UI
 
-Example (illustrative):
+Example of one entry (illustrative):
 
 ```json
 {
+  "datasetId": "my_atlas_v1",
   "bucket": "leiden:7",
-  "fromSuggestionId": "sug_01HXYZ...",
-  "intoSuggestionId": "sug_01HABC...",
+  "fromSuggestionId": "ghid_7_6f1c2c0e-3d1b-4e37-9a83-2f0b54c7d1a9",
+  "intoSuggestionId": "ghid_8_0b9e4a51-7c2d-4f8e-b3a6-5d1e9c2f7a40",
   "by": "ghid_12345",
   "at": "2025-01-01T12:34:56Z",
   "note": "Merged formatting variants: 'T cell' and 'T-cell'."
@@ -825,9 +1056,13 @@ be validated before Pull.
 Cellucid can build a local derived categorical obs column for visualization:
 
 1) Open **Consensus column**.
-2) Choose an annotatable source column (e.g. `leiden`).
-3) Choose a **New column key** (e.g. `community_cell_type`).
-4) Set threshold / min annotators (used only for this derived column).
+2) Choose an annotatable source column (e.g. `leiden`; a column you renamed
+   here is listed by its name here, and its votes are read under its dataset
+   name).
+3) Choose a **New column key** (it starts as `community_<column>`).
+4) Threshold / min annotators start at the column's rule in the repository
+   (`annotations/config.json`); a change applies to this derived column only
+   and is remembered for the column.
 5) Build the derived column.
 
 Result:
@@ -835,13 +1070,40 @@ Result:
 - Each category becomes a label (if consensus), or `Disputed`, or `Pending`.
 - This does **not** change voting rules and does **not** publish anything to GitHub.
 
+A built column is a step of the history (`field.consensus`), like any other
+change: Undo takes it back, and a session or a shared history carries it. The
+step records, for each category of the source column, its outcome (the agreed
+label, disputed or pending, with its voter count), the rule it was built with
+(threshold and minimum annotators) and where the votes came from (repository,
+branch and when it was last pulled); the cells' labels are derived from the
+source column when the step is applied. So it replays by name: on another
+dataset with a column and categories of the same names, each category gets
+its recorded outcome. A step recorded before this version kept one code per
+cell, so it is put back only on the dataset it was built on.
+
+A column built is a snapshot of the consensus at that moment. When a Pull (or
+a vote) changes the consensus of its source column, the panel says
+`<column>: consensus changed since built (N categories)` with **Rebuild**,
+which builds it again under its name with the rule it was built with.
+
+A category agreed as literally `Pending` or `Disputed` stays a label of its
+own; the status category is then named `Pending (status)` (or `Disputed
+(status)`).
+
+Categories that agree on the same label are one category of the derived
+column, compared as suggestions are (after Unicode NFC normalization; case,
+spacing and punctuation are not folded), and it is spelled as the first of
+them spells it.
+
 This is useful to:
 
 - color the atlas by the current community consensus
 - quickly spot which clusters still need attention
 
 :::{note}
-The derived column uses the threshold/minAnnotators you set in the derived-column UI, which may differ from the annotatable field’s official settings. If you export screenshots or figures, record which settings you used.
+The derived column uses the threshold/minAnnotators set in the derived-column
+UI (the repository's rule unless you changed it); the history step records
+them, and the methods paragraph of the history states them.
 :::
 
 ---
@@ -942,6 +1204,27 @@ For non-technical collaborators, a screenshot of the status panel + error messag
   - Cause: repo not created from template or paths renamed.
   - Fix: ensure the required layout exists exactly (case-sensitive).
 
+- **“annotations/… is not the schema this Cellucid reads (Git blob …, expected …)”**
+  - Cause: one of the three schema files differs from the template's: an
+    older version (for example the version-2 schemas), an edit, or changed
+    line endings.
+  - Fix: copy the named file again, unchanged, from
+    [theislab/cellucid-annotation](https://github.com/theislab/cellucid-annotation),
+    together with `scripts/validate_user_files.py` and `.gitattributes`, and
+    commit it.
+
+- **Pull warns that files were left out of the consensus**
+  - Cause: those files are not valid annotation files (the warning's details
+    list each one with its reason), or paths under `annotations/` are not
+    annotation files.
+  - Fix: run `python scripts/validate_user_files.py`, then fix or remove the
+    files it names. Everything else in the repository is used meanwhile.
+    A file written for the earlier contract (`"version": 2`, suggestion ids
+    without the owner prefix) is one of them. There is no migration: Publish
+    never overwrites a contributor's own file that is not valid, so the file
+    is removed on GitHub and its contributor publishes again from the current
+    Cellucid; the old file's suggestions and votes are not carried over.
+
 - **CI validation fails immediately**
   - Cause: invalid JSON, wrong field types, or policy rules (e.g. `annotatableSettings` contains keys not in `fieldsToAnnotate`).
   - Fix: run `python scripts/validate_user_files.py` locally in the annotation repo and follow the error output.
@@ -977,8 +1260,9 @@ For non-technical collaborators, a screenshot of the status panel + error messag
     - verify your GitHub username in the modal matches your intended account
 
 - **Fork + PR flow fails for annotators**
-  - Common cause: annotator did not install the GitHub App on their personal account (their fork isn’t visible to the token).
-  - Fix: ask them to install the app for their personal account (ideally “all repositories”), then retry Publish.
+  - "You have no fork of …": they fork the repository on GitHub (the message links to it), then Publish again. Cellucid never creates a fork.
+  - "Cellucid cannot write to your fork …": the GitHub App is not installed on their own account with access to the fork. Fix: install it there (*All repositories*, or *Only select repositories* with the fork selected), then Publish again.
+  - "GitHub is still copying your fork …": wait a minute and Publish again.
 
 ### Publish failures (authors)
 
@@ -997,26 +1281,60 @@ For non-technical collaborators, a screenshot of the status panel + error messag
   - Cause: users without push cannot publish if `allow_forking` is disabled.
   - Fix: enable forking, or grant write access to annotators.
 
+- **“Your published file `annotations/users/ghid_<id>.json` … is not a valid annotation file”**
+  - Cause: the contributor's own file on GitHub fails the contract (for
+    example a version-2 file). Cellucid composes a Publish onto that file and
+    never overwrites one it cannot read.
+  - Fix: fix or remove the file on GitHub, then Pull and Publish again.
+
+- **“Remote user file changed since your last Pull” / “… changed on GitHub while publishing”**
+  - Cause: the contributor's file on GitHub is newer than the one their last
+    Pull read (for example after publishing from another device).
+  - Fix: Pull latest, check the result, then Publish again. Cellucid never
+    replaces a remote file it has not read.
+
 ### Pull is slow / rate-limited
 
+What a Pull costs: when nothing under `annotations/` changed since your last
+completed Pull, one or two requests (the repository metadata, usually a
+`304` that transfers nothing, and the snapshot). A first Pull reads the
+changed files by blob id in batches packed by their sizes (a batch doubles
+while GitHub answers and halves when GitHub refuses one as too large or too
+slow), so the number of requests follows the bytes to read, not the number of
+files: 5,000 user files of about 1 KB each take about six batch requests.
+
 - Causes:
-  - very large number of user files
+  - GitHub's hourly request budget of the signed-in user is spent (see
+    *Limits* below)
   - frequent auto-pulls across many users
-  - GitHub rate limits for your org
+  - a slow or unsteady connection
+- What Cellucid does: every request is paced by the budget GitHub reports
+  (`X-RateLimit-*`, `Retry-After`). When GitHub names a wait, the progress
+  notification says so and the Pull continues after it; cancel it to stop
+  (what was read is kept). A Pull that still meets the limit stops with a
+  `GitHub rate limit:` message, and the next Pull resumes from what was read. A failed request is asked again; nothing is
+  stopped by a fixed time limit, only by a connection on which nothing
+  arrives at all.
 - Mitigations:
   - keep the annotation repo “clean” (only JSON + scripts; avoid large binaries)
-  - avoid massive numbers of branches with many files (each branch multiplies history/tree size)
   - ask annotators to Pull on demand instead of using aggressive auto-pull intervals
 
 ### Local cache corruption / storage restrictions
 
 - **Error that the local raw cache is unavailable**
   - Cause: browser storage policies (private mode, strict settings, embedded iframe restrictions).
-  - Impact: file bodies use IndexedDB and the cache's SHA index uses local
-    storage. The persistent raw-file cache requires IndexedDB and local
-    storage. Cellucid never switches to an in-memory cache. Pull fails without
-    replacing the current annotation view.
+  - Impact: the files a Pull read are kept in IndexedDB; annotation state and
+    the cross-tab lock use local storage. The persistent raw-file cache
+    requires IndexedDB. Cellucid never switches to an in-memory cache. Pull
+    fails without replacing the current annotation view.
   - Fix: use a normal browser profile, allow site storage, avoid restrictive privacy modes for the annotation session.
+
+- **Error that local annotation state was written by another Cellucid version**
+  - Cause: the local annotation state of this repository was saved by an
+    earlier Cellucid in a format this one does not read.
+  - Fix: clear that repository's local annotation state (**Clear session**
+    under **Snapshot and cache**) and Pull again. Published annotations stay
+    on GitHub; local work that was never published is not carried over.
 
 - **Error about local cache being corrupted**
   - Fix: clear site data for the Cellucid origin and Pull again.
@@ -1030,9 +1348,22 @@ For non-technical collaborators, a screenshot of the status panel + error messag
 - Search text is visible to the Worker operator, CAP, and the network path. The
   GitHub bearer token and OAuth cookies are not sent to CAP.
 - A successful response is
-  `{ "contractVersion": 2, "results": [...], "omittedInvalidCount": number }`.
+  `{ "contractVersion": 3, "results": [...], "omittedInvalidCount": number }`.
 - If your org blocks either network hop, CAP helper searches fail without
   blocking manual annotation.
+
+### The Worker or GitHub cannot be reached
+
+- **“The community-annotation service at … runs an older version (contract N) than this Cellucid (contract 3)”**
+  - Cause: the Worker deployment is older than the Cellucid page.
+  - Fix: its owner redeploys the Worker from the matching Cellucid source
+    (cellucid.com users: report it). No GitHub token was sent.
+- **The Worker is reported as unreachable**
+  - Causes: the Worker is down, it does not allow this site's origin
+    (`ALLOWED_ORIGINS`), the network blocks it, or Cloudflare answered for it
+    with an error page without CORS headers (which a browser cannot read).
+  - Fix: retry; a self-hosted deployment checks its origin list and its
+    Cloudflare logs (see *Limits*).
 
 ### Security / privacy review questions
 
@@ -1040,12 +1371,60 @@ For non-technical collaborators, a screenshot of the status panel + error messag
   - In browser `sessionStorage` only, with their expiry: a GitHub App user
     token expires after 8 hours (the GitHub App must keep **Expire user
     authorization tokens** on; the Worker refuses a token that never expires).
-    Closing the tab clears it; **Sign out** revokes it at GitHub through the
-    Worker's `/auth/revoke`. The refresh token GitHub issues never leaves the
+    Closing the tab clears it; **Disconnect GitHub** revokes it at GitHub
+    through the Worker's `/auth/revoke` (and disconnects the dataset's
+    repository). The refresh token GitHub issues never leaves the
     Worker.
 - **What personal data ends up in the annotation repo?**
-  - User files contain GitHub numeric id and optional profile fields (display name/title/orcid/linkedin handle).
+  - Each user file contains the contributor's GitHub numeric id (in the file
+    name and as `username`/`githubUserId`), their GitHub login (`login`,
+    written from the account they sign in with), and the optional profile
+    fields they fill in (display name, title, ORCID iD, LinkedIn handle).
+    Suggestions, votes and comments name their author by the numeric identity
+    `ghid_<id>`. The commits and pull requests that carry the file also show
+    the GitHub account that made them.
   - The template validation disallows email fields.
+
+---
+
+## Limits (What Cellucid Cannot Do or Check)
+
+These come from GitHub, Cloudflare or the browser, not from Cellucid. They are
+listed so a large round can plan around them.
+
+- **One file per contributor, at most 1,000,000 UTF-8 bytes.** GitHub's
+  Contents API returns a file's content as JSON only up to 1 MB
+  ([GitHub: get repository content](https://docs.github.com/en/rest/repos/contents#get-repository-content)).
+  A contributor's one file holds every dataset they annotate in the repository.
+- **Listing of `annotations/users/`.** GitHub documents a limit of 100,000
+  entries or 7 MB for a tree listing
+  ([GitHub: get a tree](https://docs.github.com/en/rest/git/trees#get-a-tree)).
+  When GitHub reports the listing as truncated, Pull stops and says so rather
+  than compiling the part it saw.
+- **GitHub's hourly budgets.** Every request counts against the signed-in
+  user's REST and GraphQL budgets
+  ([REST](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api),
+  [GraphQL](https://docs.github.com/en/graphql/overview/rate-limits-and-node-limits-for-the-graphql-api)).
+  Cellucid paces by what GitHub reports and waits when GitHub says so;
+  frequent auto-pulls by many people spend each person's own budget.
+- **Direct-mode trust.** Anyone with push access can write any file with Git
+  or GitHub's web editor, including another contributor's
+  `annotations/users/ghid_<id>.json`. The Worker refuses such a write made
+  through Cellucid, but Cellucid reads files by content and cannot verify who
+  committed them. Review the commit history when in doubt.
+- **The Worker cannot bind a write to the connected branch.** Which branch a
+  page has connected lives in the browser; the Worker binds every write to the
+  signed-in user (their own file, their own `cellucid-annotations/ghid_<id>/`
+  branches), not to that branch.
+- **Cloudflare Workers Free plan** (cellucid.com's Worker and the checked-in
+  configuration): about 10 ms of CPU and 50 subrequests per request
+  ([Cloudflare: Workers limits](https://developers.cloudflare.com/workers/platform/limits/)).
+  The checked-in Worker stays well inside both (it relays reads without
+  parsing them, and a 1,000,000-byte publish costs a few milliseconds). A
+  request over the CPU budget is answered by Cloudflare with an HTML `503`
+  page without CORS headers, which the browser can only report as an
+  unreachable Worker; Cloudflare's logs show it as `exceededCpu` (the Worker
+  setup guide's failure diagnosis covers it).
 
 ---
 

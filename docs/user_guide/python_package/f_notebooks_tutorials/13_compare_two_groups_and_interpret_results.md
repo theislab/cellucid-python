@@ -52,7 +52,7 @@ Pros:
 
 Cons:
 - easy to introduce selection bias
-- harder to reproduce unless you save a session bundle
+- harder to reproduce unless you save a session file
 
 ---
 
@@ -263,7 +263,7 @@ Manual selections are inherently ephemeral unless you capture state.
 
 If you need reproducibility, use:
 - cluster labels (Option A)
-- or save a session bundle (advanced; see {doc}`32_session_persistence_and_restoring_analysis_artifacts`)
+- or save a session file (advanced; see {doc}`32_session_persistence_and_restoring_analysis_artifacts`)
 
 ---
 

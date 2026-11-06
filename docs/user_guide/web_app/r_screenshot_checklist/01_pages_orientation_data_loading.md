@@ -121,8 +121,10 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   server": `#data-address` placeholder `Link or localhost:8765`,
   `#data-address-open-btn` "Open", and the connection lines
   `#remote-disconnect-container` / `#data-link-disconnect-container`);
-  `#session-state-controls` ("Session file": `#save-state-btn` "Save",
-  `#load-state-btn` "Load"); `#data-mapping-controls` ("Data mapping").
+  `#data-mapping-controls` ("Data mapping"). In the State section:
+  `#session-state-controls` ("Session": `#history-share-btn` "Share…",
+  `#history-load-btn` "Load…", which opens `#saved-states-dialog`, holding
+  `#load-state-btn` "Open a session file…").
 - Other: `#welcome-modal` / `#welcome-start-btn` ("Start exploring"), `#sidebar`,
   `#legend`, `#split-keep-view-btn` ("Keep view"),
   `.highlight-mode-btn[data-mode="lasso"]` ("Lasso"), `#navigation-controls`
@@ -185,7 +187,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
      anywhere in the docs).
   2. Second, smaller diagram for the "State & persistence" section (line 109):
      three nested boxes labelled **In-memory state** (lost on refresh),
-     **Session bundle** (`.cellucid-session`, explicit **Save**),
+     **Session bundle** (`.cellucid-session`, explicit **Share…**),
      **localStorage preferences** (theme/background only), with a "refresh"
      arrow showing what survives. Suggested
      `_static/diagrams/persistence-layers.svg`.
@@ -271,7 +273,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
      1440x900 at 2x, then composite numbered callout badges (1–6) over the
      regions the tour names in order — 1 Session accordion, 2 Compare Views →
      Navigation, 3 Coloring & Filtering, 4 Compare Views → Multiview / Keep
-     view, 5 Highlighting, 6 Figure Export + Session file → Save — with a matching
+     view, 5 Highlighting, 6 Figure Export + State › Session › Share… — with a matching
      numbered key in the caption. Cursor: no (callouts replace it). Filename
      `_static/screenshots/web_app/ui-map-annotated.png`. This one image is the
      wet-lab reader's whole orientation; it is currently the weakest asset in the
@@ -305,7 +307,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
        drag and a static frame without a pointer does not read as a gesture.
        `_static/screenshots/web_app/tour-05-lasso-highlight.png`.
      - Step 6 (line 123): crop to `#session-state-controls` with cursor on
-       `#save-state-btn`. `_static/screenshots/web_app/tour-06-save-state.png`.
+       `#history-share-btn`. `_static/screenshots/web_app/tour-06-save-state.png`.
 - **notes** — Stale build string, see cross-cutting note 3: line 31 alt and
   line 36 caption both assert `Build 2026-07-27.1`; the app ships
   `2026-07-27.24`. Line 130 tells the reader to "scroll to the sidebar footer and
@@ -414,7 +416,7 @@ terminal and Jupyter captures:
 - **explains** — Routes the reader to the right loader page via a "you have… →
   best first choice" table, card grids for getting started / viewing methods /
   concepts, and a method-vs-server comparison table.
-- **has** — line 41 `data_loading/data-loading-session-panel.png`, `:width: 246px`
+- **has** — line 41 `data_loading/data-loading-session-panel.png`, `:width: 532px`
   (native 246x560). **Reused on 10 pages docs-wide**: this page,
   `01_loading_options_overview.md:254`, `03_browser_file_picker_tutorial.md:49`,
   `09_screenshots.md:13`, `l_sessions_sharing/{index,01_session_mental_model,
@@ -614,8 +616,8 @@ terminal and Jupyter captures:
   `show_anndata()` for AnnData/`.h5ad`/`.zarr` inside a notebook; how the
   localhost server + same-origin iframe work; the exact `show_anndata` keyword
   signature; vector fields in notebooks; `viewer.highlight_cells` /
-  `set_color_by` / `set_visibility` control; the `@viewer.on_*` hooks; pulling
-  `viewer.state` and session bundles back into AnnData; `debug_connection()`;
+  `color_by` / `cells_visibility_set` control; the `@viewer.on_*` hooks; pulling
+  `viewer.state` and sessions back into AnnData; `debug_connection()`;
   cleanup; and remote/HPC tunnelling.
 - **has** — **none.** At 26 KB this is the largest page in the section and the
   only loader page with zero figures. It defers to
@@ -684,9 +686,10 @@ terminal and Jupyter captures:
      troubleshooting symptoms ("My session won't restore / says dataset
      mismatch", line 175; "Community annotation shows 'no votes' / 'wrong
      dataset'", line 191) are exactly the states a reader arrives here with,
-     and neither is shown. Load `pancreas`, then `#load-state-btn` with a
-     `.cellucid-session` saved against a different dataset id; crop to the
-     resulting refusal message. Cursor on `#load-state-btn`.
+     and neither is shown. Load `pancreas`, then `#history-load-btn` →
+     `#load-state-btn` with a `.cellucid-session` saved against a different
+     dataset id; crop to the resulting refusal message. Cursor on
+     `#load-state-btn`.
      `_static/screenshots/data_loading/session-dataset-mismatch.png`.
      This is the one capture that turns an abstract page into a diagnostic one.
   2. ~~**Where the id is actually visible in the UI.**~~ **Dropped:** the

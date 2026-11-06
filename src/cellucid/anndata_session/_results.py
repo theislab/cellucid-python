@@ -764,7 +764,6 @@ def pull(
     adata: Any,
     source: Any,
     *,
-    expected_dataset_id: str | None = None,
     highlights: bool = True,
     fields: bool = True,
     scores: bool = True,
@@ -804,10 +803,12 @@ def pull(
         then each column's name; a kind row, ``kind`` then each column's
         kind, ``highlight``, ``categorical`` or ``continuous``; a row per
         cell; each column written as named), ``.gmt`` gene sets and
-        ``.cellucid-session`` files -- one file, a list, or a folder of them.
-    expected_dataset_id : str, optional
-        For a session file: the dataset it must have been saved on. Defaults
-        to ``adata.uns['cellucid']['id']``.
+        ``.cellucid-session`` files (the state the session shows, its active
+        tracker's head: its highlight groups, user-defined fields and gene
+        sets, checked against ``adata`` as an apply checks it;
+        :func:`~cellucid.apply_cellucid_session_to_anndata` applies another
+        step, and the session's renames) -- one file, a list, or a folder of
+        them.
     highlights, fields, scores, visibility, gene_sets : bool
         Which results to write: highlight groups; user-defined fields; scores
         an analysis made (a gene signature's); the filter's visible cells
@@ -865,7 +866,7 @@ def pull(
             on_conflict=on_conflict,
             prune=prune,
         )
-    from ._apply import _plan_session
+    from ._apply import session_columns
 
     on_conflict = _require_pull_options(
         adata,
@@ -881,34 +882,23 @@ def pull(
         include_pushed=include_pushed, highlight_prefix=highlight_prefix, field_prefix=field_prefix,
     )
     sets = _gene_sets_of(results)
-    record = _uns_record(adata)
     for path in sessions:
-        dataset_id = expected_dataset_id if expected_dataset_id is not None else record.get("id")
-        if not isinstance(dataset_id, str) or not dataset_id:
-            raise ValueError(
-                f"{path.name}: pass expected_dataset_id= (the dataset id the session was saved on); "
-                "this object names none in uns['cellucid']['id']"
-            )
-        # Planned against no existing column: its names are then settled with
-        # every other column of this pull (on_conflict, reuse).
-        session = _plan_session(
-            path,
-            adata,
-            expected_dataset_id=dataset_id,
-            add_highlights=highlights,
-            highlights_prefix=highlight_prefix,
-            add_user_defined_fields=fields,
-            user_defined_prefix=field_prefix,
-            include_deleted_user_defined_fields=False,
-            existing_columns=set(),
-        )
-        for plan in session.plans:
-            result_id = str(plan.metadata.get("group_id") or plan.metadata.get("field_id"))
-            info = {**plan.metadata, "id": result_id, "pulled_from": path.name}
-            candidates.append(_Candidate(key=(path.name, str(plan.metadata["kind"]), result_id), wanted=plan.name,
-                                         values=plan.values, info=info))
+        # The state the session shows (its active tracker's head), checked
+        # as an apply checks it; its names are then settled with every other
+        # column of this pull (on_conflict, reuse). A pull writes results;
+        # renaming the object's own columns is apply_cellucid_session_to_anndata's.
+        columns, session_sets = session_columns(path, adata)
+        for column in columns:
+            kind = str(column.metadata["kind"])
+            if (kind == "highlight" and not highlights) or (kind != "highlight" and not fields):
+                continue
+            result_id = str(column.metadata.get("group_id") or column.metadata.get("field_id"))
+            wanted = f"{highlight_prefix}{result_id}" if kind == "highlight" else f"{field_prefix}{column.metadata['key']}"
+            info = {**column.metadata, "id": result_id, "pulled_from": path.name}
+            assert column.values is not None
+            candidates.append(_Candidate(key=(path.name, kind, result_id), wanted=wanted, values=column.values, info=info))
         taken = {name for _, name, _ in sets}
-        for entry in session.gene_sets:
+        for entry in session_sets:
             sets.append((
                 (path.name, "geneSet", entry["name"]),
                 unique_gene_set_name(entry["name"], taken),
@@ -988,8 +978,12 @@ def _code_dtype(count: int) -> np.dtype:
     raise ValueError(f"{count} {plural(count, 'category', 'categories')} are more than a field holds")
 
 
-def field_message(values: Any, key: str, *, n_obs: int, obs_names: pd.Index | None) -> dict[str, Any]:
-    """The ``setField`` command of one column, aligned to the viewer's cells.
+def field_push_params(values: Any, key: str, *, n_obs: int, obs_names: pd.Index | None) -> dict[str, Any]:
+    """The parameters of the ``field.push`` action of one column, aligned to
+    the viewer's cells: ``key``, ``kind``, ``categories``, ``n_obs``,
+    ``cells`` (original positions as ``uint32``, ascending, or None for every
+    cell in order) and ``values`` (codes, the code type's largest value for no
+    category, or ``float32`` with NaN for no value).
 
     A Series is aligned by its index: the viewer's obs names (every cell, or
     some, the rest without a value), or a ``RangeIndex`` of every cell in
@@ -1066,12 +1060,10 @@ def field_message(values: Any, key: str, *, n_obs: int, obs_names: pd.Index | No
     else:
         raise TypeError(f"Values of dtype {dtype} cannot be pushed: push labels or numbers")
     return {
-        "type": "setField",
-        "requestId": "",
         "key": key,
         "kind": kind,
         "categories": field_categories,
-        "nObs": n_obs,
-        "cells": cells,
+        "n_obs": n_obs,
+        "cells": None if cells is None else cells.astype(np.uint32),
         "values": field_values,
     }

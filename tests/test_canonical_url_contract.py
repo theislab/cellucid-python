@@ -58,9 +58,9 @@ FROZEN_APEX_IDENTIFIERS: dict[str, tuple[str, ...]] = {
         'HOSTED_APP_ORIGINS = frozenset({CELLUCID_WEB_URL, "https://cellucid.com"})',
     ),
     CONVENTION_PAGE: (
-        "- `https://cellucid.com/contracts/community-annotation/user-v1.schema.json`",
+        "- `https://cellucid.com/contracts/community-annotation/user-v3.schema.json`",
         "- `https://cellucid.com/contracts/community-annotation/config-v1.schema.json`",
-        "- `https://cellucid.com/contracts/community-annotation/merges-v1.schema.json`",
+        "- `https://cellucid.com/contracts/community-annotation/merges-v3.schema.json`",
         "- `https://cellucid.com/ns#` (SVG export namespace)",
     ),
 }
@@ -204,7 +204,8 @@ def test_no_link_names_the_retired_read_the_docs_host() -> None:
         relative = path.relative_to(REPOSITORY_ROOT)
         if not path.is_file() or EXCLUDED_PARTS.intersection(relative.parts):
             continue
-        if relative.parts[0] in {".git", "build", ".tmp", "data"} or relative == Path(__file__).relative_to(REPOSITORY_ROOT):
+        # .claude holds local agent worktrees (other checkouts of this repository, git-excluded): not this tree's files.
+        if relative.parts[0] in {".git", ".claude", "build", ".tmp", "data"} or relative == Path(__file__).relative_to(REPOSITORY_ROOT):
             continue
         if path.suffix not in SWEPT_SUFFIXES | {".toml", ".yaml", ".yml", ".ipynb", ".R", ".Rmd"}:
             continue

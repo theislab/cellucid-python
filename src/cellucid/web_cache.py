@@ -211,9 +211,26 @@ def _require_content_type(value: Any, *, label: str) -> str:
     return value
 
 
+# The names one kind of file goes by on hosts: JavaScript is ``text/javascript``
+# (RFC 9239), and its historic names are still what many hosts send
+# (GitHub Pages and nginx ``application/javascript``; Node's and Python's own
+# servers ``text/javascript``).
+_MEDIA_TYPE_ALIASES = {
+    "application/javascript": "text/javascript",
+    "application/x-javascript": "text/javascript",
+    "application/ecmascript": "text/javascript",
+    "text/ecmascript": "text/javascript",
+}
+
+
 def _media_type(content_type: str) -> str:
-    """Return the bare media type, discarding parameters such as ``charset``."""
-    return content_type.split(";", 1)[0].strip().lower()
+    """Return the bare media type, discarding parameters such as ``charset``.
+
+    Names of one kind of file are one media type (``_MEDIA_TYPE_ALIASES``):
+    the check only tells a file of another kind (an HTML error page) apart.
+    """
+    bare = content_type.split(";", 1)[0].strip().lower()
+    return _MEDIA_TYPE_ALIASES.get(bare, bare)
 
 
 def _require_asset_path(value: Any) -> str:

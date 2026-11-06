@@ -213,7 +213,11 @@ when its genes are read for a sample of them and that sample brings the
 first gene sooner by more than the order costs
 ({ref}`genes-on-a-sample-of-the-cells`), else in file order with genes read
 for every cell. Other stratified and spatial shares and a session's recorded
-cells always open at once.
+cells always open at once. So does a dataset folder on a web host when
+nothing names the version of its files, neither its address (a GitHub
+folder at a commit) nor its host (an `ETag` or `Last-Modified` header the
+page can read): every step would read the folder anew, so it could not grow
+in place, and every cell asked for opens at once.
 
 Some files store the embedding in parts much larger than a share's blocks
 (the lung atlas: parts of 8,916 cells), so the first cells of a share lie in

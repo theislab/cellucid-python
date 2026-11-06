@@ -44,8 +44,8 @@ TWINS = (
      ("cellucid.pull(adata, EXPORTS)", "cellucid.read_gmt("),
      ("cellucid_pull(seu, exports", "cellucid_read_gmt(", "cellucid_prepare(")),
     ("45_gene_sets_round_trip", "11_gene_sets_round_trip",
-     ("cellucid.write_gmt(", "cellucid.read_gmt(", "viewer.push_gene_set(", "viewer.gene_sets()", "viewer.pull(adata)"),
-     ("cellucid_write_gmt(", "cellucid_read_gmt(", "cellucid_push_gene_set(", "cellucid_gene_sets(viewer)", "cellucid_pull(")),
+     ("cellucid.write_gmt(", "cellucid.read_gmt(", "viewer.gene_set_save(", "viewer.gene_sets()", "viewer.pull(adata)"),
+     ("cellucid_write_gmt(", "cellucid_read_gmt(", "cellucid_gene_set_save(", "cellucid_gene_sets(viewer)", "cellucid_pull(")),
     ("46_export_an_h5ad_subset_and_reanalyse", "12_subset_and_reanalyse",
      ("viewer.subset(adata)", "ad.read_h5ad(SUBSET)", "sc.tl.leiden("),
      ("cellucid_subset(seu, viewer)", "anndataR::read_h5ad(", "FindClusters(")),
@@ -143,7 +143,7 @@ def test_every_r_call_in_the_tutorials_is_a_documented_export() -> None:
 def test_the_gallery_explains_the_two_cell_pattern() -> None:
     gallery = GALLERY.read_text(encoding="utf-8")
     assert "## The two-cell pattern" in gallery
-    assert "request = viewer.request_session_bundle()" in gallery
+    assert "request = viewer.request_session()" in gallery
     assert "`cellucid_session_result()`" in gallery
     for python, _r, _py_calls, _r_calls in TWINS:
         assert f"\n{python}\n" in gallery.split("```{toctree}", 1)[1]

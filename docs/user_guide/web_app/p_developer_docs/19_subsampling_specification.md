@@ -341,10 +341,11 @@ nested), for `stratified` and `spatial` a uniform sample of the cells they
 kept. The fixture lists each case's order (`order`; `orderHead` and
 `orderTail` for the large one), which the web app's `priorityOrder` is held
 to. It is the web app's own: everything that leaves the app names cells by
-original position, and a session saved on a subsample holds its per-cell
-state in **ascending original position** (`session-cell-order.js`: cell `s`
-of a chunk is `cells.kept[s]`), so Python and R apply it without knowing any
-order.
+original position. A session's state values name cells by original position
+too, whatever order they were open in (`app/state/domains/cell-positions.js`:
+a cell list is an ascending `Uint32Array` of original positions, a per-cell
+column `{cells, values}` with its cells ascending), so Python and R apply a
+session saved on a subsample without knowing any order.
 
 What the web app builds on it (`subsample-plan.js`, `views/cell-subset.js`,
 `prefix-column-index.js`):
@@ -458,6 +459,35 @@ varint. Every cell is no bytes. In the session manifest the bytes are base64,
 under `cells.kept`, beside `cells.spec` (the specification: `method`, `nObs`,
 `k`, `seed`, and the method's own keys) and `cells.digest`
 ({doc}`10_sessions_persistence_and_serialization`).
+
+## Cells to open in the history, and opening again from My datasets
+
+**Cells to open** (Session › Subsampling) is the action `cells.open`
+(`app/actions/definitions/mapping.js`, provided by
+`ui/modules/subsample-control.js`): `{mode: 'all'}` or `{mode: 'subsample',
+count, method, seed, …}`, one step of the dataset's history on the same
+tracker ({doc}`29_action_layer_domains_and_history`). Its value is the `cells`
+state domain's (`app/state/domains/cells.js`): `open`, null for every cell or
+the subsample's specification with `k` the cells it grows to (it reproduces the
+same cells exactly, `strict`), and `genes`, the count of open cells genes were
+asked to be read for. A progressive opening growing toward its share and the
+gene sample's top-up are not a change of the value. Undoing the step puts the
+`cells` value back, which reads the dataset again on the cells shown before
+(`reopenKeeping`: what was made is kept by original cell position), and the
+history captures every other domain again after it; redo reads the share
+again (`tests/browser/history-open-cells.spec.mjs`). `cells.read-genes`
+(Genes read for) is a step of the same domain; a smaller `genes` keeps what is
+read.
+
+**My datasets** (`app/library/my-datasets.js`) records the cells a dataset was
+last open with (`openCells`). When they were chosen (a subsample's method,
+size and seed), opening the dataset again from My datasets while another one
+is shown makes them the next opening's request (`reopenRequestOf`: `{mode: 'subsample', …spec, strict:
+false}`, through `setNextCellSubsetRequest` in `data/cell-subset-policy.js`),
+which the opening takes once (`takeCellSubsetRequest`) and which is withdrawn
+when that opening ends without taking it (`withdrawNextCellSubsetRequest`), so
+it never applies to whatever opens next. Every cell, or cells the device fit
+chose, open as the tab opens datasets now (the tab's request).
 
 ## Where subsampling happens in the web app
 

@@ -1,15 +1,17 @@
 # Release process
 
 This is the exact production release process for the `cellucid` Python package.
-Pushing a version tag starts PyPI publication, so the tag is created only after
-the release candidate is reviewed and publication is explicitly authorized.
+To release it, publish a GitHub Release named `vX.Y.Z` in
+`theislab/cellucid-python`; the workflow `pypi-publish.yml` ("Publish to PyPI")
+checks it and publishes it to PyPI. Pushing a tag alone publishes nothing.
+{doc}`/contributing/releasing` covers all three Cellucid packages in order.
 
 ## Versioning policy
 
-`cellucid` is currently in beta (`0.9.6`). <!-- CELLUCID_VERSION -->
+`cellucid` is currently in beta (`0.9.7`). <!-- CELLUCID_VERSION -->
 
 - Package versions use three numeric components.
-- Git tags use the exact package version with a `v` prefix, such as `v0.9.6`. <!-- CELLUCID_VERSION -->
+- Git tags use the exact package version with a `v` prefix, such as `v0.9.7`. <!-- CELLUCID_VERSION -->
 - PyPI distributions, citation metadata, documentation, and the downstream
   recipe declare the same version.
 - The normalized source distribution has one reproducible byte stream, and its
@@ -34,7 +36,7 @@ In the PyPI `cellucid` project settings, register this publisher:
 | Environment | `pypi` |
 
 In the GitHub repository, create the `pypi` environment and restrict deployment
-to version tags and authorized maintainers. The workflow requests
+to `v*` tags and authorized maintainers. The workflow requests
 `id-token: write` only in its final publication job.
 
 ```{warning}
@@ -46,9 +48,9 @@ would not carry the reviewed release protections required by this project.
 
 Publication is therefore blocked by release-security policy until an authorized
 repository administrator explicitly creates and protects `pypi` *before* any
-release tag is pushed. An authorized PyPI project administrator must also
+GitHub Release is published. An authorized PyPI project administrator must also
 confirm or configure the exact trusted-publisher record above, including the
-`pypi` environment claim. Do not create a release tag until both external
+`pypi` environment claim. Do not publish a GitHub Release until both external
 settings have been verified; repository source validation cannot prove either
 setting. See GitHub's
 [environment behavior and protection documentation](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)
@@ -69,6 +71,14 @@ Update all release surfaces:
 - the installation, packaging, and release pages
 - `scripts/publishing/meta.yaml`
 
+**Dates.** The current version's heading stays undated (`## [X.Y.Z]`) until
+its GitHub Release is published, and `CITATION.cff` never carries
+`date-released:`: nobody knows the publication day before it happens, so
+`validate_release.py` refuses both. The bump that opens the next version dates
+the released heading with the day its GitHub Release was published, read with
+`gh release view vX.Y.Z --repo theislab/cellucid-python --json publishedAt`
+(UTC), as `## [X.Y.Z] - YYYY-MM-DD`.
+
 Every declaration a version bump has to touch carries a `CELLUCID_VERSION`
 marker comment (`grep -rn CELLUCID_VERSION`). From a workspace that holds the
 Cellucid repositories side by side, check that they all agree:
@@ -81,13 +91,13 @@ Run the repository validator after all release metadata except the source
 digest is aligned:
 
 ```bash
-python scripts/validate_release.py --tag v0.9.6
+python scripts/validate_release.py --tag v0.9.7  # CELLUCID_VERSION
 ```
 
 The command must finish with:
 
 ```text
-Cellucid Python release contract is valid for v0.9.6.
+Cellucid Python release contract is valid for v0.9.7.
 ```
 
 ### 2. Run source and documentation gates
@@ -112,7 +122,7 @@ python -m pip install "build==1.5.0" "twine==6.2.0"
 SOURCE_DATE_EPOCH=315532800 python -m build
 python scripts/normalize_sdist.py dist
 python -c "import hashlib, pathlib; p=next(pathlib.Path('dist').glob('cellucid-*.tar.gz')); print(hashlib.sha256(p.read_bytes()).hexdigest())"
-python scripts/validate_release.py --tag v0.9.6 --sdist dist
+python scripts/validate_release.py --tag v0.9.7 --sdist dist  # CELLUCID_VERSION
 python -m twine check --strict dist/*
 ```
 
@@ -137,7 +147,7 @@ For each artifact, verify:
 
 ```bash
 python -m pip check
-python -c "import cellucid; assert cellucid.__version__ == '0.9.6'"
+python -c "import cellucid; assert cellucid.__version__ == '0.9.7'"  # CELLUCID_VERSION
 cellucid --version
 cellucid --help
 cellucid serve --help
@@ -157,16 +167,22 @@ Before publication authorization:
 ## Publish after explicit authorization
 
 Commit and push the reviewed source first. Wait for branch CI and docs checks to
-finish successfully. Then create and push the exact annotated tag:
+finish successfully on `main`. Then publish a GitHub Release named `v0.9.7` <!-- CELLUCID_VERSION -->
+in `theislab/cellucid-python`:
 
-```bash
-git tag -a v0.9.6 -m "Cellucid Python 0.9.6"
-git push origin v0.9.6
-```
+1. **Releases** → **Draft a new release**.
+2. **Choose a tag** → type the tag, `vX.Y.Z` (the version above) → **Create new
+   tag** on publish, target `main`.
+3. Title `cellucid X.Y.Z`; paste the version's `CHANGELOG.md` section as the
+   notes.
+4. Leave **Set as a pre-release** unticked (the package declares `X.Y.Z`
+   versions only, so a pre-release is refused) and press **Publish release**.
 
-The `Publish to PyPI` workflow:
+The `Publish to PyPI` workflow then:
 
-1. checks out complete Git history, validates `v0.9.6`, and requires the tagged <!-- CELLUCID_VERSION -->
+1. checks out complete Git history, validates `v0.9.7` against the published <!-- CELLUCID_VERSION -->
+   release (`validate_release.py --release-event`: the release is not a draft,
+   is not marked pre-release, and names this tag), and requires the tagged
    `GITHUB_SHA` to be an ancestor of the fetched `origin/main`;
 2. runs Ruff, mypy, the complete pytest suite, and a strict documentation build;
 3. builds one wheel and one source distribution;
@@ -176,8 +192,8 @@ The `Publish to PyPI` workflow:
 6. installs both artifacts on Linux, macOS, and Windows with Python 3.14;
 7. publishes those exact gated files through the `pypi` environment and OIDC.
 
-There is no production dispatch button and no token-based publication path in
-the repository.
+The workflow runs on `release: published` only. There is no tag-push trigger,
+no dispatch button, and no token-based publication path in the repository.
 
 ## Verify the published release
 
@@ -187,9 +203,9 @@ After the workflow succeeds, create a clean environment and install from PyPI:
 python -m venv cellucid-release-check
 source cellucid-release-check/bin/activate
 python -m pip install --upgrade pip
-python -m pip install "cellucid==0.9.6"
+python -m pip install "cellucid==0.9.7"  # CELLUCID_VERSION
 python -m pip check
-python -c "import cellucid; assert cellucid.__version__ == '0.9.6'"
+python -c "import cellucid; assert cellucid.__version__ == '0.9.7'"  # CELLUCID_VERSION
 cellucid --version
 ```
 
@@ -211,7 +227,11 @@ build and the stable documentation link.
 - A source-distribution digest mismatch stops before artifact upload.
 - A failed source, documentation, metadata, or installed-artifact gate prevents
   the publication job from starting.
-- If publication has not started, correct the release commit and use the
-  intended tag only after every gate is green.
+- A gate that failed for a passing reason (a runner or network failure) is
+  retried with **Re-run jobs** (or **Re-run failed jobs**) on that run in the
+  Actions tab; it runs the same release again.
+- If publication has not started and the source must change, delete the GitHub
+  Release and its tag, correct the release commit on `main`, and publish the
+  release again once every gate is green.
 - If PyPI accepted any file, do not replace it. Diagnose the cause, increment
   the package version, rebuild, and run the complete process again.

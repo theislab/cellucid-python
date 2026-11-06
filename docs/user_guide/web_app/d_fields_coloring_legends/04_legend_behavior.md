@@ -4,7 +4,7 @@
 **Time:** 25–40 minutes  
 **What you’ll learn:**
 - Where the legend lives and when it appears
-- Everything you can do in a **categorical legend** (hide/show, recolor, rename, merge, delete-to-unassigned)
+- Everything you can do in a **categorical legend** (hide/show, keep only some cells, recolor, rename, merge, delete-to-unassigned)
 - Everything you can do in a **continuous legend** (colormaps, log scale, rescale, filters)
 - How counts and disabled rows behave when other filters are active
 - What extra controls exist (centroids, latent outlier filter) and how they interact with views
@@ -36,7 +36,8 @@ Each category row contains:
 - a **checkbox** (show/hide the category)
 - a **color swatch** (click to choose a color)
 - a **category label**
-- a **cell count** (how many cells are visible/available)
+- a **cell count** (how many cells are visible/available); click it to keep
+  only some of the category's cells ([below](#keep-only-some-cells-of-a-category-the-count))
 - optional tools: **rename** (pencil) and **delete** (trash)
 
 ```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
@@ -66,6 +67,10 @@ Counts are shown as:
 Interpretation:
 - **available** ≈ cells remaining after *other* filters (but before hiding this category)
 - **visible** ≈ cells currently shown after applying category visibility
+
+A category that keeps only some of its cells shows its count in the link
+colour (`200 / 1,200 cells`); see
+[Keep only some cells of a category](#keep-only-some-cells-of-a-category-the-count).
 
 If a category has `0 available` cells, its checkbox and color picker are
 disabled, the row is greyed out, and hovering it shows
@@ -104,6 +109,43 @@ Unchecking a category:
 - and adds a categorical filter entry to **Filters**.
 
 This is why hiding categories is a powerful workflow tool (not just cosmetic).
+
+### Keep only some cells of a category (the count)
+
+A large category can crowd out the others. Its count is a button: click it
+to show only some of its cells.
+
+1. Click the category's count (for example `1,200 cells`). A small box takes
+   its place, reading `all`.
+2. Type how many cells to keep, for example `200`, and press {kbd}`Enter`
+   ({kbd}`Escape`, or clicking elsewhere, cancels).
+3. The category now shows 200 of its cells, chosen at random. Its count reads
+   `200 / 1,200 cells` in the link colour, and hovering it says *Keeps a
+   random 200 cells of Beta (seed 0); click to change, or type all*.
+
+To show every cell of it again, click the count and type `all` (or any number
+at least as large as its count). **Show all**, **Hide all**, and removing the
+field's row under **Filters**, also show every cell again.
+
+What to expect:
+
+- **A seeded random sample.** The cells are drawn at random with a seed (0
+  from the legend), so the same count always shows the same cells, whichever
+  cells are open and in whatever order.
+- **A larger count adds cells.** Raising 200 to 500 keeps the 200 shown and
+  adds 300 more; lowering it keeps some of those shown.
+- **It is a filter.** It hides cells as unticking a category does, and is
+  listed under **Filters** with its field (`cell_type: keeping 200 of Beta`);
+  unticking that row turns it off ({doc}`../e_filtering/03_filter_stack_ui_active_filters`).
+- **It is undoable and saved.** Each count you type is one step of the
+  history, so **Undo** takes it back
+  ({doc}`../m_state_history/01_the_history`); a session file and the saved
+  states this browser keeps hold it.
+- **On a subsample**, the cells are drawn from the category's open cells.
+
+From a notebook, `viewer.filter_category_cell_count(field={"source": "obs",
+"key": "cell_type"}, category="Beta", count=200, seed=1)` does the same, with
+any seed.
 
 ---
 

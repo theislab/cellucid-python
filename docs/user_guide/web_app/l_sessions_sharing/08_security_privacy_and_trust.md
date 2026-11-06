@@ -2,15 +2,15 @@
 
 **Audience:** everyone sharing sessions (especially for private or clinical data)  
 **Time:** 15–35 minutes  
-**What you’ll learn:**
-- What information a session bundle can contain (and therefore leak)
-- What session bundles intentionally do *not* contain (tokens, full datasets, etc.)
+**What you'll learn:**
+- What information a session file can contain (and therefore leak)
+- What session files intentionally do *not* contain (tokens, full datasets, etc.)
 - How Cellucid treats sessions as untrusted input (and what that protects you from)
-- Practical “safe sharing” rules for teams
+- Practical "safe sharing" rules for teams
 
 ---
 
-## Treat session bundles like data artifacts
+## Treat session files like data artifacts
 
 Even though `.cellucid-session` files do not contain the full dataset, they can still encode sensitive information.
 
@@ -20,84 +20,105 @@ Rule of thumb:
 
 ---
 
-## What a session bundle can contain (privacy perspective)
+## What a session file can contain (privacy perspective)
 
-Depending on what you did in the UI, a session bundle may include:
+A session file holds the **whole history** of the dataset, not only what is on
+screen: steps you undid, other branches and other trackers are in it too.
+Depending on what you did, it may include:
 
+- **The steps themselves**
+  - each step's action and settings, its label, and when it was taken
+  - who took it: you, an agent (by its name), or a notebook (Python or R)
+  - tracker and branch names you typed
 - **Dataset identifiers**
-  - the dataset id, counts and cell-order digest of the dataset it was saved on
-  - where the dataset was opened from, for a sample, a data link (in its
-    public form: never a key, signature or token the link carries) or a
-    server (its address); for a file opened from your own computer, its file
-    or folder name
+  - the dataset id, name, counts and cell-order digest of the dataset it was
+    saved on
+  - where the dataset was opened from: a sample, a data link (in its public
+    form: never a key, signature or token the link carries) or a server (its
+    address); for a file opened from your own computer, its file or folder
+    name
+  - which cells were open (a subsample's specification and its cells) and how
+    many cells genes were read for
 - **Field names and category labels**
-  - including any renames you applied
-  - including deleted/purged field registry state
+  - including any renames you applied, and the names before each rename
+  - including deleted fields
 - **Highlight structure**
-  - page names (e.g., `Patient A`, `Responder`, etc. — avoid private IDs)
-  - group names and enabled/disabled state
-- **Highlight memberships**
-  - sets of cell indices belonging to groups (can be large)
-- **User-defined fields**
-  - derived field definitions and exact per-cell categorical codes
-- **Analysis configuration and results**
-  - which analyses were open (sidebar panel and floating windows), their settings
+  - page names (e.g., `Patient A`, `Responder`; avoid private IDs)
+  - group names and on/off state
+- **Highlight cells**
+  - which cells belong to each group (can be large)
+- **Fields you made, and gene sets**
+  - their definitions and exact per-cell values
+  - gene sets with their names and descriptions
+- **Analysis settings and results**
+  - which analyses were open (sidebar panel and floating windows) and their
+    settings
   - their results: differential expression, marker genes, signatures,
     correlations, dot plots and compositions, i.e. statistics derived from the
     data
 - **Figure Export settings**
   - including the figure title and axis labels you typed
-- **Where the dataset came from**
-  - the sample id, data link in its public form (never a key, signature or
-    token it carries: a recipient who has no access of their own opens the
-    link you sent them first, then loads the session; see
-    {ref}`link-access-keys`), or server address; for a local file, its file
-    or folder name (never its path, nor the handle a Chromium browser keeps
-    to reopen it, which stays in that browser)
 
 Practical implication:
-- Do not put patient identifiers or private sample barcodes into highlight/page names if you intend to share sessions.
+- Do not put patient identifiers or private sample barcodes into names you type
+  (highlight pages and groups, categories, trackers) if you intend to share the
+  session. Renaming later is not enough: the earlier name stays in the step
+  before the rename. Share the **Current state** only (it holds what is shown,
+  without the steps before), or leave the branches that hold such steps
+  unticked in **Share…**, and read **What's inside** before you save
+  ({doc}`../m_state_history/06_sharing_and_replay`).
 
 ---
 
-## What a session bundle does NOT contain (important)
+## What a session file does NOT contain (important)
 
 By design, sessions do not include:
 
-- the full dataset (points arrays, full obs table, full expression matrix)
+- the full dataset (cell coordinates, full observation table, full expression
+  matrix)
 - sign-in tokens: Google Drive and OneDrive sign-ins and the GitHub sign-in for
   Community Annotation are kept in the tab's `sessionStorage` and never written
   to a session file (a session saved on a signed-in file records its link, and
   whoever opens it signs in with their own account)
-- Community Annotation votes/comments/moderation state
+- a key, signature or token a data link carried: a recipient without access of
+  their own opens the link you sent them first, then loads the session
+  ({ref}`link-access-keys`)
+- the path of a local file, or the copy of it a Chrome or Edge browser keeps to
+  reopen it (that stays in the browser)
+- Community Annotation votes, comments and moderation state
 - Benchmarking state
 
 This reduces risk, but does not eliminate it (sessions can still contain meaningful derived information).
+
+The history this browser keeps (**Load…**, {doc}`../m_state_history/03_saved_states_and_autosave`) holds the same information
+as a session file, but it stays in this browser and is never uploaded; see
+{doc}`../m_state_history/03_saved_states_and_autosave`.
 
 ---
 
 ## Trust model: sessions are treated as untrusted input
 
-Cellucid loads `.cellucid-session` bundles with safety checks:
+Cellucid loads `.cellucid-session` files with safety checks:
 
-- exact-validates framing, manifest roots, chunk profiles, ordering, and byte
-  lengths before success
-- bounds stored and decoded sizes and preflights the single-member
-  gzip/DEFLATE structure before native decompression
-- rejects unknown, missing, duplicate, aliased, or dishonest contributors
-- requires the complete dataset fingerprint to match
-- applies state in a transaction and rolls back earlier mutations if any later
-  decode, contributor, commit, or final-refresh step fails
+- the signature, the manifest, every tracker and every chunk entry are checked
+  exactly; unknown, missing, duplicate or reordered chunks are refused
+- every chunk is decompressed to exactly its declared size, within bounds, and
+  its single gzip stream is checked before it is inflated
+- every array is checked against its digest and every value against its hash,
+  and every step tree is checked whole
+- the complete dataset fingerprint must match, and the dataset must have every
+  field the shown step uses
+- a failure at any point, before or after the step shown appears, puts back
+  what was shown before
 
 This is meant to protect you from:
 - corrupted files,
-- accidental “wrong dataset” restores,
+- accidental "wrong dataset" loads,
 - extreme memory allocations from maliciously crafted gzip payloads.
 
-The strict reader exposes one all-or-nothing current operation. Starting a
-newer restore or pressing **Cancel** aborts the older operation and dismisses
-its progress without presenting the intentional cancellation as a product
-failure.
+A load is one all-or-nothing operation. Starting a newer load or pressing
+**Cancel** stops the older one and dismisses its progress without presenting
+the cancellation as a failure.
 
 :::{important}
 Even with safety checks, best practice is still:
@@ -113,7 +134,7 @@ Even with safety checks, best practice is still:
 - Public dataset → sessions can be public (if they contain no extra sensitive labels).
 - Private dataset → sessions should remain private.
 
-### 2) Redact sensitive semantics from UI labels
+### 2) Redact sensitive semantics from labels
 
 Avoid:
 - patient identifiers
@@ -125,12 +146,21 @@ Prefer:
 - `condition_A`, `condition_B`
 - `cluster_7` → plus separate private mapping if needed
 
-### 3) Don’t publish sessions by accident
+### 3) Check what the history holds before you send it
+
+A history file holds the steps of the branches you tick, undone ones
+included. In **Share…**, tick only what should leave your computer, choose
+**Current state** when the way you got there does not matter, set **Times** and
+**Dataset** to what you want to say, and open **What's inside**: it lists the
+branches, cell sets, results, notes, conversations, agents and models, names
+of people, times and dataset the file will hold.
+
+### 4) Don't publish sessions by accident
 
 If you are distributing a dataset file or a dataset catalog folder publicly:
-- do not include session bundles unless you intend them to be opened by anyone.
+- do not include session files unless you intend them to be opened by anyone.
 
-### 4) For high-sensitivity environments, share encrypted archives
+### 5) For high-sensitivity environments, share encrypted archives
 
 If your organization requires it:
 - share the dataset file + sessions via encrypted storage or approved systems.
@@ -140,4 +170,5 @@ If your organization requires it:
 ## Next steps
 
 - {doc}`05_share_workflows_links_sessions_data_files` (recommended sharing patterns)
-- {doc}`10_troubleshooting_sessions` (when a restore is rejected)
+- {doc}`10_troubleshooting_sessions` (when a load is refused)
+- {doc}`../o_accessibility_privacy_security/02_privacy_model` (everything Cellucid keeps, and where)

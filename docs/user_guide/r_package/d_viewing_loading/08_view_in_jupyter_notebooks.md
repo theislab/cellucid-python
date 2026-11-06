@@ -41,7 +41,7 @@ laptop, on a remote JupyterHub or Binder, and over HTTPS.
    viewer's credentials (they never appear in an address), then reads the
    dataset and opens the viewer channel through it; R answers every request
    from the object, exactly as its server would.
-3. Commands (`cellucid_highlight()`, `cellucid_color_by()`, …) go to the
+3. Actions (`cellucid_highlight_cells()`, `cellucid_color_by()`, …) go to the
    viewer; events (selections, hovers, …) come back to your hooks
    ({doc}`06_hooks_selection_and_sessions`).
 
@@ -56,13 +56,18 @@ thread. So:
   current, whenever the kernel is idle — which is when you are using the
   viewer;
 - a call that waits for the viewer (`cellucid_wait_ready()`, or
-  `cellucid_session_result()` before the viewer answered) cannot be answered
-  in the cell that waits: it stops at
-  once and says to run it again in a later cell, or to register a hook. A
-  session is asked for with `cellucid_request_session()` and collected
-  (`cellucid_session_result()`) or applied (`cellucid_apply_session(object,
-  request)`) in a later cell. Commands never wait: `cellucid_push()` and
-  `cellucid_set_data_mapping()` go as soon as the viewer can take them.
+  `cellucid_action_result()`, `cellucid_session_result()` and
+  `cellucid_load_session_result()` before the viewer answered) cannot be
+  answered in the cell that waits: it stops at once and says to run it again
+  in a later cell, or to register a hook. A session is asked for with
+  `cellucid_request_session()` and collected (`cellucid_session_result()`) or
+  planned and applied (`cellucid_apply_session(object, request)`) in a later
+  cell; a session file pushed in with `cellucid_load_session()` is answered
+  (`cellucid_load_session_result()`) in a later cell; an action's answer is
+  collected with `cellucid_action_result(request)` in a later cell. Actions
+  never wait (a `cellucid_turn()` block sends its actions as it runs):
+  `cellucid_push()`, `cellucid_mapping_set()` and every other go as soon as
+  the viewer can take them.
 
 ```r
 cellucid_on(viewer, "selection", function(event) {

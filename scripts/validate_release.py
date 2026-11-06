@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""Validate the exact Cellucid Python release contract."""
+"""Validate the exact Cellucid Python release contract.
+
+A release is published in one way: a GitHub Release named ``vX.Y.Z`` is
+published in ``theislab/cellucid-python``, and ``.github/workflows/pypi-publish.yml``
+runs this script against the release's tag and event before it builds and
+publishes to PyPI. Run it locally with ``--tag vX.Y.Z`` before publishing the
+release.
+"""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import subprocess
 import tarfile
@@ -202,6 +210,40 @@ def _validate_release_history(changelog: str, verify_local_tags: bool) -> None:
         _require(not missing, f"release-history tags are missing locally: {missing}")
 
 
+def is_prerelease_version(version: str) -> bool:
+    """Whether ``version`` is a pre-release (anything but ``X.Y.Z``)."""
+    return re.fullmatch(r"\d+\.\d+\.\d+", version) is None
+
+
+def validate_release_event(event: dict[str, object], tag: str, version: str) -> None:
+    """Require the GitHub ``release`` event to publish exactly ``tag``.
+
+    The publishing workflow runs on ``release: published`` only. The release
+    must name ``tag``, must not be a draft, and may be marked a pre-release
+    only when ``version`` is one; this package declares ``X.Y.Z`` versions
+    only, so a release marked pre-release is always refused.
+    """
+    _require(event.get("action") == "published", "the GitHub release event must be 'published'")
+    release = event.get("release")
+    _require(isinstance(release, dict), "the GitHub event carries no release")
+    assert isinstance(release, dict)
+    _require(
+        release.get("tag_name") == tag,
+        f"the GitHub release names tag {release.get('tag_name')!r}, not {tag!r}",
+    )
+    _require(release.get("draft") is False, "a draft GitHub release is never published")
+    prerelease = release.get("prerelease")
+    _require(isinstance(prerelease, bool), "the GitHub release does not say whether it is a pre-release")
+    _require(
+        prerelease == is_prerelease_version(version),
+        (
+            f"the GitHub release is marked pre-release but {version} is a final version"
+            if prerelease
+            else f"{version} is a pre-release version but the GitHub release is not marked pre-release"
+        ),
+    )
+
+
 def validate_release(tag: str | None, *, verify_local_tags: bool = False) -> str:
     """Validate package metadata and return the declared release version."""
     metadata = tomllib.loads(_read("pyproject.toml"))
@@ -269,10 +311,9 @@ def validate_release(tag: str | None, *, verify_local_tags: bool = False) -> str
         ),
         "docs/user_guide/python_package/h_developer_docs/14_release_process.md": (
             f"`cellucid` is currently in beta (`{version}`). <!-- CELLUCID_VERSION -->",
-            # The commands a maintainer copies. A bump that misses these tags and
-            # publishes the previous version.
-            f'git tag -a v{version} -m "Cellucid Python {version}"',
-            f"git push origin v{version}",
+            # The commands and names a maintainer copies. A bump that misses
+            # these validates, releases or checks the previous version.
+            f"publish a GitHub Release named `v{version}`",
             f"python scripts/validate_release.py --tag v{version}",
             f"python -c \"import cellucid; assert cellucid.__version__ == '{version}'\"",
             f'python -m pip install "cellucid=={version}"',
@@ -305,9 +346,27 @@ def validate_release(tag: str | None, *, verify_local_tags: bool = False) -> str
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Validate Cellucid Python release metadata and an optional Git tag."
+        description=(
+            "Validate Cellucid Python release metadata and an optional release tag. "
+            "To release, publish a GitHub Release named vX.Y.Z in "
+            "theislab/cellucid-python; the workflow pypi-publish.yml runs this "
+            "script against it and publishes to PyPI. Run it with --tag vX.Y.Z "
+            "before publishing the release."
+        )
     )
-    parser.add_argument("--tag", help="Exact pushed Git tag, including the v prefix.")
+    parser.add_argument(
+        "--tag",
+        help="The GitHub Release's tag, vX.Y.Z (the v prefix and the package version).",
+    )
+    parser.add_argument(
+        "--release-event",
+        type=Path,
+        help=(
+            "The GitHub release event (GITHUB_EVENT_PATH; requires --tag): it must "
+            "publish --tag, not be a draft, and be marked pre-release only for a "
+            "pre-release version."
+        ),
+    )
     parser.add_argument(
         "--verify-local-tags",
         action="store_true",
@@ -332,6 +391,11 @@ def main() -> int:
         arguments.tag,
         verify_local_tags=arguments.verify_local_tags,
     )
+    if arguments.release_event is not None:
+        _require(arguments.tag is not None, "--release-event requires --tag")
+        event = json.loads(arguments.release_event.read_text(encoding="utf-8"))
+        _require(isinstance(event, dict), "the GitHub event file is not a JSON object")
+        validate_release_event(event, arguments.tag, version)
     if arguments.sdist is not None:
         # `validate_recipe` still runs on every push: the recipe's name, version,
         # entry point and dependency pins are facts about the source and must

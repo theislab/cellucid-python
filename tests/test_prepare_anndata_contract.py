@@ -442,7 +442,7 @@ def test_h5ad_opening_reads_lie_before_every_other_value(tmp_path: Path) -> None
 
 def test_zarr_v2_codec_and_consolidated_metadata(tmp_path: Path) -> None:
     path = _write(tmp_path, "data.zarr", "zarr", 2)
-    metadata = json.loads((path / ".zmetadata").read_text())["metadata"]
+    metadata = json.loads((path / ".zmetadata").read_text(encoding="utf-8"))["metadata"]
     data = metadata["X/data/.zarray"]
     assert data["compressor"] == {"id": "zlib", "level": _store.DEFLATE_LEVEL}
     # Multi-byte values are byte-shuffled before they are deflated; the
@@ -486,13 +486,13 @@ def test_every_zarr_v2_array_carries_the_store_codec(tmp_path: Path) -> None:
         dataset_name="Bare",
     )
     for path in (full, bare):
-        metadata = json.loads((path / ".zmetadata").read_text())["metadata"]
+        metadata = json.loads((path / ".zmetadata").read_text(encoding="utf-8"))["metadata"]
         arrays = {key: value for key, value in metadata.items() if key.endswith(".zarray")}
         assert "var/_index/.zarray" in arrays
         for key, array in arrays.items():
             assert array["compressor"] == {"id": "zlib", "level": _store.DEFLATE_LEVEL}, key
             assert array["fill_value"] in (0, 0.0, False, ""), key
-    metadata = json.loads((full / ".zmetadata").read_text())["metadata"]
+    metadata = json.loads((full / ".zmetadata").read_text(encoding="utf-8"))["metadata"]
     assert metadata["uns/cellucid/defaults/obsKeys/.zattrs"]["encoding-type"] == "string-array"
     assert metadata["uns/cellucid/schema/.zattrs"]["encoding-type"] == "numeric-scalar"
     assert metadata["uns/cellucid/schema/.zarray"]["dtype"] == "<i8"
@@ -514,7 +514,7 @@ def _blosc(itemsize: int) -> dict[str, Any]:
 
 def test_zarr_v3_codec_and_consolidated_metadata(tmp_path: Path) -> None:
     path = _write(tmp_path, "data.zarr", "zarr", 3, **_embedding_defaults_and_metadata())
-    root = json.loads((path / "zarr.json").read_text())
+    root = json.loads((path / "zarr.json").read_text(encoding="utf-8"))
     nodes = root["consolidated_metadata"]["metadata"]
     gzip = {"name": "gzip", "configuration": {"level": _store.DEFLATE_LEVEL}}
     # The expression values, strings and one-byte values: gzip alone.
@@ -561,7 +561,7 @@ def test_zarr_v3_uses_only_codecs_of_the_specification(tmp_path: Path, output_fo
     )
     for path in (full, bare):
         if output_format == "zarr":
-            documents = [json.loads(entry.read_text()) for entry in path.rglob("zarr.json")]
+            documents = [json.loads(entry.read_text(encoding="utf-8")) for entry in path.rglob("zarr.json")]
         else:
             with zipfile.ZipFile(path) as archive:
                 documents = [
@@ -730,7 +730,7 @@ def test_a_zarr_v3_chunk_carries_no_time(tmp_path: Path) -> None:
     for chunk in chunks:
         data = chunk.read_bytes()
         key = chunk.relative_to(path).as_posix().split("/c/")[0]
-        if json.loads((path / key / "zarr.json").read_text())["codecs"][-1]["name"] == "blosc":
+        if json.loads((path / key / "zarr.json").read_text(encoding="utf-8"))["codecs"][-1]["name"] == "blosc":
             array = root[key]
             coords = [int(part) for part in chunk.relative_to(path / key / "c").parts]
             raw = np.zeros(array.chunks, dtype=array.dtype)
@@ -1086,10 +1086,10 @@ def test_an_existing_output_is_replaced_only_with_force(tmp_path: Path) -> None:
 def test_force_never_replaces_a_folder_that_is_not_a_zarr_store(tmp_path: Path) -> None:
     folder = tmp_path / "results.zarr"
     folder.mkdir()
-    (folder / "notes.txt").write_text("keep")
+    (folder / "notes.txt").write_text("keep", encoding="utf-8")
     with pytest.raises(ValueError, match="is not a Zarr store"):
         _write(tmp_path, "results.zarr", "zarr", 2, force=True)
-    assert (folder / "notes.txt").read_text() == "keep"
+    assert (folder / "notes.txt").read_text(encoding="utf-8") == "keep"
     file_folder = tmp_path / "data.h5ad"
     file_folder.mkdir()
     with pytest.raises(ValueError, match="is a folder"):

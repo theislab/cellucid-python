@@ -128,11 +128,18 @@ that origin only.
 
 - One JSON text frame each, with exactly the keys of its type
   (`_wire._COMMAND_MESSAGE_FIELDS`); see {doc}`06_python_to_frontend_commands`.
-- A command that names cells (`highlight`, `setVisibility`) is one binary
-  frame: its header (`_wire._BINARY_COMMAND_HEADER_FIELDS`), padded to a
-  multiple of 4 bytes, then the cells as little-endian `uint32`, strictly
-  ascending, which the viewer reads in place. Two million cells are 8 MB,
-  where the same cells as JSON text were 14 MB.
+- An `action` whose parameters hold arrays (cells, a column's values) is one
+  binary frame: its header (`_wire._BINARY_COMMAND_HEADER_FIELDS`: the
+  parameters without the arrays, and where each array goes), padded to a
+  multiple of 4 bytes, then each array's elements, little-endian, which the
+  viewer reads in place. Two million cells are 8 MB, where the same cells as
+  JSON text were 14 MB.
+- Every `action` names the notebook turn it belongs to: `turn` (its id) and
+  `turnLabel` (what it was asked to do), both null outside
+  `with viewer.turn(...)`.
+- `load_session` (`viewer.load_session(...)`) is always one binary frame: its
+  header (the request and the file's name), padded the same way, then the
+  `.cellucid-session` file.
 - A command sent before the viewer is connected (the cell output still
   loading, the page reconnecting) waits in the viewer's outbox and is sent,
   in order, the moment it connects. Nothing is sent twice.
@@ -142,16 +149,19 @@ that origin only.
 ## Events (viewer → Python)
 
 - Text frames for `hover`, `click`, `ready`, `pong`, `debug_snapshot`,
-  `command_error`, `data_mapping`, `color_by`, `result_removed` and
-  `results`: exactly the keys of their type, and no viewer id.
-- Binary frames for `selection`, `result` and `session_bundle`: a
-  little-endian uint32 header length, a UTF-8 JSON header
-  (`{"type": "selection", "source": …}`, a result's header, or
+  `command_error`, `data_mapping`, `color_by`, `result_removed`, `results`,
+  `history_changed` and `session_loaded`: exactly the keys of their type, and
+  no viewer id.
+- Binary frames for `selection`, `result`, `action_result` and
+  `session_bundle`: a little-endian uint32 header length, a UTF-8 JSON header
+  (`{"type": "selection", "source": …}`, a result's header,
+  `{"type": "action_result", "requestId": …, "step": …}`, or
   `{"type": "session_bundle", "requestId": …}`), then the body. A result's
   body is its cells and then its values ({doc}`../g_api_reference_coverage/api/round_trip`). A selection's
-  body is the cell indices as little-endian uint32, strictly ascending; a
-  session bundle's is the `.cellucid-session` file, streamed to a temporary
-  file as it arrives.
+  body is the cell indices as little-endian uint32, strictly ascending; an
+  action's answer is its outcome as UTF-8 JSON; a session's is the
+  `.cellucid-session` file (format 4), streamed to a temporary file as it
+  arrives.
 - The viewer sends only the event types `/_cellucid/protocol` lists.
 - Each event is checked (`_wire._require_inbound_jupyter_event`) and then
   delivered to the viewer's hooks on the socket's thread, one at a time and
@@ -218,7 +228,7 @@ Controls: `web_cache_dir=`, `viewer.ensure_web_ui_cached(force=True)`,
 ## Where to look in the code
 
 - Python channel: `cellucid-python/src/cellucid/_viewer_channel.py` (handshake,
-  outbox, events, session bundles) over `_websocket.py` (RFC 6455 framing).
+  outbox, events, session files) over `_websocket.py` (RFC 6455 framing).
 - Python checks: `cellucid-python/src/cellucid/jupyter/_wire.py`.
 - Python viewer: `cellucid-python/src/cellucid/jupyter/_viewer.py`.
 - Web channel: `cellucid/assets/js/data/viewer-channel.js` and

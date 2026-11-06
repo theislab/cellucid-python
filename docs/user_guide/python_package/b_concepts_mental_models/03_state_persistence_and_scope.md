@@ -3,7 +3,7 @@
 **Audience:** everyone (wet lab → developer)  
 **Time:** 15–25 minutes  
 **What you’ll learn:**
-- The three persistence layers (live state vs session bundle vs dataset file)
+- The three persistence layers (live state vs session file vs dataset file)
 - What lives in Python vs in the browser vs on disk
 - What tends to reset when you reload/re-run
 - The safest way to make interactive work reproducible
@@ -12,7 +12,7 @@
 
 ## Mental model (one sentence)
 
-Cellucid has **live state** (changes while you interact), **durable state** (session bundles), and **reproducible data artifacts** (Cellucid-ready AnnData files) — and you should choose the right one depending on whether you’re exploring, sharing, or publishing.
+Cellucid has **live state** (changes while you interact), **durable state** (session files), and **reproducible data artifacts** (Cellucid-ready AnnData files) — and you should choose the right one depending on whether you’re exploring, sharing, or publishing.
 
 ---
 
@@ -35,19 +35,22 @@ Live state is lost if:
 - you close the browser,
 - the notebook output that shows the viewer is removed or the notebook reloads.
 
-### 2) Session bundle (`.cellucid-session`) (durable, shareable)
+### 2) Session file (`.cellucid-session`) (durable, shareable)
 
-A session bundle is a single file that captures **a portable snapshot of the app state** (not the dataset itself).
+A session file is a single file that holds **the history of the app state**
+(not the dataset itself): every step taken, by a person, an agent or a
+notebook, and the state each step left behind, in one or more trackers.
 
 You can create it:
-- in the web app via **Save** under **Session file** (downloads a file), or
-- in notebooks via `viewer.request_session_bundle()` and, in the next cell,
+- in the web app via **Share…** under **State › Session** (downloads a file of
+  the history, the current state only, or the steps only, as chosen), or
+- in notebooks via `viewer.request_session()` and, in the next cell,
   its `result()` (no-download capture).
 
 You can use it to:
-- reopen your work later,
+- reopen your work later, and go back to any step,
 - send “this exact view/highlight/filter setup” to a collaborator,
-- apply selected parts of state back onto an AnnData in Python (see {doc}`05_sessions_to_anndata_bridge`).
+- apply the state at any step back onto an AnnData in Python (see {doc}`05_sessions_to_anndata_bridge`).
 
 ### 3) Dataset file (reproducible dataset artifact)
 
@@ -76,7 +79,7 @@ Python does **not** automatically have:
 - your snapshot layout,
 - your analysis panel state.
 
-If you need durable UI state in Python, you must capture it via a **session bundle**.
+If you need durable UI state in Python, you must capture it via a **session file**.
 
 ### Browser-side state (what the web app “knows”)
 
@@ -88,7 +91,7 @@ Practical implication:
 ### Disk-side artifacts (what survives across machines)
 
 - Dataset file: stable dataset artifact, shareable.
-- Session bundle: stable state artifact, shareable.
+- Session file: stable state artifact (its whole history), shareable.
 - Notebook code + environment: the “how to reproduce” part.
 
 ---
@@ -146,39 +149,36 @@ viewer = show_anndata("pbmc_v1.h5ad")
 In notebooks (two cells: the widget hears the viewer between cells):
 
 ```python
-request = viewer.request_session_bundle()
+request = viewer.request_session()
 ```
 
 ```python
-bundle = request.result()
-bundle.save("./sessions/pbmc_v1_my_findings.cellucid-session")
+session = request.result()
+session.save("./sessions/pbmc_v1_my_findings.cellucid-session")
 ```
 
-In the web app: use **Save** (downloads a `.cellucid-session` file).
+In the web app: use **Share…** (downloads a `.cellucid-session` file).
 
 ### Step 4: materialize key decisions back into AnnData (optional)
 
 For example, turn highlights into `adata.obs` columns so downstream analysis can be scripted and versioned:
 
 ```python
-adata2 = bundle.apply_to_anndata(
-    adata,
-    expected_dataset_id="pbmc-v1",
-    inplace=False,
-)
+plan = session.apply(adata)      # what would change, one row each; nothing written yet
+report = plan.apply()            # writes the rows into adata and records the apply
 ```
 
 See: {doc}`05_sessions_to_anndata_bridge`.
 
 ---
 
-## Screenshot: where the Save button lives in the web app
+## Screenshot: where Share… and Load… live in the web app
 
-```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Data mapping group.
-:width: 532px
+```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-01-session-controls.png
+:alt: The State section with the Pancreatic endocrinogenesis sample open: Session with Share… and Load…, and the History with the recording switch, the branch shown and the graph of the steps taken so far, the step shown marked.
+:width: 540px
 
-The Session panel gathers every loading path under **Open data** and keeps the **Save** and **Load** buttons under **Session file**, directly below it.
+The **State** section of the sidebar keeps **Share…** and **Load…** under **Session**, above the history they write and read.
 ```
 
 ---
@@ -187,12 +187,12 @@ The Session panel gathers every loading path under **Open data** and keeps the *
 
 ### Index-based identity (today)
 
-Selections/highlights/codes are aligned to **cell indices** (row positions). If you apply a session to an AnnData whose row order differs, your highlights can silently point to different cells.
+Selections, highlights and field values name cells by **original position** (row positions). If you apply a session to an AnnData whose row order differs, your highlights would point to different cells. Applying a session refuses such an object when it has the embedding the session's cell-order digest was taken on; without that embedding, the order is not checked.
 
 Mitigations:
 - keep dataset files versioned and immutable once shared,
 - treat cell order as part of dataset identity,
-- use `expected_dataset_id=...` when applying sessions in Python.
+- give each dataset an id (`uns['cellucid']['id']`): applying a session compares it with the session's.
 
 ### “Why was my session refused?”
 
@@ -204,7 +204,7 @@ A session restores whole or not at all. Most commonly:
 
 ### “Why did my notebook re-run ‘forget’ the viewer?”
 
-The notebook code is not the viewer. Re-running cells creates new viewer instances unless you capture state as a session bundle.
+The notebook code is not the viewer. Re-running cells creates new viewer instances unless you capture state as a session file.
 
 ---
 
@@ -213,12 +213,19 @@ The notebook code is not the viewer. Re-running cells creates new viewer instanc
 ### Symptom: “I refreshed and lost my highlights/filters”
 
 Likely causes:
-- you did not save a session bundle,
-- you saved a session but did not reload it after refresh.
+- the page opened its default dataset after the refresh, not yours;
+- **Autosave in this browser** (State › History settings) is off, or the browser keeps no data
+  for the site (some private windows);
+- a notebook viewer: a new viewer starts a new history.
 
 Fix:
-- save state in the web app (**Save** under **Session file**) or in Python (`viewer.request_session_bundle()`),
-- reload the session after reloading the dataset.
+- open the same dataset again and choose **Continue** when Cellucid offers to
+  continue where you left off (or **State › Session › Load…**):
+  every step is kept in this browser as you make it
+  ({doc}`../../web_app/m_state_history/03_saved_states_and_autosave`);
+- keep a session file for anything you need on another machine: **Share…**
+  under **State › Session** in the web app, or `viewer.request_session()`
+  in Python, then load it after opening the dataset.
 
 ### Symptom: “I loaded a session but nothing changed”
 

@@ -120,7 +120,7 @@ def test_prepare_stores_every_categorical_fields_quantiles(tmp_path: Path, name:
 
 def test_each_field_is_its_own_array_read_whole(tmp_path: Path) -> None:
     path = prepare(tmp_path / "data.zarr", format="zarr", **_arguments())
-    metadata = json.loads((path / ".zmetadata").read_text())["metadata"]
+    metadata = json.loads((path / ".zmetadata").read_text(encoding="utf-8"))["metadata"]
     array = metadata["uns/cellucid/outlierQuantiles/fields/cell_type/.zarray"]
     assert array["dtype"] == "<f4"
     assert array["shape"] == [N_CELLS]

@@ -15,7 +15,6 @@ import h5py
 
 import cellucid
 from cellucid.data_mapping import EMBEDDING_KEY_PREFIX, parse_vector_field_key
-from cellucid.session_bundle import CellucidSessionBundle
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 README = REPOSITORY_ROOT / "README.md"
@@ -42,7 +41,6 @@ PYTHON_FENCE_INFO = {
 }
 PUBLIC_CALL_NAMES = {name for name in cellucid.__all__ if callable(getattr(cellucid, name))} | {
     "from_file",
-    "apply_to_anndata",
 }
 COMMENTED_CALL_START = re.compile(
     r"^\s*"
@@ -256,7 +254,6 @@ def test_runnable_python_examples_match_current_public_signatures() -> None:
         for name in cellucid.__all__
         if callable(getattr(cellucid, name))
     }
-    public_objects["apply_to_anndata"] = CellucidSessionBundle.apply_to_anndata
     signatures = {
         name: inspect.signature(public_object) for name, public_object in public_objects.items()
     }
@@ -832,13 +829,14 @@ def test_docs_preserve_closed_jupyter_session_and_zarr_contracts() -> None:
         "pong",
         "debug_snapshot",
         "session_bundle",
+        "action_result",
         "command_error",
         "data_mapping",
     ):
         assert f"### `{event_type}`" in event_page
     assert "Unknown event types" in event_page
     assert "rejected before any hook runs" in event_page
-    assert "one of nine closed event records" in event_page
+    assert "sends closed event records" in event_page
     assert "@viewer.on_command_error" in event_page
     # A command that failed must not read as one that applied.
     assert "did not take effect in the viewer" in event_page
@@ -851,11 +849,12 @@ def test_docs_preserve_closed_jupyter_session_and_zarr_contracts() -> None:
         / "api"
         / "sessions.md"
     ).read_text(encoding="utf-8")
-    assert (
-        "An unknown chunk, unknown contributor, or mismatched contributor/chunk pair"
-        in session_reference
+    assert "Each refusal is one sentence starting *This session file is damaged:*" in session_reference
+    assert "A key this version does not know is refused before anything is written" in " ".join(
+        session_reference.split()
     )
-    assert "inplace=False` rejects a backed target" in session_reference
+    # An apply writes in memory; a backed file is never rewritten.
+    assert "its source file is not rewritten" in " ".join(session_reference.split())
 
 
 def test_embedding_docs_state_that_the_viewer_normalizes() -> None:
@@ -1280,6 +1279,7 @@ def test_every_documented_hook_list_matches_the_viewer_decorator_surface() -> No
         "on_command_error",
         "on_data_mapping",
         "on_message",
+        "on_history_change",
     }, hooks
 
     failures: list[str] = []
@@ -1371,7 +1371,7 @@ def _table_keys(section: str) -> list[str]:
             if keys:
                 break
             continue
-        keys.extend(re.findall(r"`([A-Za-z0-9]+)`", line.split("|")[1]))
+        keys.extend(re.findall(r"`([A-Za-z0-9_]+)`", line.split("|")[1]))
     return keys
 
 
@@ -1407,6 +1407,11 @@ def test_prepare_reference_signature_is_the_runtime_signature() -> None:
     ] == ["out_path"]
 
 
+#: The records the packages keep in ``uns['cellucid']`` on the object a person
+#: works with (an apply, a pull); ``prepare()`` never writes them.
+PACKAGE_RECORD_KEYS = {"history_applied", "gene_sets", "pulled"}
+
+
 def test_specification_lists_exactly_the_uns_cellucid_keys_the_writer_and_viewer_use(
     tmp_path: Path,
 ) -> None:
@@ -1423,7 +1428,8 @@ def test_specification_lists_exactly_the_uns_cellucid_keys_the_writer_and_viewer
     top = _table_keys(text.split("## 2. `uns['cellucid']`", 1)[1])
     defaults = _table_keys(text.split("### `defaults`", 1)[1])
     assert top == [
-        "schema", "id", "name", "description", "citation", "source", "defaults", "outlierQuantiles", "session", "priority",
+        "schema", "id", "name", "description", "citation", "source", "defaults", "outlierQuantiles", "priority",
+        "history_applied", "gene_sets", "pulled",
     ]
     assert defaults == [
         "embedding1d",
@@ -1460,12 +1466,12 @@ def test_specification_lists_exactly_the_uns_cellucid_keys_the_writer_and_viewer
         centroid_min_points=3,
     )
     written = ad.read_h5ad(path).uns["cellucid"]
-    assert set(written) <= set(top) - {"session"}
+    assert set(written) <= set(top) - PACKAGE_RECORD_KEYS
     assert set(written["defaults"]) <= set(defaults)
     # Everything prepare() can write is written here, except the two defaults
     # it leaves to the viewer (knn, expression), the two it needs obs/var for,
     # and the modality, which only a MuData has.
-    assert set(written) == set(top) - {"session"}
+    assert set(written) == set(top) - PACKAGE_RECORD_KEYS
     assert set(written["defaults"]) == set(defaults) - {
         "knn",
         "expression",

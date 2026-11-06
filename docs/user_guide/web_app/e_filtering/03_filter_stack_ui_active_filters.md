@@ -29,7 +29,7 @@
 
 The Filters UI is the **source of truth** for current visibility — for
 every filter you can create in the UI. The one thing it cannot show is a
-per-cell visibility mask set from a notebook with `viewer.set_visibility()`,
+per-cell visibility mask set from a notebook with `viewer.cells_visibility_set()`,
 which is applied before all of these and has no row here; that is the only way
 `Showing X of N cells` and `No filters active` can disagree. See
 {doc}`01_filtering_mental_model` and
@@ -97,6 +97,10 @@ Each filter row includes:
     figures, so a typed or slider bound reads exactly as applied
   - categorical hides: `Field: hiding A, B, C, D` — at most four names, then
     ` +N more`
+  - categories keeping only some of their cells (filter by cell count, the
+    legend's count): `Field: keeping 200 of Beta` — at most two, then
+    ` +N more`; on the same row as the field's hides, after them
+    (`cell_type: hiding Alpha; keeping 200 of Beta`)
   - outlier filter: `Field: outlier ≤ 95%`
 - a **remove button** `×` (tooltip `Remove this filter`):
   - removes the filter and resets it to its default “no filter” state
@@ -129,11 +133,16 @@ There are three common ways to stop a filter from affecting visibility:
 2) **Reset** (in the legend UI)
    - continuous: click `Reset` in the continuous legend
    - outliers: set outlier slider back to `100%`
-   - categorical: click `Show all` in the categorical legend
+   - categorical: click `Show all` in the categorical legend (it also shows
+     every cell of a category that kept only some); for one category, click
+     its count and type `all`
 3) **Remove** (× in Filters)
-   - does the reset for you (full range / show all / outlier=100%)
+   - does the reset for you (full range / show all / every cell of every category / outlier=100%)
    - also re-enables the filter (it becomes a “no-op” and typically disappears from the list)
-   - the legend redraws to match: range sliders return to the ends, the category checkboxes are ticked again, and the outlier slider returns to `100%`
+   - the legend redraws to match: range sliders return to the ends, the category checkboxes are ticked again, the counts show every cell, and the outlier slider returns to `100%`
+
+Each of these is a step of the history, so **Undo** brings the filter back
+as it was ({doc}`../m_state_history/01_the_history`).
 
 :::{tip}
 When debugging, prefer **disable** first (safe and reversible). Use **remove** once you understand the cause.

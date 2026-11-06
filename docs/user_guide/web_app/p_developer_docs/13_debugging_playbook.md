@@ -79,6 +79,7 @@ Use the symptom list to choose your debugging path:
 | Switching a view's embedding breaks | Dimension manager + viewer positions | “Embedding switching issues” |
 | WebGL context lost / slow | Rendering/GPU | “Rendering issues” |
 | Session save/load wrong | Session serializer | “Session issues” |
+| Undo misses a change, or a step reads "Changed outside the history" | Actions + history | “History issues” |
 | Analysis panel broken | Analysis module | “Analysis issues” |
 | Figure export broken | Figure export | “Export issues” |
 | Community annotation broken | GitHub auth/sync | “Community annotation issues” |
@@ -131,7 +132,7 @@ How to confirm:
   loads; a dataset chosen in the data controls while it loads replaces it, and
   startup then publishes `ready` without it.
 - The request/response steps (`sign-in`, `health`, `catalog` and `session`,
-  which reads a sample's published default session) each have a 60-second
+  which reads the starting view a sample's catalog names) each have a 60-second
   deadline. A server that never answers ends startup on the startup-failure
   page, naming the step and the URL it was waiting on. `dataset` (opening the
   startup dataset: its metadata, field lists and the embedding its first view
@@ -340,21 +341,60 @@ load. See {doc}`../n_benchmarking_performance/04_benchmarking_methodology_and_me
 ### Symptom: “Session loads but key state is missing”
 
 Likely causes:
-- the feature is intentionally excluded
-- the one awaited restore is still running lazy chunks
-- exact dataset identity or chunk validation rejected and rolled back the operation
+- the feature is intentionally not kept (a device preference, community
+  annotation state, a selection not confirmed)
+- the state is not part of any state domain, so no step and no session holds it
+- the one awaited load is still reading its lazy chunks
+- the dataset identity, a missing field or a damaged file refused the load and
+  rolled it back
 
 How to confirm:
 - Require terminal **Session fully restored**.
 - Check the exact Console error and progress failure; there is no skip/partial mode.
+- In the console, compare what the domains hold now with what you expect:
+  `(await import('/assets/js/app/actions/index.js')).getStateDomains().owner('<domain>').capture()`.
 
 Fix:
 - Confirm you loaded the same dataset id/fingerprint.
-- If feature should persist, add it to the closed current profile with
-  completeness, rollback, and documentation tests.
+- If the feature should persist, make it a state domain's value (or part of
+  one) with capture, restore and round-trip tests
+  ({doc}`29_action_layer_domains_and_history`, “How to add a piece of state”).
 
 Deep dive:
 - {doc}`10_sessions_persistence_and_serialization`
+
+---
+
+## History issues (undo, redo, steps)
+
+### Symptom: “Undo does not put something back”
+
+Likely causes:
+- the action that changed it does not list that domain in `touches`, so the
+  history did not capture it before and after
+- a control changed state without dispatching an action (a mutating state
+  call from a UI module)
+
+How to confirm:
+- `window._cellucidHistories.current().active` is the tracker in use; its
+  `steps` map holds each step's `touches`, `before` and `after`.
+- A step labelled **Changed outside the history** (type
+  `history.outside-change`) names the domains that changed without an action;
+  the console warns `[history] <domains> changed outside an action`.
+- The area's browser spec proves `touches` (`applyUndoRedo`,
+  `tests/browser/helpers/state-history.mjs`): run it for the action.
+
+Fix:
+- Make the control dispatch the action (`dispatchFromControl`), or record its
+  change by observation (`recordObserved`), and list every domain the handler
+  can change in `touches` ({doc}`29_action_layer_domains_and_history`, “How to
+  add an action”).
+
+### Symptom: “An action is refused with ‘… is not available on this page yet’”
+
+The type has no implementation now (`getActions().unprovided()` lists them):
+its owner module has not started (a panel never opened, no dataset) or was
+torn down. Provide it where the owner starts and remove it where it ends.
 
 ---
 
@@ -416,6 +456,27 @@ How to confirm:
 
 Fix:
 - Close extra tabs for the same dataset/repo/user scope.
+
+### Symptom: “Pull warns that files were left out”
+
+This is intentional: a Pull leaves a file that fails the annotation contract
+out on its own (`verdictOf` in `github-sync.js`) instead of stopping, and keeps
+the reason in the file cache by blob id.
+
+How to confirm:
+- The warning's details list each file with its reason.
+- `python scripts/validate_user_files.py` in the annotation repository reports
+  the same files.
+
+Fix:
+- Fix or remove the files on GitHub; the next Pull reads only what changed.
+
+### Symptom: “… runs an older version (contract N) than this Cellucid”
+
+The deployed Worker's root document names an older contract than
+`WORKER_CONTRACT_VERSION` (`community-annotations/worker-contract.js`).
+Deploy the Worker from the same source as the page
+(`cellucid/docs/github-oauth-cloudflare-setup.md`).
 
 Developer references:
 - `cellucid/assets/js/app/community-annotations/REPO_SETUP.md`

@@ -268,7 +268,7 @@ Likely causes:
 
 Fix:
 - open export panel, set options, and export immediately
-- if you need reproducibility, save a session bundle (advanced; see {doc}`32_session_persistence_and_restoring_analysis_artifacts`)
+- if you need reproducibility, save a session file (advanced; see {doc}`32_session_persistence_and_restoring_analysis_artifacts`)
 
 ---
 

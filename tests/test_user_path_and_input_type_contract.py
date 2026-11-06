@@ -147,7 +147,7 @@ def test_every_user_supplied_path_entry_point_expands_the_home_directory() -> No
         "_anndata_files.py": [
             "Path(path).expanduser().resolve()",
         ],
-        "session_bundle.py": ["Path(path).expanduser().resolve()", "Path(dest).expanduser().resolve()"],
+        "session.py": ["Path(path).expanduser().resolve()", "Path(dest).expanduser().resolve()"],
         "web_cache.py": ["cache_dir.expanduser()"],
     }
     for filename, fragments in expected.items():

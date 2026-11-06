@@ -3,8 +3,9 @@ Exact value checks for the viewer channel.
 
 Every message that crosses the viewer channel (:mod:`cellucid._viewer_channel`,
 one WebSocket per viewer) is checked here before it is trusted: outbound
-commands are validated and serialized by :func:`_require_frontend_message` (a
-command that names cells as one binary frame, every other one as JSON text),
+commands are validated and serialized by :func:`_require_frontend_message` (an
+``action`` whose parameters hold arrays as one binary frame, every other
+command as JSON text),
 inbound events are validated and destructured by
 :func:`_require_inbound_jupyter_event`, and the diagnostics path validates the
 dataset list it probes. The declarations those checks read from are also what
@@ -16,8 +17,8 @@ app's ``data/viewer-protocol.js``), and a test holds them equal.
 The checks are exact rather than permissive -- ``type(value) is str`` instead of
 ``isinstance``, exact key sets instead of subsets -- because a viewer running in
 a browser is not a trusted caller. This module imports only the standard
-library, NumPy (to read a binary ``selection`` body and write a command's
-cells in one vectorized pass),
+library, NumPy (to read a binary ``selection`` body and write an action's
+arrays in one vectorized pass),
 and :mod:`cellucid.data_mapping`, which is standard-library only itself, so the
 protocol can be reasoned about without loading the viewer machinery.
 """
@@ -37,47 +38,65 @@ from ..data_mapping import DataMappingError, validate_data_mapping
 
 # Every command Python sends to the viewer as a JSON text frame, mapped to the
 # complete key set that command must carry (the shared fixture's ``commands``).
+# Everything that changes or reads the viewer's state is an ``action`` of the
+# catalogue (``action_catalog.json``): ``action`` names it by its dotted type,
+# ``params`` are its parameters, and the viewer answers with one
+# ``action_result`` or ``command_error`` carrying the same ``requestId``. An
+# action names the notebook turn it belongs to (``turn``, its id, and
+# ``turnLabel``, what it was asked to do; both null outside a turn): the
+# viewer undoes a turn's steps together.
 _COMMAND_MESSAGE_FIELDS: dict[str, frozenset[str]] = {
     "ping": frozenset({"type", "requestId"}),
     "debug_snapshot": frozenset({"type", "requestId"}),
     "requestSessionBundle": frozenset({"type", "requestId"}),
-    "clearHighlights": frozenset({"type"}),
-    "setColorBy": frozenset({"type", "field"}),
-    "resetCamera": frozenset({"type"}),
     "freeze": frozenset({"type"}),
-    "setDataMapping": frozenset({"type", "requestId", "mapping"}),
-    "setGeneSet": frozenset({"type", "requestId", "name", "description", "genes"}),
+    "action": frozenset({"type", "requestId", "action", "params", "turn", "turnLabel"}),
+    # An agent app on this computer driving the viewer through ``cellucid mcp``
+    # (:mod:`cellucid.mcp`): its tool list, a call, a stop, and the person's
+    # answer given in the app. The viewer runs each call as the agent through a
+    # local connection, under the person's permissions, and answers it with
+    # the agent events below.
+    "agent_list": frozenset({"type", "requestId", "connection"}),
+    "agent_call": frozenset({"type", "requestId", "tool", "args", "agent", "connection"}),
+    "agent_cancel": frozenset({"type", "requestId"}),
+    "agent_answer": frozenset({"type", "requestId", "allowed"}),
 }
 
-# Every command that names cells or carries a column, which Python sends as
-# one binary frame: a ``uint32`` little-endian header length, the UTF-8 JSON
-# header (exactly these keys, the shared fixture's ``binaryCommands``), padded
-# with spaces so the body starts on a 4-byte boundary, then the cells as
-# little-endian ``uint32``, strictly ascending (a ``setField`` then its
-# values). ``setVisibility`` of every cell is ``all: true`` and no cells. Two
-# million cells are 8 MB written in one pass, where the same cells as JSON
-# text were 14 MB to build and parse. Cells are original positions: rows of
-# the dataset's ``obs``, whatever subsample the viewer opened.
+#: The keys of an agent command's ``connection``: the local connection's id
+#: (one MCP session of one app) and the app's own name, or None.
+_AGENT_CONNECTION_FIELDS = frozenset({"id", "client"})
+
+#: A local connection's id (the shared fixture's ``agent.connectionIdPattern``).
+_AGENT_CONNECTION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+#: An agent's tool name, as the tool list names it (``color_by``).
+_AGENT_TOOL_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+
+# An action whose parameters hold arrays (cells as original positions, a
+# column's values) is one binary frame: a ``uint32`` little-endian header
+# length, the UTF-8 JSON header (exactly these keys, the shared fixture's
+# ``binaryCommands``), padded with spaces so the body starts on a 4-byte
+# boundary, then each array's elements, little-endian, in the order
+# ``arrays`` lists them (``path``: the keys and list indices leading to it in
+# ``params``, ending in a key ``params`` does not hold; ``type``; ``length``).
+# Two million cells are 8 MB written in one pass, where the same cells as
+# JSON text were 14 MB to build and parse. ``load_session`` pushes a session
+# file into the viewer: its header names the request and the file (``name``,
+# without a folder), padded the same way, and its body is the file; the viewer
+# answers with ``session_loaded`` or a ``command_error``.
 _BINARY_COMMAND_HEADER_FIELDS: dict[str, frozenset[str]] = {
-    "highlight": frozenset({"type", "color", "label"}),
-    "setVisibility": frozenset({"type", "visible", "all"}),
-    "setField": frozenset(
-        {"type", "requestId", "key", "kind", "categories", "nObs", "cells", "values"}
-    ),
+    "action": frozenset({"type", "requestId", "action", "params", "turn", "turnLabel", "arrays"}),
+    "load_session": frozenset({"type", "requestId", "name"}),
 }
 
-# What a caller of ``send_message`` gives for a binary command: its cells under
-# ``cells`` (None for every cell of a ``setVisibility``, and for a ``setField``
-# whose values cover every cell), beside the header's fields; a ``setField``
-# gives its values under ``values`` as a NumPy array, whose dtype the header
-# names.
-_BINARY_COMMAND_MESSAGE_FIELDS: dict[str, frozenset[str]] = {
-    "highlight": frozenset({"type", "cells", "color", "label"}),
-    "setVisibility": frozenset({"type", "cells", "visible"}),
-    "setField": frozenset(
-        {"type", "requestId", "key", "kind", "categories", "nObs", "cells", "values"}
-    ),
-}
+#: The keys of one entry of a binary action's ``arrays``, in their order.
+_ACTION_ARRAY_FIELDS = ("path", "type", "length")
+
+#: The keys of an ``action_result``'s ``step``: the history step it made.
+_ACTION_STEP_FIELDS = frozenset({"id", "label"})
+
+#: A dotted action type, as the catalogue names one (``color.by``).
+_ACTION_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\.[a-z][a-z0-9]*(?:-[a-z0-9]+)*)+$")
 
 #: The result kinds the viewer sends, with the exact keys of each ``meta``
 #: (the shared fixture's ``results.kinds``).
@@ -98,10 +117,7 @@ _HIGHLIGHT_TOOLS = frozenset(
 #: Who made a field or gene set.
 _RESULT_ORIGINS = frozenset({"analysis", "markers", "notebook", "user"})
 
-#: The kinds of field ``setField`` pushes.
-_FIELD_KINDS = frozenset({"categorical", "continuous"})
-
-#: Each value type of a result or ``setField`` body, as a little-endian NumPy dtype.
+#: Each value type of a result body or an action's array, as a little-endian NumPy dtype.
 _VALUE_DTYPES: dict[str, np.dtype] = {
     "uint8": np.dtype("<u1"),
     "uint16": np.dtype("<u2"),
@@ -117,7 +133,7 @@ _FLOAT_TYPES = frozenset({"float32", "float64"})
 # commands against it, and an inbound ``command_error`` event may only name a
 # command that appears here.
 _COMMAND_TYPES: frozenset[str] = frozenset(_COMMAND_MESSAGE_FIELDS) | frozenset(
-    _BINARY_COMMAND_MESSAGE_FIELDS
+    _BINARY_COMMAND_HEADER_FIELDS
 )
 
 # Every event the viewer may send back, mapped to the complete key set that
@@ -127,17 +143,22 @@ _COMMAND_TYPES: frozenset[str] = frozenset(_COMMAND_MESSAGE_FIELDS) | frozenset(
 # what this installation accepts instead of guessing from a version number.
 # Events carry no viewer id: the channel's socket is one viewer's.
 #
-# Three events do not arrive as JSON text frames: the channel builds
+# Six events do not arrive as JSON text frames: the channel builds
 # ``selection`` from a binary frame (its ``cells`` field is the frame's body,
 # little-endian uint32, until :func:`_decode_selection_cells` reads it),
 # ``result`` from a binary frame (its header's fields and the frame's
-# ``body``, read by :func:`_decode_result`) and ``session_bundle`` from a
-# binary frame it streams to a temporary file.
+# ``body``, read by :func:`_decode_result`), ``action_result`` from a binary
+# frame (its header's fields and the frame's ``body``, the action's outcome as
+# UTF-8 JSON, read by :func:`_decode_action_result`: a read's result is as
+# large as it asks for), ``agent_tools`` and ``agent_result`` from binary
+# frames whose body is UTF-8 JSON (:func:`_decode_agent_json`), and
+# ``session_bundle`` from a binary frame it streams to a temporary file.
 _INBOUND_EVENT_FIELDS: dict[str, frozenset[str]] = {
     "selection": frozenset({"type", "cells", "source"}),
     "result": frozenset(
-        {"type", "requestId", "epoch", "revision", "kind", "id", "nObs", "meta", "cells", "values", "body"}
+        {"type", "epoch", "revision", "kind", "id", "nObs", "meta", "cells", "values", "body"}
     ),
+    "action_result": frozenset({"type", "requestId", "step", "body"}),
     "hover": frozenset({"type", "cell", "position"}),
     "click": frozenset({"type", "cell", "button", "shift", "ctrl"}),
     "ready": frozenset({"type", "n_cells", "n_obs", "dimensions"}),
@@ -155,12 +176,35 @@ _INBOUND_EVENT_FIELDS: dict[str, frozenset[str]] = {
         }
     ),
     "session_bundle": frozenset({"type", "requestId", "status", "bytes", "path"}),
-    "command_error": frozenset({"type", "command", "reason"}),
-    "data_mapping": frozenset({"type", "requestId", "origin", "mapping"}),
+    "command_error": frozenset({"type", "command", "requestId", "reason"}),
+    "data_mapping": frozenset({"type", "origin", "mapping"}),
     "color_by": frozenset({"type", "field", "source", "symbol", "cells_read"}),
     "result_removed": frozenset({"type", "epoch", "revision", "kind", "id"}),
     "results": frozenset({"type", "epoch", "dataset", "revision", "nObs", "items"}),
+    "history_changed": frozenset({"type", "kind", "tracker", "head", "step", "branch"}),
+    "session_loaded": frozenset({"type", "requestId", "tracker", "head"}),
+    # The answers to an agent's commands (``cellucid mcp``): its tools and a
+    # call's MCP result arrive as binary frames whose body is UTF-8 JSON
+    # (``tools``, ``result`` once read); the person being asked about a call,
+    # and their answer; the person's settings changing what a list says.
+    "agent_tools": frozenset({"type", "requestId", "body"}),
+    "agent_result": frozenset({"type", "requestId", "body"}),
+    "agent_asking": frozenset({"type", "requestId", "message", "detail"}),
+    "agent_answered": frozenset({"type", "requestId", "allowed"}),
+    "agent_tools_changed": frozenset({"type"}),
 }
+
+#: Every agent event: delivered to the viewer's agent port
+#: (:class:`cellucid._agent_link.ViewerAgentPort`), never to the notebook's hooks.
+_AGENT_EVENT_TYPES = frozenset(
+    {"agent_tools", "agent_result", "agent_asking", "agent_answered", "agent_tools_changed"}
+)
+
+#: What a ``history_changed`` says changed (the shared fixture's
+#: ``history.changeKinds``): a step recorded, the step shown moved, the
+#: history's structure edited, a tracker started, used, renamed or removed, a
+#: session file loaded.
+_HISTORY_CHANGE_KINDS = ("step", "moved", "edited", "tracker", "loaded")
 
 # One page's account of one dataset it opened (viewer-protocol.json
 # ``results.epochPattern``): every result event carries it, and a host keeps
@@ -168,8 +212,7 @@ _INBOUND_EVENT_FIELDS: dict[str, frozenset[str]] = {
 _RESULT_EPOCH_PATTERN = re.compile(r"^[0-9a-f]{16}$")
 
 # Why the viewer's data mapping is what it is, as a ``data_mapping`` event
-# reports it. ``notebook`` is the one origin that answers a ``setDataMapping``
-# command, so it is the one origin that carries a ``requestId``.
+# reports it (``notebook``: this host's own ``mapping.set`` action).
 _DATA_MAPPING_ORIGINS = frozenset(
     {"default", "best_guess", "session", "user", "notebook"}
 )
@@ -178,10 +221,10 @@ _DATA_MAPPING_ORIGINS = frozenset(
 _ANNDATA_ENTRY_FIELDS = frozenset({"id", "name", "anndata"})
 
 # Longest ``command_error`` reason the viewer may report. The viewer truncates
-# its own text well below this, so the bound refuses an unbounded string
-# without turning a change to the viewer's presentation limit into a protocol
-# break.
-_COMMAND_ERROR_REASON_LIMIT = 500
+# its own text well below this (1000 characters: an action's refusal names
+# what it expected), so the bound refuses an unbounded string without turning
+# a change to the viewer's presentation limit into a protocol break.
+_COMMAND_ERROR_REASON_LIMIT = 4000
 
 
 #: Where the viewer channel is, relative to the server's base address.
@@ -212,7 +255,8 @@ def _protocol_capability_document() -> dict[str, Any]:
         Every command this installation may send, which is also exactly the set
         of names a ``command_error`` may report as having failed.
     ``binaryCommands``
-        The commands it sends as binary frames: those that name cells.
+        The commands it may send as binary frames: an ``action`` whose
+        parameters hold arrays, and ``load_session`` (a session file).
     """
     return {
         "channel": _CHANNEL_ROUTE,
@@ -456,25 +500,120 @@ def _require_data_mapping(value: object, *, label: str) -> dict[str, Any]:
         raise ValueError(str(error)) from error
 
 
-def _binary_command_frame(
-    header: dict[str, Any], cells: np.ndarray | None, values: np.ndarray | None = None
-) -> bytearray:
-    """One binary command frame: header length, padded JSON header, cells, values."""
+def _binary_command_frame(header: dict[str, Any], parts: list[np.ndarray]) -> bytearray:
+    """One binary command frame: header length, the JSON header padded to a
+    multiple of 4 bytes, then each array's little-endian bytes in order."""
     text = json.dumps(header, ensure_ascii=True, allow_nan=False, separators=(",", ":"))
     header_bytes = (text + " " * (-len(text) % 4)).encode("ascii")
-    body_offset = 4 + len(header_bytes)
-    count = 0 if cells is None else cells.size
-    values_offset = body_offset + 4 * count
-    frame = bytearray(values_offset + (0 if values is None else values.nbytes))
+    offset = 4 + len(header_bytes)
+    frame = bytearray(offset + sum(part.nbytes for part in parts))
     frame[:4] = len(header_bytes).to_bytes(4, "little")
-    frame[4:body_offset] = header_bytes
-    if cells is not None:
-        # The cells are written straight into the frame: one pass, no copy
-        # of them beside it.
-        np.frombuffer(frame, dtype=_SELECTION_CELL_DTYPE, count=count, offset=body_offset)[:] = cells
-    if values is not None:
-        frame[values_offset:] = values.tobytes()
+    frame[4:offset] = header_bytes
+    for part in parts:
+        # Each array is written straight into the frame: one pass, no copy
+        # of it beside the frame.
+        np.frombuffer(frame, dtype=part.dtype, count=part.size, offset=offset)[:] = part
+        offset += part.nbytes
     return frame
+
+
+def _action_array_type(array: np.ndarray, *, label: str) -> str:
+    """The wire type of an action's array: its value type, or refused."""
+    if array.ndim != 1:
+        raise TypeError(f"{label} must be one-dimensional, not of {array.ndim} {plural(array.ndim, 'dimension')}")
+    for name, dtype in _VALUE_DTYPES.items():
+        if array.dtype.kind == dtype.kind and array.dtype.itemsize == dtype.itemsize:
+            return name
+    raise TypeError(f"{label} must be uint8, uint16, uint32, float32 or float64, not {array.dtype}")
+
+
+def _split_action_params(
+    params: dict[str, Any],
+) -> tuple[dict[str, Any], list[tuple[list[str | int], str, np.ndarray]]]:
+    """An action's parameters with every NumPy array taken out: the JSON rest,
+    and each array with its path, in the order met (keys in their order). An
+    array goes under an object's key, never directly in a list."""
+    arrays: list[tuple[list[str | int], str, np.ndarray]] = []
+
+    def visit(node: Any, path: list[str | int], in_list: bool) -> Any:
+        if isinstance(node, np.ndarray):
+            if in_list:
+                where = ".".join(str(key) for key in path)
+                raise TypeError(f"action params hold an array inside a list at {where}; put it under a key")
+            name = _action_array_type(node, label=f"action params {'.'.join(str(key) for key in path)}")
+            arrays.append((path, name, node.astype(_VALUE_DTYPES[name], copy=False)))
+            return _ARRAY_TAKEN
+        if type(node) is list:
+            return [visit(item, [*path, index], True) for index, item in enumerate(node)]
+        if type(node) is dict:
+            out: dict[str, Any] = {}
+            for key, child in node.items():
+                if type(key) is not str:
+                    raise TypeError("action params object keys must be native strings")
+                kept = visit(child, [*path, key], False)
+                if kept is not _ARRAY_TAKEN:
+                    out[key] = kept
+            return out
+        return node
+
+    rest = visit(params, [], False)
+    _require_exact_json_value(rest, label="action params")
+    return rest, arrays
+
+
+#: The place of an array taken out of an action's parameters.
+_ARRAY_TAKEN = object()
+
+
+def _action_frame(message: dict[str, Any]) -> str | bytearray:
+    """One ``action`` command: JSON text, or a binary frame when its
+    parameters hold arrays (the viewer reads both the same way)."""
+    request_id = _require_exact_message_text(message["requestId"], label="action requestId")
+    action = message["action"]
+    if type(action) is not str or _ACTION_TYPE_PATTERN.fullmatch(action) is None:
+        raise ValueError(f"action must be a dotted action type such as 'color.by', not {action!r}")
+    params = message["params"]
+    if type(params) is not dict:
+        raise TypeError("action params must be a native dictionary")
+    turn, turn_label = message["turn"], message["turnLabel"]
+    if (turn is None) != (turn_label is None):
+        raise ValueError("an action names its turn and the turn's label together, or neither")
+    if turn is not None:
+        _require_exact_message_text(turn, label="action turn")
+        _require_exact_message_text(turn_label, label="action turnLabel", allow_whitespace=True)
+    rest, arrays = _split_action_params(params)
+    if not arrays:
+        return json.dumps(
+            {"type": "action", "requestId": request_id, "action": action, "params": rest, "turn": turn, "turnLabel": turn_label},
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+    header = {
+        "type": "action",
+        "requestId": request_id,
+        "action": action,
+        "params": rest,
+        "turn": turn,
+        "turnLabel": turn_label,
+        "arrays": [{"path": path, "type": name, "length": int(array.size)} for path, name, array in arrays],
+    }
+    return _binary_command_frame(header, [array for _, _, array in arrays])
+
+
+def _load_session_frame(message: dict[str, Any]) -> bytearray:
+    """One ``load_session`` command: the header (the request and the file's
+    name) padded to 4 bytes, then the session file."""
+    request_id = _require_exact_message_text(message["requestId"], label="load_session requestId")
+    name = _require_exact_message_text(message["name"], label="load_session name", allow_whitespace=True)
+    if "/" in name or "\\" in name:
+        raise ValueError("load_session names the file by its name, without a folder")
+    data = message["file"]
+    if type(data) not in (bytes, bytearray) or not data:
+        raise TypeError("load_session carries the session file's bytes")
+    return _binary_command_frame(
+        {"type": "load_session", "requestId": request_id, "name": name}, [np.frombuffer(bytes(data), dtype=np.uint8)],
+    )
 
 
 def _require_text_list(value: object, *, label: str, nonempty: bool, whitespace: bool) -> list[str]:
@@ -491,87 +630,11 @@ def _require_text_list(value: object, *, label: str, nonempty: bool, whitespace:
     return value
 
 
-def _require_field_values(
-    values: object, *, kind: str, categories: list[str] | None, count: int, label: str
-) -> tuple[str, np.ndarray]:
-    """A pushed column's values: codes (a code type's largest value is no
-    category) or floats (NaN is no value, never an infinity), one per cell."""
-    if not isinstance(values, np.ndarray) or values.ndim != 1:
-        raise TypeError(f"{label} values must be a one-dimensional NumPy array")
-    dtype_name = next(
-        (
-            name
-            for name, dtype in _VALUE_DTYPES.items()
-            if values.dtype.kind == dtype.kind and values.dtype.itemsize == dtype.itemsize
-        ),
-        None,
-    )
-    if dtype_name is None:
-        raise TypeError(f"{label} values must be uint8, uint16, uint32, float32 or float64, not {values.dtype}")
-    if values.size != count:
-        raise ValueError(f"{label} holds {values.size} {plural(values.size, 'value')} for {count} {plural(count, 'cell')}")
-    if kind == "categorical":
-        if dtype_name not in _CODE_TYPES:
-            raise TypeError(f"{label} codes must be uint8, uint16 or uint32")
-        assert categories is not None
-        missing = int(np.iinfo(values.dtype).max)
-        if len(categories) > missing:
-            raise ValueError(f"{label} has more categories than its {dtype_name} code type holds")
-        if values.size and bool(np.any((values >= len(categories)) & (values != missing))):
-            raise ValueError(f"{label} has a code that names no category")
-    else:
-        if dtype_name not in _FLOAT_TYPES:
-            raise TypeError(f"{label} values must be float32 or float64")
-        if bool(np.any(np.isinf(values))):
-            raise ValueError(f"{label} values must be finite numbers or NaN (no value)")
-    return dtype_name, values.astype(_VALUE_DTYPES[dtype_name], copy=False)
-
-
-def _set_field_frame(message: dict[str, Any]) -> bytearray:
-    """One ``setField`` frame: a column for the viewer to add as a field."""
-    request_id = _require_exact_message_text(message["requestId"], label="setField requestId")
-    key = _require_exact_message_text(message["key"], label="setField key", allow_whitespace=True)
-    kind = message["kind"]
-    if kind not in _FIELD_KINDS:
-        raise ValueError("setField kind must be 'categorical' or 'continuous'")
-    categories = message["categories"]
-    if kind == "categorical":
-        categories = _require_text_list(categories, label="setField categories", nonempty=True, whitespace=True)
-    elif categories is not None:
-        raise TypeError("A continuous setField has no categories")
-    n_obs = message["nObs"]
-    if type(n_obs) is not int or not 1 <= n_obs <= _MAX_CELL_INDEX + 1:
-        raise ValueError("setField nObs must be the dataset's cell count")
-    raw_cells = message["cells"]
-    cells = None if raw_cells is None else _require_cell_indices(raw_cells, label="setField cells")
-    if cells is not None and int(cells[-1]) >= n_obs:
-        raise ValueError(f"setField cells must be below the dataset's {n_obs} {plural(n_obs, 'cell')}")
-    count = n_obs if cells is None else int(cells.size)
-    dtype_name, values = _require_field_values(
-        message["values"], kind=kind, categories=categories, count=count, label=f"setField {key!r}"
-    )
-    if cells is not None:
-        # The cells go out ascending; each value goes with its cell.
-        order = np.argsort(np.asarray(raw_cells, dtype=np.int64), kind="stable")
-        values = values[order]
-    header = {
-        "type": "setField",
-        "requestId": request_id,
-        "key": key,
-        "kind": kind,
-        "categories": categories,
-        "nObs": n_obs,
-        "cells": None if cells is None else int(cells.size),
-        "values": dtype_name,
-    }
-    return _binary_command_frame(header, cells, values)
-
-
 def _require_frontend_message(message: object) -> str | bytearray:
     """Validate one command and serialize it as the frame the viewer reads.
 
-    A command that names cells (``highlight``, ``setVisibility``) becomes one
-    binary frame (bytes); every other one a JSON text frame (str).
+    An ``action`` whose parameters hold NumPy arrays becomes one binary frame
+    (bytes); every other command a JSON text frame (str).
     """
     if type(message) is not dict:
         raise TypeError("message must be a native dictionary")
@@ -582,80 +645,82 @@ def _require_frontend_message(message: object) -> str | bytearray:
     if "viewerId" in message or "viewerToken" in message:
         raise TypeError("message must not supply viewer routing credentials")
 
-    binary = _BINARY_COMMAND_MESSAGE_FIELDS.get(message_type)
-    expected = binary if binary is not None else _COMMAND_MESSAGE_FIELDS.get(message_type)
+    if message_type == "load_session":
+        if set(message) != {"type", "requestId", "name", "file"}:
+            raise TypeError("load_session message must contain exactly file, name, requestId, type")
+        return _load_session_frame(message)
+    expected = _COMMAND_MESSAGE_FIELDS.get(message_type)
     if expected is None:
         raise ValueError(f"Unknown viewer command type {message_type!r}")
     if set(message) != expected:
         fields = ", ".join(sorted(expected))
         raise TypeError(f"{message_type} message must contain exactly {fields}")
-
-    if message_type == "highlight":
-        cells = _require_cell_indices(message["cells"], label="highlight cells")
-        color = message["color"]
-        if (
-            type(color) is not str
-            or len(color) != 7
-            or color[0] != "#"
-            or any(character not in "0123456789abcdefABCDEF" for character in color[1:])
-        ):
-            raise ValueError("highlight color must be an exact six-digit hex color")
-        label = message["label"]
-        if label is not None:
-            _require_exact_message_text(label, label="highlight label", allow_whitespace=True)
-        return _binary_command_frame({"type": "highlight", "color": color, "label": label}, cells)
-    if message_type == "setField":
-        return _set_field_frame(message)
-    if message_type == "setVisibility":
-        visible = message["visible"]
-        if type(visible) is not bool:
-            raise TypeError("setVisibility visible must be exactly True or False")
-        if message["cells"] is None:
-            return _binary_command_frame(
-                {"type": "setVisibility", "visible": visible, "all": True}, None
-            )
-        cells = _require_cell_indices(message["cells"], label="setVisibility cells")
-        return _binary_command_frame(
-            {"type": "setVisibility", "visible": visible, "all": False}, cells
-        )
+    if message_type == "action":
+        return _action_frame(message)
 
     _require_exact_json_value(message, label="message")
+    if message_type.startswith("agent_"):
+        _require_agent_command(message)
     if message_type in {"ping", "debug_snapshot", "requestSessionBundle"}:
         _require_exact_message_text(
             message["requestId"],
             label=f"{message_type} requestId",
         )
-    elif message_type == "setColorBy":
-        _require_exact_message_text(
-            message["field"],
-            label="setColorBy field",
-            allow_whitespace=True,
-        )
-    elif message_type == "setGeneSet":
-        _require_exact_message_text(message["requestId"], label="setGeneSet requestId")
-        _require_exact_message_text(message["name"], label="setGeneSet name", allow_whitespace=True)
-        if type(message["description"]) is not str:
-            raise TypeError("setGeneSet description must be text")
-        _require_text_list(message["genes"], label="setGeneSet genes", nonempty=False, whitespace=False)
-    elif message_type == "setDataMapping":
-        _require_exact_message_text(
-            message["requestId"],
-            label="setDataMapping requestId",
-        )
-        message = {
-            **message,
-            "mapping": _require_data_mapping(
-                message["mapping"],
-                label="setDataMapping mapping",
-            ),
-        }
-
     return json.dumps(
         message,
         ensure_ascii=True,
         allow_nan=False,
         separators=(",", ":"),
     )
+
+
+def _require_agent_connection(value: object, *, label: str) -> dict[str, Any]:
+    if type(value) is not dict or set(value) != _AGENT_CONNECTION_FIELDS:
+        raise TypeError(f"{label} connection must be {{id, client}}")
+    if type(value["id"]) is not str or not _AGENT_CONNECTION_ID_PATTERN.match(value["id"]):
+        raise ValueError(f'{label} connection id must be 1 to 64 letters, digits, "_" or "-"')
+    client = value["client"]
+    if client is not None:
+        _require_exact_message_text(client, label=f"{label} connection client", allow_whitespace=True)
+    return value
+
+
+def _require_agent_command(message: dict[str, Any]) -> None:
+    """Check an agent command's fields beyond its keys (the viewer checks them
+    the same way: ``requireViewerAgentCommand``)."""
+    message_type = message["type"]
+    _require_exact_message_text(message["requestId"], label=f"{message_type} requestId")
+    if message_type in {"agent_list", "agent_call"}:
+        _require_agent_connection(message["connection"], label=message_type)
+    if message_type == "agent_call":
+        if type(message["tool"]) is not str or not _AGENT_TOOL_PATTERN.match(message["tool"]):
+            raise ValueError("agent_call names its tool as the tool list does, such as 'color_by'")
+        if type(message["args"]) is not dict:
+            raise TypeError("agent_call args must be one object")
+        _require_exact_message_text(message["agent"], label="agent_call agent", allow_whitespace=True)
+    if message_type == "agent_answer" and type(message["allowed"]) is not bool:
+        raise TypeError("agent_answer allowed must be True or False")
+
+
+def _decode_agent_json(message: dict[str, Any], key: str) -> dict[str, Any]:
+    """Read one binary agent event (``agent_tools``, ``agent_result``): its
+    request and its body, UTF-8 JSON, as ``key``."""
+    event_type = message["type"]
+    request_id = _require_exact_message_text(message["requestId"], label=f"{event_type} requestId")
+    body = message["body"]
+    if not isinstance(body, bytes | bytearray):
+        raise TypeError(f"An {event_type} body must be bytes")
+    try:
+        value = json.loads(bytes(body).decode("utf-8"), parse_constant=_reject_constant)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"The body of {event_type} {request_id} is not UTF-8 JSON") from error
+    _require_exact_json_value(value, label=f"{event_type} body")
+    if event_type == "agent_tools":
+        if type(value) is not list or any(type(tool) is not dict or type(tool.get("name")) is not str for tool in value):
+            raise TypeError("agent_tools body must be a list of tools, each with its name")
+    elif type(value) is not dict or type(value.get("content")) is not list or type(value.get("isError")) is not bool:
+        raise TypeError("agent_result body must be an MCP tool result: {content, isError, ...}")
+    return {"type": event_type, "requestId": request_id, key: value}
 
 
 def _require_nonnegative_event_integer(value: object, *, label: str) -> int:
@@ -742,9 +807,6 @@ def _decode_result(message: dict[str, Any]) -> dict[str, Any]:
     """Read one ``result`` event: its header checked against its kind, and its
     body read as ``cells`` (original positions, uint32 ascending, or None for
     every cell) and ``values`` (a NumPy array, or None)."""
-    request_id = message["requestId"]
-    if request_id is not None:
-        _require_exact_message_text(request_id, label="result requestId")
     _require_epoch(message["epoch"], label="result epoch")
     _require_positive_revision(message["revision"], label="result revision")
     kind = message["kind"]
@@ -811,7 +873,6 @@ def _decode_result(message: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"The continuous result {result_id!r} must hold finite values or NaN")
     return {
         "type": "result",
-        "requestId": request_id,
         "epoch": message["epoch"],
         "revision": message["revision"],
         "kind": kind,
@@ -821,6 +882,33 @@ def _decode_result(message: dict[str, Any]) -> dict[str, Any]:
         "cells": cells,
         "values": values,
     }
+
+
+def _reject_constant(name: str) -> Any:
+    raise ValueError(f"an action's outcome holds {name}, which JSON cannot carry")
+
+
+def _decode_action_result(message: dict[str, Any]) -> dict[str, Any]:
+    """Read one ``action_result`` event: the request it answers, the history
+    step it made (``{id, label}`` or None) and its outcome, the UTF-8 JSON of
+    the frame's body."""
+    request_id = _require_exact_message_text(message["requestId"], label="action_result requestId")
+    step = message["step"]
+    if step is not None:
+        if type(step) is not dict:
+            raise TypeError("action_result step must be an object or null")
+        _require_exact_event_fields(step, _ACTION_STEP_FIELDS, event_type="action_result step")
+        _require_exact_message_text(step["id"], label="action_result step id")
+        _require_exact_message_text(step["label"], label="action_result step label", allow_whitespace=True)
+    body = message["body"]
+    if not isinstance(body, bytes | bytearray):
+        raise TypeError("An action_result body must be bytes")
+    try:
+        outcome = json.loads(bytes(body).decode("utf-8"), parse_constant=_reject_constant)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"The outcome of action request {request_id} is not UTF-8 JSON") from error
+    _require_exact_json_value(outcome, label="action_result outcome")
+    return {"type": "action_result", "requestId": request_id, "step": step, "outcome": outcome}
 
 
 def _require_inbound_jupyter_event(message: object) -> tuple[str, dict[str, Any]]:
@@ -834,7 +922,13 @@ def _require_inbound_jupyter_event(message: object) -> tuple[str, dict[str, Any]
     # A selection's cells and a result's body are the binary body the
     # channel received, not JSON; they are read by `_decode_selection_cells`
     # and `_decode_result` below.
-    binary_key = {"selection": "cells", "result": "body"}.get(str(message.get("type")))
+    binary_key = {
+        "selection": "cells",
+        "result": "body",
+        "action_result": "body",
+        "agent_tools": "body",
+        "agent_result": "body",
+    }.get(str(message.get("type")))
     _require_exact_json_value(
         (
             {key: value for key, value in message.items() if key != binary_key}
@@ -892,6 +986,23 @@ def _require_inbound_jupyter_event(message: object) -> tuple[str, dict[str, Any]
             raise TypeError("click shift and ctrl must be native booleans")
     elif event_type == "result":
         message = _decode_result(message)
+    elif event_type == "action_result":
+        message = _decode_action_result(message)
+    elif event_type == "agent_tools":
+        message = _decode_agent_json(message, "tools")
+    elif event_type == "agent_result":
+        message = _decode_agent_json(message, "result")
+    elif event_type == "agent_asking":
+        _require_exact_message_text(message["requestId"], label="agent_asking requestId")
+        _require_exact_message_text(message["message"], label="agent_asking message", allow_whitespace=True)
+        if message["detail"] is not None:
+            _require_exact_message_text(message["detail"], label="agent_asking detail", allow_whitespace=True)
+    elif event_type == "agent_answered":
+        _require_exact_message_text(message["requestId"], label="agent_answered requestId")
+        if type(message["allowed"]) is not bool:
+            raise TypeError("agent_answered allowed must be a native boolean")
+    elif event_type == "agent_tools_changed":
+        pass
     elif event_type == "result_removed":
         _require_epoch(message["epoch"], label="result_removed epoch")
         _require_positive_revision(message["revision"], label="result_removed revision")
@@ -986,6 +1097,10 @@ def _require_inbound_jupyter_event(message: object) -> tuple[str, dict[str, Any]
                 "command_error command must name one current Jupyter command, "
                 f"not {command!r}"
             )
+        # The request the failed command named, or None (``freeze`` names
+        # none, and a frame read no further than its type).
+        if message["requestId"] is not None:
+            _require_exact_message_text(message["requestId"], label="command_error requestId")
         reason = _require_exact_message_text(
             message["reason"],
             label="command_error reason",
@@ -1003,19 +1118,6 @@ def _require_inbound_jupyter_event(message: object) -> tuple[str, dict[str, Any]
                 "data_mapping origin must be one of "
                 f"{sorted(_DATA_MAPPING_ORIGINS)}, not {origin!r}"
             )
-        request_id = message["requestId"]
-        if origin == "notebook":
-            # Only an answer to setDataMapping says "notebook", and an answer
-            # names the request it answers.
-            _require_exact_message_text(
-                request_id,
-                label="data_mapping requestId",
-            )
-        elif request_id is not None:
-            raise ValueError(
-                "data_mapping requestId must be null unless the event answers "
-                "setDataMapping (origin 'notebook')"
-            )
         message = {
             **message,
             "mapping": _require_data_mapping(
@@ -1023,6 +1125,22 @@ def _require_inbound_jupyter_event(message: object) -> tuple[str, dict[str, Any]
                 label="data_mapping mapping",
             ),
         }
+    elif event_type == "history_changed":
+        if message["kind"] not in _HISTORY_CHANGE_KINDS:
+            raise ValueError(f"history_changed kind must be one of {list(_HISTORY_CHANGE_KINDS)}, not {message['kind']!r}")
+        for key in ("tracker", "head"):
+            _require_exact_message_text(message[key], label=f"history_changed {key}")
+        for key in ("step", "branch"):
+            if message[key] is not None:
+                _require_exact_message_text(message[key], label=f"history_changed {key}")
+    elif event_type == "session_loaded":
+        _require_exact_message_text(message["requestId"], label="session_loaded requestId")
+        tracker = message["tracker"]
+        if type(tracker) is not dict or set(tracker) != {"id", "name"}:
+            raise TypeError("session_loaded tracker must be {id, name}")
+        _require_exact_message_text(tracker["id"], label="session_loaded tracker id")
+        _require_exact_message_text(tracker["name"], label="session_loaded tracker name", allow_whitespace=True)
+        _require_exact_message_text(message["head"], label="session_loaded head")
     else:
         if message["status"] != "ok":
             raise ValueError("session_bundle status must equal 'ok'")

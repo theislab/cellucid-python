@@ -72,7 +72,7 @@ expecting to see them side by side.
 
 **Are export settings saved?**
 
-- Yes: every setting in this panel (size, frame, background, fonts, labels, legend, preview, format, DPI, SVG strategy, **Export all views**) is saved in a session bundle and restored by **Load**.
+- Yes: every setting in this panel (size, frame, background, fonts, labels, legend, preview, format, DPI, SVG strategy, **Export all views**) is a step of the history: undo takes it back, and a session file keeps it and puts it back when loaded.
 - The exported artifact also embeds metadata (see {doc}`05_metadata_and_provenance`).
 
 ---

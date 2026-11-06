@@ -11,6 +11,10 @@ Main exports:
     - serve_anndata / AnnDataServer: Serve an AnnData file, store or object
     - show_anndata / Widget: Show an AnnData file, store or object in a notebook
     - AnnDataViewer: The same viewer API, in a browser tab of its own
+    - read_session / CellucidSession: Read a saved session's history (trackers,
+      branches, steps, notes, turns, the journal; cellucid.history)
+    - apply_cellucid_session_to_anndata / ApplyPlan / ApplyReport: Plan and apply
+      the state at one of its steps to an AnnData (history_applied reads the record)
 """
 
 from importlib import metadata as _metadata
@@ -29,17 +33,20 @@ if TYPE_CHECKING:
     # even though the package ships ``py.typed``.
     from .anndata_server import AnnDataServer, serve_anndata
     from .anndata_session import (
+        ApplyPlan,
+        ApplyReport,
         PullSummary,
         Selection,
         ViewerResult,
         apply_cellucid_session_to_anndata,
+        history_applied,
         pull,
         read_gmt,
         write_gmt,
     )
     from .jupyter import AnnDataViewer, Widget, show_anndata
     from .prepare_data import prepare, restore_original_order
-    from .session_bundle import CellucidSessionBundle
+    from .session import CellucidSession, read_session
     from .subsample import subsample_cells
     from .vector_fields import add_transition_drift_to_obsm, compute_transition_drift
     from .web_cache import clear_web_cache, get_web_cache_dir
@@ -82,15 +89,15 @@ def __getattr__(name: str) -> Any:
 
         return AnnDataServer
 
-    # Session bundles + AnnData mutation
-    if name == "CellucidSessionBundle":
-        from .session_bundle import CellucidSessionBundle
+    # Session files + applying one step of them to AnnData
+    if name in {"CellucidSession", "read_session"}:
+        from . import session
 
-        return CellucidSessionBundle
-    if name == "apply_cellucid_session_to_anndata":
-        from .anndata_session import apply_cellucid_session_to_anndata
+        return getattr(session, name)
+    if name in {"apply_cellucid_session_to_anndata", "ApplyPlan", "ApplyReport", "history_applied"}:
+        from . import anndata_session
 
-        return apply_cellucid_session_to_anndata
+        return getattr(anndata_session, name)
 
     # The round trip: results back from the viewer and its exports
     if name in {"pull", "write_gmt", "read_gmt", "PullSummary", "Selection", "ViewerResult"}:
@@ -136,8 +143,12 @@ __all__ = [
     "serve_anndata",
     "AnnDataServer",
     # Sessions
-    "CellucidSessionBundle",
+    "read_session",
+    "CellucidSession",
     "apply_cellucid_session_to_anndata",
+    "ApplyPlan",
+    "ApplyReport",
+    "history_applied",
     # The round trip
     "pull",
     "write_gmt",

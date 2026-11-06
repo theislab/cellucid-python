@@ -63,6 +63,11 @@ Unchecking a row creates a **category visibility** filter. `Show all` and
 `Hide all` act on every row you are currently allowed to toggle.
 ```
 
+The same legend's **cell counts** are buttons too: click a category's count
+and type a number to keep only that many of its cells, a random sample
+(**filter by cell count**; type `all` to show them all again). See
+{doc}`04_common_filter_types_document_every_filter_the_ui_exposes`.
+
 ### 2) Continuous legend — Min/Max sliders
 
 ```{figure} ../../../_static/screenshots/filtering/type-numeric-range.png
@@ -93,9 +98,13 @@ Every filter applies until you remove it, whatever the view is coloured by:
 - an **outlier filter** keeps applying after you colour by another field.
 
 Each is listed under **Filters** with its field (`CD3E: 1.00 – 4.00`,
-`cell_type: outlier ≤ 90%`), where it can be disabled or removed, and
-**Visible cells** in an analysis is exactly the cells the view shows with all
-of them applied.
+`cell_type: outlier ≤ 90%`, `cell_type: keeping 200 of Beta`), where it can
+be disabled or removed, and **Visible cells** in an analysis is exactly the
+cells the view shows with all of them applied.
+
+Every filter you set is a step of the history: **Undo** takes it back
+({doc}`../m_state_history/01_the_history`), and a session file or a saved
+state keeps it.
 
 If you ever feel “the plot is lying to me”, the debugging rule is:
 **trust the Filters panel** (it lists every filter you can create in the
@@ -103,14 +112,15 @@ UI that currently affects visibility in the active view).
 
 :::{note}
 **One more visibility source exists, and it is not a UI control.** From a
-notebook, `viewer.set_visibility(cell_indices, visible)` sets a per-cell mask
+notebook, `viewer.cells_visibility_set(cells=..., visible=...)` (the
+`cells.visibility.set` action) sets a per-cell mask
 directly. That mask is tested *before* every filter on this page, no filter can
 make a cell it hides visible again, and it deliberately produces **no Active
 filters row** — there is no UI configuration for a row to reset.
 
 So a notebook session can legitimately read `Showing 1,200 of 3,696 cells`
 above the words `No filters active`. If you see that, the mask is the
-explanation; call `viewer.set_visibility(None, visible=True)` to clear it. See
+explanation; call `viewer.cells_visibility_set(cells=None, visible=True)` to clear it. See
 {doc}`../b_data_loading/05_jupyter_tutorial`.
 :::
 

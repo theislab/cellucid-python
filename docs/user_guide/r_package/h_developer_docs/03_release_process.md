@@ -4,37 +4,44 @@
 **Time:** 10 minutes  
 **What you'll get:** the version sites that move together, and how a release is built and published
 
-This page summarizes the intended release/publishing flow for `cellucid-r`.
+To release the R package, publish a GitHub Release `vX.Y.Z` in
+`theislab/cellucid-r`; the workflow `release.yaml` ("Publish to CRAN") submits
+it to CRAN. Nothing else publishes it: pushing a tag does nothing, and the
+workflow has no manual trigger. {doc}`/contributing/releasing` covers the
+three Cellucid packages in order.
 
 The full step-by-step checklist lives in:
 - `cellucid-r/publishing.md`
 
-## Recommended release flow (high level)
+## Release flow
 
 1) Update `DESCRIPTION` version. It is the one source the rest are checked
    against.
 2) Update `CITATION.cff`, `NEWS.md`, `README.md`, and
    `vignettes/installation.Rmd` to match, plus the pinned release literal in
-   `tests/testthat/test-current-contract.R`.
-3) Record user-visible changes in `NEWS.md`.
+   `tests/testthat/test-current-contract.R`. `NEWS.md` headings carry no
+   date; CRAN records the publication day.
+3) Record user-visible changes in `NEWS.md` and keep `cran-comments.md`
+   current.
 4) Ensure tests pass (`testthat::test_local()`, including the anndata round
    trip with `CELLUCID_ANNDATA_PYTHON` set, and `R CMD check --as-cran`).
-5) Merge to main.
-6) Create a GitHub Release tag. It must be exactly `v` followed by the
-   `DESCRIPTION` version — `release.yaml` reads `DESCRIPTION`, computes
-   `EXPECTED_TAG="v${VERSION}"`, and fails the build when the tag or the
-   branch provenance does not match.
+5) Merge to main and wait for CI to be green there.
+6) Publish a GitHub Release whose tag is exactly `v` followed by the
+   `DESCRIPTION` version, on `main`, not marked pre-release. `release.yaml`
+   runs on `release: published` only and, before building anything, refuses
+   a draft, a release marked pre-release, a `DESCRIPTION` version that is not
+   `X.Y.Z` (CRAN takes final versions only), a tag other than
+   `EXPECTED_TAG="v${VERSION}"`, and a tagged commit that is not on `main`.
 7) `release.yaml` then builds the source tarball, runs
-   `R CMD check --as-cran` on it (a manual run can choose the default check
-   instead), and uploads it with its SHA-256 as the `r-source-tarball`
-   artifact. For a published release it attaches the tarball to the release
-   and, when the check reports no WARNING and no ERROR, submits it to CRAN
-   with `cran-comments.md` as the comment (`devtools:::upload_cran()`); CRAN
-   then emails the maintainer a confirmation link, which the maintainer must
+   `R CMD check --as-cran` on it, uploads it with its SHA-256 as the
+   `r-source-tarball` artifact, attaches both to the release and, when the
+   check reports no WARNING and no ERROR, submits the tarball to CRAN with
+   `cran-comments.md` as the comment (`devtools:::upload_cran()`); CRAN then
+   emails the maintainer a confirmation link, which the maintainer must
    click.
-8) Publish targets, in the order `cellucid-r/publishing.md` documents:
-   - GitHub release (source of truth)
-   - CRAN (submitted by `release.yaml`; confirmed by the maintainer's email click)
+8) A run that failed for a passing reason (a runner, the network, CRAN's
+   form) is retried with **Re-run jobs** on that run in the Actions tab.
+9) Other channels follow the GitHub release:
    - r-universe (auto-builds from GitHub once the GitHub App is installed)
    - conda-forge (`r-cellucid`, built from the CRAN tarball)
 

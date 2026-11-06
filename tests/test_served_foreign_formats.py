@@ -125,11 +125,11 @@ def write_outs(folder: Path, n_cells: int = N_CELLS, *, types: tuple[tuple[str, 
     projection = folder / "analysis" / "umap" / "gene_expression_2_components" / "projection.csv"
     projection.parent.mkdir(parents=True)
     # Missing the last cell: NaN there.
-    projection.write_text("Barcode,UMAP-1,UMAP-2\n" + "".join(f"{b},{float(u[0])!r},{float(u[1])!r}\n" for b, u in zip(barcodes[:-1], umap[:-1], strict=True)))
+    projection.write_text("Barcode,UMAP-1,UMAP-2\n" + "".join(f"{b},{float(u[0])!r},{float(u[1])!r}\n" for b, u in zip(barcodes[:-1], umap[:-1], strict=True)), encoding="utf-8")
     clusters = rng.integers(1, 12, n_cells)
     clustering = folder / "analysis" / "clustering" / "gene_expression_graphclust" / "clusters.csv"
     clustering.parent.mkdir(parents=True)
-    clustering.write_text("Barcode,Cluster\n" + "".join(f"{b},{c}\n" for b, c in zip(barcodes, clusters, strict=True)))
+    clustering.write_text("Barcode,Cluster\n" + "".join(f"{b},{c}\n" for b, c in zip(barcodes, clusters, strict=True)), encoding="utf-8")
     return cells, umap, clusters
 
 

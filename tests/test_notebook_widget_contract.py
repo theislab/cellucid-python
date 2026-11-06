@@ -30,9 +30,8 @@ import pytest
 from cellucid.jupyter import Widget
 from cellucid.jupyter._widget import _ANSWER_MESSAGE_BYTES, show_widget
 from cellucid.prepare_data._priority import ORIGINAL_POSITION_COLUMN, CellPriority, prefix_levels
-from cellucid.session_bundle import SESSION_BUNDLE_MAGIC
 
-PROTOCOL = json.loads((Path(__file__).parent / "fixtures" / "viewer_protocol.json").read_text())
+PROTOCOL = json.loads((Path(__file__).parent / "fixtures" / "viewer_protocol.json").read_text(encoding="utf-8"))
 
 
 def _example_event(kind: str) -> dict[str, Any]:
@@ -45,42 +44,8 @@ def _binary_frame(header: dict[str, Any], body: bytes) -> bytes:
 
 
 def _bundle() -> bytes:
-    """The smallest valid session bundle: the magic and a manifest with no chunks."""
-    manifest = json.dumps(
-        {
-            "createdAt": "2026-10-27T00:00:00.000Z",
-            "datasetFingerprint": {
-                "datasetId": None,
-                "name": None,
-                "cellCount": 0,
-                "varCount": 0,
-                "cellOrder": {
-                    "embedding": {"key": "X_umap", "columns": [0, 1]},
-                    "dimension": 2,
-                    "digest": "0123456789abcdef",
-                },
-                "dataMapping": {
-                    "kind": "anndata",
-                    "embeddings": {
-                        "enabled": [{"key": "X_umap", "columns": [0, 1]}],
-                        "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": [0, 1]}, "3d": None},
-                    },
-                    "knn": None,
-                    "geneNames": "index",
-                    "expression": "X",
-                    "log1p": {},
-                    "highlyVariable": None,
-                    "latent": None,
-                    "vectorFields": [],
-                },
-            },
-            "source": None,
-            "requires": {"obs": [], "var": []},
-            "chunks": [],
-        },
-        separators=(",", ":"),
-    ).encode()
-    return SESSION_BUNDLE_MAGIC + struct.pack("<I", len(manifest)) + manifest
+    """A session file of format 4: the shared golden history."""
+    return (Path(__file__).parent / "fixtures" / "history_golden" / "history_golden.cellucid-session").read_bytes()
 
 
 class FrontEnd:
@@ -298,9 +263,12 @@ def test_answers_ready_together_share_a_message(widget, front):
 
 
 def test_the_channel_runs_over_the_comm_commands_first_then_events_in_order(widget, front):
-    widget.set_color_by("cell_type")  # sent before the page connected: it waits
+    request = widget.color_by(field={"source": "obs", "key": "cell_type"})  # before the page connected: it waits
     front.connect()
-    front.wait_for(lambda c: c["t"] == "text" and json.loads(c["text"]) == {"type": "setColorBy", "field": "cell_type"})
+    front.wait_for(lambda c: c["t"] == "text" and json.loads(c["text"]) == {
+        "type": "action", "requestId": request.request_id, "action": "color.by",
+        "params": {"field": {"source": "obs", "key": "cell_type"}}, "turn": None, "turnLabel": None,
+    })
 
     ready = _example_event("ready")
     front.post({"t": "text", "s": 0, "text": json.dumps(ready)})
@@ -322,9 +290,14 @@ def test_the_channel_runs_over_the_comm_commands_first_then_events_in_order(widg
         time.sleep(0.01)
     assert [list(event["cells"]) for event in seen] == [example["cells"]]
 
-    # A command that names cells is a binary frame, sent whole as one buffer.
+    # An action whose parameters hold cells is a binary frame, sent whole as one buffer.
     command = PROTOCOL["examples"]["binaryCommands"][0]
-    widget.send_message({**command["header"], "cells": command["cells"]})
+    params = dict(command["header"]["params"])
+    for entry in command["arrays"]:
+        params[entry["path"][-1]] = np.array(entry["elements"], dtype=np.uint32)
+    header = command["header"]
+    widget.send_message({"type": "action", "requestId": header["requestId"], "action": header["action"], "params": params,
+                         "turn": header["turn"], "turnLabel": header["turnLabel"]})
     content, buffers = front.wait_for(lambda c: c["t"] == "binary")
     assert content["s"] == 0 and buffers == [bytes.fromhex(command["hex"])]
 
@@ -356,10 +329,15 @@ def test_a_cell_cannot_wait_for_the_viewer_but_another_thread_can(widget, front)
         widget.wait_for_event("hover", timeout=30)
     with pytest.raises(RuntimeError, match="@viewer.on_ready"):
         widget.wait_for_ready(timeout=30)
-    request = widget.request_session_bundle()
+    request = widget.request_session()
     with pytest.raises(RuntimeError, match="later cell|next cell"):
         request.result(timeout=30)
     request.cancel()
+    # An action's answer, too, is collected in a later cell.
+    action = widget.fields_list()
+    with pytest.raises(RuntimeError, match=r"request\.result\(\) in a later cell"):
+        action.result(timeout=30)
+    action.cancel()
 
     front.connect()
     caught: list[Any] = []
@@ -372,10 +350,10 @@ def test_a_cell_cannot_wait_for_the_viewer_but_another_thread_can(widget, front)
     assert caught and caught[0]["cell"] == hover["cell"]
 
 
-def test_a_session_bundle_is_asked_in_one_cell_and_collected_in_the_next(widget, front):
+def test_a_session_is_asked_in_one_cell_and_collected_in_the_next(widget, front):
     front.post({"t": "attach"})
     front.connect()
-    request = widget.request_session_bundle()
+    request = widget.request_session()
     content, _ = front.wait_for(lambda c: c["t"] == "text" and json.loads(c["text"])["type"] == "requestSessionBundle")
     request_id = json.loads(content["text"])["requestId"]
     assert request.done is False
@@ -389,12 +367,12 @@ def test_a_session_bundle_is_asked_in_one_cell_and_collected_in_the_next(widget,
     deadline = time.monotonic() + 5
     while not request.done and time.monotonic() < deadline:
         time.sleep(0.01)
-    bundle = request.result()
+    session = request.result()
     try:
-        assert bundle.path.read_bytes() == _bundle()
-        assert request.result() is bundle
+        assert session.path.read_bytes() == _bundle()
+        assert request.result() is session
     finally:
-        bundle.path.unlink()
+        session.path.unlink()
 
 
 def test_stopping_freezes_the_page_closes_its_channel_and_answers_no_more_reads(widget, front):
@@ -578,7 +556,7 @@ def test_the_front_end_is_cellucid_rs_byte_for_byte():
 def test_the_front_end_module_ships_with_the_package():
     from cellucid.jupyter._widget import _STATIC
 
-    source = (_STATIC / "widget.js").read_text()
+    source = (_STATIC / "widget.js").read_text(encoding="utf-8")
     assert "export default { render }" in source
     # The token is asked of the kernel, kept in memory and posted only to the app's origin.
     assert "localStorage" not in source and "console.log" not in source

@@ -4,7 +4,9 @@
 Cellucid-ready AnnData (or MuData) store, `cellucid_transition_drift()`, which
 computes a vector field for it from a cell-cell transition matrix, the viewer
 (`cellucid_view()`, `cellucid_serve()` and the functions that talk to an open
-viewer), `cellucid_apply_session()` and `cellucid_clear_web_cache()`. This
+viewer), the session reader (`cellucid_read_session()`, the history's
+reading functions such as `cellucid_steps()`, and `cellucid_apply_session()`)
+and `cellucid_clear_web_cache()`. This
 section is the flat reference for them: every exported function and the
 complete argument lists on one page, and the error messages on another. The
 narrative explanation of each argument lives in
@@ -12,9 +14,12 @@ narrative explanation of each argument lives in
 
 ```{note}
 The R help pages (`?cellucid_prepare`, `?cellucid_transition_drift`,
-`?cellucid_view`, `?cellucid_highlight`, `?cellucid_on`,
+`?cellucid_view`, `?cellucid_act`, `?cellucid_on`, `?cellucid_turn`,
+`?cellucid_load_session`, `?cellucid_read_session`, `?cellucid_trackers`,
 `?cellucid_apply_session`, `?cellucid_debug_connection`,
-`?cellucid_clear_web_cache`) are hand-written and authoritative, and
+`?cellucid_clear_web_cache`) are hand-written and authoritative -- each
+action function's page (`?cellucid_color_by`, `?cellucid_highlight_cells`, …)
+is generated from the action catalogue with the function --, and
 `cellucid-r`'s own test suite rebuilds each `\usage` block into a function and
 compares it to the real signature. The two pages here restate them for the
 web, with links into the guide.

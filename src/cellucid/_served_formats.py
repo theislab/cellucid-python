@@ -584,7 +584,7 @@ def outs_analysis(folder: Path, files: tuple[str, ...], base: str, barcodes: np.
     for kind, found in projections.items():
         found.sort(key=functools.cmp_to_key(_by_library))
         for position, (directory, path) in enumerate(found):
-            header, rows = _parse_csv((folder / path).read_text(), path)
+            header, rows = _parse_csv((folder / path).read_text(encoding="utf-8"), path)
             width = len(header) - 1
             if width < 1:
                 continue
@@ -598,7 +598,7 @@ def outs_analysis(folder: Path, files: tuple[str, ...], base: str, barcodes: np.
     obs: dict[str, Any] = {}
     clusterings.sort(key=functools.cmp_to_key(_by_library))
     for directory, path in clusterings:
-        _, rows = _parse_csv((folder / path).read_text(), path)
+        _, rows = _parse_csv((folder / path).read_text(encoding="utf-8"), path)
         labels = sorted(dict.fromkeys(row[1] for row in rows), key=functools.cmp_to_key(_label_order))
         code_of = {label: code for code, label in enumerate(labels)}
         codes = np.full(n_cells, -1, dtype=np.int32)

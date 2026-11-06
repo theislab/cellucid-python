@@ -15,11 +15,16 @@ and state); there are no S4 classes or methods.
 | `cellucid_transition_drift()` | Computes the drift of every cell in an embedding's coordinates from a cell-cell transition matrix, a vector field to pass to `cellucid_prepare(vector_fields = )` | A double matrix as wide as the embedding |
 | `cellucid_view()`, `cellucid_serve()` | Open an object or a file in the viewer (Viewer pane or browser), or serve it for a browser elsewhere | The viewer, invisibly |
 | `cellucid_stop()`, `cellucid_stop_all()`, `cellucid_viewers()` | Stop one viewer, every viewer; list the running ones | The viewer; the number stopped; a list |
-| `cellucid_highlight()`, `cellucid_clear_highlights()`, `cellucid_color_by()`, `cellucid_set_visibility()`, `cellucid_reset_camera()`, `cellucid_freeze()`, `cellucid_set_data_mapping()` | Commands to an open viewer | The viewer, invisibly (the applied mapping for `cellucid_set_data_mapping()`) |
-| `cellucid_on()`, `cellucid_off()`, `cellucid_selection()`, `cellucid_wait_ready()`, `cellucid_request_session()`, `cellucid_session_result()` | Events from the viewer: hooks, the last selection, readiness, the session file | See {doc}`../d_viewing_loading/06_hooks_selection_and_sessions` |
-| `cellucid_apply_session()` | A saved session's highlights and user-defined fields added to the object's cell metadata (Python's `apply_cellucid_session_to_anndata()`) | See {doc}`../d_viewing_loading/06_hooks_selection_and_sessions` |
+| `cellucid_<action>()`: one function per action of the viewer, 146 of them, generated from the action catalogue -- `cellucid_color_by()`, `cellucid_highlight_cells()`, `cellucid_highlight_clear_all()`, `cellucid_cells_visibility_set()`, `cellucid_camera_reset()`, `cellucid_mapping_set()`, `cellucid_gene_set_save()`, `cellucid_category_rename()`, `cellucid_fields_list()`, `cellucid_history_get()`, `cellucid_history_undo()`, `cellucid_history_redo()`, `cellucid_history_jump()`, `cellucid_view_picture()`, … (each has its help page) | Everything a person can do in the viewer, and every read: one step of the viewer's history, labelled as R's; undo, redo and jumps move the history and record no step (Python's generated `viewer.<action>()` methods) | A request, invisibly; `cellucid_action_result()` collects its outcome |
+| `cellucid_act()`, `cellucid_action_result()` | Any action named in data, `cellucid_act(viewer, "color.by", field = ...)` (Python's `viewer.act()`); the outcome of a request (a read's result), or a stop with the viewer's reason | A request, invisibly; the outcome |
+| `cellucid_freeze()` | Freeze the viewer's last view (a command, not an action) | The viewer, invisibly |
+| `cellucid_on()`, `cellucid_off()`, `cellucid_selection()`, `cellucid_wait_ready()`, `cellucid_request_session()`, `cellucid_session_result()` | Events from the viewer: hooks, the last selection, readiness, the session (the viewer's history) | See {doc}`../d_viewing_loading/06_hooks_selection_and_sessions` |
+| `cellucid_turn()`, `cellucid_last_history_change()`, `cellucid_load_session()`, `cellucid_load_session_result()` | The viewer's history, live: every action sent while the code runs one turn of the history (Python's `viewer.turn()`); the latest `history_changed` (`viewer.history`); a session file pushed into the viewer, its trackers added beside the person's (`viewer.load_session()`) | The turn's id, invisibly; `list(kind, tracker, head, step, branch)` or `NULL`; a request, invisibly; `list(tracker = list(id, name), head)` |
+| `cellucid_read_session()`, `cellucid_conversations()` | A `.cellucid-session` file (session format 4) read and checked whole (a newer Cellucid's file refused as newer, never as damaged); the agent conversations it kept with a tracker (Python's `read_session()`, `CellucidSession.conversations()`) | A `cellucid_session`; a list of conversations |
+| `cellucid_trackers()`, `cellucid_tracker()`, `cellucid_branches()`, `cellucid_branch()`, `cellucid_groups()`, `cellucid_group()`, `cellucid_steps()`, `cellucid_step()`, `cellucid_step_state()`, `cellucid_step_diff()`, `cellucid_stale()`, `cellucid_notes()`, `cellucid_turns()`, `cellucid_journal()`, `cellucid_methods()`, `cellucid_pseudocode()` | The history a session holds: its trackers, branches, groups, steps (of each kind, squashed ones included), the state after a step, what differs between two steps, the stale results, notes, turns, the journal, and a branch as a methods paragraph and as pseudocode (Python's `cellucid.history`: `Tracker`, `Branch`, `Group`, `Step`) | Data frames (one row per record, the columns of Python's tables); records; a named list of state values; text |
+| `cellucid_apply_session()`, `cellucid_apply_plan()`, `cellucid_history_applied()` | The state at any step of a saved session -- labels, user-defined fields, highlights, gene sets -- planned (one row per change, `dry_run = TRUE` by default), then applied to the object's cell metadata and recorded; the applies recorded on an object (Python's `apply_cellucid_session_to_anndata()`, `ApplyPlan.apply()`, `history_applied()`) | A `cellucid_apply_plan`, or the object (attribute `"cellucid_apply_report"`); the object; a list of apply records. See {doc}`../d_viewing_loading/06_hooks_selection_and_sessions` |
 | `cellucid_pull()`, `cellucid_results()`, `cellucid_subset()`, `cellucid_gene_sets()` | Everything made in the viewer -- highlight groups, labels and clusters, scores, gene sets -- onto the object's cell metadata in one call, from a viewer or from the web app's exports; the results themselves; the cells of a group or selection; the gene sets (Python's `viewer.pull()`, `cellucid.pull()`, `viewer.subset()`, `viewer.gene_sets()`) | The object with the columns (`list(data, summary)` with `return_summary = TRUE`); a list of results; the subset; a named list |
-| `cellucid_push()`, `cellucid_push_gene_set()`, `cellucid_write_gmt()`, `cellucid_read_gmt()` | A column or a gene set shown in the viewer (Python's `viewer.push()`, `viewer.push_gene_set()`); GMT files (`cellucid.write_gmt()`, `read_gmt()`) | The viewer's result, invisibly; the file's path; a named list |
+| `cellucid_push()`, `cellucid_write_gmt()`, `cellucid_read_gmt()` | A column shown in the viewer as a field (the `field.push` action, Python's `viewer.push()`; a gene set is `cellucid_gene_set_save()`); GMT files (`cellucid.write_gmt()`, `read_gmt()`) | The request, invisibly; the file's path; a named list |
 | `cellucid_debug_connection()` | Checks what works between R and an open viewer: the server's routes, the store's range reads, a ping and a debug snapshot over the channel | A list, the report |
 | `cellucid_clear_web_cache()` | Removes the cached web app | The folder removed, invisibly |
 
@@ -206,7 +211,7 @@ has every argument.
 object <- cellucid_pull(object, viewer)                 # from an open viewer
 object <- cellucid_pull(object, "~/Downloads/exports")  # from the web app's exports
 cellucid_push(viewer, object$seurat_clusters, key = "clusters")
-cellucid_push_gene_set(viewer, "T cells", c("CD3E", "CD3D"))
+cellucid_gene_set_save(viewer, name = "T cells", genes = c("CD3E", "CD3D"))
 t_cells <- cellucid_subset(object, viewer, "Lasso selection")
 ```
 
@@ -227,10 +232,12 @@ whenever its channel opens again) and each change after, and
 `cellucid_pull()`, `cellucid_subset()`, `cellucid_gene_sets()`,
 `cellucid_results()` and `cellucid_selection()` read what it sent, so in a
 Jupyter notebook a lasso drawn and `cellucid_pull()` run in the next cell
-finds the lasso. `cellucid_push()` and `cellucid_push_gene_set()` send at once.
-A session is asked for with `cellucid_request_session()` and collected with
-`cellucid_session_result()` or applied with `cellucid_apply_session(object,
-request)` -- the one way, in a notebook (in a later cell) and outside one.
+finds the lasso. `cellucid_push()` and `cellucid_gene_set_save()`, like every
+action, send at once and return a request (`cellucid_action_result()` collects
+its outcome). A session is asked for with `cellucid_request_session()` and
+collected with `cellucid_session_result()` (the session, read and checked) or
+planned and applied with `cellucid_apply_session(object, request)` -- the one
+way, in a notebook (in a later cell) and outside one.
 See `?cellucid_pull`, `?cellucid_push` and `?cellucid_on`.
 
 ## Messages

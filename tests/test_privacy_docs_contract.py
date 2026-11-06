@@ -7,7 +7,12 @@ or "gone when the tab closes"); a link's access key goes nowhere but the
 address bar; community annotation signs in with GitHub on www.cellucid.com
 (not Google on port 8765); a server on ``127.0.0.1`` is readable by every
 user of that machine; Python's web cache is per user; the session format is
-3; every filter keeps applying. A page that says one of them again fails here.
+4 (a file of format 3 is refused); every filter keeps applying. A page that
+says one of them again fails here.
+
+The privacy model names each store the web app keeps in this browser (every
+IndexedDB database, and the `localStorage` and `sessionStorage` keys below);
+a page that drops one fails here.
 """
 
 from __future__ import annotations
@@ -31,9 +36,9 @@ STALE = {
     r"\(Google Drive data, community annotation\) works only": "community annotation signs in with GitHub on www.cellucid.com",
     r"This means \*\*only your machine\*\* can access it": "every user of a shared machine can read it",
     r"process-independent temporary directory": "the web cache is per user",
-    r"CELLUCID_SESSION/2\\n": "the session format is 3",
-    r"session file of format 2 …": "the session format is 3",
-    r"currently 2 — and restores": "the session format is 3",
+    r"CELLUCID_SESSION/[23]\\n": "the session format is 4",
+    r"session file of format [23] …": "the session format is 4",
+    r"currently [23] — and restores": "the session format is 4",
     r"active-field scoped": "every filter keeps applying until removed",
     r"\(\*Representation\* ": "the Details row is Categories",
     r"Not covered by this review: the app is www.cellucid.com": "a notebook widget is a viewer page and sends no analytics",
@@ -70,5 +75,26 @@ def test_the_privacy_model_states_the_current_storage_sign_in_and_link_rules() -
         "`cellucid:opening-cost:v2`",
         "`cellucid:analysis-cost:v2`",
         "`cellucid_antialias`",
+        "`cellucid_session_sections`",
+        "`cellucid:history-settings`",
+        "`cellucid:host-link:v1`",
+        "`cellucid:host-pace:v1`",
+        "`cellucid:opening-under-way`",
+        "`cellucid:tab-local-dataset`",
+        "`cellucid:phone-sheet`",
+        "`cellucid-history`",
+        "`cellucid-library`",
+        "`cellucid-local-files`",
+        "`cellucid-decoders`",
+        "`cellucid_community_annotation_file_cache`",
+        "Autosave in this browser",
+        "`cellucid:agent-chat`",
+        "`cellucid:agent-key:<provider>`",
+        "`cellucid:agent-permissions`",
+        "`cellucid:agent-data`",
+        "`cellucid:agent-relay:tab-secret`",
+        "(privacy-agents)=",
+        "It is not anonymisation.",
+        "never what a link carried to grant access",
     ):
         assert required in page, required

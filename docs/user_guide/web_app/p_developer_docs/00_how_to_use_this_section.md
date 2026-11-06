@@ -15,7 +15,7 @@ You can stop early if you only need the top-level mental model.
 
 3) **Deep path (contributors / maintainers)**
    - Goal: add features without breaking performance, and understand state/events/rendering boundaries.
-   - Read: {doc}`01_codebase_map_and_entry_points` → {doc}`06_state_datastate_and_events` → {doc}`07_rendering_pipeline_webgl_and_performance_notes` → {doc}`08_ui_modules_map` → {doc}`15_extension_points_overview`.
+   - Read: {doc}`01_codebase_map_and_entry_points` → {doc}`06_state_datastate_and_events` → {doc}`29_action_layer_domains_and_history` → {doc}`07_rendering_pipeline_webgl_and_performance_notes` → {doc}`08_ui_modules_map` → {doc}`15_extension_points_overview`.
 
 ---
 
@@ -23,7 +23,7 @@ You can stop early if you only need the top-level mental model.
 
 Cellucid is intentionally split across repos:
 
-- `cellucid/` (**web app**): the browser UI, state layer, WebGL rendering, figure export, community annotation UI, session bundles.
+- `cellucid/` (**web app**): the browser UI, state layer, actions and history, WebGL rendering, figure export, community annotation UI, session files.
 - `cellucid-python/` (**helper repo**): Python APIs + CLI (`prepare`, `serve`, `show_anndata`), plus these Sphinx docs.
 - `cellucid-annotation/` (**helper repo/template**): GitHub repo template for community annotation voting + validation.
 
@@ -44,7 +44,9 @@ Most bugs in interactive visualization apps come from subtle state interactions.
 When you change something in the web app, make sure you explicitly check:
 
 - **State correctness**: do events fire exactly once? do caches invalidate? do counts match?
-- **Persistence**: does save/load preserve the relevant settings? if not, is it intentionally excluded?
+- **History and persistence**: is every change an action (one undoable step,
+  `touches` naming every domain it changes)? does save/load preserve the
+  relevant settings? if not, is it intentionally excluded?
 - **Performance**: did you add per-frame work or per-point allocations outside
   the renderer? The baseline to protect is that **an idle frame uploads nothing**
   — see {doc}`07_rendering_pipeline_webgl_and_performance_notes`.
@@ -54,11 +56,12 @@ When you change something in the web app, make sure you explicitly check:
 - **Failure messages**: does each distinct cause produce a distinct message and
   error code? Collapsing a cancellation, a size refusal and a parse failure into
   one message is a defect, not a simplification.
-- **Cross-feature interactions**: filters ↔ highlights ↔ multiview snapshots ↔ analysis ↔ exports ↔ sessions.
+- **Cross-feature interactions**: filters ↔ highlights ↔ multiview snapshots ↔ analysis ↔ exports ↔ history ↔ sessions.
 
 If you’re adding a new feature, start by reading:
 - {doc}`15_extension_points_overview`
 - {doc}`16_extension_point_add_ui_module` (UI)
+- {doc}`29_action_layer_domains_and_history` (actions and state)
 - {doc}`17_extension_point_add_analysis_mode` (analysis)
 - {doc}`18_extension_point_add_export_renderer` (export)
 

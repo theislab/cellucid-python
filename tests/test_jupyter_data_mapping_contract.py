@@ -1,11 +1,13 @@
-"""The data-mapping half of the Jupyter wire: ``setDataMapping`` and ``data_mapping``.
+"""The data mapping on the Jupyter wire: the ``data_mapping`` event and the
+``mapping.set`` action.
 
-The viewer reports its data mapping with a ``data_mapping`` event, and a
-notebook changes it with the ``setDataMapping`` command, which -- unlike the
-one-way commands -- is answered: by a ``data_mapping`` event of origin
-``notebook`` naming the request, or by a ``command_error`` naming the command.
-Both directions carry a complete DataMapping, validated by the same rule
-sessions use, so a mapping the viewer would refuse never crosses the wire.
+The viewer reports its data mapping with a ``data_mapping`` event: once its
+dataset opens, and whenever the mapping changes (``origin`` says why;
+``notebook`` for this notebook's own ``mapping.set``). A notebook changes it
+with the ``mapping.set`` action (``viewer.mapping_set(...)``), which names
+only the groups it changes and is answered like every action: with its
+outcome, or with the ``command_error`` of its request. A reported mapping is
+validated by the same rule sessions use.
 """
 
 from __future__ import annotations
@@ -19,7 +21,6 @@ import pytest
 from _serverless_viewer import serverless_viewer
 
 import cellucid.jupyter as jupyter
-import cellucid.jupyter._viewer as jupyter_viewer
 import cellucid.jupyter._wire as wire
 
 CONFORMANCE = Path(__file__).parent / "fixtures" / "data_mapping_conformance.json"
@@ -42,10 +43,9 @@ def _invalid_mapping_cases() -> list[dict[str, Any]]:
     return [case for case in cases if "error" in case["expected"]]
 
 
-def _event(viewer_id: str, **overrides: Any) -> dict[str, Any]:
+def _event(**overrides: Any) -> dict[str, Any]:
     event: dict[str, Any] = {
         "type": "data_mapping",
-        "requestId": None,
         "origin": "default",
         "mapping": copy.deepcopy(ANNDATA_MAPPING),
     }
@@ -59,59 +59,16 @@ def _event(viewer_id: str, **overrides: Any) -> dict[str, Any]:
 
 
 def test_the_wire_declares_exactly_these_field_sets() -> None:
-    assert wire._COMMAND_MESSAGE_FIELDS["setDataMapping"] == frozenset(
-        {"type", "requestId", "mapping"}
-    )
-    assert wire._INBOUND_EVENT_FIELDS["data_mapping"] == frozenset(
-        {"type", "requestId", "origin", "mapping"}
-    )
-    origins = wire._DATA_MAPPING_ORIGINS
-    assert origins == {"default", "best_guess", "session", "user", "notebook"}
+    assert wire._INBOUND_EVENT_FIELDS["data_mapping"] == frozenset({"type", "origin", "mapping"})
+    # Changing the mapping is an action like every other: no command of its own.
+    assert "setDataMapping" not in wire._COMMAND_TYPES
+    assert "mapping.set" in jupyter.action_catalog()
 
 
-def test_the_capability_document_lists_both_halves() -> None:
+def test_the_capability_document_lists_the_event() -> None:
     document = wire._protocol_capability_document()
-    assert "setDataMapping" in document["commands"]
     assert "data_mapping" in document["events"]
-    assert jupyter_viewer._COMMAND_PYTHON_CALLERS["setDataMapping"] == "viewer.set_data_mapping(...)"
-
-
-# ---------------------------------------------------------------------------
-# Outbound: setDataMapping
-# ---------------------------------------------------------------------------
-
-
-def test_set_data_mapping_serializes_the_canonical_mapping() -> None:
-    reordered = dict(reversed(list(ANNDATA_MAPPING.items())))
-    serialized = wire._require_frontend_message(
-        {"type": "setDataMapping", "requestId": "request-1", "mapping": reordered}
-    )
-    decoded = json.loads(serialized)
-    assert decoded == {"type": "setDataMapping", "requestId": "request-1", "mapping": ANNDATA_MAPPING}
-    assert list(decoded["mapping"]) == list(ANNDATA_MAPPING)
-
-
-@pytest.mark.parametrize(
-    ("message", "error"),
-    [
-        ({"type": "setDataMapping", "mapping": ANNDATA_MAPPING}, TypeError),
-        ({"type": "setDataMapping", "requestId": "r", "mapping": ANNDATA_MAPPING, "x": 1}, TypeError),
-        ({"type": "setDataMapping", "requestId": "", "mapping": ANNDATA_MAPPING}, TypeError),
-        ({"type": "setDataMapping", "requestId": 7, "mapping": ANNDATA_MAPPING}, TypeError),
-        ({"type": "setDataMapping", "requestId": "r", "mapping": None}, ValueError),
-    ],
-)
-def test_set_data_mapping_rejects_malformed_commands(message: dict[str, Any], error: type) -> None:
-    with pytest.raises(error):
-        wire._require_frontend_message(message)
-
-
-@pytest.mark.parametrize("case", _invalid_mapping_cases(), ids=lambda case: case["name"])
-def test_set_data_mapping_refuses_every_invalid_conformance_mapping(case: dict[str, Any]) -> None:
-    with pytest.raises(ValueError):
-        wire._require_frontend_message(
-            {"type": "setDataMapping", "requestId": "r", "mapping": case["value"]}
-        )
+    assert "action" in document["commands"]
 
 
 # ---------------------------------------------------------------------------
@@ -119,60 +76,40 @@ def test_set_data_mapping_refuses_every_invalid_conformance_mapping(case: dict[s
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("origin", ["default", "best_guess", "session", "user"])
-def test_a_reported_mapping_carries_no_request_id(origin: str) -> None:
-    event_type, payload = wire._require_inbound_jupyter_event(
-        _event("v", origin=origin))
+@pytest.mark.parametrize("origin", ["default", "best_guess", "session", "user", "notebook"])
+def test_a_reported_mapping_names_why_it_is_what_it_is(origin: str) -> None:
+    event_type, payload = wire._require_inbound_jupyter_event(_event(origin=origin))
     assert event_type == "data_mapping"
-    assert payload == {"requestId": None, "origin": origin, "mapping": ANNDATA_MAPPING}
-
-
-def test_a_notebook_answer_names_its_request() -> None:
-    _event_type, payload = wire._require_inbound_jupyter_event(
-        _event("v", origin="notebook", requestId="request-1"))
-    assert payload["requestId"] == "request-1"
+    assert payload == {"origin": origin, "mapping": ANNDATA_MAPPING}
 
 
 @pytest.mark.parametrize(
     ("overrides", "match"),
     [
-        ({"origin": "notebook", "requestId": None}, "requestId"),
-        ({"origin": "user", "requestId": "request-1"}, "requestId must be null"),
         ({"origin": "unknown"}, "origin must be one of"),
         ({"origin": None}, "origin must be one of"),
-        ({"origin": "notebook", "requestId": ""}, "requestId"),
+        # Schema 2's answer to setDataMapping named its request; none does now.
+        ({"requestId": None}, "unknown requestId"),
         ({"mapping": {"kind": "h5ad"}}, "kind"),
         ({"mapping": {**ANNDATA_MAPPING, "extra": True}}, "unknown extra"),
     ],
 )
 def test_a_malformed_report_is_refused(overrides: dict[str, Any], match: str) -> None:
     with pytest.raises((TypeError, ValueError), match=match):
-        wire._require_inbound_jupyter_event(_event("v", **overrides))
+        wire._require_inbound_jupyter_event(_event(**overrides))
 
 
 @pytest.mark.parametrize("case", _invalid_mapping_cases(), ids=lambda case: case["name"])
 def test_a_report_with_an_invalid_conformance_mapping_is_refused(case: dict[str, Any]) -> None:
     with pytest.raises(ValueError):
-        wire._require_inbound_jupyter_event(
-            _event("v", mapping=case["value"]))
+        wire._require_inbound_jupyter_event(_event(mapping=case["value"]))
 
 
 def test_a_report_missing_a_field_is_refused() -> None:
-    event = _event("v")
+    event = _event()
     del event["origin"]
     with pytest.raises(ValueError, match="missing origin"):
         wire._require_inbound_jupyter_event(event)
-
-
-def test_command_error_may_name_set_data_mapping() -> None:
-    _event_type, payload = wire._require_inbound_jupyter_event(
-        {
-            "type": "command_error",
-            "command": "setDataMapping",
-            "reason": "obsp['distances'] is not symmetric",
-        },
-    )
-    assert payload["command"] == "setDataMapping"
 
 
 # ---------------------------------------------------------------------------
@@ -187,11 +124,11 @@ def test_the_viewer_holds_the_latest_reported_mapping() -> None:
     hooked: list[dict[str, Any]] = []
     viewer.on_data_mapping(hooked.append)
 
-    viewer._handle_frontend_message(_event(viewer._viewer_id, origin="best_guess"))
+    viewer._handle_frontend_message(_event(origin="best_guess"))
 
     assert viewer.data_mapping == ANNDATA_MAPPING
     assert viewer.data_mapping_origin == "best_guess"
-    assert hooked == [{"requestId": None, "origin": "best_guess", "mapping": ANNDATA_MAPPING}]
+    assert hooked == [{"origin": "best_guess", "mapping": ANNDATA_MAPPING}]
     assert viewer.state.data_mapping == hooked[0]
 
     # The property is a copy: editing it does not change what the viewer holds.
@@ -202,119 +139,60 @@ def test_the_viewer_holds_the_latest_reported_mapping() -> None:
 
 
 # ---------------------------------------------------------------------------
-# The viewer: set_data_mapping
+# The viewer: mapping_set (the mapping.set action)
 # ---------------------------------------------------------------------------
 
 
-def _viewer_with_mapping(mapping: dict[str, Any]) -> jupyter.AnnDataViewer:
-    viewer = serverless_viewer()
-    viewer._handle_frontend_message(_event(viewer._viewer_id, mapping=copy.deepcopy(mapping)))
-    return viewer
-
-
-def test_set_data_mapping_before_the_viewer_reported_one_goes_when_it_does(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # "Run All": the cell runs before the viewer opened its dataset.
-    viewer = serverless_viewer()
-    sent: list[dict[str, Any]] = []
-    monkeypatch.setattr(viewer, "send_message", sent.append)
-    assert viewer.set_data_mapping(knn="connectivities") is None
-    assert sent == []
-    viewer._handle_frontend_message(_event(viewer._viewer_id, mapping=copy.deepcopy(ANNDATA_MAPPING)))
-    (command,) = sent
-    assert command["type"] == "setDataMapping"
-    assert command["mapping"] == {**ANNDATA_MAPPING, "knn": "connectivities"}
-
-
-def test_a_waiting_mapping_the_viewer_cannot_take_is_reported_as_a_command_error(
+def test_mapping_set_names_only_the_groups_it_changes_and_its_answer_is_the_live_mapping(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     viewer = serverless_viewer()
-    errors: list[dict[str, Any]] = []
-    viewer.on_command_error(errors.append)
     sent: list[dict[str, Any]] = []
     monkeypatch.setattr(viewer, "send_message", sent.append)
-    viewer.set_data_mapping(expression="layers:x")
-    viewer._handle_frontend_message(_event(viewer._viewer_id, mapping=copy.deepcopy(ANNDATA_MAPPING)))
-    assert sent == []
-    assert [error["command"] for error in errors] == ["setDataMapping"]
-    assert "expression" in errors[0]["reason"]
+    request = viewer.mapping_set(knn="connectivities", expression="layer:counts")
+    assert sent == [{
+        "type": "action", "requestId": request.request_id, "action": "mapping.set",
+        "params": {"expression": "layer:counts", "knn": "connectivities"}, "turn": None, "turnLabel": None,
+    }]
+    # Null is a value of its own ("no graph"), never confused with leaving
+    # the group out.
+    viewer.mapping_set(knn=None)
+    assert sent[-1]["params"] == {"knn": None}
+    wire._require_frontend_message(sent[-1])
 
-
-@pytest.mark.parametrize(
-    ("mapping", "fields", "error", "match"),
-    [
-        (ANNDATA_MAPPING, {"kind": "export"}, TypeError, "cannot change the mapping kind"),
-        (ANNDATA_MAPPING, {"embedding": {}}, TypeError, "unknown field"),
-        (ANNDATA_MAPPING, {"expression": "layers:x"}, ValueError, "expression"),
-        (
-            ANNDATA_MAPPING,
-            {"embeddings": {"enabled": [{"key": "X_pca", "columns": [1, 1]}], "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [1, 1]}, "3d": None}}},
-            ValueError,
-            "different column",
-        ),
-        (
-            ANNDATA_MAPPING,
-            {"embeddings": {"enabled": [], "defaults": {"1d": None, "2d": None, "3d": None}}},
-            ValueError,
-            "at least one",
-        ),
-    ],
-)
-def test_set_data_mapping_validates_before_sending(
-    monkeypatch: pytest.MonkeyPatch,
-    mapping: dict[str, Any],
-    fields: dict[str, Any],
-    error: type,
-    match: str,
-) -> None:
-    viewer = _viewer_with_mapping(mapping)
-    sent: list[dict[str, Any]] = []
-    monkeypatch.setattr(viewer, "send_message", sent.append)
-    with pytest.raises(error, match=match):
-        viewer.set_data_mapping(**fields)
-    assert sent == []
-
-
-def test_set_data_mapping_sends_the_merged_mapping_and_its_answer_is_the_live_mapping(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    viewer = _viewer_with_mapping(ANNDATA_MAPPING)
-    sent: list[str] = []
-    monkeypatch.setattr(viewer, "send_message", lambda message: sent.append(wire._require_frontend_message(message)))
-    returned = viewer.set_data_mapping(
-        embeddings={"enabled": [{"key": "X_pca", "columns": [3, 1]}], "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [3, 1]}, "3d": None}},
-        knn="connectivities",
-    )
-    assert returned is None
-    expected = {
-        **ANNDATA_MAPPING,
-        "embeddings": {"enabled": [{"key": "X_pca", "columns": [3, 1]}], "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [3, 1]}, "3d": None}},
-        "knn": "connectivities",
-    }
-    (serialized,) = sent
-    command = json.loads(serialized)
-    assert set(command) == {"type", "requestId", "mapping"}
-    assert command["type"] == "setDataMapping"
-    assert len(command["requestId"]) == 32
-    assert command["mapping"] == expected
-    # Nothing waited: the answer arrives later (between cells) and is the live mapping.
-    assert viewer.data_mapping == ANNDATA_MAPPING
-    viewer._handle_frontend_message(
-        _event(viewer._viewer_id, origin="notebook", requestId=command["requestId"], mapping=command["mapping"])
-    )
-    assert viewer.data_mapping == expected
+    # The viewer reports the mapping it now shows (origin notebook), then
+    # answers the action.
+    live = {**ANNDATA_MAPPING, "knn": "connectivities", "expression": "layer:counts"}
+    viewer._handle_frontend_message(_event(origin="notebook", mapping=live))
+    viewer._handle_frontend_message({
+        "type": "action_result", "requestId": request.request_id,
+        "step": {"id": "s2", "label": "Changed the data mapping: neighbour graph, expression"},
+        "body": bytearray(b'{"groups":2}'),
+    })
+    assert request.result(timeout=0) == {"groups": 2}
+    assert request.step == {"id": "s2", "label": "Changed the data mapping: neighbour graph, expression"}
+    assert viewer.data_mapping == live
     assert viewer.data_mapping_origin == "notebook"
 
 
-def test_a_refused_mapping_arrives_as_a_command_error() -> None:
-    viewer = _viewer_with_mapping(ANNDATA_MAPPING)
+def test_a_refused_mapping_fails_its_request_and_reaches_the_hooks() -> None:
+    viewer = serverless_viewer()
     errors: list[dict[str, Any]] = []
     viewer.on_command_error(errors.append)
-    viewer._handle_frontend_message(
-        {"type": "command_error", "command": "setDataMapping", "reason": "obsp['distances'] is not symmetric"}
-    )
-    assert errors[0]["reason"] == "obsp['distances'] is not symmetric"
-    assert viewer.state.command_error["command"] == "setDataMapping"
-    assert viewer.data_mapping == ANNDATA_MAPPING
+    request = viewer._expect_action("mapping.set")
+    viewer._handle_frontend_message({
+        "type": "command_error", "command": "action", "requestId": request.request_id,
+        "reason": "obsp['distances'] is not symmetric",
+    })
+    assert errors == [{"command": "action", "requestId": request.request_id, "reason": "obsp['distances'] is not symmetric"}]
+    with pytest.raises(jupyter.ActionError, match="not symmetric"):
+        request.result(timeout=0)
+
+
+def test_mapping_set_refuses_a_group_the_mapping_does_not_have(monkeypatch: pytest.MonkeyPatch) -> None:
+    viewer = serverless_viewer()
+    monkeypatch.setattr(viewer, "send_message", lambda _message: True)
+    with pytest.raises(TypeError, match="has no parameter 'geneNames'"):
+        viewer.act("mapping.set", geneNames="index")
+    with pytest.raises(TypeError, match="unexpected keyword argument 'kind'"):
+        viewer.mapping_set(kind="anndata")  # type: ignore[call-arg]

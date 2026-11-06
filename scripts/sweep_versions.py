@@ -13,20 +13,17 @@ repositories side by side and read the verdict.
 It classifies every declaration it finds, because "all version literals must be
 equal" is false here and a sweep that pretends otherwise is useless:
 
-* ``release``     -- must equal the release version. Drift here is a defect.
-* ``independent`` -- deliberately unrelated to the release version, with the
-                     reason recorded next to it. The npm package is a name
-                     reservation pinned at 0.0.1 on purpose (see
-                     ``cellucid/npm/publishing.md``); flagging it would train
-                     maintainers to ignore the sweep.
-* ``artifact``    -- the producer release that wrote a committed dataset, or
-                     prose that describes one. Datasets built earlier
-                     legitimately record older values; these are printed for
-                     visibility and never counted as drift.
+* ``release``  -- must equal the release version. Drift here is a defect.
+                  The npm name-reservation package (``cellucid/npm``) is one
+                  of them: it is released under the same version.
+* ``artifact`` -- the producer release that wrote a committed dataset, or
+                  prose that describes one. Datasets built earlier
+                  legitimately record older values; these are printed for
+                  visibility and never counted as drift.
 
 Every ``release`` declaration must also be reachable from inside its own
 checkout, so each one carries the marker on its declaring line. A line that
-cannot carry a comment — a DCF field, a JSON example, a transcript of a tool's
+cannot carry a comment — a DCF field, a JSON file, a transcript of a tool's
 output — records how it carries the marker instead and why, in
 ``marker_alternative``/``marker_reason``. An unrecorded gap fails the sweep:
 a declaration nobody can grep for is a declaration a bump will miss.
@@ -55,7 +52,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 RELEASE = "release"
-INDEPENDENT = "independent"
 ARTIFACT = "artifact"
 
 MARKER = "CELLUCID_VERSION"
@@ -168,16 +164,14 @@ DECLARATIONS: tuple[Declaration, ...] = (
         "cellucid",
         "npm/package.json",
         r'(?m)^  "version": "([^"]+)",$',
-        INDEPENDENT,
-        "npm name-reservation placeholder, deliberately unrelated to the "
-        "package releases; documented in cellucid/npm/publishing.md",
-    ),
-    Declaration(
-        "cellucid",
-        "npm/publishing.md",
-        r"independent of the Python package's version \(`([^`]+)` at time of writing\)",
         RELEASE,
-        "cross-reference to the Python release inside the placeholder rationale",
+        "npm name-reservation package, released under the same version by "
+        "npm-publish.yml",
+        marker_alternative=f'"cellucid-version-marker": "{MARKER}"',
+        marker_reason=(
+            "JSON has no comment syntax, so the marker is a field of npm's "
+            "`config` object on the line below, as DESCRIPTION's is a field"
+        ),
     ),
     # -- cellucid-python -----------------------------------------------------
     Declaration("cellucid-python", "pyproject.toml", VERSION_SOURCE_PATTERN, RELEASE),
@@ -247,6 +241,73 @@ DECLARATIONS: tuple[Declaration, ...] = (
         rf"when validating {VERSION} before publication",
         RELEASE,
         "pre-publication source-checkout note",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/index.md",
+        rf"admonition\}} Active package version — {VERSION}",
+        RELEASE,
+        "status admonition title on the Python guide home page",
+        marker_alternative=f"<!-- {MARKER} -->",
+        marker_reason=(
+            "a MyST directive title cannot carry a comment (it enters the rendered title) and the line below it is a directive option; the marked status line inside the same admonition declares the same value"
+        ),
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/index.md",
+        rf"Version \*\*{VERSION}\*\* is the current Cellucid Python source",
+        RELEASE,
+        "status line on the Python guide home page",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/installation.md",
+        rf"\*\*Active package version: {VERSION}\.\*\*",
+        RELEASE,
+        "status line on the Python installation page",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/installation.md",
+        rf"Version {VERSION} is the current PyPI",
+        RELEASE,
+        "status line on the Python installation page",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/h_developer_docs/14_release_process.md",
+        rf"(?m)^python scripts/validate_release\.py --tag v{VERSION}(?! --sdist)",
+        RELEASE,
+        "the validator command a maintainer copies",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/h_developer_docs/14_release_process.md",
+        rf"validate_release\.py --tag v{VERSION} --sdist dist",
+        RELEASE,
+        "the source-distribution validator command a maintainer copies",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/h_developer_docs/14_release_process.md",
+        rf"assert cellucid\.__version__ == '{VERSION}'",
+        RELEASE,
+        "the installed-version checks a maintainer copies",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/h_developer_docs/14_release_process.md",
+        rf"publish a GitHub Release named `v{VERSION}`",
+        RELEASE,
+        "the GitHub Release a maintainer publishes",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/h_developer_docs/14_release_process.md",
+        r'pip install "cellucid==([^"]+)"',
+        RELEASE,
+        "the post-publication install check",
     ),
     Declaration(
         "cellucid-python",
@@ -329,6 +390,45 @@ DECLARATIONS: tuple[Declaration, ...] = (
     ),
     Declaration(
         "cellucid-python",
+        "docs/user_guide/r_package/installation.md",
+        rf"\*\*Active package version: {VERSION}\.\*\*",
+        RELEASE,
+        "status line on the R installation page",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/r_package/installation.md",
+        rf"Version {VERSION} is the CRAN submission",
+        RELEASE,
+        "status line on the R installation page",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/r_package/installation.md",
+        rf"the index lists `cellucid` {VERSION}; otherwise install",
+        RELEASE,
+        "which install path applies",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/r_package/index.md",
+        rf"admonition\}} Active package version — {VERSION}",
+        RELEASE,
+        "status admonition title on the R guide home page",
+        marker_alternative=f"<!-- {MARKER} -->",
+        marker_reason=(
+            "a MyST directive title cannot carry a comment (it enters the rendered title) and the line below it is a directive option; the marked status line inside the same admonition declares the same value"
+        ),
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/r_package/index.md",
+        rf"Version \*\*{VERSION}\*\* is the active Cellucid for R source",
+        RELEASE,
+        "status line on the R guide home page",
+    ),
+    Declaration(
+        "cellucid-python",
         "docs/user_guide/r_package/index.md",
         rf"Install version {VERSION} from the source currently available",
         RELEASE,
@@ -385,6 +485,67 @@ DECLARATIONS: tuple[Declaration, ...] = (
         "vignettes/installation.Rmd",
         rf"source and documentation version is {VERSION}",
         RELEASE,
+    ),
+    Declaration(
+        "cellucid-r",
+        "README.md",
+        rf"> Version {VERSION} is the active Cellucid for R source",
+        RELEASE,
+        "status line under the version heading",
+    ),
+    Declaration(
+        "cellucid-r",
+        "vignettes/installation.Rmd",
+        rf"the index lists `cellucid` {VERSION}; otherwise use the GitHub",
+        RELEASE,
+        "which install path applies",
+    ),
+    Declaration(
+        "cellucid-r",
+        "vignettes/installation.Rmd",
+        rf"## Install version {VERSION} from CRAN",
+        RELEASE,
+        "CRAN install section heading",
+        marker_alternative=f"<!-- {MARKER} -->",
+        marker_reason=(
+            "an inline comment inside a heading enters the heading text and its "
+            "anchor; the marked status line of the same vignette declares the "
+            "same value"
+        ),
+    ),
+    Declaration(
+        "cellucid-r",
+        "vignettes/installation.Rmd",
+        rf"When the CRAN package index lists `cellucid` {VERSION}, install",
+        RELEASE,
+        "the CRAN install instruction",
+    ),
+    Declaration(
+        "cellucid-r",
+        "vignettes/installation.Rmd",
+        rf"If the index does not list version {VERSION} yet",
+        RELEASE,
+        "the source-install instruction",
+    ),
+    Declaration(
+        "cellucid-r",
+        "vignettes/installation.Rmd",
+        rf"package index lists version {VERSION}:",
+        RELEASE,
+        "the source-install note",
+    ),
+    Declaration(
+        "cellucid-r",
+        "vignettes/installation.Rmd",
+        rf"#> \[1\] '{VERSION}'",
+        RELEASE,
+        "the packageVersion() output shown",
+        marker_alternative=f"<!-- {MARKER} -->",
+        marker_reason=(
+            "a transcript of R's output has to reproduce it exactly, and R "
+            "prints no comment; the marked status line of the same vignette "
+            "declares the same value"
+        ),
     ),
     # -- cellucid-datasets ---------------------------------------------------
     Declaration(
@@ -559,16 +720,6 @@ def report(workspace: Path) -> int:
             marker = "marker" if finding.marked else "NO MARKER"
             note = f"  ({finding.declaration.note})" if finding.declaration.note else ""
             out.append(f"    {finding.path}:{finding.line}  [{marker}]{note}")
-    out.append("")
-
-    independent_groups = _grouped(findings, INDEPENDENT)
-    out.append("INTENTIONALLY INDEPENDENT — excluded from the agreement check")
-    for value, group in independent_groups.items():
-        for finding in group:
-            out.append(f"  {value}  {finding.path}:{finding.line}")
-            out.append(f"        {finding.declaration.note}")
-    if not independent_groups:
-        out.append("  (none)")
     out.append("")
 
     artifact_groups = _grouped(findings, ARTIFACT)

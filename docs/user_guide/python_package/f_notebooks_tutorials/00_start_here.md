@@ -6,7 +6,7 @@ It is intentionally written for **mixed audiences** and uses “layered” writi
 
 1) **Fast path (wet lab / non-technical / new to Python)** — copy/paste, minimal choices, clear success criteria.
 2) **Practical path (computational users)** — reproducible datasets, scale/performance, workflow integration.
-3) **Deep path (expert / developer)** — event schemas, session bundles, debugging, edge-case behavior.
+3) **Deep path (expert / developer)** — event schemas, session files, debugging, edge-case behavior.
 
 ## What Cellucid is (and what it is not)
 

@@ -63,8 +63,10 @@ def _shown(data: Any, monkeypatch: pytest.MonkeyPatch) -> tuple[Any, list[dict[s
 
 
 def _cells(message: dict[str, Any]) -> list[int]:
-    cells = message["cells"]
-    return np.frombuffer(bytes(cells), dtype="<u4").tolist() if isinstance(cells, bytes | bytearray) else list(cells)
+    """The cells an action command names (original positions, as sent)."""
+    cells = message["params"]["cells"]
+    assert cells.dtype == np.uint32
+    return cells.tolist()
 
 
 def test_an_object_read_from_a_file_in_priority_order_is_named_in_original_order(
@@ -83,11 +85,12 @@ def test_an_object_read_from_a_file_in_priority_order_is_named_in_original_order
         )
         assert list(viewer.selection.obs_names) == [f"cell{i}" for i in range(5)]
         # Cells named are the viewer's cells of those names.
-        viewer.highlight_cells(pd.Index(["cell17", "cell3"]))
-        assert sorted(_cells(sent[-1])) == [3, 17]
+        viewer.highlight_cells(cells=pd.Index(["cell17", "cell3"]))
+        assert _cells(sent[-1]) == [17, 3]
         # A column given by names lands on the cells of those names.
         viewer.push(pd.Series([1.0, 2.0], index=["cell17", "cell3"]), key="score")
-        assert _cells(sent[-1]) == [3, 17] and np.asarray(sent[-1]["values"]).tolist() == [2.0, 1.0]
+        assert sent[-1]["action"] == "field.push"
+        assert _cells(sent[-1]) == [3, 17] and np.asarray(sent[-1]["params"]["values"]).tolist() == [2.0, 1.0]
         # The object as stored is refused; restored, it is the viewer's cells in order.
         with pytest.raises(ValueError, match="restore_original_order"):
             viewer.subset(stored)

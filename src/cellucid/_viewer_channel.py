@@ -66,7 +66,7 @@ from ._websocket import (
     accept_key,
     require_client_key,
 )
-from .session_bundle import SESSION_BUNDLE_MAGIC, session_signature_refusal
+from .session import SESSION_SIGNATURE, session_signature_refusal
 
 if TYPE_CHECKING:
     import socket
@@ -96,7 +96,10 @@ CLOSE_REPLACED = 4409
 BINARY_EVENT_HEADER_FIELDS: dict[str, frozenset[str]] = {
     "selection": frozenset({"type", "source"}),
     "session_bundle": frozenset({"type", "requestId"}),
-    "result": frozenset({"type", "requestId", "epoch", "revision", "kind", "id", "nObs", "meta", "cells", "values"}),
+    "result": frozenset({"type", "epoch", "revision", "kind", "id", "nObs", "meta", "cells", "values"}),
+    "action_result": frozenset({"type", "requestId", "step"}),
+    "agent_tools": frozenset({"type", "requestId"}),
+    "agent_result": frozenset({"type", "requestId"}),
 }
 
 _HELLO_FIELDS = frozenset({"type", "viewerId", "viewerToken"})
@@ -178,14 +181,23 @@ class _Registration:
         "callback",
         "channel_lock",
         "delivery_lock",
+        "on_socket",
         "outbox",
         "socket",
         "viewer_token",
     )
 
-    def __init__(self, viewer_token: str, callback: Callable[[dict], None]) -> None:
+    def __init__(
+        self,
+        viewer_token: str,
+        callback: Callable[[dict], None],
+        on_socket: Callable[[bool], None] | None = None,
+    ) -> None:
         self.viewer_token = viewer_token
         self.callback = callback
+        # Told when a page takes the channel (True) and when the page that
+        # held it lets it go (False: closed, reloaded, its link dropped).
+        self.on_socket = on_socket
         self.delivery_lock = threading.RLock()
         # Guards `socket` and `outbox` together, so a command is either sent
         # on the open socket or queued, and a new socket is handed every
@@ -220,13 +232,19 @@ def register_event_callback(
     viewer_id: str,
     viewer_token: str,
     callback: Callable[[dict], None],
+    *,
+    on_socket: Callable[[bool], None] | None = None,
 ) -> None:
-    """Register one token-authenticated viewer and the callback its events reach."""
+    """Register one token-authenticated viewer and the callback its events
+    reach; ``on_socket`` hears a page take the channel (True) and the page
+    holding it let it go (False), on the channel's thread."""
     _require_routing_string(viewer_id, label="viewer_id")
     _require_routing_string(viewer_token, label="viewer_token")
     if not callable(callback):
         raise TypeError("callback must be callable")
-    registration = _Registration(viewer_token, callback)
+    if on_socket is not None and not callable(on_socket):
+        raise TypeError("on_socket must be callable")
+    registration = _Registration(viewer_token, callback, on_socket)
     with _event_callbacks_lock:
         if viewer_id in _event_callbacks:
             raise RuntimeError("An event callback is already registered for this viewer_id")
@@ -618,8 +636,11 @@ def serve_viewer_channel(websocket: ChannelSocket) -> None:
         websocket.close(CLOSE_GOING_AWAY, "")
         if registration is not None:
             with registration.channel_lock:
-                if registration.socket is websocket:
+                held = registration.socket is websocket
+                if held:
                     registration.socket = None
+            if held:
+                _tell_socket(registration, False)
         # Read what the viewer still sends until it closes its side, so the
         # socket is not reset under the close frame (RFC 6455 section 7.1.1).
         websocket.finish()
@@ -659,6 +680,18 @@ def _attach(registration: _Registration, websocket: ChannelSocket) -> None:
             registration.outbox.popleft()
     if previous is not None and previous is not websocket:
         previous.close(CLOSE_REPLACED, "Replaced by a newer connection of this viewer")
+        # The page that held it is gone (reloaded, opened again elsewhere).
+        _tell_socket(registration, False)
+    _tell_socket(registration, True)
+
+
+def _tell_socket(registration: _Registration, attached: bool) -> None:
+    if registration.on_socket is None:
+        return
+    try:
+        registration.on_socket(attached)
+    except Exception:
+        logger.exception("A viewer channel socket listener failed")
 
 
 def _keep_alive(websocket: ChannelSocket) -> None:
@@ -700,11 +733,12 @@ def _receive_binary_event(
     if expected is None or set(header) != expected:
         raise ViewerProtocolError(
             "A binary event header must be exactly {type: 'selection', source}, "
-            "{type: 'session_bundle', requestId} or a result's header"
+            "{type: 'session_bundle', requestId}, {type: 'action_result', requestId, step}, "
+            "{type: 'agent_tools' or 'agent_result', requestId} or a result's header"
         )
-    if header["type"] == "result":
-        # Its cells and values, read whole: `_wire._decode_result` checks them
-        # against the header.
+    if header["type"] in {"result", "action_result", "agent_tools", "agent_result"}:
+        # A result's cells and values, an action's outcome, or an agent's
+        # tools or tool result, read whole: `_wire` checks them.
         return {**header, "body": message.read_rest()}
     if header["type"] == "selection":
         # One buffer, sized from the frame and filled in place: the cells are
@@ -732,8 +766,8 @@ def _receive_session_bundle(
     tmp_path: Path | None = None
     written = 0
     try:
-        magic = message.read_exact(len(SESSION_BUNDLE_MAGIC))
-        if magic != SESSION_BUNDLE_MAGIC:
+        magic = message.read_exact(len(SESSION_SIGNATURE))
+        if magic != SESSION_SIGNATURE:
             raise ValueError(session_signature_refusal(magic))
         with tempfile.NamedTemporaryFile(
             delete=False, prefix="cellucid-session-", suffix=".cellucid-session"
@@ -745,10 +779,11 @@ def _receive_session_bundle(
             while count := message.readinto(buffer):
                 tmp.write(buffer[:count])
                 written += count
-        from .session_bundle import CellucidSessionBundle
+        from .session import CellucidSession
 
-        for _chunk in CellucidSessionBundle(tmp_path).iter_chunks(decode=True):
-            pass
+        # Read and checked whole (every chunk, array and value) before the
+        # request is answered: a damaged file is refused here, by name.
+        CellucidSession(tmp_path)
         _session_bundle_request(viewer_id, viewer_token, request_id, consume=True)
     except WebSocketClosed:
         # The channel ended mid-bundle (closed, or the network dropped): the
@@ -770,7 +805,7 @@ def _receive_session_bundle(
             reason = f"The session bundle could not be saved: {error}"
         # Python is waiting for this request: tell it now, in the form its
         # wait already accepts, instead of letting it time out.
-        return {"type": "command_error", "command": "requestSessionBundle", "reason": reason[:500]}
+        return {"type": "command_error", "command": "requestSessionBundle", "requestId": request_id, "reason": reason[:4000]}
     return {
         "type": "session_bundle",
         "requestId": request_id,

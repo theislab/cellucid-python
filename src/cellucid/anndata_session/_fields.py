@@ -1,26 +1,31 @@
 """
 Planning the ``obs`` columns that carry a session's user-defined fields.
 
-A user-defined field is categorical -- codes plus categories, decoded from
-its own chunk --, a continuous alias of an existing column, or a continuous
-field that holds its own values (a column a notebook pushed), decoded from its
-``user-defined/values/<id>`` chunk. Both are
-validated against the field overlay the session declares before a column is
-built, including the operation that produced it, its creation timestamp, and,
-for categoricals, the category list and the overlap strategy that resolved
-cells belonging to more than one source page.
+The ``field-overlays`` value at a step (``app/state/domains/field-overlays.js``)
+lists every field a person or a notebook made (``userFields``), each one of:
 
-A continuous alias of a gene names that gene the way the session's data
-mapping named it -- its gene-name set on its gene axis, made unique with the
-shared rule -- and copies values from the expression matrix the mapping reads.
-A categorical record carries no centroids: label positions are derived from
-codes and coordinates whenever an embedding is shown, so a session never
-persists them.
+- categorical: ``categories`` and ``codes``, a per-cell column ``{cells,
+  values}`` by original position (``cells`` null: every cell); a code is a
+  category's index, and its code type's largest value marks a cell with no
+  category. The column is a pandas ``category`` with those categories in
+  order, missing where a cell has no category;
+- continuous with its own values (a column a notebook pushed): ``values``, a
+  per-cell column of ``Float32Array`` values, NaN for no value. The column is
+  ``float32``, NaN where a cell has no value;
+- a continuous copy of another field (``sourceField``, no values of its own):
+  the viewer reads its values from the field it copies, and so does this: an
+  obs column, or a gene named the way the session's data mapping names it
+  (its gene-name set on its gene axis, made unique with the shared rule),
+  copied from the expression matrix the mapping reads.
+
+Each column is named by the field's key (as shown). A field deleted in the
+session, and a purged one (which holds no values), is not applied, and says
+so. A cell the session does not know (one the viewer did not open) is
+missing.
 """
 
 from __future__ import annotations
 
-import copy
 from typing import Any
 
 import numpy as np
@@ -29,79 +34,79 @@ from scipy import sparse
 
 from .._plural import plural
 from ..data_mapping import mapped_expression_matrix, resolve_gene_names
-from ..session_codecs import decode_user_defined_codes
-from ._columns import categorical_column, continuous_column
+from ._columns import categorical_column, continuous_column, without_unknown
 from ._primitives import (
+    _require_array,
+    _require_bool,
     _require_category_list,
-    _require_exact_bool,
+    _require_cell_list,
     _require_exact_keys,
     _require_field_key,
-    _require_nonempty_string,
-    _require_nonnegative_int,
-    _require_optional_string,
-    _require_wire_id,
-    _reserve_column,
+    _require_list,
+    _require_optional_text,
+    _require_record,
+    _require_source,
+    _require_text,
 )
-from ._records import _ColumnPlan
+from ._records import _Candidate
 from ._schema import (
-    _CATEGORY_FIELD_KEYS,
-    _CONTINUOUS_FIELD_KEYS,
-    _OVERLAP_STRATEGIES,
-    _OVERLAY_ROOT_KEYS,
-    _STORED_CONTINUOUS_FIELD_KEYS,
-    _USER_DEFINED_CODES_PREFIX,
-    _USER_DEFINED_VALUES_PREFIX,
+    CODE_TYPES,
+    COLUMN_KEYS,
+    OVERLAP_STRATEGIES,
+    SOURCE_FIELD_KEYS,
+    USER_CATEGORY_KEYS,
+    USER_FIELD_KEYS,
+    USER_VALUES_KEYS,
 )
 
-#: A session's user-defined code arrays: the numpy dtype for each typed-array
-#: name the bundle declares, and its largest value, which marks an uncovered
-#: cell.
-_CODES_TYPES: dict[str, tuple[type[np.unsignedinteger], int]] = {
-    "Uint8Array": (np.uint8, 255),
-    "Uint16Array": (np.uint16, 65_535),
-    "Uint32Array": (np.uint32, 4_294_967_295),
-}
+
+def _source_field(value: Any, *, label: str) -> dict[str, Any]:
+    record = _require_record(value, label=label)
+    if "sourceKey" not in record or set(record) - SOURCE_FIELD_KEYS:
+        raise ValueError(f"This session's {label} must name sourceKey, and may name sourceIndex and kind only.")
+    out: dict[str, Any] = {"sourceKey": _require_text(record["sourceKey"], label=f"{label}.sourceKey")}
+    if "sourceIndex" in record:
+        index = record["sourceIndex"]
+        if isinstance(index, bool) or not isinstance(index, int) or index < 0:
+            raise ValueError(f"This session's {label}.sourceIndex must be a non-negative integer.")
+        out["sourceIndex"] = index
+    if "kind" in record:
+        out["kind"] = _require_text(record["kind"], label=f"{label}.kind")
+    return out
 
 
-def _validate_source_field(value: Any, *, label: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise TypeError(f"{label} must be an object")
-    allowed = {"sourceKey", "sourceIndex", "kind"}
-    if "sourceKey" not in value or set(value) - allowed:
-        raise ValueError(f"{label} has invalid fields")
-    source_key = _require_nonempty_string(
-        value["sourceKey"],
-        label=f"{label}.sourceKey",
-    )
-    output: dict[str, Any] = {"sourceKey": source_key}
-    if "sourceIndex" in value:
-        output["sourceIndex"] = _require_nonnegative_int(
-            value["sourceIndex"],
-            label=f"{label}.sourceIndex",
-        )
-    if "kind" in value:
-        output["kind"] = _require_nonempty_string(
-            value["kind"],
-            label=f"{label}.kind",
-        )
-    return output
-
-
-def _validate_operation(value: Any, *, label: str) -> None:
+def _operation(value: Any, *, label: str) -> None:
     if value is None:
         return
-    if not isinstance(value, dict):
-        raise TypeError(f"{label} must be an object or null")
-    _require_nonempty_string(value.get("type"), label=f"{label}.type")
+    record = _require_record(value, label=label)
+    _require_text(record.get("type"), label=f"{label}.type")
 
 
-def _numeric_series(
-    values: Any,
-    *,
-    n_obs: int,
-    obs_index: pd.Index,
-    label: str,
-) -> pd.Series:
+def _created_at(value: Any, *, label: str) -> None:
+    if value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, int | float) or not np.isfinite(value) or value < 0:
+        raise ValueError(f"This session's {label} must be a finite non-negative number or null.")
+
+
+def _column_part(value: Any, types: tuple[str, ...], n_obs: int, *, label: str) -> tuple[np.ndarray | None, np.ndarray, str]:
+    """A per-cell column ``{cells, values}``: its cells (None: every cell),
+    its values, and their typed-array type."""
+    column = _require_exact_keys(value, COLUMN_KEYS, label=label)
+    cells = None if column["cells"] is None else _require_cell_list(column["cells"], n_obs, label=f"{label}.cells")
+    values = _require_array(column["values"], types, label=f"{label}.values")
+    expected = n_obs if cells is None else cells.size
+    if values.data.size != expected:
+        held = int(values.data.size)
+        raise ValueError(
+            f"This session's {label} holds {held} {plural(held, 'value')} for "
+            + ("every one of the dataset's" if cells is None else "its")
+            + f" {expected} {plural(expected, 'cell')}."
+        )
+    return cells, values.data, values.type
+
+
+def _numeric_series(values: Any, *, n_obs: int, index: pd.Index, label: str) -> pd.Series:
     array = np.asarray(values.toarray()) if sparse.issparse(values) else np.asarray(values)
     if array.ndim == 2 and array.shape[1] == 1:
         array = array[:, 0]
@@ -112,422 +117,150 @@ def _numeric_series(
         or np.issubdtype(array.dtype, np.bool_)
         or np.issubdtype(array.dtype, np.complexfloating)
     ):
-        raise TypeError(f"{label} must contain real numeric values")
+        raise ValueError(f"{label} must contain real numeric values")
     # Copied as the viewer copies them (``overlay-public.js``): NaN, the
     # stored missing value -- and every cell a MuData modality did not
     # measure -- stays NaN.
-    return pd.Series(array.copy(), index=obs_index)
+    return pd.Series(array.astype(np.float64 if array.dtype == np.float64 else np.float32), index=index)
 
 
-def _materialize_continuous_alias(
-    adata: Any,
-    *,
-    mapping: dict[str, Any],
-    source: str,
-    source_field: dict[str, Any],
-    label: str,
-) -> pd.Series:
+def _copied_values(shown: Any, *, mapping: dict[str, Any], source: str, source_field: dict[str, Any], label: str) -> pd.Series:
+    """The values of a continuous copy, read from the field it copies."""
     source_key = source_field["sourceKey"]
-    n_obs = int(adata.n_obs)
-    obs_index = adata.obs_names
+    n_obs = int(shown.n_obs)
     if source == "obs":
-        matching = [index for index, key in enumerate(adata.obs.columns) if key == source_key]
+        matching = [position for position, key in enumerate(shown.obs.columns) if key == source_key]
         if len(matching) != 1:
-            raise ValueError(f"{label} source obs field {source_key!r} must exist exactly once")
+            raise ValueError(f"{label} copies the obs column {source_key!r}, which must exist exactly once")
         source_index = matching[0]
-        values = adata.obs.iloc[:, source_index].to_numpy(copy=True)
+        values = shown.obs.iloc[:, source_index].to_numpy(copy=True)
     else:
         # A gene is named the way the viewer named it: by the data mapping's
         # gene-name set on its gene axis, made unique with the shared rule, so
         # the second of two 'MATR3' rows is 'MATR3-1' here exactly as it was
         # in the session. Its values come from the matrix the mapping read.
-        gene_names = resolve_gene_names(adata, mapping).names
-        matching = [index for index, key in enumerate(gene_names) if key == source_key]
+        gene_names = resolve_gene_names(shown, mapping).names
+        matching = [position for position, key in enumerate(gene_names) if key == source_key]
         if len(matching) != 1:
-            raise ValueError(f"{label} source gene {source_key!r} must exist exactly once")
+            raise ValueError(f"{label} copies the gene {source_key!r}, which must exist exactly once")
         source_index = matching[0]
         try:
-            matrix = mapped_expression_matrix(adata, mapping)
+            matrix = mapped_expression_matrix(shown, mapping)
         except ValueError as error:
             raise ValueError(f"{label} cannot copy gene values: {error}") from error
         values = matrix[:, source_index]
-
-    declared_index = source_field.get("sourceIndex")
-    if declared_index is not None and declared_index != source_index:
+    declared = source_field.get("sourceIndex")
+    if declared is not None and declared != source_index:
         raise ValueError(
-            f"{label} sourceIndex {declared_index} does not match exact source "
-            f"{source_key!r} at index {source_index}"
+            f"{label} sourceIndex {declared} does not match exact source {source_key!r} at index {source_index}"
         )
-    return _numeric_series(
-        values,
-        n_obs=n_obs,
-        obs_index=obs_index,
-        label=label,
-    )
+    return _numeric_series(values, n_obs=n_obs, index=shown.obs_names, label=label)
 
 
-def _validate_category_metadata(
-    field: dict[str, Any],
-    *,
-    label: str,
-) -> list[str | bool | int | float]:
-    categories = _require_category_list(
-        field["categories"],
-        label=f"{label}.categories",
-        nonempty=True,
-    )
-    codes_length = _require_nonnegative_int(
-        field["codesLength"],
-        label=f"{label}.codesLength",
-    )
-    codes_type = field["codesType"]
-    if codes_type not in _CODES_TYPES:
-        raise ValueError(
-            f"{label}.codesType must be Uint8Array, Uint16Array or Uint32Array"
-        )
-    if not isinstance(field["sourcePages"], list):
-        raise TypeError(f"{label}.sourcePages must be an array")
-    if field["overlapStrategy"] not in _OVERLAP_STRATEGIES:
-        raise ValueError(f"{label}.overlapStrategy is invalid")
-    overlap_label = _require_optional_string(
-        field["overlapLabel"],
-        label=f"{label}.overlapLabel",
-    )
-    if overlap_label == "":
-        raise ValueError(f"{label}.overlapLabel must be non-empty or null")
-    if field["intersectionLabels"] is not None and not isinstance(
-        field["intersectionLabels"], dict
-    ):
-        raise TypeError(f"{label}.intersectionLabels must be an object or null")
-    uncovered_label = _require_optional_string(
-        field["uncoveredLabel"],
-        label=f"{label}.uncoveredLabel",
-    )
-    if uncovered_label == "":
-        raise ValueError(f"{label}.uncoveredLabel must be non-empty or null")
-    if field["sourceField"] is not None:
-        _validate_source_field(field["sourceField"], label=f"{label}.sourceField")
-    _validate_operation(field["operation"], label=f"{label}.operation")
-    if codes_length > 0 and len(categories) > _CODES_TYPES[codes_type][1]:
-        raise ValueError(f"{label} has too many categories for {codes_type} codes")
+def _check_category_definition(field: dict[str, Any], *, label: str) -> list[Any]:
+    categories = _require_category_list(field["categories"], label=f"{label}.categories")
+    _require_list(field["sourcePages"], label=f"{label}.sourcePages")
+    if field["overlapStrategy"] not in OVERLAP_STRATEGIES:
+        raise ValueError(f"This session's {label}.overlapStrategy is not one this version reads.")
+    _require_optional_text(field["overlapLabel"], label=f"{label}.overlapLabel")
+    if field["intersectionLabels"] is not None:
+        _require_record(field["intersectionLabels"], label=f"{label}.intersectionLabels")
+    _require_optional_text(field["uncoveredLabel"], label=f"{label}.uncoveredLabel")
     return categories
 
 
-def _validate_field_created_at(value: Any, *, label: str) -> None:
-    if value is None:
-        return
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise TypeError(f"{label} must be a finite non-negative number or null")
-    if not np.isfinite(value) or value < 0:
-        raise ValueError(f"{label} must be a finite non-negative number or null")
+#: Why a field the session made is not applied.
+DELETED_NOTE = "Deleted in the session."
+PURGED_NOTE = "Deleted for good in the session: it holds no values."
 
 
-def _validate_string_record(value: Any, *, label: str) -> None:
-    if not isinstance(value, dict):
-        raise TypeError(f"{label} must be an object")
-    for key, item in value.items():
-        _require_nonempty_string(key, label=f"{label} key")
-        _require_nonempty_string(item, label=f"{label} value for {key!r}")
-
-
-def _validate_unique_string_array(value: Any, *, label: str) -> list[str]:
-    if not isinstance(value, list):
-        raise TypeError(f"{label} must be an array")
-    output: list[str] = []
-    seen: set[str] = set()
-    for index, item in enumerate(value):
-        exact = _require_nonempty_string(item, label=f"{label}[{index}]")
-        if exact in seen:
-            raise ValueError(f"{label} duplicates {exact!r}")
-        seen.add(exact)
-        output.append(exact)
-    return output
-
-
-def _plan_user_defined_fields(
-    bundle: Any,
-    chunk_ids: set[str],
-    adata: Any,
+def _plan_user_fields(
+    fields: Any,
+    shown: Any,
     *,
     mapping: dict[str, Any],
-    prefix: str,
-    existing_columns: set[str],
-    materialize: bool,
-    include_deleted: bool,
-    metadata_by_id: dict[str, dict[str, Any]],
-) -> tuple[list[_ColumnPlan], Any | None]:
-    codes_prefix = _USER_DEFINED_CODES_PREFIX
-    code_chunk_ids = {chunk_id for chunk_id in chunk_ids if chunk_id.startswith(codes_prefix)}
-    value_chunk_ids = {
-        chunk_id for chunk_id in chunk_ids if chunk_id.startswith(_USER_DEFINED_VALUES_PREFIX)
-    }
-    if "core/field-overlays" not in chunk_ids:
-        if code_chunk_ids or value_chunk_ids:
-            raise ValueError(
-                "Session contains user-defined code or value chunks without core/field-overlays"
-            )
-        return [], None
+    known: np.ndarray | None,
+) -> list[_Candidate]:
+    """One column per user field, every field checked before any column is built."""
+    n_obs = int(shown.n_obs)
+    index = shown.obs_names
+    ids: set[str] = set()
+    candidates: list[_Candidate] = []
+    for position, raw in enumerate(_require_list(fields, label="field-overlays value userFields")):
+        label = f"field-overlays value userFields[{position}]"
+        record = _require_record(raw, label=label)
+        kind = record.get("kind")
+        if kind not in ("category", "continuous"):
+            raise ValueError(f"This session's {label}.kind must be \"category\" or \"continuous\".")
+        purged = _require_bool(record.get("purged"), label=f"{label}.purged")
+        copy_of = kind == "continuous" and record.get("sourceField") is not None
+        keys = (
+            USER_FIELD_KEYS if purged or copy_of
+            else USER_CATEGORY_KEYS if kind == "category"
+            else USER_VALUES_KEYS
+        )
+        field = _require_exact_keys(record, keys, label=label)
+        field_id = _require_text(field["id"], label=f"{label}.id")
+        if field_id in ids:
+            raise ValueError(f"This session's field-overlays value holds the user field {field_id!r} twice.")
+        ids.add(field_id)
+        source = _require_source(field["source"], label=f"{label}.source")
+        key = _require_field_key(field["key"], label=f"{label}.key")
+        deleted = _require_bool(field["deleted"], label=f"{label}.deleted")
+        if purged and not deleted:
+            raise ValueError(f"This session's {label} is purged and not deleted.")
+        _created_at(field["createdAt"], label=f"{label}.createdAt")
+        _operation(field["operation"], label=f"{label}.operation")
+        source_field = None if field["sourceField"] is None else _source_field(field["sourceField"], label=f"{label}.sourceField")
+        if copy_of and source_field is None:
+            raise ValueError(f"This session's {label} copies no field.")
+        metadata: dict[str, Any] = {
+            "kind": kind, "field_id": field_id, "key": key, "source": source, "deleted": deleted,
+            "source_field": source_field,
+        }
+        what = f"The user field {key!r} ({field_id})"
 
-    raw_overlays = bundle.decode_chunk("core/field-overlays")
-    overlays = _require_exact_keys(
-        raw_overlays,
-        _OVERLAY_ROOT_KEYS,
-        label="core/field-overlays",
-    )
-    renames = _require_exact_keys(
-        overlays["renames"],
-        {"fields", "categories"},
-        label="core/field-overlays.renames",
-    )
-    _validate_string_record(
-        renames["fields"],
-        label="core/field-overlays.renames.fields",
-    )
-    _validate_string_record(
-        renames["categories"],
-        label="core/field-overlays.renames.categories",
-    )
-    deleted_fields = _require_exact_keys(
-        overlays["deletedFields"],
-        {"deleted", "purged"},
-        label="core/field-overlays.deletedFields",
-    )
-    deleted = set(
-        _validate_unique_string_array(
-            deleted_fields["deleted"],
-            label="core/field-overlays.deletedFields.deleted",
-        )
-    )
-    purged = set(
-        _validate_unique_string_array(
-            deleted_fields["purged"],
-            label="core/field-overlays.deletedFields.purged",
-        )
-    )
-    if not purged.issubset(deleted):
-        raise ValueError("core/field-overlays.deletedFields.purged must be a subset of deleted")
-    fields = overlays["userDefinedFields"]
-    if not isinstance(fields, list):
-        raise TypeError("core/field-overlays.userDefinedFields must be an array")
+        def unapplied(note: str, metadata: dict[str, Any] = metadata, key: str = key) -> _Candidate:
+            return _Candidate(kind="user-field", domain="field-overlays", name=key, values=None, cells=None, note=note, metadata=metadata)
 
-    plans: list[_ColumnPlan] = []
-    field_ids: set[str] = set()
-    referenced_code_chunks: set[str] = set()
-    referenced_value_chunks: set[str] = set()
-    categorical_field_ids: list[str] = []
-    n_obs = int(adata.n_obs)
-    for index, raw_field in enumerate(fields):
-        if not isinstance(raw_field, dict):
-            raise TypeError(f"core/field-overlays.userDefinedFields[{index}] must be an object")
-        label = f"core/field-overlays.userDefinedFields[{index}]"
-        kind = raw_field.get("kind")
-        stored = kind == "continuous" and "valuesType" in raw_field
-        expected_keys = (
-            _CATEGORY_FIELD_KEYS
-            if kind == "category"
-            else _STORED_CONTINUOUS_FIELD_KEYS
-            if stored
-            else _CONTINUOUS_FIELD_KEYS
-        )
-        field = _require_exact_keys(raw_field, expected_keys, label=label)
-        if kind not in {"category", "continuous"}:
-            raise ValueError(f"{label}.kind must be 'category' or 'continuous'")
-        field_id = _require_wire_id(field["id"], label=f"{label}.id")
-        if field_id in field_ids:
-            raise ValueError(f"Duplicate user-defined field id: {field_id}")
-        field_ids.add(field_id)
-        source = field["source"]
-        if source not in {"obs", "var"}:
-            raise ValueError(f"{label}.source must be 'obs' or 'var'")
-        field_key = _require_field_key(field["key"], label=f"{label}.key")
-        is_deleted = _require_exact_bool(
-            field["isDeleted"],
-            label=f"{label}.isDeleted",
-        )
-        is_purged = _require_exact_bool(
-            field["isPurged"],
-            label=f"{label}.isPurged",
-        )
-        if is_purged and not is_deleted:
-            raise ValueError(f"{label} purged fields must also be deleted")
-        _validate_field_created_at(field["createdAt"], label=f"{label}.createdAt")
-        should_materialize = materialize and (include_deleted or not is_deleted) and not is_purged
-
-        column_name = f"{prefix}{field_key}"
-        if stored:
-            if field["sourceField"] is not None or field["valuesType"] != "Float32Array":
-                raise ValueError(f"{label} stores Float32Array values and has no source")
-            _validate_operation(field["operation"], label=f"{label}.operation")
-            values_length = _require_nonnegative_int(field["valuesLength"], label=f"{label}.valuesLength")
-            if values_length != n_obs:
+        if purged:
+            candidates.append(unapplied(PURGED_NOTE))
+            continue
+        if kind == "category":
+            categories = _check_category_definition(field, label=label)
+            cells, codes, code_type = _column_part(field["codes"], tuple(CODE_TYPES), n_obs, label=f"{label}.codes")
+            missing = CODE_TYPES[code_type]
+            if len(categories) > missing:
+                raise ValueError(f"This session's {label} has more categories than its code type ({code_type}) can name.")
+            codes64 = codes.astype(np.int64)
+            invalid = np.flatnonzero((codes64 >= len(categories)) & (codes64 != missing))
+            if invalid.size:
+                count = len(categories)
                 raise ValueError(
-                    f"User-defined field {field_id!r} has valuesLength {values_length}, expected {n_obs}"
+                    f"This session's {label}.codes holds the code {int(codes64[invalid[0]])}, and the field has "
+                    f"{count} {plural(count, 'category', 'categories')}."
                 )
-            value_chunk_id = f"{_USER_DEFINED_VALUES_PREFIX}{field_id}"
-            if is_purged:
+            if deleted:
+                candidates.append(unapplied(DELETED_NOTE))
                 continue
-            if value_chunk_id not in chunk_ids:
-                raise ValueError(
-                    f"User-defined field {field_id!r} is missing required chunk {value_chunk_id!r}"
-                )
-            value_meta = metadata_by_id[value_chunk_id]
-            if value_meta["label"] != f"User-defined values: {field_key}":
-                raise ValueError(f"{value_chunk_id} label must match user-defined field {field_id!r}")
-            raw_values = bundle.decode_chunk(value_chunk_id)
-            if not isinstance(raw_values, bytes | bytearray | memoryview):
-                raise TypeError(f"{value_chunk_id} must decode to binary bytes")
-            if value_meta["uncompressedBytes"] != len(raw_values) or len(raw_values) != 4 * n_obs:
-                raise ValueError(f"{value_chunk_id} must hold {n_obs} float32 values")
-            referenced_value_chunks.add(value_chunk_id)
-            values = np.frombuffer(bytes(raw_values), dtype="<f4").astype(np.float32)
-            if bool(np.any(np.isinf(values))):
-                raise ValueError(f"{value_chunk_id} must hold finite values or NaN")
-            if should_materialize:
-                _reserve_column(existing_columns, column_name)
-                plans.append(
-                    _ColumnPlan(
-                        name=column_name,
-                        values=continuous_column(values, cells=None, n_obs=n_obs, index=adata.obs_names),
-                        metadata={"kind": "continuous", "field_id": field_id, "source": source, "source_field": None},
-                    )
-                )
-            continue
-        if kind == "continuous":
-            source_field = _validate_source_field(
-                field["sourceField"],
-                label=f"{label}.sourceField",
-            )
-            _validate_operation(field["operation"], label=f"{label}.operation")
-            if should_materialize:
-                _reserve_column(existing_columns, column_name)
-                values = _materialize_continuous_alias(
-                    adata,
-                    mapping=mapping,
-                    source=source,
-                    source_field=source_field,
-                    label=f"Continuous field {field_id!r}",
-                )
-                plans.append(
-                    _ColumnPlan(
-                        name=column_name,
-                        values=values,
-                        metadata={
-                            "kind": "continuous",
-                            "field_id": field_id,
-                            "source": source,
-                            "source_field": source_field,
-                        },
-                    )
-                )
-            continue
-
-        categories = _validate_category_metadata(field, label=label)
-        categorical_field_ids.append(field_id)
-        codes_length = field["codesLength"]
-        codes_type = field["codesType"]
-        code_chunk_id = f"{codes_prefix}{field_id}"
-        if codes_length != n_obs:
-            raise ValueError(
-                f"User-defined categorical field {field_id!r} has codesLength "
-                f"{codes_length}, expected {n_obs} cell-aligned codes"
-            )
-        if n_obs == 0:
-            if code_chunk_id in chunk_ids:
-                raise ValueError(
-                    f"Empty user-defined field {field_id!r} must not contain a codes chunk"
-                )
-            codes = np.empty(0, dtype=_CODES_TYPES[codes_type][0])
+            values = categorical_column(codes, categories, cells=cells, n_obs=n_obs, missing_code=missing, index=index)
+        elif copy_of:
+            assert source_field is not None
+            if deleted:
+                candidates.append(unapplied(DELETED_NOTE))
+                continue
+            values = _copied_values(shown, mapping=mapping, source=source, source_field=source_field, label=what)
         else:
-            if code_chunk_id not in chunk_ids:
-                raise ValueError(
-                    f"User-defined categorical field {field_id!r} is missing "
-                    f"required chunk {code_chunk_id!r}"
-                )
-            code_meta = metadata_by_id[code_chunk_id]
-            if code_meta["label"] != f"User-defined codes: {field_key}":
-                raise ValueError(
-                    f"{code_chunk_id} label must match user-defined field {field_id!r}"
-                )
-            raw_codes = bundle.decode_chunk(code_chunk_id)
-            if not isinstance(raw_codes, bytes | bytearray | memoryview):
-                raise TypeError(f"{code_chunk_id} must decode to binary bytes")
-            if code_meta["uncompressedBytes"] != len(raw_codes):
-                raise ValueError(f"{code_chunk_id} uncompressedBytes must match its payload")
-            codes = decode_user_defined_codes(
-                raw_codes,
-                expected_length=codes_length,
-                expected_codes_type=codes_type,
-            )
-            referenced_code_chunks.add(code_chunk_id)
-            expected_dtype = np.dtype(_CODES_TYPES[codes_type][0])
-            if codes.dtype != expected_dtype:
-                raise ValueError(f"{code_chunk_id} dtype {codes.dtype} does not match {codes_type}")
-            if len(codes) != codes_length:
-                raise ValueError(
-                    f"{code_chunk_id} contains {len(codes)} {plural(len(codes), 'code')}, expected {codes_length}"
-                )
-
-        category_codes = codes.astype(np.int64, copy=True)
-        missing_sentinel = (
-            _CODES_TYPES[codes_type][1] if field["uncoveredLabel"] is None else None
-        )
-        if missing_sentinel is not None:
-            category_codes[category_codes == missing_sentinel] = -1
-        invalid = np.flatnonzero((category_codes < -1) | (category_codes >= len(categories)))
-        if invalid.size:
-            position = int(invalid[0])
-            code = int(category_codes[position])
-            raise ValueError(
-                f"User-defined categorical field {field_id!r} contains code "
-                f"{code} at position {position}, but declares {len(categories)} {plural(len(categories), 'category', 'categories')}"
-            )
-
-        if should_materialize:
-            _reserve_column(existing_columns, column_name)
-            plans.append(
-                _ColumnPlan(
-                    name=column_name,
-                    values=categorical_column(
-                        category_codes,
-                        categories,
-                        cells=None,
-                        n_obs=n_obs,
-                        missing_code=-1,
-                        index=adata.obs_names,
-                    ),
-                    metadata={
-                        "kind": "category",
-                        "field_id": field_id,
-                        "source": source,
-                    },
-                )
-            )
-
-    if value_chunk_ids != referenced_value_chunks:
-        unexpected = sorted(value_chunk_ids - referenced_value_chunks)
-        raise ValueError(
-            "Session contains undeclared user-defined value chunks: " + ", ".join(unexpected)
-        )
-    if code_chunk_ids != referenced_code_chunks:
-        unexpected = sorted(code_chunk_ids - referenced_code_chunks)
-        raise ValueError(
-            "Session contains undeclared user-defined code chunks: " + ", ".join(unexpected)
-        )
-    # The AnnData bridge deliberately leaves core/state opaque. It proves
-    # completeness and exact field-overlay order inside each priority bucket;
-    # the web restore owner proves which active live/snapshot fields are eager.
-    for priority in ("eager", "lazy"):
-        actual_order = [
-            chunk_id.removeprefix(_USER_DEFINED_CODES_PREFIX)
-            for chunk_id, meta in metadata_by_id.items()
-            if (chunk_id.startswith(_USER_DEFINED_CODES_PREFIX) and meta["priority"] == priority)
-        ]
-        expected_order = [
-            field_id for field_id in categorical_field_ids if field_id in actual_order
-        ]
-        if actual_order != expected_order:
-            raise ValueError(
-                f"User-defined {priority} code chunks must match the exact "
-                "field-overlay inventory order"
-            )
-    return plans, copy.deepcopy(overlays)
+            cells, numbers, _ = _column_part(field["values"], ("Float32Array",), n_obs, label=f"{label}.values")
+            if bool(np.isinf(numbers).any()):
+                raise ValueError(f"This session's {label}.values holds an infinity; a field holds finite values or NaN.")
+            if deleted:
+                candidates.append(unapplied(DELETED_NOTE))
+                continue
+            values = continuous_column(numbers, cells=cells, n_obs=n_obs, index=index)
+        known_values = without_unknown(values, known)
+        candidates.append(_Candidate(
+            kind="user-field", domain="field-overlays", name=key, values=known_values,
+            cells=int(known_values.notna().sum()), note=None, metadata=metadata,
+        ))
+    return candidates

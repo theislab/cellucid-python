@@ -112,6 +112,46 @@ What the contract suite once got wrong only on some CI cells (fixed
   folder over HTTP, for a gene index it was keeping on disk) carried no
   signal and outlived the source's disconnect, retrying its host. Closing
   a store now stops every read made through it (`close-stops-reads-contract`).
+- **A test whose assertions follow from a plan holds this machine's speed.**
+  An opening's plan weighs the speed of the machine besides the link: how
+  fast chunks decode (`progressive-open.js` `decodingRate`, averaged over
+  everything the process decoded), how long making every cell's order takes
+  (`subsample-plan.js` `geneSampleOf`), how fast a kept gene index was read
+  and what a gene index pass's work cost. Measured, each follows how busy
+  the machine is, so a test asserting which opening a link plans passed alone
+  and failed beside pytest and R checks (`gene-sample-contract`,
+  2026-11-04: "a fast link: file order" opened every cell in a `blocks`
+  order). Every such rate is read through one module,
+  `assets/js/utils/machine.js` (`measureOf`), and held there by a test
+  (`holdMachine`). Such a test file imports
+  `tests/helpers/machine-at-rest.mjs` for its effect (`MACHINE_AT_REST`):
+  decoding held at `DECODE_BYTES_PER_MS_AT_REST` (1 GB/s, fast enough never
+  to bind these small stores' plans), the order made in no time worth
+  pricing, no kept read and no index pass measured yet. A test of a
+  measurement itself leaves it measured
+  (`holdMachineAtRest({decodeBytesPerMs: undefined})`) and puts the rest back
+  when it ends. The link is not held by that import: those files model
+  their links themselves (a clock of their own, a rate set on the meter,
+  answers delayed). A test whose host is a function in the test's own
+  process, with no time of its own, measures only how busy the machine is,
+  and holds the link too (`holdMachineAtRest({link: LINK_AT_REST})`):
+  `open-cells-folder-reuse` failed on a loaded Windows runner because its
+  900-cell opening took over no index of the 300 cells open before it
+  (run 42180511574), and does so on every run with every interval timed 40
+  times longer -- the first gene of the 900 cells is then priced at 14.7 s,
+  genes are read for 8 of them, and the share opens in the file's cell
+  order. A byte reader whose requests a test holds at a gate takes a clock
+  of its own (`createByteReader(source, {clock: virtualTime().now})`): timed,
+  a request held for as long as a busy machine takes to open the gate was a
+  slow link's, and the reader read further ahead than the test's reads
+  expected (`shared-reads-cancellation`, HDF5: 12 of 12 runs failed with
+  intervals timed 400 times longer, none with the clock).
+  **To find such a test**, run the suite with every measured interval made
+  longer: preload a module that replaces `performance.now` by
+  `base + (now - base) * N` (`node --import ./slow-clock.mjs --test …`, N =
+  40 and 400). A test that passes at 1 and fails at 40 asserts something the
+  machine's speed decides. (A deadline a test measures on the same clock
+  expires N times sooner: read the failure before believing it.)
 - **A test undoes what it set up in reverse order.** `node:test` runs a
   test's `after` hooks first registered first, so a test that fakes
   `fetch` (or `Worker`, `window`, `document`) and then makes a source with
@@ -133,6 +173,25 @@ What the contract suite once got wrong only on some CI cells (fixed
   with `node --import ./scripts/network-guard-preload.mjs --test
   tests/<file>.test.mjs`; with the slow-delivery preload, `NODE_OPTIONS`
   adds to it (`network-guard-contract` checks the guard itself).
+- **A contract about cost counts, it does not time.** A threshold on a clock
+  is flaky by construction on a shared runner: a 1 MB publish of the
+  community-annotation Worker measured 12.1 parses of CPU on one hosted job
+  and 5 on a Mac (Web contracts run 42129386525). `blocksRun`
+  (`tests/helpers/block-counts.mjs`) counts the blocks of JavaScript a piece of
+  work runs, with V8's precise coverage: the same on every machine and every
+  run, and a loop per item adds a count per item. A contract says how that
+  count grows with the input (a thousand times the bytes adds a few blocks per
+  chunk; four times the steps, about four times the blocks). A native pass runs
+  no block, so what matters of one is counted too: the input lengths native
+  functions were given (`community-annotation-worker-cpu-contract`), ranges
+  shifted (`kept-parts-contract`), questions asked and the length of the timer
+  each set (`formats-io-contract`). A test's own `timeout` is a fence for a hang,
+  never a budget.
+- **A test waits for the work, not for a number of turns of the event loop.**
+  Crypto, zlib and file work run on other threads, so no count of `setImmediate`
+  turns is enough for them. A fake schedule hands the write's own promise back
+  (`manualSchedule` in `tests/helpers/memory-history-database.mjs`); a test with
+  mocked timers ticks them once the code has set the timer it means to end.
 - **Virtual time counts zlib's thread-pool work**
   (`tests/helpers/virtual-time.mjs`). Node's `DecompressionStream` inflates
   off the event loop, where `process.getActiveResourcesInfo()` lists
@@ -158,6 +217,36 @@ and can be set separately. The servers and the specs resolve the address from
 the same module, so a moved run also fetches its fixtures from the port it was
 moved to, and failure artifacts land in `test-results/<port>/` where concurrent
 runs cannot overwrite each other's evidence.
+
+(sibling-repositories-and-environment-variables)=
+### Sibling repositories and environment variables
+
+Several contract tests and specs read the other repositories of the workspace:
+a shared fixture, a mirrored catalogue, the documentation tree, a starting
+view. Each finds its sibling beside this checkout
+(`../cellucid-python`, `../cellucid-r`, `../cellucid-datasets`) unless an
+environment variable names another place (a worktree, a CI checkout
+elsewhere):
+
+| Variable | Default | Read by | When the sibling is absent |
+|---|---|---|---|
+| `CELLUCID_PYTHON_ROOT` | `../cellucid-python` | `scripts/generate-history-golden.mjs` and `tests/history-golden-fixture.test.mjs` (the shared golden history, `tests/fixtures/history_golden/`), `tests/notebook-widget-requests-contract.test.mjs` (the Python widget copy), `scripts/generate-action-catalog.mjs` and `tests/action-catalog-document-contract.test.mjs` (`src/cellucid/action_catalog.json`), the Python viewer specs (`viewer-channel`, `viewer-round-trip`, `viewer-host-selection-delivery`, `notebook-widget-jupyterlab`: the source they run) | the fixture tests skip; the catalogue copy is named and skipped (`t.diagnostic`) |
+| `CELLUCID_R_ROOT` | `../cellucid-r` | `scripts/generate-history-golden.mjs` and `tests/history-golden-fixture.test.mjs` (the shared golden history, `tests/testthat/fixtures/history_golden/`), `tests/notebook-widget-requests-contract.test.mjs` (the R widget copy), `scripts/generate-action-catalog.mjs` and `tests/action-catalog-document-contract.test.mjs` (`inst/action_catalog.json`), `tests/browser/notebook-widget-jupyterlab.spec.mjs` (the R package source), `scripts/efficiency-floor/served.R` | the golden-history copy test skips; the catalogue copy is named and skipped |
+| `CELLUCID_DATASETS_ROOT` | `../cellucid-datasets` | `tests/session-preset-control-inventory-contract.test.mjs`: the starting views the sample catalog advertises (`anndata/datasets.json`), read the way the viewer reads them, held to the control inventory | skipped when the sibling is not checked out; a directory named by the variable that is not a `cellucid-datasets` checkout fails |
+| `CELLUCID_PYTHON_DOCS` | `../cellucid-python/docs` | `tests/info-tips-contract.test.mjs` (every info tip's link resolves to a heading of these docs), `tests/citation-contract.test.mjs`, `tests/analysis-options-schema-contract.test.mjs`, `tests/action-reference-contract.test.mjs` and `scripts/generate-action-reference.mjs` (the action reference page) | the documentation checks skip |
+| `CELLUCID_PYTHON` | none | the Python viewer specs: an interpreter with cellucid's dependencies (JupyterLab and anywidget too for `notebook-widget-jupyterlab`); the package itself comes from `CELLUCID_PYTHON_ROOT`, never an installed copy | the spec skips |
+| `CELLUCID_RSCRIPT` | none | `tests/browser/r-viewer-channel.spec.mjs`: an `Rscript` whose library has the package's dependencies | the spec skips |
+| `CELLUCID_R` | none | `tests/browser/notebook-widget-jupyterlab.spec.mjs`, R part: an R with IRkernel, cellucid-r's dependencies and pkgload | that test skips |
+
+In CI the Node job sets none of these: it checks out, beside this one, only the
+files of each sibling its contracts read (`.github/workflows/test.yml`, sparse:
+the two widget copies; both packages' copies of the action catalogue, the MCP
+tools and the history model; both golden history folders; this site's Markdown
+pages; and the sample catalog `anndata/datasets.json` with its starting views).
+`tests/ci-sibling-checkouts-contract.test.mjs` holds those lists to what the
+generators write, so a new shared file cannot pass on a whole checkout and fail
+on every CI job. Only `tests/anndata-copy-cross-language.test.mjs` reads more
+(a whole package and a Python with its dependencies); it runs where those are.
 
 (browser-spec-stability)=
 ### Browser specs that wait for state, not time
@@ -196,6 +285,170 @@ retry would hide exactly these failures.
   wait on the product's state, a sleep is never added to it, and its `todo`
   test reports it whenever it is not empty. A timer of no delay (a turn of
   the event loop) and a timer that rejects are not fixed waits.
+- **No spec reaches the network.** `tests/browser/helpers/outside-requests.mjs`
+  watches every context of every spec: a response that names a server address
+  outside this machine fails the test, naming it (a route's answer names none).
+  It only watches, because a catch-all route would turn off the HTTP cache for
+  every spec. The test server serves `index.html` with the suite's own sample
+  catalog in place of the published one (`scripts/serve-browser-tests.mjs`), so
+  opening the app never depends on the published site, whatever the spec's
+  address. A spec plays the hosts it reads from with `page.route`
+  (`playAnthropic` for the AI provider); a made-up API key typed in a spec really
+  went to api.anthropic.com, and its 401 reached WebKit's console only when the
+  answer beat the end of the test (run 42129386525).
+- **One cell of the matrix is not a fair test of pixels or GPU-heavy work.**
+  Firefox on GitHub's macOS runner takes about a minute for a 1024² fragment
+  pass, and has drawn the same bytes held in two GPU objects a few pixels
+  apart with the cameras asserted equal (3 of 1.4 million off by 1, 13 of
+  921,600 off by at most 2; the same objects drawn twice were identical:
+  `tests/browser/helpers/hosted-gl.mjs`). There a spec still holds, exactly,
+  every input to a draw (cameras, order, the bytes of the stores, cells drawn)
+  and, where it records them, what the compared frames submitted to the GPU
+  (below). Its pixel comparison of two such objects is bounded, not skipped: no
+  more than one lit pixel in a thousand may differ (`pixelParityVerdict`,
+  `lod-rank-order-resize`, `segmented-point-stores`), which still fails on what
+  moves whole points (a wrong order, colour or camera, cells missing) and
+  cannot show a difference of fewer pixels that only that renderer would
+  draw. The figure export's point pass drawn in a worker and on the page is
+  compared by its two GL contexts only, and `segmented-point-stores` draws
+  12,000 points there, still three segments. A test whose budget follows the
+  GPU measures it (`smoke-dataset-switch`, `renderer-smoke`,
+  `segmented-point-stores`). That those few pixels are that renderer's
+  rounding and nothing else has not been established: they were measured on
+  the hosted cell only. No other cell has such a treatment.
+- **What two frames submitted is asserted before their pixels.**
+  `tests/browser/helpers/gl-submissions.mjs` records every draw call of a
+  frame: program, mode, vertex count, viewport, whether it rasterizes, and
+  every uniform of its program at the call; calls that follow one another
+  under the same state count as one, so a store drawn one call a segment
+  submits what a store drawn in one call does. `segmented-point-stores` and
+  `lod-rank-order-resize` assert the two sides equal on every cell. Two pixels
+  that differed on hosted Windows Firefox (`segmented-point-stores`, nightly
+  runs 41269083996 and 42180511574) had been read from two kinds of frame: the
+  first frame after a level change on one side (it also ran the
+  transform-feedback pass that writes the new level's highlight words) and a
+  later pulse frame on the other. Four animation frames after a change had
+  stood for "a pulse frame has been drawn", which holds where frames are
+  fast; the pulse is paced by the measured frame cost, so on a slow renderer
+  the first frame was still the last one drawn. Whether that frame's two
+  pixels are a defect of that renderer is not known; the spec now reads
+  steady frames (below) and compares them for equality there as everywhere.
+- **Under a highlight a scene never settles; its frames repeat.** A
+  highlight's pulse draws a frame whenever one is due, so `settled` never
+  holds. A spec that only acts next waits with `waitForPageAtRest`, for which
+  a scene drawn for the pulse alone is at rest. A spec that reads pixels
+  waits for a steady pulse frame (`steadyPulseFrame` in `gl-submissions.mjs`):
+  nothing invalidated, and the last two frames drawn since the change
+  submitted the same, with the pulse's phase pinned
+  (`setHighlightAnimationTime`).
+- **A wait is as long as the machine, and the test's timeout is its fence.**
+  A loop that asks the product's state once an animation frame does not count
+  its frames, and sets itself no clock. `segmented-point-stores` waited up to
+  900 frames a scene for a condition that could not hold (it compared a
+  `drawOrder` the store order does not have) and went on whatever they
+  showed: a quarter of a minute on a developer machine, and the whole
+  ten-minute budget where a frame takes seconds (hosted macOS and Windows
+  Firefox, "Test timeout of 600000ms"). Counts that ran out are in the
+  history of this workflow: "The live store never adopted its tree order"
+  (`frustum-culling-parity`, Linux Firefox), a frame read before any had been
+  drawn under its rings and 126,568 pixels off (`highlight-pulse-layer-parity`,
+  Linux Firefox, a loop that went on in silence after 600 frames), "the
+  sidebar toggle started no slide" (`presented-layout`, Linux WebKit: a 300 ms
+  slide that had started and ended between two looks; the slide sampled now
+  does not end by itself). `tests/browser-spec-counted-waits-contract.test.mjs`
+  (`npm test`) finds every `for` loop that counts to a number, awaits a frame
+  or a timer and leaves early, and every loop bounded by a deadline of its
+  own; each must be listed with why its count is the subject. The same test
+  holds the time a spec gives an assertion or a wait: the suite's own is a
+  minute for an assertion and the test's timeout for everything else, and a
+  spec that gave one less (`{ timeout: 10_000 }`, 110 of them) said how fast
+  the machine must be.
+- **A selection gesture is made once, when the page can take it.** A press on
+  the plot is read by the tool in use against the frame on screen; the tool's
+  mode is switched by an action, and a pick is of the frame that was drawn.
+  Specs repeated a gesture until its tool armed and called it dropped after
+  three seconds: on a runner that armed later a second gesture landed on top
+  of the first (`select-bar`, macOS Chromium; `uint32-categories-end-to-end`,
+  Linux WebKit and Firefox). `tests/browser/helpers/selection-gesture.mjs`
+  waits for every action asked so far (`getActions().idle()`) and for the
+  page to be at rest, makes the gesture once, and waits for the tool's step
+  controls.
+- **A slow machine on a developer machine.**
+  `CELLUCID_BROWSER_TEST_CPU_THROTTLE=6` slows the main thread of every page
+  six times (Chromium only, the DevTools protocol's CPU throttling;
+  `tests/browser/helpers/test.mjs`), so work is ordered as on a hosted
+  runner: what a spec read right after an action is then not there yet. It
+  slows a page's own thread, not its workers or the GPU.
+- **A page is closed at a defined point.** A change of the history is handed
+  to the browser's storage some tens of milliseconds after it is made, and is
+  then kept whole whatever becomes of the page
+  ({doc}`29_action_layer_domains_and_history`, "All of a write or none"). A
+  spec about what a closed or reloaded page kept waits for that first
+  (`window._cellucidHistories.flush()`, or the saved state listed with what
+  it holds); a spec about a page that goes at once asserts what the product
+  promises then: all of the last write or none of it, never a part
+  (`saved-state-close.spec.mjs`, which closes a tab at several moments of one
+  write in every engine).
+- **A page is parsed only once it is styled.** WebKit does not hold
+  DOMContentLoaded for a stylesheet; Chromium and Firefox do. The page boot
+  starts the code at DOMContentLoaded, so with the stylesheet late (held 4 s:
+  the code started 0.3 s in) WebKit ran the bootstrap in a page with no
+  styles: design tokens had no value (the analysis tools failed to load on
+  one) and markup hidden by a class was displayed. A spec that navigated and
+  waited for the welcome dialog to be visible saw the markup, pressed Escape
+  before any listener existed, and the page showed the dialog later over a
+  page the spec believed free of it (Linux WebKit, run 42180485733 and
+  earlier: `history-graph`, `highlight-pulse-layer-parity`,
+  `knn-missing-connectivity-warning`, `my-datasets`). `index.html` now carries
+  a style gate (`CELLUCID_STYLE_GATE`): a script straight after the stylesheet
+  link, which every engine runs only once the stylesheets before it are in,
+  so nothing of `<body>` is parsed and DOMContentLoaded does not come before
+  them; a stylesheet that did not load is reported on the code-load failure
+  screen instead of starting the code without it. `style-gate.spec.mjs` holds
+  the stylesheet, and one it imports, for 2.5 s in every engine;
+  `tests/startup-code-graph-contract.test.mjs` holds the gate's place in the
+  page. `dismissWelcome` waits for the state the product keeps
+  (`#welcome-modal:not(.hidden)`).
+- **Offline only through `goOffline`.** A page still loading something of its
+  own when the connection goes reports that failure too: the analysis tools it
+  imports as it starts (hundreds of files, still arriving on a hosted runner:
+  `community-annotation-startup-lifecycle`, Linux WebKit, run 42180485733), a
+  read of the opening still under way. `tests/browser/helpers/offline.mjs`
+  waits on every page of the context for the page to be at rest and for
+  `window._comparisonModule`, which the page sets in the continuation of that
+  import, then takes the context offline;
+  `tests/browser-spec-offline-contract.test.mjs` allows `setOffline(true)`
+  nowhere else.
+- **A click whose press and release a layout change split is reported.**
+  Playwright checks what a press lands on and releases a moment later at the
+  same point. The Session panel's Dataset box fills in while the start
+  dataset opens and moves everything under it (the foot of the panel by 718 px
+  in six steps): a release then lands on something else, the browser sends
+  the `click` to their common ancestor, and the control pressed hears
+  nothing, with no error (`ui-visual-consistency.spec.mjs`, the licence link,
+  Linux WebKit, run 42180485733). `tests/browser/helpers/split-clicks.mjs`
+  watches every context of every test for a trusted mouse press and release
+  at one point whose pressed element is no longer under it, and fails the
+  test naming both elements (`split-clicks.spec.mjs`). The cure is the
+  spec's: click once the page has stopped moving (`waitForPageAtRest`).
+  `openSessionSection` (`panels.mjs`), which opens a header under that box
+  whatever a spec is about, waits for the interface to be built
+  (`window._cellucidUi`), clicks, and clicks again only for a split click
+  reported on its own header.
+  A drag has the same hazard one step earlier: `keyboard-move-lifecycle` read
+  a panel summary's box and pressed two seconds later, on the Agents panel,
+  which the history rows of the test's own steps had moved there, and tore
+  that panel off (hosted macOS Firefox, run 42202865024). It now waits for
+  the steps to be recorded, moves the pointer onto the summary itself and
+  checks what the press landed on before it drags.
+- **A change made through the interface is done when the dispatcher says
+  so.** A control's change is an action, applied when those before it have
+  finished and with what it reads on the way. A spec that goes on through
+  the page's internals (a domain restored directly, a pick) waits for
+  `getActions().idle()` first (`whenActionsDone`, `dataset-ready.mjs`):
+  `state-domains-roundtrip` restored a domain while the field chosen just
+  before was still being applied, and was overtaken by it (WebKit, 1 run in
+  14).
 - **Repeat before pushing.** `npm run test:browser:repeat` runs specs many
   times in each engine, Chromium, Firefox and WebKit one after another, with
   one worker and no retries as CI runs them, in browser processes no
@@ -219,6 +472,41 @@ retry would hide exactly these failures.
   beside another browser-test run. A machine that is not a hosted runner does
   not show every runner's race, so a green repeat is evidence, not proof: a
   spec that failed in CI is fixed by finding what it raced, then repeated.
+
+### Long, sharded and opt-in suites
+
+- **Every browser spec file declares tests.** Playwright says nothing about a
+  spec file that holds none, and a spec cut to its imports once lost thirteen
+  tests while the run stayed green; `tests/browser-specs-hold-tests-contract.test.mjs`
+  (`npm test`) fails on a spec file under `tests/browser/` that calls no
+  `test(…)` / `test.describe(…)` (or hands `test` to a helper that declares
+  them, `declareWalkTests`) or does not end with a newline.
+- **The control walk** (`tests/browser/helpers/control-walk.mjs`) walks every
+  control the page shows and fails on a control that changes state with no
+  step, an outside change, more than one step, or an undo that does not put
+  back exactly ({doc}`29_action_layer_domains_and_history`, "Drift guards").
+  It is one test per sidebar section, one for everything outside them and the
+  graph-and-vectors test, spread over `control-walk-1-of-4.spec.mjs` …
+  `4-of-4`, and runs on Chromium only. Run one part with
+  `npx playwright test tests/browser/control-walk- --project=chromium --grep "<section id>"`,
+  or the four files side by side with `--shard=<i>/4`; each part prints
+  where its time went, by section and phase (about 15 minutes for the whole
+  walk). After Escape it waits until the page is still, never a fixed time.
+- **History stress** (`tests/stress/`, `npm run stress:history`, which runs
+  `scripts/history-stress.mjs`: `--steps 1000,10000,50000,100000`,
+  `--cells`, `--quick`, `--readers` for the Python and R session readers):
+  `tests/history-stress-harness.test.mjs` is the short check in `npm test`;
+  the long runs and the opt-in browser spec
+  (`CELLUCID_HISTORY_STRESS=1 npx playwright test tests/browser/history-stress.spec.mjs --project=chromium`,
+  a 1M-cell page, run alone) measure against the budgets and results in
+  `tests/stress/RESULTS.md`.
+- **Live agents** (`npm run test:live-agents`): the specs in
+  `tests/browser/live-agents/` against the real Anthropic and OpenAI APIs,
+  Chromium, one worker. They need the developer's keys (the environment's
+  `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`, else the file `CELLUCID_AGENT_ENV`
+  names, else the checkout's `.env`, which is git-ignored and never printed)
+  and skip with the reason when a key is missing; they never run in CI, since
+  they spend real credit ({doc}`32_agents_in_the_tab`).
 
 ### What the hosted CI runners differ in
 
@@ -268,19 +556,100 @@ contracts workflow (`cellucid/.github/workflows/test.yml`), run 41213981681
     page's share; the timer's answers are ready at the first read, so a slow
     simulated GPU costs a spec nothing. A spec whose subject is the real
     GPU's time says `gpu: 'real'` (`snapshot-split-vbo-rendering`).
-  - `openingMsPerCell`: what showing a cell costs, held in the page's module
-    (`holdShownCells`): nothing measured by default, so every opening is
-    priced by its reads alone; the page's own records leave it as it is.
-    `browser.newContext({ device: { openingMsPerCell: 2 } })` makes an
-    opening progressive; `'measured'` lets the page record (the record's own
-    spec in `open-cells-in-place`).
   - `hardwareConcurrency` (4) and, where an engine reports it (Chromium),
-    `deviceMemory` (8), so the page's pools and budgets are sized alike
-    everywhere. Workers read their own `navigator`, which an init script
-    cannot reach: a pool a worker sizes still follows the machine, and its
-    results do not depend on its size. The link's speed and the decoding
-    rate are measured too and left so: every fixture is served from the
-    machine running the spec, far inside the opening target.
+    `deviceMemory` (8), so the pools and budgets are sized alike everywhere:
+    the page's `navigator` reports them, and the workers, whose own
+    `navigator` an init script cannot reach, are handed the cores (the
+    machine's `cores`, next) and take the page's memory budgets
+    (`data/memory-budget.js` `connectMemoryWorker`).
+  - The machine's measures (`assets/js/utils/machine.js`): **the one place
+    a rate measured of the machine or the link enters a plan**. The fixture
+    holds them in the page's module (`holdMachine`), and the page hands what
+    it holds to every worker it starts, in the fragment of the worker's
+    address (`workers/worker-script.js` `handToWorkers`: the same script is
+    asked for, a fragment being no part of a request, and the worker keeps
+    its name); the reader worker hands them on to its decode workers. A worker's module begins with them,
+    before any of its code plans. Each is a value, or `'measured'` in a spec
+    whose subject is that measurement:
+    - `link`: the link the reader plans on, `{latencyMs, bytesPerMs}`: 2 ms
+      and 32 MB/s by default (a host on a fast local network; below the rate
+      a web host is read ahead at, so fixtures are read on demand, as a link
+      opens). A host on this machine is priced as this machine at rest on
+      top of it, as in the app. The requests themselves are still timed and
+      shaped by the source's own meter: how long a stalled request is waited
+      for must follow the real link, on a slow runner above all. A spec
+      about a slow link gives its link here (`{latencyMs: 400, bytesPerMs:
+      32000}`) instead of delaying answers.
+    - `decodeBytesPerMs` (1 GB/s), `orderMadeMs` (0),
+      `keptReadBytesPerMs` and `indexPassMs` (null: none measured).
+    - `openingMsPerCell`: what showing a cell costs (the machine's
+      `shownCellMs`): nothing measured by default, so every opening is
+      priced by its reads alone, and the page's own records are not made.
+      `browser.newContext({ device: { openingMsPerCell: 2 } })` makes an
+      opening progressive; `'measured'` lets the page record (the record's
+      own spec in `open-cells-in-place`).
+
+    Why the link and the decoding rate are held too (they were left
+    measured until 2026-11-06, "every fixture is served from the machine
+    running the spec, far inside the opening target"): a request a loaded
+    machine answers itself late is a slow link to the reader. In
+    `open-cells-in-place`, beside five other runs, the 1,500-cell opening
+    read genes for 864 of its cells, which opens the share in the file's
+    cell order, so Apply showed it as a new reading instead of in place.
+    `held-machine.spec.mjs` holds the file's answers back 370 ms: measured,
+    the raised share's genes are read for a sample and it is read anew, in
+    every engine; on the fixture's device it opens in place with genes for
+    every cell. In `kept-gene-index` a hosted macOS WebKit runner read
+    genes for a sample on one of the two visits, twice: the first visit's
+    gene on 606 of its 1,000 cells (run 42180511574), and the later visit's
+    on 811 of them in the file's cell order, where the first had read every
+    cell in the share's own order (run 42202865024). Every value of both
+    visits was its cell's (checked against the fixture's formula, 1,000 of
+    1,000 and 811 of 811); the spec compares the visits position by
+    position.
+
+    WebKit only: a spec of `persistentStorage` runs with one worker. WebKit
+    keeps a persistent context's origin storage outside its profile folder
+    (`helpers/test.mjs` `clearOriginStorage`), and two workers running such
+    specs at once lost what they kept (`kept-gene-index` and `kept-parts`:
+    6 of 12 runs; CI runs one worker).
+
+    The holds reach a page that runs its sources (this machine). A page
+    opened as a deployed site runs its bundle, whose module instances an
+    init script cannot name, and measures everything: a spec opened there
+    asserts nothing that follows from a plan.
+
+  **Every rate the app measures, and what a test does with it.** A new
+  measured rate that feeds a plan gets a name in `utils/machine.js`
+  (`tests/machine-seam-contract.test.mjs` holds the list to the sources);
+  one that only paces work is added to this table with why a slow runner is
+  safe with it.
+
+  | Measured | Decides | In a test | Safe on a slow runner because |
+  | --- | --- | --- | --- |
+  | The link's round trip, rate, round trip under load, cost of a request (`formats/io/link.js`), as the reader plans on it | The gene sample, the block rung of the cell order, a progressive opening, values read on demand or ahead, a kept index against building it again | Held: `link` (browser: the device; Node: `LINK_AT_REST` where the host has no time of its own, else the file's own clock) | held |
+  | What earlier visits and the page's own downloads measured of the host (`data/host-link-memory.js`) | The prices above until the opening measures more | Not weighed while `link` is held (`plannedHostLink`) | held |
+  | The same link as requests are shaped by it (merge gaps, request size, the concurrency search, the protocol guess) | How many requests carry a read, and how long each is | Measured | the bytes read are the same: no spec asserts a count of requests, and a Node test of requests gives its byte reader a clock |
+  | Response times (`ResponseClock`) | When a stalled request is given up and asked again | Measured | it must follow the real link: its patience grows with what the runner measures |
+  | A host's pace (`formats/io/hosts.js`) | The spacing of requests to a host that refused some | Measured | learnt only from refusals (429, 403), which a fixture gives only where that is its subject |
+  | How fast chunks decode (`formats/io/decode-pool.js`) | The gene sample, a progressive first view | Held: `decodeBytesPerMs` | held |
+  | Which decoder is fastest (`formats/io/decoder-choice.js`) | The decoder of a codec family | Measured | every decoder gives the same bytes |
+  | How long making every cell's order took | File order or a `blocks` order for every cell | Held: `orderMadeMs` | held |
+  | How fast kept gene indexes were read | A kept index read, or built again | Held: `keptReadBytesPerMs` | held |
+  | What a gene index pass's work cost an entry (`PassRates`) | Which pass indexes a share spread through the store | Held: `indexPassMs` | held |
+  | What showing a cell cost (`data/opening-cost.js`) | A progressive opening | Held: `openingMsPerCell` | held |
+  | How long the first gene and each top-up read took (`field/gene-sample.js`) | How many more cells genes are read for after the first gene | Measured | it runs only on a gene sample fitted to the gene time, which the held link and decoding never make; a spec that gives a slow link asserts what holds for any top-up |
+  | What an analysis kind cost (`analysis/shared/progressive-cells.js`) | Whether a later run of it shows a sample pass first | Measured | the final result is the same cells' and is what specs wait for |
+  | Analysis read and task times (`run-tuner.js`) | How far ahead genes are read, how many tasks are in flight | Measured | scheduling only |
+  | The GPU's time for a frame (`rendering/full-detail-frame-cost.js`) | Level of detail and culling by itself | Held: `gpu` (a simulated timer) | held |
+  | A frame's cost (`rendering/ambient-frame-pacing.js`) | Which highlight-pulse frames are skipped | Measured | pacing of an animation: specs wait for the page at rest, never for a frame count |
+  | The GPU's time for a level of a backdrop's sky (`rendering/backdrops/backdrop-look-renderer.js`) | How far the sky is refined (its faces' resolution) | Measured | not verified for every spec: the look shows from its first level on any GPU, and a slow one stops refining sooner (a coarser sky), so a spec may assert a look only against the same page |
+  | What a neighbour row cost from the file, and a pass over the held edges (`app/main.js` `knnRowReader`) | Which of the two gives a cell's neighbours | Measured | both give the same rows |
+  | The cores | Pool sizes | Held: `hardwareConcurrency` (page `navigator`, the machine's `cores` in workers) | held |
+  | The memory the browser reports | Budgets, the cells an auto-fit opens | Held where reported (`deviceMemory`, Chromium); Firefox and WebKit report none and take 8 GiB | determined |
+  | An allocation the engine refused; a tab that crashed while opening | The memory allowance halved | Measured | only where the runner really cannot allocate, which the page must then follow |
+  | Free storage (`storage.estimate()`) | A gene index on disk, a copy kept or refused | Measured | the fixtures are megabytes; a runner without room fails by a named storage error |
+  | Elapsed time in loops that yield (index passes, selection queries, noise generation, inflate) | When a loop gives the thread back | Measured | scheduling only: the slices are bounded by time, so a slow runner does less a slice, not longer slices |
 
   The per-spec holds this replaced (`drawEveryCellByHand`,
   `drawEveryCellFromTheStart`, a camera zoomed in before a simulated slow
@@ -429,7 +798,10 @@ contracts workflow (`cellucid/.github/workflows/test.yml`), run 41213981681
   asks `animationCause === 'highlight'` with nothing invalidated, never the
   cause of the last frame drawn: right after a restore that was still the
   pulse from before the loss, the restored context had drawn nothing, and
-  Linux WebKit read every pixel back as 0 (push run 41292953076).
+  Linux WebKit read every pixel back as 0 (push run 41292953076). That says
+  the frame of the change has been drawn, not that a later one has: a spec
+  that compares the pixels of two such scenes reads steady pulse frames
+  (`gl-submissions.mjs`, above).
 - **A one-shot GL failure** injected into an allocation (`createFramebuffer`,
   `createTransformFeedback`) is aimed at the caller under test by its stack
   (`velocity-multiview-lifecycle.spec.mjs`): the spatial tree's GPU gather
@@ -447,7 +819,35 @@ contracts workflow (`cellucid/.github/workflows/test.yml`), run 41213981681
   `tests/browser/helpers/leaving-document.mjs`): while its `goto`, `reload`,
   `goBack` or `goForward` from a document runs, those wordings, and only
   those, reach none of its listeners; no spec handles them itself
-  (`tests/browser-leaving-document-contract.test.mjs`).
+  (`tests/browser-leaving-document-contract.test.mjs`). A read of a kept
+  file through a blob is stopped and reported the same way ("Cannot load
+  blob:http://… due to access control checks.", a page error): a page left
+  while its Stored listing read a kept dataset's last-used time failed
+  `kept-gene-index` in WebKit (3 of 120 runs with one worker, on main as
+  well; a page that reads such files and is left made 1,169 reports in 40
+  navigations). Playwright's WebKit cuts that sentence at the colon of
+  `blob:` (the error's name "Cannot load blob", its message "ttp://…"), so
+  the helper matches a page error by the first line of its stack, the
+  sentence as WebKit said it.
+- **Open: a Chromium page that stops answering for about a minute on a
+  loaded machine.** With the machine's load average between 85 and 316 (ten
+  cores, other work beside three Playwright workers), a Chromium page now
+  and then answered no `page.evaluate` for about 60 s (the spec's 60 s poll
+  for its open cells then ended at 0) and went on afterwards: 2 of 198 runs
+  of `open-cells-in-place`, `kept-gene-index` and `kept-parts` on main
+  (e0aaaebc5), 13 of 426 on the branch that holds the machine, none of 140
+  in Firefox or 176 in WebKit. The page had started (its viewer made, in
+  one trace its first frame drawn) and the reads resumed by themselves.
+  Not traced; a hosted runner runs one worker, and no CI run of these specs
+  on Chromium failed so in the forty runs looked at.
+- **WebKit refuses a read of a file being rewritten.** A page's read of a
+  kept file through a blob, while a worker rewrites the file through a
+  synchronous access handle, is refused now and then and logged ("Failed to
+  load resource: … (WebKitBlobResource error 1.)", 5 of 2,645 reads;
+  Chromium and Firefox refuse none): the Stored listing read a kept
+  dataset's last-used time while a later visit's reader wrote it
+  (`kept-parts`, one run of 120). The write now takes the lock the listing
+  reads under (`transcode/space.js` `filesOf`): none of 3,001 reads refused.
 - **Shared network addresses.** GitHub's API answers 60 unauthenticated
   requests an hour per address, and a runner's address is shared: its
   refusal (403 with `x-ratelimit-remaining: 0`), which the GitHub provider
@@ -526,14 +926,23 @@ Run these steps on at least one small dataset (fast) and optionally one larger d
    (the default, then the next embedding of that dimension).
 4) Confirm **Link cameras** links only views that show the same embedding.
 
-### F) Sessions
+### F) History and sessions
 
-1) Save a session (`.cellucid-session`).
-2) Reload the page and load the session.
-3) Confirm:
-   - camera/layout restored
-   - active fields and filters restored
-   - highlight pages/groups restored (or lazy-restored shortly after)
+1) Make a few changes through the controls (a field, a filter, a highlight,
+   the camera); confirm each is one step in the State panel's branch graph,
+   and that undo (Ctrl/⌘+Z) and redo put each back.
+2) Undo two steps and make another change; confirm a branch is started and
+   both branches can be shown (double-click a row; a single click only
+   selects it).
+3) Write a session file (State › Session › **Share…**), reload the page and
+   load it (**Load…** › **Open a session file…**); confirm its tracker is
+   added beside the one there was.
+4) Confirm:
+   - the step shown is the one saved, and every step and tracker is back
+   - camera/layout, active fields, filters and highlight pages/groups are back
+   - a jump to an earlier step works right after the load
+5) Close and reopen the tab on the same dataset; confirm the Continue offer
+   puts the history back.
 
 ### G) Analysis
 
@@ -619,6 +1028,11 @@ This ensures MyST links/toctrees are valid.
 ---
 
 ## Release checklist (web app)
+
+`www.cellucid.com` serves `main`; a deployment is a merge to `main`. A GitHub
+Release `vX.Y.Z` in `theislab/cellucid` marks the version and publishes the
+npm name-reservation package (`npm-publish.yml`); the order with the Python
+and R packages is in {doc}`/contributing/releasing`.
 
 Because Cellucid is a static web app, releases often fail due to “small” deployment details.
 Before deploying:

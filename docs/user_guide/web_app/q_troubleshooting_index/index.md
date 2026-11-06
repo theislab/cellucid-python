@@ -272,7 +272,7 @@ So:
 - **A notification “Cellucid has been updated”** while you work — the page was
   opened before a new version was published, and a part it loads on demand
   (the benchmark panel, figure export, analysis plots) is not of its version.
-  Save a session file (Session file › Save) if you want to keep what is open,
+  Share a session file (State › Session › Share…) if you want to keep what is open,
   then choose **Reload**.
 
 ---

@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 
 from cellucid.jupyter._wire import _require_inbound_jupyter_event
-from cellucid.session_bundle import _decode_genes, _validate_manifest
+from cellucid.session import _check_manifest, _decode_genes
 
 GENES = {"cells": 40, "order": {"method": "blocks", "seed": 0, "blockSize": 19}, "digest": "0123456789abcdef"}
 
@@ -28,14 +28,14 @@ def test_a_session_gene_sample_is_read_as_recorded() -> None:
 @pytest.mark.parametrize(
     ("genes", "message"),
     [
-        ({**GENES, "cells": 100}, "genes.cells must be a count of open cells below"),
-        ({**GENES, "cells": 0}, "genes.cells must be a count of open cells below"),
-        ({**GENES, "cells": True}, "genes.cells must be a count of open cells below"),
-        ({**GENES, "extra": 1}, "genes must have exactly cells, order and digest"),
-        ({**GENES, "order": {"method": "uniform", "seed": 0, "blockSize": 19}}, "genes.order must be"),
-        ({**GENES, "order": {"method": "blocks", "seed": -1, "blockSize": 19}}, "genes.order.seed must be a uint32"),
-        ({**GENES, "order": {"method": "blocks", "seed": 0, "blockSize": 0}}, "genes.order.blockSize must be a positive count"),
-        ({**GENES, "digest": "ABC"}, "genes.digest must be 16 lowercase hex digits"),
+        ({**GENES, "cells": 100}, "genes cells must be a count of open cells from 1 to 99"),
+        ({**GENES, "cells": 0}, "genes cells must be a count of open cells from 1 to 99"),
+        ({**GENES, "cells": True}, "genes cells must be a count of open cells from 1 to 99"),
+        ({**GENES, "extra": 1}, "genes must contain exactly: cells, digest, order"),
+        ({**GENES, "order": {"method": "uniform", "seed": 0, "blockSize": 19}}, "genes order must be the priority order of a blocks subsample"),
+        ({**GENES, "order": {"method": "blocks", "seed": -1, "blockSize": 19}}, "genes order seed must be a uint32"),
+        ({**GENES, "order": {"method": "blocks", "seed": 0, "blockSize": 0}}, "genes order blockSize must be a positive count"),
+        ({**GENES, "digest": "ABC"}, "genes digest must be 16 lowercase hex digits"),
     ],
 )
 def test_a_session_gene_sample_out_of_its_contract_is_refused(genes, message) -> None:
@@ -44,18 +44,18 @@ def test_a_session_gene_sample_out_of_its_contract_is_refused(genes, message) ->
 
 
 def test_a_manifest_names_the_gene_sample_beside_its_other_keys() -> None:
-    manifest = {
-        "createdAt": "2026-10-28T12:00:00.000Z",
-        "datasetFingerprint": {"cellCount": 100},
-        "source": None,
-        "requires": {"obs": [], "var": []},
-        "chunks": [],
-        "genes": GENES,
-        "unexpected": 1,
-    }
+    import json
+    from pathlib import Path
+
+    from _session_files import unframe
+
+    fixture = Path(__file__).parent / "fixtures" / "history_golden" / "history_golden.cellucid-session"
+    manifest, _ = unframe(fixture.read_bytes())
+    genes = {**GENES, "cells": 500}
+    assert _check_manifest({**manifest, "genes": genes}).genes == genes
     # The gene sample is a known key; any other is still refused.
-    with pytest.raises(ValueError, match="unknown unexpected"):
-        _validate_manifest(manifest)
+    with pytest.raises(ValueError, match="unexpected: unexpected"):
+        _check_manifest(json.loads(json.dumps({**manifest, "genes": genes, "unexpected": 1})))
 
 
 def test_color_by_says_the_cells_a_gene_is_read_for() -> None:

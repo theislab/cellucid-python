@@ -303,36 +303,41 @@ If you zoom/pan and see “visible highlighted” change, you may be seeing LOD 
 
 ### Session storage (high level)
 For session bundles, each highlight group's membership is one dataset-dependent chunk, stored in whichever encoding is smallest for it (sorted gaps, a bitset over all cells, or runs of consecutive cells) and gzip-compressed.
-A group made from a whole category is stored relative to that category and costs a few bytes whatever its size; on restore the category's cells are recomputed and checked against the saved count and digest.
+A group made from a whole category is stored the same way, as its own cells (a category's cells usually form few runs, so it stays small); on restore every group's cells are checked against the saved digest.
 
 ### Python/Jupyter synchronization (implemented)
 
 Cellucid has a viewer channel to `cellucid-python` (over the notebook widget's
 connection, or one WebSocket, `/_cellucid/ws`, for a browser tab) that supports:
-- **Python → UI commands** (e.g. `viewer.highlight_cells(...)`, `viewer.set_color_by(...)`)
+- **Python → UI actions**: every action of the viewer is a Python method
+  (e.g. `viewer.highlight_cells(cells=...)`, `viewer.color_by(field=...)`),
+  applied as a step of the history labelled as the notebook's
 - **UI → Python hooks** (e.g. `@viewer.on_selection`, `@viewer.on_click`, `@viewer.on_hover`)
 - **Results back in one call**: `viewer.pull(adata)` writes every highlight
   group (a `cellucid_highlight__<id>` column), label field and score onto `adata.obs`
-- **No-download session capture**: pull the current `.cellucid-session` into Python as an object and apply it onto an `AnnData`
+- **No-download session capture**: pull the current `.cellucid-session` into Python as an object, read its history and apply one of its steps onto an `AnnData`
 
 Recommended patterns:
 - If you want to react immediately, use hooks.
 - If you want your highlight groups as columns, run `viewer.pull(adata)` in a later cell.
-- If you want a durable, reproducible artifact, use a session bundle (in a
-  notebook, ask in one cell and collect in the next):
+- If you want a durable, reproducible artifact, use a session -- the whole
+  history -- (in a notebook, ask in one cell and collect in the next):
 
   ```python
-  request = viewer.request_session_bundle()
+  request = viewer.request_session()
   ```
 
   ```python
-  bundle = request.result()
-  adata2 = bundle.apply_to_anndata(
-      adata,
-      expected_dataset_id="my-study-v1",
-      inplace=False,
-  )
+  session = request.result()
+  plan = session.apply(adata)          # dry run: what would change, one row each
+  plan.table
+  report = plan.apply()                # writes the rows into adata, records the apply
   ```
+
+  Each highlight group of the step becomes one `bool` column,
+  `cellucid_highlight__<page>__<group>` (from the page's name and the group's
+  label). Applying the same step again changes nothing, and a column you made
+  yourself is never replaced.
 
 Important constraint: selections/highlights in sessions name cells by **original position** (each cell's row in the order the dataset's cells were given, whatever order a file stores them in), so only apply sessions to the `AnnData` that produced them, in that original order (a Cellucid-ready file read with anndata: `cellucid.restore_original_order(adata)` first).
 

@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import zarr
+from _web_root import web_file
 from scipy import sparse
 
 from cellucid import prepare, restore_original_order, subsample_cells
@@ -35,7 +36,6 @@ from cellucid.prepare_data._priority import (
 from cellucid.subsample import _ranks
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-WEB_ROOT = REPOSITORY.parent / "cellucid"
 N_CELLS = 300
 N_GENES = 12
 
@@ -370,15 +370,16 @@ def test_the_web_app_opens_a_uniform_subsample_as_the_prefix_of_the_rows(
     tmp_path: Path, name: str, output_format: str, zarr_format: int | None
 ) -> None:
     node = shutil.which("node")
-    if node is None or not (WEB_ROOT / "assets/js/data/anndata/priority-layout.js").is_file():
-        pytest.skip("Node and the web app (with its priority reader) are needed")
+    if node is None:
+        pytest.skip("Node is not installed: the web reader cannot run")
+    web_root = web_file("assets/js/data/anndata/priority-layout.js").parents[4]
     arguments = {**_inputs(), "priority_seed": 0}
     if zarr_format is not None:
         arguments["zarr_format"] = zarr_format
     path = prepare(tmp_path / name, format=output_format, **arguments)
     k = 120
     completed = subprocess.run(
-        [node, "--input-type=module", "-e", _WEB_PREFIX, str(WEB_ROOT), str(path), str(k)],
+        [node, "--input-type=module", "-e", _WEB_PREFIX, str(web_root), str(path), str(k)],
         capture_output=True, text=True, check=False, timeout=300,
     )
     assert completed.returncode == 0, completed.stderr
@@ -402,15 +403,15 @@ def test_a_session_is_applied_in_original_order_and_refuses_a_stored_order(tmp_p
     from cellucid import apply_cellucid_session_to_anndata
 
     stored = _stored(prepare(tmp_path / "s.zarr", format="zarr", **_inputs()))
-    fixture = Path(__file__).parent / "fixtures" / "session_format3" / "session.cellucid-session"
+    fixture = Path(__file__).parent / "fixtures" / "history_golden" / "history_golden.cellucid-session"
     with pytest.raises(ValueError, match="restore_original_order"):
-        apply_cellucid_session_to_anndata(fixture, stored, expected_dataset_id="format3")
+        apply_cellucid_session_to_anndata(stored, fixture)
     # A record that no longer describes the object (rows reordered since):
     # each row is its own original position, as the web app read the file;
     # the warning says why, and the session's own checks apply.
     resorted = stored[np.argsort(stored.obs_names.to_numpy())[::-1]].copy()
     with pytest.warns(UserWarning, match="is not its seed's order"), pytest.raises(ValueError) as refused:
-        apply_cellucid_session_to_anndata(fixture, resorted, expected_dataset_id="format3")
+        apply_cellucid_session_to_anndata(resorted, fixture)
     assert "restore_original_order" not in str(refused.value)
 
 
@@ -436,8 +437,9 @@ _WEB_MUDATA_PREFIX = _WEB_PREFIX.replace(
 def test_the_web_app_opens_a_mudata_prefix_with_every_modalitys_first_rows(tmp_path: Path) -> None:
     md = pytest.importorskip("mudata")
     node = shutil.which("node")
-    if node is None or not (WEB_ROOT / "assets/js/data/anndata/priority-layout.js").is_file():
-        pytest.skip("Node and the web app (with its priority reader) are needed")
+    if node is None:
+        pytest.skip("Node is not installed: the web reader cannot run")
+    web_root = web_file("assets/js/data/anndata/priority-layout.js").parents[4]
     rng = np.random.default_rng(8)
     names = [f"c{i}" for i in range(500)]
     rna = ad.AnnData(
@@ -458,7 +460,7 @@ def test_the_web_app_opens_a_mudata_prefix_with_every_modalitys_first_rows(tmp_p
                        dataset_id="m", dataset_name="M")
     k = 90
     completed = subprocess.run(
-        [node, "--input-type=module", "-e", _WEB_MUDATA_PREFIX, str(WEB_ROOT), str(path), str(k)],
+        [node, "--input-type=module", "-e", _WEB_MUDATA_PREFIX, str(web_root), str(path), str(k)],
         capture_output=True, text=True, check=False, timeout=300,
     )
     assert completed.returncode == 0, completed.stderr

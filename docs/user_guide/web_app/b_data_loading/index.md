@@ -36,6 +36,7 @@ Use this as a decision tree. You can always switch later.
 
 | You have… | Best first choice | Why | Next page |
 |---|---|---|---|
+| A dataset you opened before in this browser | **My datasets** under **Open data** | One click opens it again, with the cells you chose for it | {doc}`01_loading_options_overview` |
 | A Zarr store folder (`.zarr`), for example from `prepare()` | **Open… › Folder…**, or drop the folder | Read key by key from disk, nothing zipped or uploaded | {doc}`03_browser_file_picker_tutorial` |
 | A `.loom`, a 10x Cell Ranger `outs/` folder, or a MuData `.h5mu` | **Open… › File…** (Loom, `.h5mu`) or **Folder…** (`outs/`) | Read in place as it is, no conversion | {doc}`18_open_loom_and_10x` or {doc}`19_multimodal_mudata` |
 | A Seurat or SingleCellExperiment object (`.rds`, `.rda`, `.RData`), or a MatrixMarket folder | **Open… › File…** (R objects) or **Folder…** (MatrixMarket) | Cannot be read in parts: read whole once into this browser's storage and kept for next time, no R needed | {doc}`17_open_r_objects` |
@@ -53,16 +54,20 @@ Use this as a decision tree. You can always switch later.
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Subsampling and Data mapping sections, each one line with its summary.
+:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, My datasets naming the open sample, the Open… button and the Link or server bar; the Stored line; and the collapsed Subsampling and Data mapping sections.
 :width: 532px
 
-Every loading path has its own label under **Open data** in the Session panel;
-**Stored** (once something is kept), then **Save** and **Load** under
-**Session file**, sit below it, and under them two sections collapsed to one
-line each: **Subsampling** (how much is read: Cells to open, Genes read for)
-and **Data mapping**. The **Dataset** box at the top always describes the
-dataset currently open, whichever path opened it ([The Dataset
-box](01_loading_options_overview.md#the-dataset-box)).
+Every loading path has its own label under **Open data** in the Session
+panel: **Sample dataset**, **My datasets** (once you have opened a dataset in
+this browser), **File or folder** and **Link or server**
+([Interface reference](01_loading_options_overview.md#interface-reference)).
+**Stored** (once something is kept) sits below it, and under it two sections
+collapsed to one line each: **Subsampling** (how much is read: Cells to open,
+Genes read for) and **Data mapping**. The **Dataset** box at the top always
+describes the dataset currently open, whichever path opened it ([The Dataset
+box](01_loading_options_overview.md#the-dataset-box)). Sharing and loading a
+session file is in the sidebar's **State** section, under **Session**
+(**Share…** and **Load…**; {doc}`../m_state_history/index`).
 ```
 
 :::{note}
@@ -83,17 +88,18 @@ elsewhere, or move focus outside to close it. See
 Every dataset control is live while a dataset loads, including the dataset
 Cellucid opens when it starts. Whatever you choose last is what you get:
 
-- Choosing another sample, **None**, a file or folder with **Open…**, an
-  address in the **Link or server** bar, or running the benchmark, stops the
+- Choosing another sample, **None**, a dataset under **My datasets**, a file
+  or folder with **Open…**, an address in the **Link or server** bar, or
+  running the benchmark, stops the
   load in progress at once (its downloads are cancelled) and loads your new
   choice instead. The **Dataset** box shows a spinner and what is opening, for
   example *Opening data.h5ad…*.
 - Connecting to a server or GitHub repository that holds exactly one dataset
   opens that dataset, unless you chose another dataset, or applied a session
-  with **Load** under **Session file**, after clicking **Open**. Then what you
+  with **Load…** under **State › Session**, after clicking **Open**. Then what you
   did later stays and the connection is kept: its line under the bar still
   names it, with **Disconnect**.
-- **Load** chosen while a dataset loads waits for it, says so in a
+- A session file opened (**Load… › Open a session file…**) while a dataset loads waits for it, says so in a
   notification, and then applies the session to the dataset that loaded. A
   session saved from a different dataset is refused with an explanation, as
   always.
@@ -121,9 +127,9 @@ browser answers faster with, and in Chrome and Edge through the folder's
 handle, which those browsers list faster than its entries: measured on a
 real drop in Chrome, a Zarr folder of 22,023 files is listed in 2.7 s
 rather than 4.4 s; in Safari's engine the listing takes about a quarter
-less time than one file after another. In Chrome and Edge a dropped file or
-folder is kept to reopen with one click, as a chosen one is
-({ref}`reopen-local-file`).
+less time than one file after another. A dropped file or folder is listed
+under **My datasets** as a chosen one is, and in Chrome and Edge it opens
+again from there with one click ({ref}`reopen-local-file`).
 
 Anything else is refused with a notification that says what can be dropped:
 several items at once (drop the `.zarr` folder itself, not the files inside

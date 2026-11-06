@@ -322,6 +322,35 @@ def test_prefetch_accepts_a_source_that_omits_the_charset_parameter(
     assert content_type == declared
 
 
+def test_prefetch_accepts_javascript_by_any_of_its_names(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """A host may name JavaScript ``text/javascript`` (RFC 9239) while the
+    inventory says ``application/javascript``, as Node's and Python's own
+    servers do; both are the same kind of file."""
+    from cellucid import web_cache
+
+    assets = _asset_payloads("build-1")
+    scripts = [path for path, (_payload, kind) in assets.items() if kind.startswith("application/javascript")]
+    assert scripts
+    _install_fetch_fixture(
+        monkeypatch,
+        build_id="build-1",
+        assets=assets,
+        served_content_types={path: "text/javascript; charset=utf-8" for path in scripts},
+    )
+
+    web_cache.ensure_web_ui_cached(
+        cache_dir=tmp_path / "cache",
+        source_url="https://viewer.example",
+        force=True,
+        show_progress=False,
+    )
+    for path in scripts:
+        assert (tmp_path / "cache" / path).read_bytes() == assets[path][0]
+
+
 def test_prefetch_still_rejects_a_genuinely_different_media_type(
     monkeypatch,
     tmp_path: Path,

@@ -28,9 +28,29 @@ Cellucid is a browser-first viewer for exploring large single-cell datasets in r
   the same cells in Python (and `cellucid_subsample_cells()` in R)
 - **Round trip**: `viewer.pull(adata)` writes every highlight, label, score and
   gene set made in the viewer onto `obs` in one call; `viewer.push(adata.obs["leiden"])`
-  and `viewer.push_gene_set(...)` send yours to the viewer; without a notebook,
+  and `viewer.gene_set_save(...)` send yours to the viewer; without a notebook,
   `cellucid.pull(adata, "exports/")` reads the web app's CSV, GMT, `.h5ad` and
   session exports
+- **Every action is a method**: everything a person can do in the viewer --
+  colour, filter, highlight, rename, move the camera, run an analysis, read
+  the history -- is one method of the viewer (`viewer.color_by(...)`,
+  `viewer.highlight_cells(...)`, `viewer.history_get()`), generated from the
+  web app's action catalogue and recorded as a step of the viewer's history
+- **Sessions**: `viewer.request_session()` brings the viewer's whole history
+  (session format 4) into Python as a `cellucid.CellucidSession`, and
+  `cellucid.read_session(path)` reads any session file the web app saves
+  (trackers, branches, steps, notes, methods and pseudocode);
+  `cellucid.apply_cellucid_session_to_anndata(adata, session, step=...)` plans
+  the labels, highlights, fields and gene sets of any step and writes them
+  onto an AnnData on `plan.apply()`, recorded in
+  `uns['cellucid']['history_applied']`
+- **Local agents**: `cellucid mcp` (`pip install 'cellucid[mcp]'`) lets Claude
+  Code, Claude Desktop or Cursor work in a viewer on your computer (a
+  notebook's, a script's, R's, or one it opens with `--open`) with the web
+  app's tools, under the permissions you set in the viewer: every change is a
+  step of your history you can stop or undo, and a dataset's "Agents see
+  names and summaries only" switch applies to it too
+  ([Local agents](https://docs.cellucid.com/en/latest/user_guide/python_package/d_viewing_apis/18_local_agents_mcp.html))
 
 ## Install
 

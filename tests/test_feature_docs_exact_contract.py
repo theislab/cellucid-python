@@ -181,14 +181,16 @@ def test_community_annotation_docs_publish_current_network_and_repository_contra
     annotator = _read("j_community_annotation/01_annotator_guide.md")
     author = _read("j_community_annotation/02_author_guide.md")
     ui = _read("j_community_annotation/03_ui_reference.md")
-    combined = "\n".join((index, annotator, author, ui))
+    walkthrough = _read("j_community_annotation/04_lifecycle_walkthrough.md")
+    combined = "\n".join((index, annotator, author, ui, walkthrough))
     normalized = " ".join(combined.split())
     author_normalized = " ".join(author.split())
 
     for exact in (
         "annotations/config.schema.json",
         "annotations/moderation/merges.schema.json",
-        "rsync -a --exclude '.git/'",
+        "rsync -aR annotations scripts/validate_user_files.py .github/workflows/validate.yml .gitattributes",
+        "The three schema files must be the template's, byte for byte.",
         "fails the complete Pull without changing annotation state",
         "before selecting the raw-cache scope or downloading any user or moderation files",
         "exactly the same keys as `fieldsToAnnotate`",
@@ -206,10 +208,24 @@ def test_community_annotation_docs_publish_current_network_and_repository_contra
         "`/auth/installations`",
         "`/auth/installation-repos`",
         "`/cap/lookup-cells`",
+        "`/graphql/snapshot`",
+        "`/graphql/blobs`",
         "`/api/repos/*`",
         "`ALLOWED_ORIGINS`, `GITHUB_CLIENT_ID`, and `GITHUB_CLIENT_SECRET`",
-        '`{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":2,',
-        "1,000,000 decoded UTF-8 bytes",
+        '`{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":3,',
+        "**Expire user authorization tokens** kept on",
+        "The Worker accepts only an expiring user token",
+        "No Administration permission: Cellucid never creates a fork.",
+        "You have no fork of <owner>/<repo> yet: fork it on GitHub",
+        "`GITHUB_APP_INSTALL_URL` in `assets/js/app/ui/modules/community-annotation/github-connection-flow.js`",
+        "at most 1,000,000 UTF-8 bytes",
+        "**One file never stops a Pull.**",
+        "No text has a length limit",
+        "`ghid_<id>_<rest>`",
+        "resets the head branch to your branch's current tip",
+        "Cellucid reads files by content and cannot verify who committed them",
+        "The Worker cannot bind a write to the connected branch.",
+        "GitHub login (`login`, written from the account they sign in with)",
         "A Pull has no limit on how many user files there are or on their total size",
         "streaming the cache one file at a time",
         "persistent raw-file cache requires IndexedDB",
@@ -240,7 +256,7 @@ def test_community_annotation_docs_publish_current_network_and_repository_contra
     assert "**Name**" in ui
     assert "direct browser request to `https://pub.orcid.org`" in ui_normalized
     assert "at least three Unicode code points" in ui_normalized
-    assert "no surrounding whitespace and at most 240 Unicode code points" in ui_normalized
+    assert "no surrounding whitespace (of any length)" in ui_normalized
     assert "`/v3.0/{id}/person`" in ui_normalized
     assert "`/v3.0/expanded-search/`" in ui_normalized
     assert "at most eight results" in ui_normalized
@@ -273,10 +289,24 @@ def test_community_annotation_docs_publish_current_network_and_repository_contra
         "downloaded cache may already contain validated remote files",
         "Validated files are cached before the dataset-field check",
         "publish to a dedicated “staging” branch",
+        "user-to-server token expiration disabled",
+        "Overwrite remote",
+        "active-user-file count or aggregate-user-file byte limit",
+        "64,000,000",
+        "at most 240 Unicode code points",
+        "max 120 chars",
+        "max 500 characters",
+        "up to 500 characters",
+        "SHA index",
+        "Pull is fail-closed and atomic",
+        "A Pull is transactional",
+        '"contractVersion": 2',
+        '"contractVersion":2',
+        "sug_01H",
     ):
         assert stale not in normalized
 
-    assert "raw-file cache stores file bodies in IndexedDB and its SHA index" in normalized
+    assert "raw-file cache stores what each file holds for this dataset in IndexedDB" in normalized
     assert "Raw pulled GitHub file bodies use IndexedDB" in normalized
 
 
@@ -300,10 +330,14 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         "Cellucid applies the verified static starting view",
         "`cell_type` observation field",
         "3-D **Orbit** camera",
-        "light theme and the **Studio (light)** background",
-        "no `cinematic/camera` chunk",
-        "**Loop playback**, or **Autoplay**",
-        "moving-camera playback remains off",
+        "**Studio (light)** background",
+        # Session format 4: a starting view is one tracker of one root, with
+        # neither the cells to open nor the layout (so no theme).
+        "one tracker of one root and no step",
+        "neither the cells to open nor the layout",
+        "It does not set the theme",
+        "`trimToPublishedDefault`",
+        "scripts/capture_session_preset.mjs",
         "All three are required",
         "Nothing else is probed",
         "a file or folder chosen with **Open…** or dropped from your computer",
@@ -332,6 +366,11 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         "prepared",
         "5581569118eaa992",
         "20769ea20075a212",
+        # Format 3's starting-view profile and its manual-loader rule.
+        "no `cinematic/camera` chunk",
+        "seven-chunk",
+        "light theme and the **Studio (light)** background",
+        "Downloading it and choosing **Load** is unsupported",
     ):
         assert stale not in presets
 
@@ -394,9 +433,10 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
     developer_normalized = " ".join(developer.split())
 
     for exact in (
-        # Session format 3: the version is part of the signature.
-        "`CELLUCID_SESSION/3\\n`",
-        "`createdAt`, `datasetFingerprint`, `source`, `requires`, and `chunks`",
+        # Session format 4: the version is part of the signature.
+        "`CELLUCID_SESSION/4\\n`",
+        "This release accepts exactly one session format, the one in the signature",
+        "`createdAt`, `app`, `actions`, `scope`, `datasetFingerprint`, `source`, `requires`, `chrome`, `activeTracker`, `trackers` and `chunks`",
         # The fingerprint carries six fields: the viewer records a `cellOrder`
         # digest so a dataset republished re-sorted under an unchanged identity
         # cannot silently re-point saved selections, the data mapping the
@@ -405,15 +445,9 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
         "`cellOrder` has exactly `embedding`, `dimension`, and `digest`",
         "16 lowercase hexadecimal characters",
         "naming every missing key at once",
-        "`ui/figure-export`",
-        "`analysis/docked`",
-        "`cinematic/camera`",
-        "one for every categorical user-defined field",
-        "one membership payload for every advertised highlight group",
-        "The category this selection was saved relative to no longer holds the same cells.",
-        "**Session fully restored**",
-        "whole restore",
-        "rolls back",
+        "A file holds at least one eager `values` chunk, except a file of steps only, which holds none",
+        "`steps`, `parts`, `array`, `values`, `journal`, `chat`",
+        "**Session fully restored.**",
     ):
         assert exact in reference_normalized
 
@@ -421,18 +455,27 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
         "one current `.cellucid-session` writer/reader contract",
         "accepts exactly one session format",
         "complete document all-or-nothing",
-        "preflights the complete",
         "before constructing the native decompressor",
         "Direct serializer APIs reject with the coded `AbortError`",
         "Do not introduce a reader for an older shape",
+        "`CELLUCID_SESSION/4\\n`",
+        "`createdAt`, `app`, `actions`, `scope`, `datasetFingerprint`, `source`, `requires`, `chrome`, `activeTracker`, `trackers` and `chunks`",
+        "`steps/<n>/<k>`",
+        "`parts/<priority>/<k>`",
+        "`values/<priority>/<k>`",
+        "a part that names itself (through others) or a value whose text would pass 2^29 − 24 characters",
+        # Value hashing: a non-finite number or -0 never hashes like text.
+        '`{"$number": "NaN" | "Infinity" | "-Infinity" | "-0"}`',
+        "never hash like the text \"NaN\" or like 0",
+        "one tracker of one root",
+        "saved with Autoplay on",
+        "`SAVE_DEFAULTS`",
+        "(`chats: false`)",
     ):
         assert exact in developer_normalized
 
-    assert "strict manual loader rejects" in " ".join(manual.split())
-    assert (
-        "Downloading it and choosing **Load** is unsupported"
-        in " ".join(official.split())
-    )
+    assert "Continue where you left off?" in " ".join(manual.split())
+    assert "one tracker of one root and no step" in " ".join(official.split())
 
     # `07_...` is where every other session page sends the reader for "the exact
     # matching rules", so it has to state the whole five-field rule and give the
@@ -459,15 +502,16 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
         "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have.",
         "The session names another graph, modality, gene names, expression matrix, latent space or vector bindings, ones this dataset can use",
         "stores its cells in a different order",
-        "A file that does not start with `CELLUCID_SESSION/3`",
-        "This file is not a Cellucid session file of format 3 (it does not start with CELLUCID_SESSION/3).",
-        # A format-2 file's cell check is over drawn coordinates: refused naming its format.
-        "This session was saved by an earlier version of Cellucid (session format 2): the check that it marks the same cells cannot be verified, so it was not opened. Re-create it in this version of Cellucid.",
+        "This release reads format 4 only",
+        "A file that does not start with `CELLUCID_SESSION/4`",
+        "This file is not a Cellucid session file of format 4 (it does not start with CELLUCID_SESSION/4).",
+        # A file of an earlier format is refused naming its format (`otherSessionFormatMessage`).
+        "This session was saved by an earlier version of Cellucid (session format 3), which this version no longer reads: a session file now holds the history of every step (session format 4). It was not opened. Open it in the version of Cellucid that saved it, or re-create the session in this version.",
         "The dataset lacks an observation field or gene the session uses",
-        # The Python reader requires the same fingerprint and never verifies
-        # the digest; the page must say both.
+        # The Python reader requires the same fingerprint; an apply checks the
+        # digest when the object has the embedding it names. The page says both.
         "a file without `cellOrder.embedding` or `dataMapping` is refused",
-        "Python validates `cellOrder`'s shape and never its digest",
+        "the cell order only when the object has the embedding the session names",
     ):
         assert exact in identity
     for retired in (
@@ -508,5 +552,26 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
         "analysis/artifacts/bulk-gene",
         "five-chunk",
         "All five fingerprint fields must match",
+        # Format 3: per-feature chunks, one saved state instead of the history.
+        "CELLUCID_SESSION/3",
+        "format 3 only",
+        "currently 3",
+        "`ui/figure-export`",
+        "`analysis/docked`",
+        "`cinematic/camera`",
+        "`core/state`",
+        "highlights/cells/",
+        "user-defined/codes/",
+        "one membership payload",
+        "seven-chunk",
+        "seven gzip chunks",
+        "strict manual loader rejects",
+        "Downloading it and choosing **Load** is unsupported",
+        "The category this selection was saved relative to no longer holds the same cells.",
+        "session/contributors",
+        "session-cell-order.js",
+        "datasetDependent",
+        "preflights the complete",
+        "saved on a different copy of this dataset",
     ):
         assert retired not in combined

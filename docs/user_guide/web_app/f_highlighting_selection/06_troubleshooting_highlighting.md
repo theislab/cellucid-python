@@ -489,7 +489,8 @@ on the selection.
 
 ### Fix
 - Load the session on the dataset it was created from.
-- Save a fresh current bundle with **Save** if exact-format validation fails.
+- Write a fresh session file with **Share…** if exact-format validation fails.
+- To redo the work on a changed dataset, replay the old file's steps by name (**Load… › Replay a session file here…**); steps that name cells by position are flagged, not applied.
 - If you must change the dataset, you must recreate highlights (indices won’t match).
 
 ### Prevention
@@ -514,7 +515,7 @@ on the selection.
   or a browser tab opened at the viewer's own URL (`viewer.viewer_url`, with
   `?viewer=true&viewerId=…&viewerToken=…` in its address).
 - Run `viewer.debug_connection()` in a new cell and check `channel_connected`.
-- Try a simple command that is known to be wired (e.g., `set_color_by`) to validate communication.
+- Try a simple action and collect its answer (e.g., `request = viewer.color_by(field=...)`, then `request.result()` in a later cell) to validate communication.
 - Follow the connection checks in {doc}`../../python_package/e_jupyter_hooks/14_troubleshooting_hooks`.
 
 ### Fix

@@ -388,8 +388,9 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
 
     The same viewer API as :class:`AnnDataViewer` -- hooks
     (``@viewer.on_selection``, ``on_hover``, ``on_click``, ``on_ready``, ...),
-    ``viewer.state``, commands (``highlight_cells``, ``set_color_by``, ...),
-    session bundles -- shown in a notebook cell's output and reached through
+    ``viewer.state``, actions (one method per action of the catalogue:
+    ``color_by``, ``highlight_cells``, ``history_get``, ...; ``act``),
+    sessions -- shown in a notebook cell's output and reached through
     the notebook's own connection: no port, proxy or server address, so it
     works in JupyterLab, Jupyter Notebook 7, VS Code, Google Colab, marimo
     and Databricks alike. :func:`show_anndata` creates one and shows it;
@@ -404,12 +405,13 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
 
     - ``wait_for_ready()`` and ``wait_for_event()`` cannot wait for the viewer
       and raise at once with what to do instead;
-      ``request_session_bundle()`` asks now, and its ``result()`` (or
-      ``apply_session_to_anndata(adata, request)``) collects the bundle in a
+      ``request_session()`` asks now, and its ``result()`` (or
+      ``apply_session_to_anndata(adata, request)``) collects the session in a
       later cell;
     - hooks run, and ``viewer.state`` updates, whenever the kernel is idle;
-    - commands (``highlight_cells``, ``push``, ``set_data_mapping`` and the
-      rest) wait for nothing: they go as soon as the viewer can take them.
+    - actions (``color_by``, ``highlight_cells``, ``push`` and the rest) wait
+      for nothing: they go as soon as the viewer can take them, and the
+      request each returns is collected with ``result()`` in a later cell.
 
     Example::
 
@@ -652,11 +654,16 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
         """
         if threading.current_thread() is not (self._comm_thread or threading.main_thread()):
             return
-        if "session bundle" in what or "session_bundle" in what:
+        if "the session" in what or "session_bundle" in what:
             hint = (
-                "ask with request = viewer.request_session_bundle() and collect it in the next "
+                "ask with request = viewer.request_session() and collect it in the next "
                 "cell with request.result(), or apply it there with "
                 "viewer.apply_session_to_anndata(adata, request)"
+            )
+        elif "answer to" in what:
+            hint = (
+                "keep the request an action returns (request = viewer.fields_list(), for one) "
+                "and call request.result() in a later cell"
             )
         elif "results" in what:
             hint = "read viewer.results, which the viewer keeps current, in a later cell"

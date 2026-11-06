@@ -146,6 +146,7 @@ in `reader.js`.
 | Gene indexes of cell-major matrices | `data/sparse-column-index.js`; `data/anndata/prefix-column-index.js` (segments over priority-ordered rows, doubling, carried to the next opening of nested cells); `data/anndata/kept-column-index.js` (kept across visits) | `AnnDataReader` `_segmentedColumns` (rows spread through the store form one segment in store order, or every stored row's index restricted to them: `_restrictsWhole`, `restrictedAccess`, `PassRates`) |
 | Neighbour graphs at a share | `data/anndata/graph-lines.js` | `inducedGraphLines`, `readInducedGraph` |
 | Progressive first view and growth | `data/anndata/progressive-open.js`, `data/opening-cost.js` | grown in place by `app/open-cells-resize.js` |
+| Every rate measured of the machine or the link that these plans weigh | `utils/machine.js` | `measureOf` (the link the reader plans on, `formats/io/link.js` `plannedLink`; the decoding rate; the order time; the kept-read rate; the index pass rates; the opening cost; the cores), `holdMachine` (tests and benchmarks: held on the page and handed to every worker, `workers/worker-script.js` `handToWorkers`) |
 
 Invariants:
 

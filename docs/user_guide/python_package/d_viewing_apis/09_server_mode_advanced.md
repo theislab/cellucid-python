@@ -248,7 +248,7 @@ Even in “server mode”, the server answers the viewer channel used by noteboo
 integrations and hooks:
 
 - `GET /_cellucid/ws` (a WebSocket): commands to the viewer, events,
-  selections and session bundles back, opened only by a registered viewer with
+  selections and session files back, opened only by a registered viewer with
   its token
 
 A server started by `cellucid serve` or `serve_anndata(...)` registers no

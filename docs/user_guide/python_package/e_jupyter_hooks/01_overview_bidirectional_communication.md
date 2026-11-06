@@ -38,32 +38,42 @@ API, with the channel on a WebSocket to its local server (`/_cellucid/ws`).
 
 Once you have a `viewer` (from `show_anndata(...)`), you can:
 
-- **Send commands (Python → viewer)**
-  - highlight cells by index (`viewer.highlight_cells(...)`)
-  - clear highlights (`viewer.clear_highlights()`)
-  - color by an obs field (`viewer.set_color_by(...)`)
-  - hide/show subsets (`viewer.set_visibility(...)`)
-  - reset camera (`viewer.reset_view()`)
+- **Act on the viewer (Python → viewer)**: everything a person can do is an
+  action, and every action is a method
+  - colour by an obs field or a gene (`viewer.color_by(field=...)`)
+  - highlight cells by row, mask or obs name (`viewer.highlight_cells(cells=...)`)
+  - clear highlights (`viewer.highlight_clear_all()`)
+  - hide/show cells (`viewer.cells_visibility_set(cells=..., visible=...)`)
+  - reset the camera (`viewer.camera_reset(view="live")`)
+  - read what the viewer holds (`viewer.fields_list()`, `viewer.history_get()`, …:
+    `request.result()` in a later cell)
+  - group several actions into one turn of the history
+    (`with viewer.turn("Mark T cells"):`), undone together
 
 - **Receive events (viewer → Python)**
   - `@viewer.on_ready`: viewer is ready for interaction
   - `@viewer.on_selection`: user selects cells
   - `@viewer.on_hover`: user hovers cells (debounced)
   - `@viewer.on_click`: user clicks a cell
-  - `@viewer.on_command_error`: a command you sent was rejected by the viewer
+  - `@viewer.on_command_error`: an action you sent was refused by the viewer
   - `@viewer.on_data_mapping`: the viewer resolved or changed its data mapping
-  - `@viewer.on_message`: one envelope stream for all nine current event types
+  - `@viewer.on_history_change`: the viewer's history changed (a step, a move,
+    an edit, a tracker, a loaded session)
+  - `@viewer.on_message`: one envelope stream for every current event type
 
 - **Pull results back (one call)**
   - `viewer.pull(adata)` writes every highlight group, label, cluster, score
     and gene set the viewer holds onto `adata.obs` / `adata.uns`
     ({doc}`../g_api_reference_coverage/api/round_trip`)
-  - `viewer.push(adata.obs["leiden"])` and `viewer.push_gene_set(...)` send
+  - `viewer.push(adata.obs["leiden"])` and `viewer.gene_set_save(...)` send
     columns and gene sets the other way
 
-- **Capture durable state (session bundles)**
-  - `request = viewer.request_session_bundle()`, then `bundle = request.result()`
-    in the next cell (no browser download required)
+- **Capture durable state (sessions: the whole history)**
+  - `request = viewer.request_session()`, then `session = request.result()`
+    in the next cell (no browser download required); `session.apply(adata)`
+    plans what applying a step would change, `plan.apply()` writes it
+  - `viewer.load_session(path)` adds a saved session's trackers to the
+    viewer's history
 
 If you want the minimal working loop, start with {doc}`02_quickstart_minimal_roundtrip`.
 
@@ -100,9 +110,10 @@ notebook, a WebSocket to `/_cellucid/ws` in a browser tab — and says hello
 with its `viewerId` and `viewerToken`. Python checks the token and answers
 `welcome`; from then on the channel belongs to that one viewer.
 
-- When you call `viewer.highlight_cells(...)`, Python sends the command on the
-  channel. A command sent before the viewer has connected waits and is sent,
-  in order, as soon as it does.
+- When you call `viewer.highlight_cells(...)`, Python sends one `action` on
+  the channel and returns its request; the viewer applies it as a step of its
+  history and answers it. An action sent before the viewer has connected
+  waits and is sent, in order, as soon as it does.
 - When a user selects, hovers or clicks, the viewer sends an event on the
   channel (a selection as binary cell indices), and Python triggers your
   registered hooks.
@@ -116,20 +127,22 @@ If you want to trace the implementation:
 - Python: `cellucid-python/src/cellucid/jupyter/` (viewer classes + hook
   registry; `_widget.py` and `static/widget.js` are the notebook widget)
 - Python: `cellucid-python/src/cellucid/_viewer_channel.py` (the channel:
-  handshake, command outbox, events, session bundles)
+  handshake, command outbox, events, sessions)
 - Python: `cellucid-python/src/cellucid/_server_base.py` (verified web-generation delivery)
 - Web app: `cellucid/assets/js/data/viewer-embed.js` (the embedded page's
   transport), `data/viewer-channel.js` (the channel) and
   `data/viewer-host-source.js` (ViewerHostDataSource; commands and events)
-- Web app: `cellucid/assets/js/app/main.js` (wires session bundle capture + ready event)
+- Web app: `cellucid/assets/js/app/viewer-host/command-handler.js` (a host's
+  actions, dispatched as origin `host`) and `app/main.js` (wires session
+  capture + ready event)
 
 ## Important notebook constraint: between cells
 
 The kernel handles a widget's messages between cells. Hooks fire and
 `viewer.state` updates while the kernel is idle; a call that waits for the
 viewer in the cell that asks (`wait_for_ready()`, `wait_for_event()`, a
-session request's `result()`) raises at once and says what to do instead; commands
-(`push()`, `set_data_mapping()`, …) never wait. See {doc}`03_supported_environments_matrix`.
+session request's or an action's `result()`) raises at once and says what to
+do instead; actions (`push()`, `color_by()`, …) never wait. See {doc}`03_supported_environments_matrix`.
 
 ## Edge cases (high-level)
 

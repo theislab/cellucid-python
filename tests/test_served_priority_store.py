@@ -872,11 +872,11 @@ def test_a_killed_process_s_scratch_folder_is_removed_by_the_next_store(tmp_path
     monkeypatch.setattr(_scratch.tempfile, "tempdir", str(tmp_path))
     dead = tmp_path / "cellucid-scratch-dead"
     dead.mkdir()
-    (dead / "owner").write_text("999999999")
+    (dead / "owner").write_text("999999999", encoding="utf-8")
     (dead / "X-data.npy").write_bytes(b"x" * 100)
     alive = tmp_path / "cellucid-scratch-alive"
     alive.mkdir()
-    (alive / "owner").write_text(str(_scratch.os.getppid()))
+    (alive / "owner").write_text(str(_scratch.os.getppid()), encoding="utf-8")
     unnamed = tmp_path / "cellucid-scratch-unnamed"
     unnamed.mkdir()
     store = PriorityStore.of_anndata(_adata(n=50, m=4))
@@ -884,7 +884,7 @@ def test_a_killed_process_s_scratch_folder_is_removed_by_the_next_store(tmp_path
         assert not dead.exists()
         assert alive.exists() and unnamed.exists()
         mine = store._folder.folder
-        assert mine is not None and (mine / "owner").read_text() == str(_scratch.os.getpid())
+        assert mine is not None and (mine / "owner").read_text(encoding="utf-8") == str(_scratch.os.getpid())
     finally:
         store.close()
     assert not mine.exists()

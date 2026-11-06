@@ -53,7 +53,10 @@ class RefusedFormatError(ValueError):
     """A file of a format the registry recognises but Cellucid never opens.
 
     Its message is the registry's ``refusal`` (the route that converts the
-    file), the words the web app and cellucid-r use for the same file.
+    file), or, for one of Cellucid's own files (a ``.cellucid-session`` or
+    ``.cellucid-library`` file, the registry's ``cellucidFiles``), its
+    ``said`` sentence: what it is and where it goes. The words are the ones
+    the web app and cellucid-r use for the same file.
     """
 
 
@@ -76,6 +79,21 @@ def input_formats() -> dict[str, Any]:
             f"this package reads schema {INPUT_FORMATS_SCHEMA}."
         )
     return document
+
+
+def cellucid_file_of_name(name: str) -> dict[str, Any] | None:
+    """Which of Cellucid's own files a name is (the registry's ``cellucidFiles``:
+    ``id``, ``label``, ``names``, ``said``), or None (``cellucidFileOfName``).
+
+    They are not datasets: a library file goes to the web app's My datasets,
+    a session file to its dataset (or :func:`cellucid.read_session`).
+    """
+    lower = name.lower()
+    entry: dict[str, Any]
+    for entry in input_formats()["cellucidFiles"]:
+        if any(lower.endswith(ending) for ending in entry["names"]):
+            return entry
+    return None
 
 
 def _format_of_name(name: str, layouts: tuple[str, ...]) -> tuple[dict[str, Any], str] | None:
@@ -335,13 +353,18 @@ def classify_anndata_path(path: str | Path) -> AnnDataStore:
         When nothing exists at ``path``.
     RefusedFormatError
         When ``path`` is a format Cellucid recognises but never opens (an
-        h5Seurat file): the message says how to convert it.
+        h5Seurat file): the message says how to convert it; or one of
+        Cellucid's own files (a ``.cellucid-session`` or ``.cellucid-library``
+        file): the message says what it is and where it goes.
     ValueError
         When ``path`` is none of the formats Cellucid reads.
     """
     resolved = Path(path).expanduser().resolve()
     if not resolved.exists():
         raise FileNotFoundError(f"Path not found: {resolved}")
+    own = cellucid_file_of_name(resolved.name)
+    if own is not None:
+        raise RefusedFormatError(f"{resolved.name}: {own['said']}")
     if resolved.is_file():
         return _classify_file(resolved)
     if not resolved.is_dir():

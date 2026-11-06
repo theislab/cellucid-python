@@ -261,7 +261,7 @@ the synthetic benchmark. The rules:
   listing, and an entry that cannot be read fails it naming the entry. Where
   the browser has `getAsFileSystemHandle()` (Chromium), the item's handle is
   asked for in the same event and kept once the dataset opened
-  (`app/local-file-handles.js`). The
+  (`app/library/local-file-handles.js`). The
   classic script `ui/core/file-drop-guard.js` cancels every file drag at the
   document from the first paint, so a drop never navigates, and offers it as
   `none` until the drop target sets `data-dataset-drop="ready"` on the root.
@@ -313,9 +313,12 @@ Behavior:
      production)
 - Both must be one canonical absolute HTTP(S) folder URL with a trailing `/`
   and no query or fragment; anything else is a startup configuration error.
-- A dataset whose catalog entry names a `session` gets that default session
-  applied after it is published (`app/session/catalog-default-session.js`;
-  see {doc}`../l_sessions_sharing/04_official_sample_states`).
+- A dataset whose catalog entry names a `session` gets that starting view
+  (a format-4 file of one tracker of one root, pinned by its byte length and
+  SHA-256) put back after it is published, without a step, before its history
+  starts (`app/session/catalog-default-session.js`, `published-default.js`;
+  {doc}`10_sessions_persistence_and_serialization`, and
+  {doc}`../l_sessions_sharing/04_official_sample_states`).
 
 Common failure mode:
 - `datasets.json` missing or invalid → the sample list is “not available”,
@@ -324,7 +327,7 @@ Common failure mode:
   default, schema (missing: schema).`).
 
 Cross-origin transport contract:
-- `datasets.json` and every default session are fetched by
+- `datasets.json` and every starting view are fetched by
   `fetchCatalogFile` and revalidated with the host (`CATALOG_FILE_CACHE`);
   each AnnData file is read in place with HTTP range requests.
 - The catalog host must permit the viewer origin with CORS.
@@ -359,7 +362,7 @@ Behavior:
   make one dataset together (a GEO sample's MatrixMarket triplet), or a Zarr
   store folder (read through its consolidated metadata).
 - A catalog then behaves like `local-demo` (the same `anndata-catalog.js`
-  reader; each listed file opened when chosen, its default session applied).
+  reader; each listed file opened when chosen, its starting view applied).
   A file or Zarr folder is opened by the AnnData
   reader worker in place, with parallel HTTP range requests, and served
   through `anndata://` like a local file (see
@@ -431,7 +434,8 @@ Behavior:
     reload `dataset-connections.js` offers *Reopen <name>* for it, and
     `session-controls.js` reopens a `{kind: "file"}` session source from its
     handle (at once when `queryPermission` is `granted`, else on *Reopen
-    <name>*, then applies the session). The reopen (`reopenLocalFile`) runs
+    <name>*, then applies the session); My datasets opens it again with one
+    click (`ui/modules/my-datasets/`). The reopen (`reopenLocalFile`) runs
     in the click: `readKeptLocalFile` asks `requestPermission({mode:
     'read'})` unless granted, reads the file or lists the folder, compares
     what it held, and fails explained (`details.reopen`: `refused`, `gone`,
@@ -542,7 +546,7 @@ Code:
 - `cellucid/assets/js/data/viewer-channel.js` and `data/viewer-protocol.js`
   (the channel and its rules); `data/viewer-embed.js` (the notebook widget's
   transport)
-- `cellucid/assets/js/app/viewer-host-results.js` (what the person made,
+- `cellucid/assets/js/app/viewer-host/results.js` (what the person made,
   published to the host as `result` events) and
   `app/registries/derived-results.js` (the gene sets and scores the viewer
   holds besides its fields: pushed sets, the shown analyses' sets and scores)
@@ -1849,14 +1853,14 @@ Cellucid uses multiple caches; knowing which one you’re hitting makes debuggin
 
 ### 1) HTTP cache (browser)
 
-Every file a dataset catalog names — `datasets.json` and a default session —
+Every file a dataset catalog names — `datasets.json` and a starting view —
 is fetched by `fetchCatalogFile` with `{ cache: 'no-cache' }`
 (`CATALOG_FILE_CACHE` in `data/data-source.js`); a caller cannot choose
 another mode. The browser keeps its copy but asks the host before every use,
 and an unchanged file costs a conditional request answered with 304.
 
 Reusing a cached catalog without asking would be wrong, not merely stale: a
-default session is pinned by the catalog's digest, and hosts such as GitHub
+starting view is pinned by the catalog's digest, and hosts such as GitHub
 Pages cache for minutes, so a new catalog paired with an old session would be
 refused.
 
@@ -1921,7 +1925,8 @@ Examples:
   any other store folder on a web host (a served store, a folder link) by its URL while
   the validators of its consolidated metadata (`ETag` and `Last-Modified`,
   each the host names) are the ones it was opened with, asked again with one
-  `HEAD` (`httpStore.unchanged`). That requires the metadata to move with
+  `HEAD` (`httpStore.unchanged`), or, when they moved, while what was read is
+  what the store holds (a site deployed again, below). That requires the metadata to move with
   any rewrite of the store: every Zarr writer writes the consolidated
   metadata again when it writes the store, so its write time
   (`Last-Modified`), or a tag made from it (`cellucid serve`'s `ETag`: size,
@@ -1941,8 +1946,9 @@ Examples:
   leaves the dataset on screen as it was.
 - **The open cells grown or cut in place** (`app/open-cells-resize.js`).
   Every reading of the open dataset names its own cells (a cell subset
-  request passed to `reopenCells`; the module-level request of
-  `cell-subset-policy.js` is a link's, for the next opening only): Apply
+  request passed to `reopenCells`; the next opening's request of
+  `cell-subset-policy.js` is a link's, or the cells a dataset of My datasets
+  was last opened with, for the next opening only): Apply
   during a progressive opening's step, and the earlier cells read back
   after a cancelled one, never take or overwrite another's. Before
   reading, the work under way on the open cells ends on them
@@ -2122,7 +2128,12 @@ Examples:
   without asking its host (`sourceKey`), so its growth steps stay in place:
   GitHub's raw host shows a page no validator, and every step read other
   cells than those shown (Suo: growth stopped at 32,768 of 561,947 cells,
-  and its revisit at 750).
+  and its revisit at 750). A source no later reading can tell to be the same
+  bytes (a store folder with no key and whose host names no version: no
+  `ETag` or `Last-Modified` on its metadata) is never opened progressively:
+  the reader worker drops the plan and opens every cell asked for at once
+  (`anndata-reader-worker.js` `cellsToOpen`; the Garcia sample on such a host
+  stopped growing at 48,860 of 219,731 cells; `open-cells-folder-reuse`).
   An analysis's first pass on the first cells of priority order reads those
   cells' part of each gene the same way (`getMatrixCellSubset`).
 - The page keeps the bytes of remote files its reader workers fetched
@@ -2187,10 +2198,12 @@ Examples:
   directory whose manifest is written first, so it is kept from its first
   byte; each piece is appended to its `d.bin` through a synchronous access
   handle, then a record of where it is of the file (`j.bin`: framed by its
-  length and CRC-32, with the piece's page checksums). A write is the
-  operating system's once it returns, so a tab closed the moment its reads
-  ended, a worker ended from outside or a browser that crashes loses at most
-  the piece being written; a machine that loses power may lose what the disk
+  length and CRC-32, with the piece's page checksums). A read does not wait
+  for its write, and a write is the operating system's once it returns, so a
+  tab closed the moment its reads ended, a worker ended from outside or a
+  browser that crashes loses at most the pieces still waiting to be written,
+  which the next visit fetches again (one range in about one close in twelve,
+  measured on Firefox under load); a machine that loses power may lose what the disk
   had not yet stored, whose records then do not read whole or do not match
   their checksums and are not used (`parseKeptJournal` stops at the first).
   The page asks its reader workers to have the disk hold what they wrote
@@ -2260,7 +2273,23 @@ Examples:
   filed under its link's address (`key`: the ref the link names, so another
   commit's kept objects are stale). While a folder is open, an object
   answered with another validator than before (in this opening, or kept) is
-  refused as changed. A folder on a
+  a question its bytes answer (`formats/io/read-witness.js`): GitHub Pages
+  gives every file of a site new validators at every deployment although
+  their bytes are the same. The same range read before is compared with a
+  checksum of what it held; a range or an object never read has nothing of
+  its own, so the consolidated metadata and one read of each array read
+  before (at most 64 KiB each, one `HEAD` when the deployment is known
+  already) are asked for again and compared, also when an object never read
+  says it was written after the store was opened. The same bytes read on, and
+  the store is still the one it was opened as (`unchanged`). Any other bytes,
+  another size or an object gone are refused as changed, and so is every later
+  read of that opening, so nothing mixes two versions; a retry cannot help then
+  (`isChangedOnHost`, `data/data-source.js`), so a field's or a growth step's
+  failure says to open the store again. What this cannot see, and no client
+  can: a rewrite that keeps every byte read so far and changes only bytes never
+  read. A file on a web host is the same (`byte-source.js`): its first, middle
+  and last reads are its witnesses, the head read beside its probe among them,
+  and with nothing read at all a new validator is refused. A folder on a
   plain host (GitHub Pages, S3, GitHub by branch when its API refuses)
   keeps nothing across openings (identity `{kind: 'url'}`, its opening's
   only): its consolidated
@@ -2295,13 +2324,18 @@ cell (40 MB at 10M cells) — and is made again from it, bit for bit and
 without a read, when it is shown (`compactedColumn`); so browsing genes holds
 one gene's column at a time.
 
-### 4) Community annotation caches (IndexedDB + localStorage index)
+### 4) Community annotation caches (IndexedDB + the session in localStorage)
 
 Community annotation stores:
-- raw downloaded JSON file content (IndexedDB)
-- a small path→sha index (localStorage) for “which files changed?”
+- what each file a Pull read holds for the open dataset, keyed by its Git
+  blob id, or why the Pull left the file out (IndexedDB); the blob ids a scope
+  knows are the store's keys, so "which files changed?" needs no separate index
+- the last completed Pull's commit and tree ids (IndexedDB), so a Pull that
+  finds the same `annotations` tree stops after one or two requests
 - the working annotation session itself (localStorage), which holds votes,
   comments, suggestions and profile — dataset-derived content, not preferences
+  — and only the blob ids of the files it publishes onto (its own user file,
+  the config and the merges file)
 
 Code:
 - `cellucid/assets/js/app/community-annotations/file-cache.js`
@@ -2345,24 +2379,31 @@ a file's downloaded parts, with the bytes they spare the next opening
 (`saves`), or a gene index per file, matrix and cell order, named by the manifest's
 `about`, its file's name and host from `keptAbout`, never a link) grouped by
 dataset (`file`), and removes the rows chosen, a dataset's, or all, that no
-tab holds (`removeKeptStores`). Under the datasets, *Unsaved highlights*
-lists the highlight drafts (`app/highlight-draft.js` `listHighlightDrafts`,
-IndexedDB `cellucid-highlight-drafts`, a row per dataset by the name the
-draft records, its size and when it was saved; ids `draft:<dataset id>`,
-removed with `removeHighlightDrafts`, heard through
-`onHighlightDraftsChange`), then *Files to reopen* the kept handles
-(`app/local-file-handles.js` `listLocalFiles`, IndexedDB
-`cellucid-local-files`; ids `local:<dataset id>`, forgotten with
-`forgetLocalFiles`, heard through `onLocalFilesChange`). Both stores are
-`utils/indexed-db-store.js` `indexedDbKeyValueStore`. Then one row lists the hosts
-whose connection speed is remembered (`data/host-link-memory.js`
-`rememberedHosts`, in `localStorage`, layer 7) with its own **Remove**
-(`forgetHostLinks`); **Remove all** forgets them too, and
-the Stored row counts them (*2 datasets · 540 MB · 1 highlights draft ·
-1 file to reopen · 2 connection speeds*; with no dataset kept, *Nothing
-kept · 2 connection speeds*). *Where it's kept* names what the site's
-storage holds (*Holds*: files, highlight drafts, files to reopen,
-connection speeds). Listing and removal run one at a time in a
+tab holds (`removeKeptStores`). Under the datasets, *Saved states* lists the
+histories this browser keeps (`app/history/autosave.js` `listSavedStates`,
+IndexedDB `cellucid-history`: a row per saved state, its dataset, whether it
+is the history kept as it was made or a save under a name, its steps, size and
+when it was last written; ids `saved:<id>`, chosen like the kept items,
+removed with `removeSavedStates`, heard through `onSavedStatesChange`;
+{doc}`29_action_layer_domains_and_history`). Then My datasets is one row
+(`app/library/my-datasets.js` `listMyDatasets`, IndexedDB `cellucid-library`,
+with the handles of files to reopen, `app/library/local-file-handles.js`
+`listLocalFiles`, IndexedDB `cellucid-local-files`): how many datasets and
+files to reopen, **Show…**, which opens My datasets' own dialog (each dataset
+is listed there and only there), and **Remove**, which forgets the list and
+the handles (`forgetMyDatasets`). Then one row lists the hosts whose
+connection speed is remembered (`data/host-link-memory.js` `rememberedHosts`,
+in `localStorage`, layer 7) with its own **Remove** (`forgetHostLinks`), and
+one the decoders measured fastest in this browser
+(`formats/io/decoder-memory.js` `countDecoderDecisions`,
+`forgetDecoderDecisions`); **Remove all** forgets them too. The Stored row
+names the datasets something is kept of and the bytes, and counts the saved
+states and connection speeds as "more" (`summarizeKeptStores`: *2 datasets ·
+540 MB · 3 more*, its title *2 datasets · 540 MB · 2 saved states · 1
+connection speed*; with no dataset kept, the one kind kept or how many items;
+it does not count My datasets, which has its own control). *Where it's kept*
+names what the site's storage holds (*Holds*: files, saved states, My
+datasets, connection speeds). Listing and removal run one at a time in a
 page: each asks whether a tab holds a directory by requesting its lock if
 free, which, while it lasts, is a holder to any other such request. The
 dialog's foot (*Where it's kept*) comes from `keptStoragePlace`: whether the

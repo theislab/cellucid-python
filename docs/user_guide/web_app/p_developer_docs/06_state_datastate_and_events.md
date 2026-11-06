@@ -114,7 +114,10 @@ to disk or read again, never what can be opened or shown.
   an open subsample (`'cell rows'`: the kept rows, their runs and their
   inverse, the inverse in the smaller of a table of the kept rows and an
   array of every row of the file, and the ranks the subsample was drawn
-  from, kept so a growth or another size draws without ranking again), and,
+  from, kept so a growth or another size draws without ranking again), the
+  values the action history keeps for every step of the dataset shown
+  (`'history'`: the typed arrays of its value pool, each buffer once; the
+  person's work, never evicted, held while the dataset is shown), and,
   where the browser measures the page
   (`measureUserAgentSpecificMemory`, cross-origin isolated pages only), what
   it uses beyond everything counted. The auto-fit sizes the open cells so the
@@ -343,6 +346,38 @@ Vector fields (velocity/drift overlays) are optional and use:
 
 ---
 
+## Who changes `DataState`: actions and state domains
+
+`DataState` is changed in two ways, and only these two
+({doc}`29_action_layer_domains_and_history`):
+
+- **By an action.** A control dispatches the action it stands for
+  (`dispatchFromControl`, `app/actions/control-dispatch.js`); an agent, a
+  Python or R host and the history's replay dispatch the same actions. The
+  action's implementation, provided by the module that owns the state
+  (`app/state/actions/field-actions.js` for the state's own, the control's
+  module for its orchestration), resolves the names its parameters give and
+  calls the `DataState` method the control used to call. A UI module calls no
+  mutating `DataState` method itself. Settings controls and camera gestures
+  change their owner first and are recorded after (`recordObserved`).
+- **By a state domain's owner** (`app/state/domains/`), when the history puts
+  a value back (undo, redo, a jump, a session or saved state loaded, a
+  starting view): `restore(value)` changes only what differs, through the same
+  `DataState` methods the controls use, never by dispatching an action. Per-view
+  state of a view that is not focused is changed while that view is focused,
+  and the focus is put back (`view-list.js` `inEachView`). `capture()` reads
+  the value back; a value is plain data and is never written after capture.
+
+**Cells to open** (Session › Subsampling) is the action `cells.open`
+(`ui/modules/subsample-control.js`): one step of the history, on the same
+tracker, that reads the dataset again with other cells and keeps what was made
+by original cell position. Undoing it puts the `cells` domain's value back,
+which reads the cells shown before again (`state/domains/cells.js`), and the
+history captures every other domain again after it (`REREADING_DOMAINS`);
+redo reads the share again.
+
+---
+
 ## Events (what the UI and analysis listen to)
 
 `DataState` extends a small `EventEmitter` (`cellucid/assets/js/app/utils/event-emitter.js`).
@@ -357,7 +392,7 @@ Events are the main way UI modules stay decoupled from state internals.
 | `highlight:changed` | none | Highlight groups changed (membership/colors/enabled) |
 | `page:changed` | none | Highlight page set changed (add/remove/rename/switch) |
 | `view:representation-changed` | `{ viewId, layoutKey, dimension, previousLayoutKey }` | The representation a view shows changed (any view, active or not), or focus moved to a view showing another one |
-| `mapping:changed` | `{ mapping, cause, origin }` | The data mapping was applied; `origin` is `user` (Session › Data mapping), `session` (a session restore) or `notebook` (a host program's command) |
+| `mapping:changed` | `{ mapping, cause, origin }` | The data mapping was applied; `origin` is `user` (Session › Data mapping, the action `mapping.set`), `session` (the `mapping` domain's restore: an undo, a jump, a session or saved state loaded) or `notebook` (a host program's `mapping.set`) |
 | `representations:changed` | `{ enabled }` | The enabled representations changed (fires with `mapping:changed`) |
 | `vectorFields:changed` | list of available fields | Vector-field availability changed (dataset load / manager attached) |
 
@@ -377,7 +412,9 @@ Common patterns:
 - One user action (e.g. “switch active field”) can cause **both**:
   - `field:changed` (active field selection)
   - `visibility:changed` (if outlier defaults/filters change)
-- Bulk restores (session load) may intentionally fire fewer events by using batch mode.
+- A history restore (an undo, a jump, a session load) puts back only the
+  domains that differ, each through its owner; an owner may fire fewer events
+  by using batch mode.
 
 If you are debugging a double-render / double-recompute:
 - Confirm whether the UI is subscribed in multiple modules.
@@ -387,7 +424,7 @@ If you are debugging a double-render / double-recompute:
 
 ## Batch mode (bulk changes without repeated recompute)
 
-When applying many state changes (especially during session restore), you want to avoid:
+When applying many state changes (especially while the history puts a value back), you want to avoid:
 - re-computing visibility N times
 - re-uploading buffers N times
 
@@ -447,9 +484,11 @@ Two consequences for contributors:
 - Representation changes all go through
   `setViewRepresentation(viewId, layoutKey, { followsDefault })`. The callers
   are `setViewEmbedding(viewId, ref)` (an explicit choice: the picker, the
-  API), `restoreViewEmbedding(viewId, ref)` (a session: the view follows the
-  default again when it shows it), `showDefaultRepresentation(viewId, level)`
-  and `cycleRepresentation(viewId, level)` (keys 1, 2 and 3). It:
+  action `view.embedding.set`), the `views` domain's restore
+  (`state/domains/views.js`: the embedding and `followsDefault` a step or a
+  session recorded), a data-mapping change that moves a view off an embedding
+  it turns off (`mapping-manager.js`), `showDefaultRepresentation(viewId,
+  level)` and `cycleRepresentation(viewId, level)` (keys 1, 2 and 3). It:
   - refuses a layout that is not enabled; a request for the layout the view
     already shows only records `followsDefault`
   - loads that layout's positions, pinned while the change is staged, and
@@ -509,6 +548,9 @@ Risks:
 Mitigation patterns:
 - centralize reload in `main.js`
 - ensure state reset paths clear view contexts, highlights, and caches as appropriate
+- a dataset replaced retires its history first (`app/history/dataset-history.js`
+  `retire`): recording stops at once and nothing more is put back; the same
+  dataset read again on other cells keeps its history (`keepHistory`)
 
 ### Empty datasets
 

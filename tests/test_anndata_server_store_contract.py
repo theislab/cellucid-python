@@ -589,7 +589,7 @@ def _zarr_folder(tmp_path: Path, *, consolidated: bool) -> Path:
 def test_a_zarr_folder_is_read_key_by_key_with_404_for_an_absent_key(tmp_path: Path) -> None:
     folder = _zarr_folder(tmp_path, consolidated=True)
     outside = tmp_path / "secret.txt"
-    outside.write_text("not part of the store")
+    outside.write_text("not part of the store", encoding="utf-8")
     (folder / "obs" / "escape").symlink_to(outside)
     route = "/_cellucid/anndata/store-contract.zarr"
     with _serving(folder) as (server, host, port):
@@ -619,7 +619,7 @@ def test_a_zarr_v2_folder_without_consolidated_metadata_gets_it_built(tmp_path: 
     document = json.loads(body)
     assert document["zarr_consolidated_format"] == 1
     on_disk = {
-        path.relative_to(folder).as_posix(): json.loads(path.read_text())
+        path.relative_to(folder).as_posix(): json.loads(path.read_text(encoding="utf-8"))
         for path in folder.rglob("*")
         if path.name in {".zgroup", ".zattrs", ".zarray"}
     }
@@ -630,16 +630,16 @@ def test_a_zarr_v3_folder_without_consolidated_metadata_gets_it_inline(tmp_path:
     folder = tmp_path / "v3.zarr"
     with ad.settings.override(zarr_write_format=3):
         _in_priority_order(_adata()).write_zarr(folder)
-    root = json.loads((folder / "zarr.json").read_text())
+    root = json.loads((folder / "zarr.json").read_text(encoding="utf-8"))
     root.pop("consolidated_metadata", None)
-    (folder / "zarr.json").write_text(json.dumps(root))
+    (folder / "zarr.json").write_text(json.dumps(root), encoding="utf-8")
     with _serving(folder) as (_server, host, port):
         served = json.loads(_request(host, port, "GET", "/_cellucid/anndata/store-contract.zarr/zarr.json")[2])
     nodes = served["consolidated_metadata"]["metadata"]
     assert served["consolidated_metadata"]["kind"] == "inline"
     assert {key: value for key, value in served.items() if key != "consolidated_metadata"} == root
     assert "X/data" in nodes and "obs" in nodes and "" not in nodes
-    assert nodes["X/data"] == json.loads((folder / "X" / "data" / "zarr.json").read_text())
+    assert nodes["X/data"] == json.loads((folder / "X" / "data" / "zarr.json").read_text(encoding="utf-8"))
 
 
 def test_a_zipped_zarr_store_is_one_file(tmp_path: Path) -> None:
@@ -724,15 +724,15 @@ def test_an_hdf5_filter_the_browser_cannot_undo_is_decoded_on_the_kernel(tmp_pat
 def test_zarr_codecs_the_browser_cannot_decode_are_named(tmp_path: Path) -> None:
     folder = _zarr_folder(tmp_path, consolidated=True)
     zarray = folder / "obsm" / "X_pca" / ".zarray"
-    meta = json.loads(zarray.read_text())
+    meta = json.loads(zarray.read_text(encoding="utf-8"))
     meta["compressor"] = {"id": "snappy"}
     meta["filters"] = [{"id": "delta", "dtype": "<f4"}]
-    zarray.write_text(json.dumps(meta))
+    zarray.write_text(json.dumps(meta), encoding="utf-8")
     assert browser_undecodable(classify_anndata_path(folder)) == ["obsm/X_pca (snappy, delta)"]
     # bz2 and lzma the browser decodes (formats/zarr/codecs/pipeline.js): no copy for them.
     meta["compressor"] = {"id": "bz2", "level": 1}
     meta["filters"] = None
-    zarray.write_text(json.dumps(meta))
+    zarray.write_text(json.dumps(meta), encoding="utf-8")
     assert browser_undecodable(classify_anndata_path(folder)) == []
 
 

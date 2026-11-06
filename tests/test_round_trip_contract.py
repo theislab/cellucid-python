@@ -22,7 +22,8 @@ import pytest
 from _serverless_viewer import serverless_viewer
 
 import cellucid
-from cellucid.anndata_session._results import field_message, read_obs_names
+import cellucid.jupyter as jupyter
+from cellucid.anndata_session._results import field_push_params, read_obs_names
 from cellucid.jupyter import _wire as wire
 
 N_OBS = 6
@@ -48,7 +49,6 @@ def _result(
     cells: list[int] | None,
     values: np.ndarray | None = None,
     revision: int = 1,
-    request_id: str | None = None,
     n_obs: int = N_OBS,
     epoch: str = EPOCH,
 ) -> dict[str, Any]:
@@ -64,7 +64,6 @@ def _result(
         body += values.astype(values.dtype.newbyteorder("<")).tobytes()
     return {
         "type": "result",
-        "requestId": request_id,
         "epoch": epoch,
         "revision": revision,
         "kind": kind,
@@ -125,7 +124,9 @@ def send_snapshot(viewer: Any, held: list[dict[str, Any]], *, epoch: str = EPOCH
 
 
 class FakeViewer:
-    """The viewer: its snapshot sent, and its answers to pushed columns and gene sets."""
+    """The viewer: its snapshot sent, and its answers to the actions sent to it
+    (a pushed column and a gene set publish their result, then the action's
+    answer; any other action is answered with no outcome)."""
 
     def __init__(self, viewer: Any, held: list[dict[str, Any]]) -> None:
         self.viewer = viewer
@@ -137,24 +138,34 @@ class FakeViewer:
     def send(self, message: dict[str, Any]) -> bool:
         frame = wire._require_frontend_message(message)
         self.sent.append((message, frame))
-        if message["type"] == "setField":
+        if message["type"] != "action":
+            return True
+        params = message["params"]
+        outcome: Any = None
+        if message["action"] == "field.push":
             meta = (
-                {"key": message["key"], "categories": message["categories"], "origin": "notebook"}
-                if message["kind"] == "categorical"
-                else {"key": message["key"], "origin": "notebook"}
+                {"key": params["key"], "categories": params["categories"], "origin": "notebook"}
+                if params["kind"] == "categorical"
+                else {"key": params["key"], "origin": "notebook"}
             )
-            cells = None if message["cells"] is None else np.asarray(message["cells"]).tolist()
+            cells = None if params["cells"] is None else np.asarray(params["cells"]).tolist()
             self.viewer._handle_frontend_message(
-                _result(message["kind"], f"pushed:{message['key']}", meta, cells=cells,
-                        values=np.asarray(message["values"]), request_id=message["requestId"], revision=50)
+                _result(params["kind"], f"pushed:{params['key']}", meta, cells=cells,
+                        values=np.asarray(params["values"]), revision=50)
             )
-        elif message["type"] == "setGeneSet":
+            outcome = {"name": params["key"], "kind": params["kind"], "id": f"pushed:{params['key']}"}
+        elif message["action"] == "gene-set.save":
             self.viewer._handle_frontend_message(
-                _result("geneSet", "gene_set_1", {"name": message["name"], "description": message["description"],
-                                                  "genes": message["genes"], "symbols": None,
+                _result("geneSet", "gene_set_1", {"name": params["name"], "description": params["description"],
+                                                  "genes": params["genes"], "symbols": None,
                                                   "origin": "notebook"},
-                        cells=[], request_id=message["requestId"], revision=51)
+                        cells=[], revision=51)
             )
+        body = bytearray(json.dumps(outcome).encode("utf-8"))
+        self.viewer._handle_frontend_message({
+            "type": "action_result", "requestId": message["requestId"],
+            "step": {"id": "s1", "label": message["action"]}, "body": body,
+        })
         return True
 
 
@@ -235,13 +246,13 @@ def test_prune_removes_only_what_the_viewer_no_longer_holds(connected) -> None:
 def test_a_file_pull_and_a_viewer_pull_keep_each_others_columns(connected, tmp_path: Path) -> None:
     viewer, _fake = connected()
     adata = _adata()
-    (tmp_path / "groups.csv").write_text("obs_name,groups\nkind,categorical\ncell-0,a\ncell-1,b\n")
+    (tmp_path / "groups.csv").write_text("obs_name,groups\nkind,categorical\ncell-0,a\ncell-1,b\n", encoding="utf-8")
     cellucid.pull(adata, tmp_path / "groups.csv")
     summary = viewer.pull(adata)
     assert "groups" in adata.obs and summary.removed == []
     assert adata.uns["cellucid"]["pulled"]["groups"]["pulled_from"] == "groups.csv"
     # A file column of a name the viewer wants is another source's: a conflict.
-    (tmp_path / "annotation.csv").write_text("obs_name,annotation\nkind,categorical\ncell-0,a\n")
+    (tmp_path / "annotation.csv").write_text("obs_name,annotation\nkind,categorical\ncell-0,a\n", encoding="utf-8")
     with pytest.raises(ValueError, match="'annotation'"):
         cellucid.pull(adata, tmp_path / "annotation.csv")
 
@@ -391,7 +402,9 @@ def _pushed(viewer: Any, result_id: str) -> Any:
 def test_push_aligns_a_column_by_obs_names_and_sends_it_at_once(connected) -> None:
     viewer, fake = connected()
     adata = _adata()
-    assert viewer.push(adata.obs["leiden"]) is None
+    request = viewer.push(adata.obs["leiden"])
+    assert request.result(timeout=0) == {"name": "leiden", "kind": "categorical", "id": "pushed:leiden"}
+    assert request.step == {"id": "s1", "label": "field.push"}
     result = _pushed(viewer, "pushed:leiden")
     assert result.kind == "categorical" and result.meta["categories"] == ["0", "1", "2"]
     assert result.values.tolist() == [0, 1, 0, 2, 1, 0]
@@ -404,10 +417,11 @@ def test_push_aligns_a_column_by_obs_names_and_sends_it_at_once(connected) -> No
         viewer.push(pd.Series([1.0], index=["nope"], name="x"))
     with pytest.raises(ValueError, match="Name the field"):
         viewer.push(np.zeros(N_OBS))
-    viewer.push_gene_set("T cells", ["CD3E", "CD3E", " CD3D "], "markers")
+    # A gene set is the gene-set.save action, from any sequence of names.
+    viewer.gene_set_save(name="T cells", genes=pd.Index(["CD3E", "CD3D"]), description="markers")
     assert viewer.gene_sets()["T cells"] == ["CD3E", "CD3D"]
-    frames = [frame for message, frame in fake.sent if message["type"] == "setField"]
-    assert all(isinstance(frame, bytearray) for frame in frames)
+    frames = [frame for message, frame in fake.sent if message.get("action") == "field.push"]
+    assert frames and all(isinstance(frame, bytearray) for frame in frames)
 
 
 def test_a_refused_push_is_reported_where_the_notebook_looks(
@@ -419,13 +433,18 @@ def test_a_refused_push_is_reported_where_the_notebook_looks(
 
     def refuse(message: dict[str, Any]) -> bool:
         viewer._handle_frontend_message(
-            {"type": "command_error", "command": "setField", "reason": 'A field named "leiden" exists already'}
+            {"type": "command_error", "command": "action", "requestId": message["requestId"],
+             "reason": 'A field named "leiden" exists already'}
         )
         return True
 
     monkeypatch.setattr(viewer, "send_message", refuse)
-    viewer.push(_adata().obs["leiden"])
-    assert "viewer.push(...) did not take effect in the viewer" in capsys.readouterr().err
+    request = viewer.push(_adata().obs["leiden"])
+    assert "viewer.field_push(...) did not take effect in the viewer" in capsys.readouterr().err
+    with pytest.raises(jupyter.ActionError, match="exists already") as refused:
+        request.result(timeout=0)
+    assert refused.value.action == "field.push" and refused.value.reason == 'A field named "leiden" exists already'
+
 
 
 
@@ -439,13 +458,19 @@ def test_run_all_a_push_before_the_viewer_opened_goes_when_it_says_its_cells(
     monkeypatch.setattr(viewer, "send_message", sent.append)
     errors: list[dict[str, Any]] = []
     viewer.on_command_error(errors.append)
-    assert viewer.push(_adata().obs["leiden"]) is None
-    viewer.push(np.arange(2), key="short")
-    assert sent == []
+    waiting = viewer.push(_adata().obs["leiden"])
+    short = viewer.push(np.arange(2), key="short")
+    assert sent == [] and not waiting.done and not short.done
     viewer._handle_frontend_message({"type": "ready", "n_cells": N_OBS, "n_obs": N_OBS, "dimensions": 2})
-    assert [message["key"] for message in sent] == ["leiden"]
-    assert [error["command"] for error in errors] == ["setField"]
+    # The column goes with the request id handed out before; the one that does
+    # not fit fails its own request.
+    assert [(message["action"], message["params"]["key"], message["requestId"]) for message in sent] == [
+        ("field.push", "leiden", waiting.request_id)
+    ]
+    assert [(error["command"], error["requestId"]) for error in errors] == [("action", short.request_id)]
     assert "2 values" in errors[0]["reason"]
+    with pytest.raises(jupyter.ActionError, match="2 values"):
+        short.result(timeout=0)
     # A dataset this process reads: its cell count is known, nothing waits.
     served = serverless_viewer()
     served._served_cell_count = N_OBS
@@ -466,26 +491,29 @@ def test_run_all_a_push_before_the_viewer_opened_goes_when_it_says_its_cells(
     ],
 )
 def test_push_dtype_rules(values: Any, kind: str, expected: list[float]) -> None:
-    message = field_message(values, "k", n_obs=N_OBS, obs_names=None)
-    assert message["kind"] == kind
-    np.testing.assert_array_equal(message["values"], np.asarray(expected, dtype=message["values"].dtype))
-    wire._require_frontend_message(message | {"requestId": "r"})
+    params = field_push_params(values, "k", n_obs=N_OBS, obs_names=None)
+    assert params["kind"] == kind and params["n_obs"] == N_OBS
+    np.testing.assert_array_equal(params["values"], np.asarray(expected, dtype=params["values"].dtype))
+    frame = wire._require_frontend_message(
+        {"type": "action", "requestId": "r", "action": "field.push", "params": params, "turn": None, "turnLabel": None}
+    )
+    assert isinstance(frame, bytearray)
 
 
 def test_push_refuses_what_it_cannot_carry() -> None:
     with pytest.raises(ValueError, match="infinity"):
-        field_message(np.array([1.0, np.inf, 0, 0, 0, 0]), "k", n_obs=N_OBS, obs_names=None)
+        field_push_params(np.array([1.0, np.inf, 0, 0, 0, 0]), "k", n_obs=N_OBS, obs_names=None)
     with pytest.raises(ValueError, match="5 values"):
-        field_message(np.zeros(5), "k", n_obs=N_OBS, obs_names=None)
+        field_push_params(np.zeros(5), "k", n_obs=N_OBS, obs_names=None)
 
 
 def test_highlight_cells_takes_obs_names(connected) -> None:
     viewer, fake = connected()
-    viewer.highlight_cells(pd.Index(["cell-5", "cell-1"]), label="Two")
+    viewer.highlight_cells(cells=pd.Index(["cell-5", "cell-1"]), label="Two")
     message, frame = fake.sent[-1]
-    assert message["label"] == "Two" and sorted(message["cells"].tolist()) == [1, 5]
-    with pytest.raises(ValueError, match="not in this viewer's dataset"):
-        viewer.highlight_cells(["cell-9"])
+    assert message["params"]["label"] == "Two" and message["params"]["cells"].tolist() == [5, 1]
+    with pytest.raises(ValueError, match="not in the viewer's dataset"):
+        viewer.highlight_cells(cells=["cell-9"])
 
 
 def test_gmt_round_trip(tmp_path: Path) -> None:
@@ -495,7 +523,7 @@ def test_gmt_round_trip(tmp_path: Path) -> None:
     )
     # Each run of tabs and line breaks one space, never other whitespace; a
     # name that then repeats one is written as read_gmt names it.
-    assert path.read_text() == "T cells\tmarkers\tCD3E\tCD3D\nB cells\t\tMS4A1\nB cells (2)\t\tCD79A\na  b\t\tX\n"
+    assert path.read_text(encoding="utf-8") == "T cells\tmarkers\tCD3E\tCD3D\nB cells\t\tMS4A1\nB cells (2)\t\tCD79A\na  b\t\tX\n"
     assert cellucid.read_gmt(path) == {
         "T cells": ["CD3E", "CD3D"], "B cells": ["MS4A1"], "B cells (2)": ["CD79A"], "a  b": ["X"]}
 
@@ -533,9 +561,9 @@ def test_the_shared_obs_column_csv_fixture_keeps_every_declared_kind() -> None:
 def test_the_web_apps_exports_pull_in_one_call(tmp_path: Path) -> None:
     (tmp_path / "highlight.csv").write_text(
         "obs_name,cellucid_highlight__highlight_1\nkind,highlight\n" + "".join(
-            f"cell-{index},{'true' if index in {0, 2} else 'false'}\n" for index in range(N_OBS)))
-    (tmp_path / "annotation.csv").write_text("obs_name,annotation\nkind,categorical\ncell-0,T\ncell-1,B\ncell-5,T\n")
-    (tmp_path / "score.csv").write_text("obs_name,T score\nkind,continuous\ncell-3,1.5\ncell-1,\n")
+            f"cell-{index},{'true' if index in {0, 2} else 'false'}\n" for index in range(N_OBS)), encoding="utf-8")
+    (tmp_path / "annotation.csv").write_text("obs_name,annotation\nkind,categorical\ncell-0,T\ncell-1,B\ncell-5,T\n", encoding="utf-8")
+    (tmp_path / "score.csv").write_text("obs_name,T score\nkind,continuous\ncell-3,1.5\ncell-1,\n", encoding="utf-8")
     cellucid.write_gmt({"T": ["CD3E"]}, tmp_path / "markers.gmt")
     adata = _adata()
     summary = cellucid.pull(adata, tmp_path)
@@ -549,16 +577,16 @@ def test_the_web_apps_exports_pull_in_one_call(tmp_path: Path) -> None:
     again = cellucid.pull(adata, tmp_path, on_conflict="suffix")
     assert set(again.columns) == set(summary.columns)
     assert list(adata.uns["cellucid"]["gene_sets"]) == ["T"]
-    (tmp_path / "bad.csv").write_text("obs_name,x\nkind,continuous\ncell-99,1\n")
+    (tmp_path / "bad.csv").write_text("obs_name,x\nkind,continuous\ncell-99,1\n", encoding="utf-8")
     with pytest.raises(ValueError, match="not in this object"):
         cellucid.pull(adata, tmp_path / "bad.csv")
-    (tmp_path / "bad.csv").write_text("obs_name,x\ncell-1,1\n")
+    (tmp_path / "bad.csv").write_text("obs_name,x\ncell-1,1\n", encoding="utf-8")
     with pytest.raises(ValueError, match="kind row"):
         cellucid.pull(adata, tmp_path / "bad.csv")
-    (tmp_path / "bad.csv").write_text("obs_name,x\nkind,continuous\ncell-1,one\n")
+    (tmp_path / "bad.csv").write_text("obs_name,x\nkind,continuous\ncell-1,one\n", encoding="utf-8")
     with pytest.raises(ValueError, match="continuous column 'x' holds 'one'"):
         cellucid.pull(adata, tmp_path / "bad.csv")
-    (tmp_path / "bad.csv").write_text("obs_name,x\nkind,label\ncell-1,one\n")
+    (tmp_path / "bad.csv").write_text("obs_name,x\nkind,label\ncell-1,one\n", encoding="utf-8")
     with pytest.raises(ValueError, match="of kind 'label'"):
         cellucid.pull(adata, tmp_path / "bad.csv")
 
@@ -576,11 +604,11 @@ def test_gene_sets_of_one_name_are_named_by_one_rule() -> None:
 
 
 def test_a_bool_column_is_pushed_with_the_labels_r_pushes() -> None:
-    message = field_message(pd.Series([True, False, None], dtype="boolean"), "flag", n_obs=3, obs_names=None)
-    assert message["categories"] == ["false", "true"]
-    assert message["values"].tolist() == [1, 0, 255]
-    message = field_message(np.array([True, True]), "flag", n_obs=2, obs_names=None)
-    assert message["categories"] == ["true"]
+    params = field_push_params(pd.Series([True, False, None], dtype="boolean"), "flag", n_obs=3, obs_names=None)
+    assert params["categories"] == ["false", "true"]
+    assert params["values"].tolist() == [1, 0, 255]
+    params = field_push_params(np.array([True, True]), "flag", n_obs=2, obs_names=None)
+    assert params["categories"] == ["true"]
 
 
 def test_pull_reads_obs_names_of_a_file_alone(tmp_path: Path) -> None:
@@ -601,7 +629,7 @@ def test_mudata_takes_the_pull_on_its_global_obs(connected) -> None:
 
 
 def test_the_protocol_document_lists_every_result_kind() -> None:
-    fixture = json.loads((Path(__file__).parent / "fixtures" / "viewer_protocol.json").read_text())
+    fixture = json.loads((Path(__file__).parent / "fixtures" / "viewer_protocol.json").read_text(encoding="utf-8"))
     assert set(fixture["results"]["kinds"]) == set(wire._RESULT_META_FIELDS)
 
 
@@ -644,11 +672,11 @@ def test_a_viewer_of_a_priority_ordered_file_names_cells_by_original_position(
                                      "source": "lasso"})
     selection = viewer.selection
     assert selection is not None and list(selection.obs_names) == ["cell-3", "cell-17"]
-    assert viewer._cell_positions(pd.Index(["cell-17", "cell-3"])).tolist() == [17, 3]
+    assert viewer._action_cells(pd.Index(["cell-17", "cell-3"]), "cells").tolist() == [17, 3]
     # A column pushed by obs names lands on the cells of those names.
-    message = field_message(pd.Series([1.0, 2.0], index=["cell-17", "cell-3"]), "score", n_obs=40,
-                            obs_names=viewer.obs_names)
-    assert message["cells"].tolist() == [3, 17] and message["values"].tolist() == [2.0, 1.0]
+    params = field_push_params(pd.Series([1.0, 2.0], index=["cell-17", "cell-3"]), "score", n_obs=40,
+                               obs_names=viewer.obs_names)
+    assert params["cells"].tolist() == [3, 17] and params["values"].tolist() == [2.0, 1.0]
     # The object restored to its original order is what pull and subset take;
     # the file read as stored is refused, never written in the wrong rows.
     stored = ad.read_zarr(path)

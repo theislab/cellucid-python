@@ -346,7 +346,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 **explains** — Feature overview: offline-first, scope-based (dataset + repo + branch + user), role split, consensus maths, local vs GitHub storage, and the annotator/author quickstart tabs.
 
-**has** — 1 figure, L40 `community_annotation/lifecycle-01-disconnected.png`, `:width: 246px`. **Reused on all four pages.**
+**has** — 1 figure, L40 `community_annotation/lifecycle-01-disconnected.png`, `:width: 504px`. **Reused on all four pages.**
 
 **verdict** — **SEQUENCE** (see the lifecycle section below).
 
@@ -360,7 +360,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 **explains** — The annotator's whole round: connect, Pull, find the 🗳️ column, open the voting modal, read the consensus line, vote, comment, propose a suggestion, Publish, wrap up; then a large troubleshooting catalogue.
 
-**has** — 1 figure, L82 `community_annotation/lifecycle-01-disconnected.png`, `:width: 246px`. Same file as the other three pages.
+**has** — 1 figure, L82 `community_annotation/lifecycle-01-disconnected.png`, `:width: 504px`. Same file as the other three pages.
 
 **verdict** — **SEQUENCE**.
 
@@ -374,7 +374,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 **explains** — The author's setup and operations: dataset-id stability, repo layout, `annotations/config.json` schema, GitHub App install, self-hosted Worker contract, enabling columns, tuning thresholds, merging duplicates, derived columns, consensus export, and a large troubleshooting catalogue. 38 kB — the largest page in all three sections.
 
-**has** — 1 figure, L61 `community_annotation/lifecycle-01-disconnected.png`, `:width: 246px`. Same file again.
+**has** — 1 figure, L61 `community_annotation/lifecycle-01-disconnected.png`, `:width: 504px`. Same file again.
 
 **verdict** — **SEQUENCE**.
 
@@ -384,7 +384,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 - **There is a visible gap at lines 214–216** where §"Confirm the dataset id in the UI (recommended)" ends with "the Community Annotation status panel displays the dataset id" followed by two blank lines and a horizontal rule. That reads like a removed figure. The status-panel crop (lifecycle step 6) belongs exactly there.
 - Repo-layout claims **verified** against `cellucid-annotation`: `annotations/{config.json, config.schema.json, schema.json}`, `annotations/users/` (contains only `.gitkeep` — **no example user file**), `annotations/moderation/{merges.json, merges.schema.json}`, `.github/workflows/validate.yml`, `scripts/validate_user_files.py`. All present. `merges.json` is `{"version":1,"updatedAt":"1970-01-01T00:00:00Z","merges":[]}`.
 - The template `config.json` uses `datasetId: "example-dataset-id"` with `fieldsToAnnotate: ["cell_type","batch"]`, not the `leiden`/`my_atlas_v1` used in this page's examples. Not wrong, but a screenshot of the template file next to the guide's example would remove a real point of confusion for a non-technical author copying the template.
-- §6 "self-host the GitHub OAuth + API proxy" documents a nine-route Worker contract and a health JSON. That is a **terminal-screenshot** opportunity per the user's objective: `curl https://<worker>/ | jq` showing `{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":2,…}`. Suggested `community_annotation/worker-health-curl.png`, `:width: 700px`. Redact the origin.
+- §6 "self-host the GitHub OAuth + API proxy" documents the ten-route Worker contract (version 3) and a health JSON. That is a **terminal-screenshot** opportunity per the user's objective: `curl https://<worker>/ | jq` showing `{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":3,…}`. Suggested `community_annotation/worker-health-curl.png`, `:width: 700px`. Redact the origin.
 
 ---
 
@@ -392,7 +392,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 **explains** — Explicitly a "**button-by-button** reference" for every Community Annotation surface: the sidebar accordion, the 4-step GitHub sync wizard, the identity modal, MANAGE ANNOTATION, DERIVED CONSENSUS COLUMN, CONSENSUS SNAPSHOT + LOCAL CACHE, and the voting modal — plus a troubleshooting catalogue.
 
-**has** — 1 figure, L34 `community_annotation/lifecycle-01-disconnected.png`, `:width: 246px`. Same file, fourth use.
+**has** — 1 figure, L34 `community_annotation/lifecycle-01-disconnected.png`, `:width: 504px`. Same file, fourth use.
 
 **verdict** — **SEQUENCE** — and this is the page where the single-image reuse is *least* defensible. A page whose stated purpose is button-by-button reference has one picture, of the state in which almost none of those buttons exist.
 
@@ -462,29 +462,38 @@ Limitation: the status chips read from the simulated state, so a shot that must 
 await page.addInitScript(({ workerOrigin, user }) => {
   window.__CELLUCID_GITHUB_WORKER_ORIGIN__ = workerOrigin;     // 'https://worker.example'
   sessionStorage.setItem('cellucid:github-app-auth:session',
-    JSON.stringify({ token: 'synthetic-token', user }));       // { id: 4242, login: 'tester' }
+    JSON.stringify({ expiresAt: Date.now() + 8 * 3600 * 1000,  // a stored token carries its expiry
+                     token: 'synthetic-token', user }));       // { id: 4242, login: 'tester' }
 }, { workerOrigin: 'https://worker.example', user: { id: 4242, login: 'tester' } });
 ```
 The origin override is accepted **only on a local-dev host** (`github-auth.js` throws `GITHUB_WORKER_ORIGIN_UNTRUSTED` elsewhere) — the same gate as Strategy A.
 
-Then route `https://worker.example/**`. Exact fixture shapes, all verified from the spec:
+Then route `https://worker.example/**`. The maintained implementation is
+`docs/_tooling/screenshots/community-annotation-mock.mjs`, which mirrors the
+stand-in Worker of `community-annotation-startup-lifecycle.spec.mjs`
+(`installGitHubApi`). Every response that relays GitHub carries
+`access-control-expose-headers` with the Worker's exposed headers
+(`WORKER_EXPOSED_RESPONSE_HEADERS` in `worker-contract.js`). The shapes of
+wire contract 3:
 
 | Route | Response |
 |---|---|
-| `GET /` (capability handshake, runs **first**) | `{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":2,"endpoints":["/auth/login","/auth/callback","/auth/revoke","/auth/user","/auth/installations","/auth/installation-repos","/cap/lookup-cells","/api/repos/*"]}` — **must match `WORKER_ENDPOINTS` element-by-element in order** or sign-in aborts before redirect |
+| `GET /` (capability handshake, runs **first**) | `{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":3,"endpoints":["/auth/login","/auth/callback","/auth/revoke","/auth/user","/auth/installations","/auth/installation-repos","/cap/lookup-cells","/graphql/snapshot","/graphql/blobs","/api/repos/*"]}` — **must match `WORKER_ENDPOINTS` element-by-element in order** or sign-in aborts before redirect |
 | `GET /auth/user` | `{"id":4242,"login":"tester"}` |
-| `POST /auth/installations` | `{"installations":[{"id":71,"account":{"login":"team"}}]}` |
-| `POST /auth/installation-repos` (body `{installation_id}`) | `{"repositories":[{"id":1,"full_name":"team/labels","private":false}]}` |
+| `GET /auth/installations?page=N` | `{"items":[{"id":71,"account":{"login":"team"}}],"nextPage":null}` (one GitHub page per request; `nextPage` is `N+1` or `null`) |
+| `POST /auth/installation-repos?page=N` (body `{installation_id}`) | `{"items":[{"id":1,"full_name":"team/labels","private":false}],"nextPage":null}` |
 | `GET /api/repos/<owner>/<repo>` | `{full_name, default_branch:"main", private:false, allow_forking:true, permissions:{pull:true,triage:false,push:true,maintain:<author>,admin:<author>}}` — `maintain/admin true` ⇒ role `author`; all false + `allow_forking:false` ⇒ Publish disabled |
-| `GET /api/repos/*/*/git/trees/*` | `{"tree":[{"type":"tree","path":"annotations/users","sha":"d…"},{"type":"blob","path":"annotations/users/.gitkeep","sha":"8b137891791fe96927ad78e64b0aad7bded08bdc","size":1}],"truncated":false}` |
-| `GET /api/repos/*/*/contents/<path>` | `{type:"file", encoding:"base64", content:<base64 JSON>, sha:<char×40>}` for `annotations/schema.json`, `config.schema.json`, `moderation/merges.schema.json`, `config.json`, `users/ghid_4242.json`, `moderation/merges.json` |
-| `PUT /api/repos/*/*/contents/*` (**Publish**) | `200`, headers `x-cellucid-operation-id: <echo>`, `x-cellucid-operation-outcome: applied`, `access-control-expose-headers: X-Cellucid-Operation-Id, X-Cellucid-Operation-Outcome`; body `{"content":{"sha":"4444…"}}` |
+| `POST /graphql/snapshot` (body `{owner, repo, branch}`) | `{"data":{"repository":{"ref":{"target":{"oid":<commit>,"annotations":{"oid","type":"tree","object":{"entries":[{name,type,oid,object:{byteSize}}…]}},"moderation":{…}}}},"rateLimit":{…}}}` — the entries of `annotations/` (`config.json`, `config.schema.json`, `moderation`, `schema.json`, `users`) and of `annotations/moderation/` (`merges.json`, `merges.schema.json`); the three schema entries carry the template's blob ids (`ANNOTATION_SCHEMA_BLOB_OIDS`) |
+| `GET /api/repos/*/*/git/trees/<users tree oid>` | `{"sha":<oid>,"tree":[{"path":".gitkeep","mode":"100644","type":"blob","sha":"8b137891791fe96927ad78e64b0aad7bded08bdc","size":1},{"path":"ghid_4242.json",…}],"truncated":false}` |
+| `POST /graphql/blobs` (body `{owner, repo, oids}`) | `{"data":{"repository":{"b0":{"oid","byteSize","isBinary":false,"isTruncated":false,"text"},…},"rateLimit":{…}}}` — aliases `b<i>` in request order |
+| `GET /api/repos/*/*/contents/<path>?ref=<branch>` | `{type:"file", encoding:"base64", content:<base64 JSON>, sha:<blob id>}` — read by Publish for the file it composes onto |
+| `PUT /api/repos/*/*/contents/*` (**Publish**) | `200`, headers `x-cellucid-operation-id: <echo>`, `x-cellucid-operation-outcome: applied`; body `{"content":{"sha":<blob id>}}` |
 
-The three `*.schema.json` documents only need their identity pair — the app checks `$id` only:
-each carries the draft 2020-12 `$schema` plus an `$id` on the frozen bare-apex
-contract host, one per document (`user-v1`, `config-v1`, `merges-v1`). The exact
-`$id` strings are pinned in ``docs/contributing/web_app.md``; do not retype them here,
-because `tests/test_canonical_url_contract.py` pins bare-apex URLs to that page.
+The schemas are never downloaded: the app accepts a repository when the
+snapshot names the template's three schema blob ids. Their `$id` strings
+(`user-v3`, `config-v1`, `merges-v3`) are pinned in
+``docs/contributing/web_app.md``; do not retype them here, because
+`tests/test_canonical_url_contract.py` pins bare-apex URLs to that page.
 
 Deep link used by the spec:
 `/?sampleCatalog=<encoded>&dataset=<id>&annotations=team%2Flabels%40main&acceptance=<tag>`
@@ -506,25 +515,27 @@ s.rebuildMergedViewFromUserFiles([ /* fabricated ghid_* user documents */ ]);
 ```
 `rebuildMergedViewFromUserFiles(remoteUserDocs, options)` (`session.js:3283`) is **the key to the whole lifecycle**: it is the exact function a real Pull feeds, so handing it fabricated documents produces a genuine multi-user merged view — multiple voters, real consensus arithmetic, real card ordering — with no network at all. Other useful methods on the same object: `vote(fieldKey, catIdx, suggestionId, direction)`, `addSuggestion`, `addComment`, `computeConsensus(fieldKey, catIdx, {minAnnotators, threshold})` (`:2854`), `addModerationMerge({fieldKey, catIdx, fromSuggestionId, intoSuggestionId, note})` (`:2659`), `buildConsensusDocument()` (`:2954`), `setFieldClosed`.
 
-**The fabricated user document schema** is fixed by `cellucid-annotation/annotations/schema.json` (`user-v1`). Required: `version` (const 1), `username`, `githubUserId` (int ≥1), `updatedAt` (ISO Z), `suggestions`, `votes`. Shape:
+**The fabricated user document schema** is fixed by `cellucid-annotation/annotations/schema.json` (`user-v3`). Required: `version` (const 3), `username`, `githubUserId` (int ≥1), `updatedAt` (ISO Z), `datasets` (one section per dataset id, each with `fieldsToAnnotate`, `lastAccessedAt`, `suggestions`, `votes`, and optional `comments` and `deletedSuggestions`). Shape:
 ```json
-{ "version": 1, "username": "ghid_101", "githubUserId": 101,
+{ "version": 3, "username": "ghid_101", "githubUserId": 101,
   "login": "a-reviewer", "displayName": "A. Reviewer", "title": "Postdoc",
   "updatedAt": "2026-01-15T10:00:00Z",
-  "suggestions": { "clusters:Beta": [
-      { "id": "sug_beta_01", "label": "Beta cell", "ontologyId": "CL:0000169",
-        "markers": [{"gene":"INS","logFC":4.2,"pval":1e-40}],
-        "evidence": "High INS, IAPP; low GCG.",
-        "proposedBy": "ghid_101", "proposedAt": "2026-01-15T10:00:00Z" } ] },
-  "votes": { "sug_beta_01": "up" },
-  "comments": { "sug_beta_01": [
-      { "id":"c1", "text":"Agrees with the reference atlas.",
-        "authorUsername":"ghid_101", "createdAt":"2026-01-15T10:05:00Z" } ] } }
+  "datasets": { "pancreas": {
+    "fieldsToAnnotate": ["clusters"], "lastAccessedAt": "2026-01-15T10:00:00Z",
+    "suggestions": { "clusters:Beta": [
+        { "id": "ghid_101_beta-01", "label": "Beta cell", "ontologyId": "CL:0000169",
+          "markers": [{"gene":"INS","logFC":4.2,"pval":1e-40}],
+          "evidence": "High INS, IAPP; low GCG.",
+          "proposedBy": "ghid_101", "proposedAt": "2026-01-15T10:00:00Z" } ] },
+    "votes": { "ghid_101_beta-01": "up" },
+    "comments": { "ghid_101_beta-01": [
+        { "id":"c1", "text":"Agrees with the reference atlas.",
+          "authorUsername":"ghid_101", "createdAt":"2026-01-15T10:05:00Z" } ] } } } }
 ```
-Bucket keys are `<fieldKey>:<categoryLabel>`; `proposedBy`/`authorUsername` must match `^ghid_[1-9][0-9]*$`; votes are `"up"` | `"down"`. **Every displayed name in a screenshot is chosen by you** — use plausible, clearly-fictional identities and never a real collaborator's GitHub login.
+Bucket keys are `<fieldKey>:<categoryLabel>`; `proposedBy`/`authorUsername` must match `^ghid_[1-9][0-9]*$`; a suggestion id starts with its own `proposedBy` and `_` (`ghid_101_…`); votes are `"up"` | `"down"`. **Every displayed name in a screenshot is chosen by you** — use plausible, clearly-fictional identities and never a real collaborator's GitHub login.
 
 **(D) Route interception, only where a network hop is unavoidable.**
-- CAP search: `page.route('**/cap/lookup-cells', …)` → `{ "contractVersion": 1, "results": [...], "omittedInvalidCount": 0 }` (handle the `OPTIONS` preflight with a 204 + CORS headers, as the spec does).
+- CAP search: `page.route('**/cap/lookup-cells', …)` → `{ "contractVersion": 3, "results": [...], "omittedInvalidCount": 0 }` (handle the `OPTIONS` preflight with a 204 + CORS headers, as the spec does).
 - ORCID lookup in the identity modal goes **directly to `https://pub.orcid.org`** from the browser — route-mock or leave the field untouched.
 - The Worker routes (`/auth/installations`, `/auth/installation-repos`, `/api/repos/*`) are only needed for wizard steps 3–4 and for a real Publish.
 
@@ -569,7 +580,7 @@ openCommunityAnnotationVotingModal({ defaultCatIdx, defaultFieldKey, state });
 
 **Exact wizard step titles** (for caption accuracy): `Sign in with GitHub`, `Install the GitHub App`, `Select an annotation repository`, `Sync (pull / publish)`.
 
-**Exact status strings worth capturing**: `Pulled latest annotations.`, `Publish complete.`, `Downloaded cellucid-consensus.json`, `No annotation repo connected.`
+**Exact status strings worth capturing**: `Pulled latest annotations.`, `Published.`, `Opened a pull request: …`, `Downloaded cellucid-consensus.json`, `No annotation repo connected.`
 
 ---
 
@@ -583,7 +594,7 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 - **After:** panel reads `No annotation repo connected.` with a `CONNECT REPO` button.
 - **Crop:** `#community-annotation-section` (header + body), plus ~8 px padding.
 - **Cursor:** on `CONNECT REPO`.
-- **File:** `community_annotation/lifecycle-01-disconnected.png`, `:width: 246px`.
+- **File:** `community_annotation/lifecycle-01-disconnected.png`, `:width: 504px`.
 - **Mock-reachable:** **YES** — no mock at all. This is the existing image; re-shoot at 2× with the cursor.
 
 ### 2. Wizard step 1 — Sign in with GitHub
@@ -592,7 +603,7 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 - **After:** `Continue with GitHub` button visible; stepper shows 1/4.
 - **Crop:** `.community-annotation-modal` (whole wizard incl. `.community-annotation-stepper` and `.community-annotation-wizard-nav`).
 - **Cursor:** on `Continue with GitHub`.
-- **File:** `community_annotation/lifecycle-02-signin.png`, `:width: 560px`.
+- **File:** `community_annotation/lifecycle-02-signin.png`, `:width: 1040px`.
 - **Mock-reachable:** **YES** — open the wizard with **no** sessionStorage token. Nothing is fetched until the button is pressed.
 
 ### 3. Wizard step 2 — Install the GitHub App
@@ -601,7 +612,7 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 - **After:** `Add repo` and `Reload` (`.community-annotation-reload-btn`) buttons, plus `.community-annotation-repo-grid[aria-label="Available annotation repositories"]` and its pager (`Previous` / `Next`, status `Showing 1–N of M repositories. Page 1 of P.`).
 - **Crop:** `.community-annotation-modal`.
 - **Cursor:** on `Add repo`.
-- **File:** `community_annotation/lifecycle-03-install-app.png`, `:width: 560px`.
+- **File:** `community_annotation/lifecycle-03-install-app.png`, `:width: 1040px`.
 - **Mock-reachable:** **YES, fully.** Strategy B + `POST /auth/installations` → `{"installations":[{"id":71,"account":{"login":"team"}}]}`. Shape verified from `community-annotation-startup-lifecycle.spec.mjs`.
 
 ### 4. Wizard step 3 — Select an annotation repository
@@ -619,7 +630,7 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 - **After:** `Pull latest` and `Publish`, the `Auto pull` toggle and its 10/15/60-minute select, and the wizard status line.
 - **Crop:** `.community-annotation-modal` incl. `.community-annotation-sync-actions` and `.community-annotation-auto-pull-row`.
 - **Cursor:** on `Pull latest`.
-- **File:** `community_annotation/lifecycle-05-sync.png`, `:width: 560px`.
+- **File:** `community_annotation/lifecycle-05-sync.png`, `:width: 1040px`.
 - **Mock-reachable:** **YES.** Strategy A renders the panel on its own (this is what `community-annotation-export.spec.mjs` relies on). Use Strategy B only if the caption needs a real `Pulled latest annotations.` status line, which `:2076` demonstrates.
 
 ### 6. Connected — the status panel
@@ -628,7 +639,7 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 - **After:** `.community-annotation-status-panel` shows `Dataset`, `GitHub` (login), `Repo` (`owner/repo@branch`), the `Copy share link` icon, and the entry button now reading `GitHub sync…`.
 - **Crop:** `#community-annotation-controls`.
 - **Cursor:** on the `Copy share link` icon.
-- **File:** `community_annotation/lifecycle-06-connected-status.png`, `:width: 246px`.
+- **File:** `community_annotation/lifecycle-06-connected-status.png`, `:width: 504px`.
 - **Mock-reachable:** **YES** — levers (A)+(C) only.
 - **This is the image {doc}`/user_guide/web_app/j_community_annotation/02_author_guide` line 214 is missing** and the natural replacement for the disconnected panel on {doc}`/user_guide/web_app/j_community_annotation/index`.
 
@@ -638,7 +649,7 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 - **After:** `Close`/`Reopen` available and the per-column **Annotatable consensus settings** appear: `Threshold` slider, `Min annotators` input, `Apply`, `Reset`.
 - **Crop:** the `MANAGE ANNOTATION` accordion body.
 - **Cursor:** on the `Threshold` slider thumb.
-- **File:** `community_annotation/lifecycle-07-manage-annotation.png`, `:width: 246px`.
+- **File:** `community_annotation/lifecycle-07-manage-annotation.png`, `:width: 504px`.
 - **Mock-reachable:** **YES** — `window._author_mode = true` + `s.setFieldAnnotated('clusters', true)`.
 
 ### 8. The 🗳️ badge in the field dropdown
@@ -647,7 +658,7 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 - **After:** `clusters` carries 🗳️; a closed column would carry 🗳️🏁.
 - **Crop:** the open dropdown list.
 - **Cursor:** on the 🗳️ entry.
-- **File:** `community_annotation/lifecycle-08-votable-badge.png`, `:width: 300px`.
+- **File:** `community_annotation/lifecycle-08-votable-badge.png`, `:width: 496px`.
 - **Mock-reachable:** **YES**. Consider a second frame with `s.setFieldClosed('clusters', true)` to show 🗳️🏁 — `01` and ``index`` both cite it as a top troubleshooting cause and it has never been shown.
 
 ### 9. Voting modal — Pending
@@ -656,7 +667,7 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 - **After:** modal open; `.community-annotation-consensus.status-pending` reads `Pending (1 voters)`; one suggestion card.
 - **Crop:** `.community-annotation-voting-detail`.
 - **Cursor:** no.
-- **File:** `community_annotation/lifecycle-09-pending.png`, `:width: 560px`.
+- **File:** `community_annotation/lifecycle-09-pending.png`, `:width: 988px`.
 - **Mock-reachable:** **YES** — `rebuildMergedViewFromUserFiles([oneUserDoc])`.
 
 ### 10. Casting a vote
@@ -665,7 +676,7 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 - **After:** unchanged (capture the hover, not the result) — this documents `01` §7.
 - **Crop:** a single `.community-annotation-suggestion-card`, showing label, `net …`, `Ontology:`, `Markers:`, `Evidence:`, `▲ n`, `▼ n`.
 - **Cursor:** **yes — on `.community-annotation-vote-btn.vote-up`.** This is the most cursor-dependent image in the whole audit.
-- **File:** `community_annotation/lifecycle-10-vote.png`, `:width: 460px`.
+- **File:** `community_annotation/lifecycle-10-vote.png`, `:width: 1020px`.
 - **Mock-reachable:** **YES** — `s.vote('clusters', catIdx, id, 'up')` for the after-state if a second frame is wanted.
 
 ### 11. Consensus reached
@@ -674,7 +685,7 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 - **After:** `.community-annotation-consensus.status-consensus` reads `Consensus: "Beta cell" (100% • 4 voters)`.
 - **Crop:** `.community-annotation-voting-detail`, whole modal.
 - **Cursor:** no.
-- **File:** `community_annotation/lifecycle-11-consensus.png`, `:width: 560px`.
+- **File:** `community_annotation/lifecycle-11-consensus.png`, `:width: 988px`.
 - **Mock-reachable:** **YES** — four user documents, each with `"votes": {"sug_beta_01": "up"}`, through `rebuildMergedViewFromUserFiles`.
 
 ### 12. Disputed
@@ -682,7 +693,7 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 - **After:** `.status-disputed` reads `Disputed: … (50% • 4 voters)` with two tied cards.
 - **Crop:** `.community-annotation-voting-detail`.
 - **Cursor:** no.
-- **File:** `community_annotation/lifecycle-12-disputed.png`, `:width: 560px`.
+- **File:** `community_annotation/lifecycle-12-disputed.png`, `:width: 988px`.
 - **Mock-reachable:** **YES**. This is the exact row 5 of `02`'s worked-examples table ("4 users split: 2 upvote A, 2 upvote B → Disputed") and pairs with it directly.
 
 ### 13. Propose a suggestion (+ CAP search)
@@ -723,13 +734,13 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 ### 17. Publish — direct push
 - **Before:** local changes pending, `permissions.push: true`.
 - **Action:** `GitHub sync…` → step 4 → `Publish`.
-- **After:** `.community-annotation-wizard-status` reads **`Publish complete.`** The client issued `PUT /api/repos/<owner>/<repo>/contents/annotations/users/ghid_<id>.json` with an `x-cellucid-operation-id` UUIDv4.
+- **After:** `.community-annotation-wizard-status` reads **`Published.`** The client issued `PUT /api/repos/<owner>/<repo>/contents/annotations/users/ghid_<id>.json` with an `x-cellucid-operation-id` UUIDv4.
 - **Crop:** `.community-annotation-modal` with the status line in frame.
 - **Cursor:** on `Publish`.
-- **File:** `community_annotation/lifecycle-17-publish.png`, `:width: 560px`.
+- **File:** `community_annotation/lifecycle-17-publish.png`, `:width: 1040px`.
 - **Mock-reachable:** **YES, fully.** Strategy B `handleMutation` returns `200` + `{"content":{"sha":"4444…"}}` with `x-cellucid-operation-outcome: applied`. Exercised by `community-annotation-startup-lifecycle.spec.mjs:3694` *"an exact-byte no-op publication seeds the SHA baseline for the next edit"* and `:4031` for the author's `config.json` write.
 - **Also worth capturing:** the **Publish-disabled** state, which `01` and `03` both troubleshoot at length. Serve repoInfo with `permissions` all false **and** `allow_forking: false` → `selectAnnotationPublicationMode()` returns `null` and Publish is unavailable. `:2076` *"read-only collaborator keeps Pull and the repository while Publish stays explicitly unavailable"* is exactly that state. → `community_annotation/lifecycle-17b-publish-unavailable.png`.
-- **Still NOT reachable:** a genuine **fork + Pull Request** confirmation. The route is selected by `selectAnnotationPublicationMode()` from repository metadata, but no spec drives a fork/PR mutation end to end, so the fork-creation and PR-creation responses are unspecified. **Do not fabricate a "Pull request opened" screenshot** — document the PR path in prose only.
+- **Still NOT reachable:** a genuine **fork + Pull Request** confirmation. The route is selected by `selectAnnotationPublicationMode()` from repository metadata, and `community-annotation-walk.spec.mjs` *"without write access and without a fork, Publish links to forking on GitHub; once forked, it opens the pull request"* drives one end to end (Cellucid never creates a fork), but this screenshot mock answers no fork or pull-request request. **Do not fabricate a "Pull request opened" screenshot** — document the PR path in prose only.
 
 ### 18. Profile / "Your identity" modal
 - **Action:** `Profile (optional)` → `Edit`.

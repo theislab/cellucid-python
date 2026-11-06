@@ -36,7 +36,7 @@ If anything fails, jump to “Troubleshooting (Massive)” at the end and start 
 :::{tab-item} Computational / Git-Savvy
 
 1) Verify you are on the intended scope: dataset id + `owner/repo@branch`.
-2) Pull (SHA-based incremental download) and confirm the merged view is current.
+2) Pull (reads one commit; downloads only files whose Git blob id changed) and confirm the merged view is current.
 3) Vote/suggest; include ontology ids and evidence when possible.
 4) Publish directly if permitted, or by fork + Pull Request only when the
    repository allows forking, and confirm any PR is merged.
@@ -55,9 +55,10 @@ This guide includes schema limits, caching behavior, and edge cases (tabs, devic
 - Access to the annotation repository (public repo, or you’ve been added to a private repo).
 - The **Cellucid GitHub App** installed on the repo owner (so the repo appears in the UI).
 
-If your author uses the fork + Pull Request model, one extra thing helps a lot:
+If you cannot push to the repository (fork + Pull Request), do two things on GitHub first:
 
-- Install the Cellucid GitHub App on **your personal GitHub account** with access to **all repositories**, so newly created forks are included automatically.
+- **Fork the repository** (`https://github.com/<owner>/<repo>/fork`). Cellucid never creates a fork for you; without one, Publish says so and links there.
+- **Install the Cellucid GitHub App on your own GitHub account with access to that fork**: *All repositories*, or *Only select repositories* with the fork selected. Cellucid writes your user file in your fork with your sign-in, which reaches only repositories the app is installed on.
 
 :::{important}
 Your work is saved in two places:
@@ -107,15 +108,22 @@ This can pre-select the annotation repo, but you still must sign in and Pull.
 
 When you click **Pull latest**, Cellucid:
 
-- lists `annotations/users/*.json` (and optional `annotations/moderation/merges.json`)
-- downloads only files that changed since your last Pull (SHA-based incremental)
+- reads the repository at one commit and lists `annotations/users/*.json` (and optional `annotations/moderation/merges.json`)
+- downloads only files whose Git blob id changed since your last Pull, many
+  per request; when nothing changed, it stops after one or two requests
 - rebuilds the merged suggestion/vote view in your browser
 
-The persistent raw-file cache stores file bodies in IndexedDB and its SHA index
-in browser local storage. Annotation state and cross-tab coordination also
-require local storage. Cellucid never switches to an in-memory cache: if either
-storage boundary is unavailable, Pull fails without replacing the current
-annotation view.
+The persistent raw-file cache stores what each file holds for this dataset in
+IndexedDB, kept as each batch arrives, so an interrupted Pull resumes where it
+stopped. Annotation state and cross-tab coordination require local storage.
+Cellucid never switches to an in-memory cache: if either storage boundary is
+unavailable, Pull fails without replacing the current annotation view.
+
+A contributor file that is not valid never stops your Pull: it is left out of
+the consensus, and a warning says how many files were left out (each file and
+its reason are under the warning's details). If it is your own file, the
+warning says so first, and Publish will not overwrite it until it is fixed or
+removed on GitHub; tell your author.
 
 If you do not Pull:
 
@@ -255,7 +263,7 @@ Remember:
 
 Under each suggestion card:
 
-- type a comment (max 500 characters)
+- type a comment
 - press **Enter** to submit
 - use **Shift+Enter** to insert a newline without submitting
 
@@ -279,10 +287,14 @@ Avoid personal data in comments (emails, patient info, private sample identifier
 
 At the bottom of the modal you can add a **New suggestion**:
 
-- **Label (required)**: short human-readable label (max 120 chars)
-- **Ontology id (optional)**: e.g. `CL:0000625` (max 64 chars)
+- **Label (required)**: short human-readable label
+- **Ontology id (optional)**: e.g. `CL:0000625`
 - **Marker genes (optional)**: comma-separated (e.g. `MS4A1, CD79A`)
-- **Evidence (optional)**: free text (max 2000 chars)
+- **Evidence (optional)**: free text
+
+No text has a length limit of its own; your whole user file (every dataset you
+annotate in the repository) is limited to 1,000,000 UTF-8 bytes, the most
+GitHub serves as one JSON file. Text cannot start or end with whitespace.
 
 Buttons you may see:
 
@@ -298,7 +310,11 @@ Before adding a new suggestion:
 2) If your label already exists but needs evidence, add a comment instead of duplicating.
 3) If your label exists but is spelled differently, prefer commenting and ask an author to merge duplicates later.
 
-Duplicates split votes until an author merges them.
+Exactly the same label cannot be added twice in one category (Cellucid
+refuses it), and if two people propose it independently, for example offline,
+Cellucid counts it as one suggestion: each person's votes on it count once.
+Labels that differ even slightly (`T cell`, `T-cell`, `T cells`) are separate
+suggestions and split votes until an author merges them.
 
 ### About CAP search (privacy + failure modes)
 
@@ -311,7 +327,7 @@ document or caller-selected upstream.
 - Search text is visible to the Cellucid Worker operator, CAP, and the network
   path. The GitHub bearer token and OAuth cookies are not sent to CAP.
 - A successful response has the bounded shape
-  `{ "contractVersion": 2, "results": [...], "omittedInvalidCount": number }`.
+  `{ "contractVersion": 3, "results": [...], "omittedInvalidCount": number }`.
 - If this disclosure is not acceptable, or if you are offline or CAP is
   blocked, use manual suggestions; voting and manual annotation still work.
 
@@ -340,6 +356,10 @@ the other route.
 
 ### If a Pull Request is opened
 
+You have one pull request per branch of the annotation repository. Publishing
+again updates the same pull request (it carries your whole file, every
+dataset you annotate there) instead of opening another.
+
 1) Confirm the PR was created successfully.
 2) Follow your lab/org process:
    - request review if needed
@@ -367,8 +387,9 @@ Recommended wrap-up:
 
 Remember:
 
-- your GitHub token expires after 8 hours, and closing the tab or **Sign out**
-  ends it sooner (**Sign out** also revokes it at GitHub),
+- your GitHub token expires after 8 hours, and closing the tab or **Disconnect
+  GitHub** ends it sooner (**Disconnect GitHub** also revokes it at GitHub and
+  disconnects this dataset's repository),
 - your local annotation session may persist in browser storage, but it is not a substitute for publishing.
 
 ---
@@ -383,19 +404,36 @@ Local work is stored per browser/device. To share across devices:
 2) Merge PR if applicable.
 3) Pull on the other device.
 
-### “I opened two tabs and now I’m blocked”
+### “Open in another tab — annotation paused here”
 
-Cellucid may enforce a single active tab per scope (dataset + repo@branch + GitHub user id) to prevent silent data loss.
+One tab of a browser annotates a dataset in a repository at a time (the same
+dataset, repository@branch and GitHub user), so two tabs never overwrite each
+other. A second tab says `Open in another tab — annotation paused here`;
+everything else of the dataset works there.
 
-- Fix: close the other tab/window for the same scope.
+- Fix: click **Use here** in the tab you want to annotate in. The other tab
+  pauses in turn; what it had is kept.
 
 ### “Everything is disabled”
 
 Common causes:
 
 - the author closed the field (🗳️🏁)
-- you are signed out (token expired)
+- you are signed out (token expired: the panel says `Your GitHub sign-in
+  expired or was revoked…`; sign in again and the repository is connected
+  again, your unpublished changes still there)
 - you are offline (Pull/Publish disabled)
+- another tab annotates the same dataset (`Open in another tab — annotation
+  paused here`, **Use here**)
+
+### An agent voted for me
+
+An agent you work with (the chat bar, Claude or ChatGPT, a local app) or a
+Python or R notebook can vote only after you allow it (you are asked, unless
+you set Publishing to Allow), and its vote is published alone: your drafts
+and other unpublished changes stay yours. Undo turn cannot take a published
+vote back; vote again to change it. See
+{ref}`the UI reference <community-annotation-agents>`.
 
 ---
 
@@ -427,12 +465,18 @@ Fix:
 Common causes:
 
 - offline / flaky network / corporate proxy
-- GitHub rate limiting
-- repo structure errors (missing template files)
+- repo structure errors (missing template files, or a schema file that is not
+  the template's)
+- the annotation service is older than this Cellucid ("… runs an older
+  version …; its owner must redeploy the Worker")
+- GitHub's hourly request budget for your account is spent. Cellucid paces
+  its requests by that budget and waits when GitHub names a wait (the
+  progress notification says so); a Pull that still meets the limit stops
+  with a `GitHub rate limit:` message.
 
 What you can do:
 
-1) Retry after a minute (rate limits).
+1) Retry after a minute (or after the time a rate-limit message names).
 2) Verify you can access GitHub in a normal browser tab.
 3) Tell the author the exact error message; authors can validate repo structure and CI.
 
@@ -464,15 +508,11 @@ Fix:
 
 ### Fork + PR publish fails (but the author says forking is enabled)
 
-Common causes:
+What Publish says, and what to do:
 
-- Your fork is not accessible to the GitHub App token (you didn’t install the app on your personal account).
-
-Fix:
-
-1) Install the Cellucid GitHub App on your personal account.
-2) Prefer “All repositories” so forks are included automatically.
-3) Retry Publish.
+- `You have no fork of <owner>/<repo> yet: fork it on GitHub, then Publish again.`: open **Fork on GitHub**, create the fork, then Publish again.
+- `GitHub is still copying your fork …; Publish again in a minute.`: GitHub creates a fork in the background; wait a minute, then Publish again.
+- `Cellucid cannot write to your fork …`: install the Cellucid GitHub App on your own account with access to the fork (**Install the app**; choose *All repositories*, or *Only select repositories* with the fork selected), then Publish again.
 
 ### I published, but others don’t see my votes
 

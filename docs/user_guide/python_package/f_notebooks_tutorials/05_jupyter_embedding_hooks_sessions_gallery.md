@@ -23,7 +23,7 @@ If you want the “hands-on but explained” tutorials, start with:
 - summarize confirmed viewer selections in Python,
 - pull the highlights and fields made in the viewer onto an in-memory
   AnnData with `viewer.pull()`,
-- ask for a session bundle in one cell, collect it in the next and apply it to
+- ask for a session file in one cell, collect it in the next and apply it to
   an identity-matched AnnData, and
 - stop the viewer cleanly.
 
@@ -35,12 +35,13 @@ jupyter lab docs/user_guide/python_package/f_notebooks_tutorials/jupyter_pancrea
 ```
 
 ```{figure} ../../../_static/screenshots/jupyter/show-anndata-driven-from-python.png
-:alt: The Cellucid viewer after Python called viewer.set_color_by("clusters") and viewer.highlight_cells(): the Pancreas sample coloured by clusters with the highlighted cells.
+:alt: The Cellucid viewer after Python called viewer.color_by(...) and viewer.highlight_cells(...): the Pancreas sample coloured by clusters with the highlighted cells.
 :width: 1440px
 
 The viewer the notebook drives, captured in a browser tab: the same app the
-notebook's output frames, after Python ran `viewer.set_color_by("clusters")`
-and `viewer.highlight_cells(...)`.
+notebook's output frames, after Python ran
+`viewer.color_by(field={"source": "obs", "key": "clusters"})` and
+`viewer.highlight_cells(...)`.
 ```
 
 ## Quick troubleshooting if hooks do not fire

@@ -6,6 +6,8 @@ This module provides a single entry point for all cellucid command-line operatio
   files and Zarr stores, Loom, 10x Cell Ranger ``.h5`` files and ``outs/``
   folders, MatrixMarket folders, R objects; ``input_formats.json``) to the
   viewer, which reads it itself
+- mcp: A local MCP server over stdio for an agent app on this computer
+  (Claude Code, Claude Desktop, Cursor) to work in a viewer (:mod:`cellucid.mcp`)
 
 Usage:
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example
@@ -186,7 +188,8 @@ def _detect_data_format(path: Path) -> str:
         ``'h5mu'``, ``'mudata-zarr'``, ``'loom'``, ``'tenx-h5'``,
         ``'tenx-outs'``, ``'rds'``, ``'rda'``, ``'mtx'``); ``'unknown'``
         when the path is none of them, or a format Cellucid recognises but
-        never opens (an h5Seurat file)
+        never opens (an h5Seurat file) or one of Cellucid's own files (a
+        ``.cellucid-session`` or ``.cellucid-library`` file)
     """
     from ._anndata_files import classify_anndata_path
 
@@ -391,6 +394,70 @@ Examples:
     )
 
     serve_parser.set_defaults(func=_run_serve)
+
+
+def _add_mcp_subparser(subparsers) -> None:
+    """Add the 'mcp' subcommand: the local MCP server (cellucid.mcp)."""
+    parser = subparsers.add_parser(
+        "mcp",
+        help="Let an agent app on this computer (Claude Code, Claude Desktop, Cursor) work in a viewer",
+        description=(
+            "A local MCP server over stdio: an agent app on this computer works in a Cellucid viewer "
+            "with the web app's tools, under the permissions set in the viewer. It drives the viewer "
+            "it opens (--open) or one already open on this computer (a notebook's, a script's, R's)."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Needs the MCP SDK: pip install 'cellucid[mcp]'. An app starts it itself; add it once:
+    claude mcp add cellucid -- cellucid mcp                      # Claude Code
+    {"mcpServers": {"cellucid": {"command": "cellucid", "args": ["mcp"]}}}
+        # Claude Desktop (claude_desktop_config.json), Cursor (.cursor/mcp.json)
+
+Examples:
+    cellucid mcp                          # drive a viewer already open on this computer
+    cellucid mcp --open data.h5ad         # open data.h5ad in a viewer and drive it
+    cellucid mcp --viewer pbmc3k          # drive the open viewer of dataset pbmc3k
+
+stdout carries the MCP messages; everything else is said on stderr.
+""",
+    )
+    parser.add_argument(
+        "--open",
+        metavar="PATH",
+        default=None,
+        help="Serve this file or folder (any format 'cellucid serve' reads) and open its viewer; it stops with the server",
+    )
+    parser.add_argument(
+        "--viewer",
+        metavar="NAME",
+        default=None,
+        help="Drive the viewer open on this computer with this viewer id, dataset id or dataset name (default: the newest open one)",
+    )
+    parser.add_argument("--port", "-p", type=int, default=None, help="Port of the viewer --open starts (default: 8765, or the next free one)")
+    parser.add_argument("--no-browser", action="store_true", help="Print the --open viewer's address on stderr instead of opening a browser")
+    parser.add_argument("--web-source-url", default=None, metavar="URL", help="Where the viewer's page is loaded from")
+    parser.add_argument("--web-cache-dir", type=Path, default=None, metavar="PATH", help="Where the viewer keeps its copy of the page")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Log the server's work on stderr")
+    parser.set_defaults(func=_run_mcp, quiet=False)
+
+
+def _run_mcp(args: argparse.Namespace) -> None:
+    """Execute the 'mcp' subcommand: everything it says goes to stderr."""
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.WARNING,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
+    from .mcp import run_mcp
+
+    run_mcp(
+        args.open,
+        viewer=args.viewer,
+        port=args.port,
+        open_browser=not args.no_browser,
+        web_source_url=args.web_source_url,
+        web_cache_dir=args.web_cache_dir,
+    )
 
 
 def _positive_int(value: str) -> int:
@@ -666,7 +733,10 @@ Quick start:
     cellucid serve /path/to/object.rds --dataset-name PBMC --dataset-id pbmc
     cellucid serve /path/to/outs/ --dataset-name Sample --dataset-id sample
 
-Use 'cellucid serve --help' for more options.
+    # Let an agent app on this computer work in a viewer (pip install 'cellucid[mcp]')
+    cellucid mcp --open /path/to/data.h5ad
+
+Use 'cellucid serve --help' and 'cellucid mcp --help' for more options.
 """,
     )
 
@@ -691,6 +761,7 @@ Use 'cellucid serve --help' for more options.
 
     # Add subcommands
     _add_serve_subparser(subparsers, common_parser)
+    _add_mcp_subparser(subparsers)
 
     return parser
 

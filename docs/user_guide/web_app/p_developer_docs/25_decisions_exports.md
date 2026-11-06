@@ -234,10 +234,118 @@ removed in the change that fixes or verifies it.
 - **Figure legends of very many categories:** the legend box is never larger than the plot (a million-category field asked for a legend millions of pixels wide and the PNG never came; now 3.0 s on a 10M-cell file), but every entry is still drawn, so past a few thousand categories they are too small to read, and an SVG writes every one (about 210 MB for a million). Whether to list what fits and say how many more is an open design question (the legend builder's rule is to show every entry).
 - **A half share's `.h5ad` export holds more than every cell's:** a 10M-cell CSR file at 50 % uniform, the browser at 5.3 GB (renderer 4.1 GB) against 3.8–4.6 GB (3.4 GB) for every cell, in the same 13.1 s (Chromium, two runs each).
 
+(browser-anndata-copy)=
+## A copy of the open dataset (`.zarr.zip`)
+
+Built 2026-11-04 (`data/anndata/write/`, its `README.md`). The writer that
+saves the dataset the page has open as one Cellucid-ready AnnData
+`.zarr.zip`, with changes written in: its output profile is the
+specification's {ref}`browser copy <browser-copy-profile>`. The History ⋯
+menu's **Save AnnData with this state…** and the action
+`history.anndata.save` call it, with the apply plan of the step shown as its
+changes ({ref}`history-anndata-save-action`).
+
+**Three layers**, each its own module, so another container or format plugs
+in at its own level:
+
+| Layer | Module | Owns |
+|---|---|---|
+| Container | `formats/zip/writer.js` | A stored ZIP written as a stream, ZIP64 exactly where a field overflows, the same bytes for the same entries. The figure export's batch archive uses it too, so its former 4 GiB / 65,535-entry ceiling is gone. |
+| Array | `formats/zarr/format-v2.js` (shared with the transcoders), `formats/zarr/writer.js`, `formats/zarr/encode-task.js` | Zarr v2: the documents, dtypes, `vlen-utf8`; the byte shuffle, zlib level 6 by fflate, float16 bits; a streamed store (metadata after the chunks, the consolidated metadata the last entry, chunks in grid order); chunks encoded on the decode workers (`encode-task.js`) and put back in order. |
+| AnnData | `data/anndata/write/` | The element layer the Zarr writers share (`element-writer.js`: the transcoders' kept stores and the copy), the specification's layout by role (`layout.js`), the streamed writer (`ready-writer.js`), the copy (`copy.js`, `gene-major.js`), the checks before a byte is written (`changes.js`, `names.js`), the way to the page (`acknowledged-sink.js`) and to every core (`pool-encoder.js`). |
+
+**The way in.** `BaseAnnDataAdapter.writeAnnDataCopy(changes, {sink, signal,
+owner})` → `AnnDataReaderClient.writeAnnDataCopy` → the reader worker. It
+answers `{bytes, entries, zip64, chunks, layout: 'anndata' | 'mudata', nObs,
+priorityOrder, notes}`. The sink takes one `Blob` per batch
+(`COPY_BATCH_BYTES`, 4 MiB; at most `COPY_WINDOW_BYTES`, 16 MiB, unanswered),
+a File System Access writable or the cell exports' spool; on a failure or a
+cancel the caller (`app/history/anndata-copy-save.js`) aborts its writable,
+never closes it, and removes its spool. Progress
+is the copy's read activity (kind `cells`, of the job `owner`), the one
+channel the page shows reads by. `changes` adds or replaces `obs` columns
+(one value per original position, placed at each cell's file row), `var`
+columns (by var row; `varModality` in a MuData), `uns` keys and
+`uns['cellucid']` keys; `priority` and unknown keys are refused, and so is
+any change that writes, renames or replaces
+`obs['cellucid_original_position']` or takes its name
+(`PRIORITY_COLUMN_REFUSAL`: it holds the rows' original positions of a file
+in priority order, which the copy keeps); the whole set is checked
+(`changes.js`) before the writer exists.
+
+**What it does.** Every element of the presented store is copied (every
+cell, whichever are open, rows in stored order, so a priority-ordered file
+stays one), every value with its dtype and bits. Every expression matrix is
+written gene-major: a `csc_matrix` array by array, a `csr_matrix`
+transposed in passes within a budget (count, values, rows), with the
+priority order's prefix counts computed from the rows, equal value for value
+to `prepare()`'s; a dense matrix in strips of a band of rows and a group of
+genes. A dataset of several modalities is written as a Cellucid-ready MuData.
+
+| Date | Decision | Reason | Rules out |
+|---|---|---|---|
+| 2026-11-04 | Zarr format 2 | What `prepare()` and `cellucid_prepare()` write by default; the app reads it as fast as v3 | A v3 copy (no reader gains) |
+| 2026-11-04 | fflate at level 6, not `CompressionStream` | Measured: 79 against 93 MB/s on indices, 23 against 23 MB/s on float values, fflate's output 5 % smaller on values; it runs in a worker of the decode pool with a level the specification names | The native stream (no level, main-thread scheduling) |
+| 2026-11-04 | Encode chunks on the decode workers, in order | Profiling put about 38 % of a copy in compression (45 % in reading the source) | One encoding thread |
+| 2026-11-04 | Re-encode every chunk, never pass a compressed chunk through | Passing through needs a raw-chunk read on the Zarr and HDF5 readers and helps only a source already in the specification's chunks | Raw chunk passthrough |
+| 2026-11-04 | Deterministic bytes | The same source and changes give the same archive however the work is cut (budget, slab, encoders in flight), so a copy can be pinned and compared | Output that depends on scheduling |
+| 2026-11-04 | One element layer for the transcoders and the copy | No second AnnData writer. Consequence: a change to `format-v2.js` or `element-writer.js` changes kept stores, so it raises `KEPT_STORE_REVISION` (`tests/transcode-cache-contract.test.mjs`) | A copy-only writer |
+| 2026-11-04 | Names exactly as stored; every name a change makes a path follows the portable rule; a name in two Unicode forms refused | An NFD column read back as its fill value (the reader normalised ZIP entry names, the Zarr metadata did not); the reader now compares keys in NFC too (`formats/zarr/open.js`), and the ZIP and folder stores find a key in either form | Normalising names on write |
+
+**Normalised, as anndata does:** numbers little-endian; a float16 NaN loses
+its sign and payload (the reader drops them already); a record array's text
+as fixed-width Unicode. **Left out, with a note:** an HDF5 attribute that is
+an object reference, an element of `uns` the browser cannot decode, a
+compound or opaque array. Anything else unreadable fails the copy in the
+reader's words.
+
+**Measured** (Node, `scripts/benchmark-anndata-copy.mjs`, peak = heap +
+array buffers during the copy; 2026-11-04):
+
+| Copy | Time | Archive rate | Peak |
+|---|---|---|---|
+| Suo (561,947 cells, 233 MB), one thread | 49.3 s | 4.7 MB/s | 151 MB |
+| Suo, 8 encode workers | 24.7 s | 9.5 MB/s | 129 MB |
+| Garcia (219,731 cells) as cell-major, 64 MB budget, 8 workers | 3.7 s | 31 MB/s | 251 MB |
+| Garcia, same, one thread | 12.3 s | 9.4 MB/s | 142 MB |
+
+Pooled and single-thread outputs were byte-identical; a transposed `X`
+matched the source's gene-major `X` byte for byte.
+
+**Memory** ({doc}`27_decisions_memory_model`): two slabs of the array being
+copied (`SLAB_BYTES`), the budget (the memory model's `columnIndex` share: a
+transposition's block of genes, or a dense matrix's band of every gene), the
+chunks in flight and the batches posted, all counted in the reader worker's
+working set under the part `anndata copy <ticket>` while it runs, plus the
+archive's central directory (about 70 bytes an entry). Bytes a copy reads
+are kept neither in the page's memory nor in kept parts
+(`ReadActivity.readOnce`).
+
+**Open:** it was not measured in a browser on a large dataset; prefix counts for a MuData modality whose
+matrix is cell-major are not computed; a large dense `X` re-reads source
+chunks once per group of genes; `showSaveFilePicker` with a file on disk is
+not exercised by a test (the private-storage writable is, in
+`history-anndata-copy.spec.mjs`). The highlighted cells' `.h5ad`
+export still builds its HDF5 tree itself: an HDF5 subclass of
+`AnnDataElementWriter` is the follow-up.
+
+**Kept data removed once.** The shared element layer, an `older-layouts.js`
+fix (a table anndata 0.7 kept in `uns` was not converted, so a copy lost its
+categories) and the later fixes raised `KEPT_STORE_REVISION` (now 11: 9 and
+10 only because the transcoders' code digest covers the input-format
+registry, whose messages now name the State panel's places and Load… › Open
+a session file…, and 11 only because it covers the shared request code, where
+a 403 naming `Retry-After` now counts as a rate limit; nothing a transcoder
+writes changed) and
+`KEPT_INDEX_REVISION` (now 7) in `data/anndata/transcode/space.js`: every
+user's converted R and MatrixMarket stores and kept gene indexes are removed
+once on the first visit of this version.
+
 ## Where the code and tests live
 
 | Concern | Module(s) | Tests |
 |---|---|---|
+| A copy of the open dataset | `cellucid/assets/js/data/anndata/write/` (`copy.js`, `gene-major.js`, `element-writer.js`, `layout.js`, `ready-writer.js`, `changes.js`, `names.js`, `acknowledged-sink.js`, `pool-encoder.js`), `cellucid/assets/js/formats/zarr/writer.js`, `cellucid/assets/js/formats/zip/writer.js` | `cellucid/tests/anndata-copy-contract.test.mjs`, `cellucid/tests/anndata-copy-cross-language.test.mjs`, `cellucid/tests/browser/anndata-copy.spec.mjs` |
 | Writers, order, spools, price | `cellucid/assets/js/app/exports/cell-exports.js`, `cellucid/assets/js/utils/radix-order.js`, `cellucid/assets/js/formats/hdf5/writer.js` | `cellucid/tests/scale-boundaries-contract.test.mjs`, `cellucid/tests/round-trip-contract.test.mjs` |
 | Buttons, card, Cancel | `cellucid/assets/js/app/ui/modules/cell-exports-ui.js`, `cellucid/assets/js/data/open-cells-work.js` | `cellucid/tests/cell-export-reads.test.mjs`, `cellucid/tests/open-cells-lease-contract.test.mjs`, `cellucid/tests/browser/cell-exports.spec.mjs` |
 | Streamed rows, gathered rows, price, listed names | `cellucid/assets/js/data/anndata/reader.js` (`readMatrixRows`, `getMatrixRows`, `matrixRowsCost`, `readObsNames`), `cellucid/assets/js/data/anndata/matrix-access.js` (`pipelined`), `cellucid/assets/js/data/base-anndata-adapter.js` (`readMatrixRowsOf`, `getMatrixRowsCostOf`) | `cellucid/tests/cell-export-reads.test.mjs` |

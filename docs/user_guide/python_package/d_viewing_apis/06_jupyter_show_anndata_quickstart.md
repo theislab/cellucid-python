@@ -131,15 +131,15 @@ is {class}`~cellucid.AnnDataViewer`: the same API, served from this machine.
 
 ## Programmatic control (quick preview)
 
-Commands travel on the viewer's channel. One sent before the viewer has
-connected (the viewer loads once the cell finishes) waits and is delivered,
-in order, the moment it connects:
+Actions travel on the viewer's channel -- every action of the viewer is a
+method. One sent before the viewer has connected (the viewer loads once the
+cell finishes) waits and is delivered, in order, the moment it connects:
 
 ```python
-viewer.highlight_cells([0, 1, 2], color="#ff0000")
-viewer.set_color_by("cell_type")
-viewer.set_visibility([0, 1, 2], visible=False)
-viewer.reset_view()
+viewer.highlight_cells(cells=[0, 1, 2], color="#ff0000")
+viewer.color_by(field={"source": "obs", "key": "cell_type"})
+viewer.cells_visibility_set(cells=[0, 1, 2], visible=False)
+viewer.camera_reset(view="live")
 ```
 
 Full hooks/events docs: {doc}`../e_jupyter_hooks/index`.

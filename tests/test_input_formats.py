@@ -23,7 +23,7 @@ from cellucid._anndata_files import classify_anndata_path, input_formats
 #: The same digest is pinned in the web app
 #: (tests/input-formats-registry.test.mjs) and in cellucid-r
 #: (tests/testthat/test-input-formats.R). Update all three together.
-INPUT_FORMATS_SHA256 = "7c1e079c33dcd7d1abb17e4996e6e6cf35f1968327a9097701dd9a1ca860c902"
+INPUT_FORMATS_SHA256 = "bd7fa1e23a3fd24794b647c5969ddb1aaad9a7b613b1457261c3b10dd705e2e5"
 
 HDF5_SIGNATURE = bytes.fromhex("894844460d0a1a0a")
 
@@ -103,3 +103,23 @@ def test_cellucid_serve_refuses_an_h5seurat_file_before_serving(tmp_path: Path, 
     error = capsys.readouterr().err
     assert "This is an h5Seurat file (SeuratDisk), which Cellucid does not open." in error
     assert "Unable to detect format" not in error
+
+
+@pytest.mark.parametrize("name", ["annotation.cellucid-session", "LAB.Cellucid-Library"])
+def test_cellucids_own_files_are_said_for_what_they_are(tmp_path: Path, name: str, capsys) -> None:
+    """A session or library file is no dataset: the registry's ``said`` sentence (the web app's) says what it is."""
+    from cellucid._anndata_files import RefusedFormatError, cellucid_file_of_name
+    from cellucid.cli import main
+
+    entry = cellucid_file_of_name(name)
+    assert entry is not None and [item["id"] for item in input_formats()["cellucidFiles"]] == ["library", "session"]
+    assert entry["id"] == ("session" if name.endswith("session") else "library")
+    path = tmp_path / name
+    path.write_bytes(b"CELLUCID_SESSION/4\n")
+    with pytest.raises(RefusedFormatError) as caught:
+        classify_anndata_path(path)
+    assert str(caught.value) == f"{name}: {entry['said']}"
+    assert main(["serve", str(path), "--quiet"]) == 1
+    error = capsys.readouterr().err
+    assert entry["said"] in error and "Unable to detect format" not in error
+    assert cellucid_file_of_name("cells.h5ad") is None

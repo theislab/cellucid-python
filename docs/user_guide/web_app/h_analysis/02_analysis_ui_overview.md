@@ -462,9 +462,10 @@ or widening the window gives every window back its own place and size.
 If you save/restore a session:
 - the docked panel reopens the mode that was open, with every mode's settings
   and which of its More options groups were open,
-- floating analysis windows reopen with their place, size, open or collapsed
-  state, stacking order and settings, and new windows and expanded views keep
-  the sizes remembered for each analysis,
+- floating analysis windows reopen with their settings and their place, size
+  and open or collapsed state (which window is in front is not saved: a click
+  raises a window), and new windows and expanded views keep the sizes
+  remembered for each analysis,
 - the shown results of Differential expression, Marker genes, Gene signature,
   Correlation, Dot plot and Composition are saved and restored as they were, without recomputing; Quick and
   Detailed recompute from their settings,

@@ -24,7 +24,7 @@ The calls, side by side:
 | everything back | `viewer.pull(adata)` | `seu <- cellucid_pull(seu, viewer)` |
 | from exported files | `cellucid.pull(adata, "exports/")` | `seu <- cellucid_pull(seu, "exports/")` |
 | a column into the viewer | `viewer.push(adata.obs["leiden"])` | `cellucid_push(viewer, seu$seurat_clusters, key = "seurat_clusters")` |
-| a gene set into the viewer | `viewer.push_gene_set("Beta", genes)` | `cellucid_push_gene_set(viewer, "B", genes)` |
+| a gene set into the viewer | `viewer.gene_set_save(name="Beta", genes=genes)` | `cellucid_gene_set_save(viewer, name = "B", genes = genes)` |
 | the viewer's gene sets | `viewer.gene_sets()` | `cellucid_gene_sets(viewer)` |
 | GMT files | `cellucid.write_gmt()`, `cellucid.read_gmt()` | `cellucid_write_gmt()`, `cellucid_read_gmt()` |
 | cells of a selection or group | `viewer.subset(adata, which)`, `viewer.selection` | `cellucid_subset(seu, viewer, which)`, `cellucid_selection(viewer)` |
@@ -45,13 +45,14 @@ kernel **between cells**. So:
 
 A call that would wait for the viewer's answer inside the cell that asked
 cannot work there: the answer can only arrive after the cell ends. Such calls
-(`wait_for_ready()`, `wait_for_event()`; R's `cellucid_wait_ready()`) stop at
-once and say what to do instead. Commands never wait: `push()` and
-`set_data_mapping()` (R: `cellucid_push()`, `cellucid_set_data_mapping()`) go
-as soon as the viewer can take them, so a notebook run top to bottom works. A session file is asked for in one cell and collected in
-the next: `request = viewer.request_session_bundle()`, then
-`request.result()` (R: `cellucid_request_session()`, then
-`cellucid_session_result()`). Commands to the viewer (`highlight_cells`,
+(`wait_for_ready()`, `wait_for_event()`, an action's `result()`; R's
+`cellucid_wait_ready()`, `cellucid_action_result()`) stop at once and say what
+to do instead. Actions never wait: `push()` and `mapping_set()` (R:
+`cellucid_push()`, `cellucid_mapping_set()`) go as soon as the viewer can take
+them, so a notebook run top to bottom works. A session file is asked for in
+one cell and collected in the next: `request = viewer.request_session()`,
+then `request.result()` (R: `cellucid_request_session()`, then
+`cellucid_session_result()`). Actions on the viewer (`highlight_cells`,
 `push`, …) go out at once; `push` needs the viewer to have opened its dataset,
 so run it in a cell after the viewer shows the cells.
 

@@ -81,15 +81,15 @@ widget. So:
 - hooks (`@viewer.on_selection`, …) run, and `viewer.state` updates, whenever
   the kernel is idle — which is when you are interacting with the viewer;
 - a call that waits for the viewer's answer (`wait_for_ready()`,
-  `wait_for_event()`, a session request's `result()`) cannot be answered
-  inside the cell that waits (commands such as `push()` and `set_data_mapping()` never
-  wait), so it raises at once and says what to
-  do instead: register a hook, read `viewer.state` in a later cell, or — for a
-  session bundle — ask with `request = viewer.request_session_bundle()` and
-  collect `request.result()` in the next cell
+  `wait_for_event()`, an action's, a session request's or a session load's
+  `result()`) cannot be answered inside the cell that waits (actions
+  themselves never wait), so it raises at once and says what to do instead: register a hook, read
+  `viewer.state` in a later cell, or keep the request (`request =
+  viewer.fields_list()`, `request = viewer.request_session()`) and collect
+  `request.result()` in the next cell
   ({doc}`10_session_bundles_request_session_bundle`).
 
-Commands (`highlight_cells`, `set_color_by`, …) are sent at once.
+Actions (`highlight_cells`, `color_by`, …) are sent at once.
 
 ## A browser tab instead
 

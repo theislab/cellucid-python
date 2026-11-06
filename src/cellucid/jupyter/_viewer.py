@@ -2,8 +2,9 @@
 The viewer's Python side: :class:`AnnDataViewer` and :func:`show_anndata`.
 
 :class:`AnnDataViewer` is the viewer API -- hooks, the event log that
-``wait_for_event`` reads, ``viewer.state``, session bundle capture, the
-outbound commands, shutdown -- and, on its own, a viewer in a browser tab: it
+``wait_for_event`` reads, ``viewer.state``, session capture, the actions (one
+method per action of the catalogue, ``_actions_generated.py``, and
+:meth:`~AnnDataViewer.act`), shutdown -- and, on its own, a viewer in a browser tab: it
 starts a :class:`cellucid.anndata_server.AnnDataServer` that hands the
 AnnData store to the page (read in place with range requests; an in-memory
 AnnData, or an AnnData, MuData, Loom or 10x file not in priority order, as a
@@ -22,6 +23,7 @@ and :func:`cleanup_all` stops whatever is still running at interpreter exit.
 from __future__ import annotations
 
 import atexit
+import contextlib
 import copy
 import html
 import json
@@ -33,13 +35,14 @@ import threading
 import time
 import weakref
 from collections import deque
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
+from .._agent_link import ViewerAgentPort, publish_viewer, withdraw_viewer
 from .._console import console_print
 from .._contracts import _require_dataset_id, _require_dataset_name
 from .._plural import plural
@@ -66,17 +69,18 @@ from ..anndata_session._results import (
     ViewerResult,
     _gene_sets_of,
     apply_results,
-    field_message,
+    field_push_params,
     read_obs_names,
 )
-from ..data_mapping import _ANNDATA_MAPPING_KEYS, MODALITY_KEY, EmbeddingKeySpec
+from ..data_mapping import EmbeddingKeySpec
+from ._actions import action_params, cell_positions, tool_name
+from ._actions_generated import ViewerActions
+from ._history import LiveHistory, LoadSessionRequest
 from ._hooks import HookCallback, HookRegistry, ViewerState
 from ._wire import (
-    _require_cell_indices,
+    _AGENT_EVENT_TYPES,
     _require_client_server_url,
-    _require_data_mapping,
     _require_debug_dataset_list,
-    _require_exact_message_text,
     _require_frontend_message,
     _require_inbound_jupyter_event,
 )
@@ -86,6 +90,7 @@ if TYPE_CHECKING:
     import mudata
 
     from ..anndata_server import AnnDataServer
+    from ..session import CellucidSession
     from ._widget import Widget
 
 logger = logging.getLogger("cellucid.jupyter")
@@ -94,20 +99,21 @@ logger = logging.getLogger("cellucid.jupyter")
 # in the notebook's own vocabulary: a viewer failure is far easier to act on
 # when it names the call that caused it rather than the wire type. Every
 # command of `_wire._COMMAND_TYPES` must appear here, and every value must name a
-# real `AnnDataViewer` method; both are asserted by the contract tests.
+# real `AnnDataViewer` method; both are asserted by the contract tests. A
+# failed `action` is named by its own method (`viewer.color_by(...)`).
 _COMMAND_PYTHON_CALLERS: dict[str, str] = {
     "ping": "viewer.debug_connection()",
     "debug_snapshot": "viewer.debug_connection()",
-    "requestSessionBundle": "viewer.request_session_bundle()",
-    "highlight": "viewer.highlight_cells(...)",
-    "clearHighlights": "viewer.clear_highlights()",
-    "setColorBy": "viewer.set_color_by(...)",
-    "setVisibility": "viewer.set_visibility(...)",
-    "resetCamera": "viewer.reset_view()",
+    "requestSessionBundle": "viewer.request_session()",
     "freeze": "viewer.stop()",
-    "setDataMapping": "viewer.set_data_mapping(...)",
-    "setField": "viewer.push(...)",
-    "setGeneSet": "viewer.push_gene_set(...)",
+    "action": "viewer.act(...)",
+    "load_session": "viewer.load_session(...)",
+    # An agent app's commands (`cellucid mcp`): their failures reach the
+    # agent that sent them (`ViewerAgentPort.command_failed`), never a notice.
+    "agent_list": "cellucid mcp",
+    "agent_call": "cellucid mcp",
+    "agent_cancel": "cellucid mcp",
+    "agent_answer": "cellucid mcp",
 }
 
 # How many recent `command_error` payloads `debug_connection()` reports. The
@@ -171,59 +177,144 @@ class _EventWaiter:
         self.event: str | None = None
         self.payload: dict[str, Any] | None = None
 
-class SessionBundleRequest:
-    """A session bundle the viewer was asked for (:meth:`AnnDataViewer.request_session_bundle`).
+class ActionError(RuntimeError):
+    """The viewer did not apply an action: :attr:`reason` says why, in the
+    viewer's words (a name that does not resolve names what does)."""
+
+    def __init__(self, action: str, request_id: str, reason: str) -> None:
+        super().__init__(f"The viewer did not apply {action}: {reason}")
+        self.action = action
+        self.request_id = request_id
+        self.reason = reason
+
+
+class ActionRequest:
+    """One action sent to the viewer (:meth:`AnnDataViewer.act`, or the
+    action's own method).
+
+    The viewer answers it once: with its outcome -- a read's result -- and the
+    history step it made, or with why it did not apply it. ``done`` says
+    whether the answer arrived; :meth:`result` returns it. Nothing has to
+    collect a request: an action applies whether or not anyone waits for it.
+    """
+
+    def __init__(self, viewer: AnnDataViewer, request_id: str, action: str, waiter: _EventWaiter) -> None:
+        self._viewer = viewer
+        self.request_id = request_id
+        #: The action's dotted type (``color.by``).
+        self.action = action
+        self._waiter: _EventWaiter | None = waiter
+
+    @property
+    def done(self) -> bool:
+        """Whether the viewer answered (with the outcome, or with why not)."""
+        return self._waiter is not None and self._waiter.payload is not None
+
+    @property
+    def step(self) -> dict[str, Any] | None:
+        """The history step the action made, ``{"id", "label"}``, once it was
+        answered; None before, for a read, and for a change that changed
+        nothing."""
+        waiter = self._waiter
+        if waiter is None or waiter.payload is None or waiter.event != "action_result":
+            return None
+        step = waiter.payload["step"]
+        return None if step is None else dict(step)
+
+    def result(self, timeout: float | None = 60.0) -> Any:
+        """
+        The action's outcome, waiting up to ``timeout`` seconds for it (None:
+        forever): a read's result (JSON: dicts, lists, text and numbers), a
+        change's outcome (counts and names), or None.
+
+        Raises :class:`ActionError` with the viewer's reason when it did not
+        apply the action, ``TimeoutError`` when no answer arrived in time,
+        and ``RuntimeError`` when the viewer stopped or the request was
+        cancelled -- or, in a notebook widget, when the answer has not arrived
+        yet: the viewer answers between cells, so collect it in a later cell.
+        """
+        waiter = self._waiter
+        if waiter is None:
+            raise RuntimeError(f"This {self.action} request was cancelled.")
+        if waiter.payload is None:
+            self._viewer._await(waiter, timeout, f"Timed out waiting for the viewer's answer to {self.action}")
+        assert waiter.payload is not None
+        if waiter.event == "command_error":
+            raise ActionError(self.action, self.request_id, waiter.payload["reason"])
+        return copy.deepcopy(waiter.payload["outcome"])
+
+    def cancel(self) -> None:
+        """Stop waiting for the answer (the action itself is not withdrawn: the
+        viewer may have applied it already); an answer that still arrives is
+        dropped."""
+        if self._waiter is None or self._waiter.payload is not None:
+            return
+        self._forget()
+        self._waiter = None
+
+    def _forget(self) -> None:
+        viewer = self._viewer
+        with viewer._event_cv:
+            viewer._action_waiters.pop(self.request_id, None)
+            viewer._action_types.pop(self.request_id, None)
+
+    def __repr__(self) -> str:
+        state = "cancelled" if self._waiter is None else "answered" if self.done else "waiting"
+        return f"ActionRequest({self.action!r}, {state})"
+
+
+class SessionRequest:
+    """A session the viewer was asked for (:meth:`AnnDataViewer.request_session`).
 
     ``done`` says whether the viewer answered; :meth:`result` returns the
-    bundle. A request that is never collected is withdrawn by :meth:`cancel`,
-    or when the viewer stops.
+    session -- its history, every tracker, as a ``.cellucid-session`` file
+    of format 4. A request that is never collected is withdrawn by
+    :meth:`cancel`, or when the viewer stops.
     """
 
     def __init__(self, viewer: AnnDataViewer, request_id: str, waiter: _EventWaiter) -> None:
         self._viewer = viewer
         self.request_id = request_id
         self._waiter: _EventWaiter | None = waiter
-        self._bundle: Any = None
+        self._session: CellucidSession | None = None
 
     @property
     def done(self) -> bool:
-        """Whether the viewer answered (with the bundle, or with why it could not)."""
-        return self._bundle is not None or (self._waiter is not None and self._waiter.payload is not None)
+        """Whether the viewer answered (with the session, or with why it could not)."""
+        return self._session is not None or (self._waiter is not None and self._waiter.payload is not None)
 
-    def result(self, timeout: float | None = 60.0):
+    def result(self, timeout: float | None = 60.0) -> CellucidSession:
         """
-        The bundle, waiting up to ``timeout`` seconds for it (None: forever).
+        The session, waiting up to ``timeout`` seconds for it (None: forever).
 
-        Returns the :class:`~cellucid.session_bundle.CellucidSessionBundle`
-        (the same one on every call). Raises ``TimeoutError`` when it did not
+        Returns the :class:`~cellucid.CellucidSession` (the same one on every
+        call), read and checked whole. Raises ``TimeoutError`` when it did not
         arrive in time, and ``RuntimeError`` when the viewer could not capture
         it -- or, in a notebook widget, when it has not arrived yet: the
         viewer answers between cells, so collect it in a later cell.
         """
-        from ..session_bundle import CellucidSessionBundle
+        from ..session import CellucidSession
 
-        if self._bundle is not None:
-            return self._bundle
+        if self._session is not None:
+            return self._session
         waiter = self._waiter
         if waiter is None:
-            raise RuntimeError("This session bundle request was cancelled.")
+            raise RuntimeError("This session request was cancelled.")
         viewer = self._viewer
-        viewer._await(waiter, timeout, "Timed out waiting for the session bundle")
+        viewer._await(waiter, timeout, "Timed out waiting for the session")
         self._finish()
         assert waiter.payload is not None
         if waiter.event == "command_error":
-            raise RuntimeError(
-                "The viewer did not capture the session bundle: " + waiter.payload["reason"]
-            )
+            raise RuntimeError("The viewer did not capture the session: " + waiter.payload["reason"])
         path = waiter.payload.get("path")
         if not path:
-            raise RuntimeError("Session bundle upload succeeded but no temp path was returned")
-        self._bundle = CellucidSessionBundle(Path(path))
-        return self._bundle
+            raise RuntimeError("The session arrived, but no file was kept for it")
+        self._session = CellucidSession(Path(path))
+        return self._session
 
     def cancel(self) -> None:
         """Withdraw the request; an answer that still arrives is dropped."""
-        if self._waiter is None or self._bundle is not None:
+        if self._waiter is None or self._session is not None:
             return
         self._finish()
 
@@ -239,7 +330,7 @@ class SessionBundleRequest:
             cancel_session_bundle_request(viewer._viewer_id, viewer._viewer_token, self.request_id)
 
     def __repr__(self) -> str:
-        return f"SessionBundleRequest(done={self.done})"
+        return f"SessionRequest(done={self.done})"
 
 
 def _probe_served_store(url: str) -> dict[str, Any]:
@@ -286,7 +377,7 @@ def _probe_served_store(url: str) -> dict[str, Any]:
     return probe
 
 
-class AnnDataViewer:
+class AnnDataViewer(ViewerActions):
     """
     Interactive viewer for AnnData objects, in a browser tab of its own.
 
@@ -355,6 +446,10 @@ class AnnDataViewer:
             @viewer.on_data_mapping
             def handle(event):
                 print(event['origin'], event['mapping'])  # what the viewer plots
+
+            @viewer.on_history_change
+            def handle(event):
+                print(event['kind'], event['head'])  # the history changed
 
             @viewer.on_message
             def handle(event):
@@ -555,10 +650,38 @@ class AnnDataViewer:
         self._served_dataset_id: str | None = None
         self._served_cell_count: int | None = None
         # What waits for the viewer, sent once it can be: columns pushed
-        # before its cell count was known (`ready`), and data-mapping fields
-        # set before it reported its mapping.
-        self._pending_pushes: list[tuple[Any, str]] = []
-        self._pending_mapping_fields: dict[str, Any] = {}
+        # before its cell count was known (`ready`), each with the request
+        # already handed out for it.
+        self._pending_pushes: list[tuple[Any, str, str, tuple[str, str] | None]] = []
+        # The actions sent and not answered yet, by request id: what answers
+        # one (`action_result`, or the `command_error` of its id) is handed to
+        # its waiter; and each one's type, to name it in a failure notice.
+        self._action_waiters: dict[str, _EventWaiter] = {}
+        self._action_types: dict[str, str] = {}
+        # The notebook turn open now (`turn()`): its id and label, carried by
+        # every action sent while it is open; None outside one.
+        self._turn: tuple[str, str] | None = None
+        # This viewer's end of local agent connections (`cellucid mcp`): an
+        # agent app's tool calls, carried to the page and answered back. It
+        # reaches the viewer weakly, so a viewer let go is not kept alive by
+        # the agents endpoint that publishes it.
+        viewer_ref = weakref.ref(self)
+
+        def agent_send(message: dict[str, Any]) -> object:
+            viewer = viewer_ref()
+            if viewer is None:
+                raise LookupError("The viewer was let go")
+            return viewer.send_message(message)
+
+        def agent_connected() -> bool:
+            viewer = viewer_ref()
+            return viewer is not None and viewer_is_connected(viewer._viewer_id, viewer._viewer_token)
+
+        def agent_describe() -> dict[str, Any]:
+            viewer = viewer_ref()
+            return {} if viewer is None else viewer._agent_description()
+
+        self._agent_port = ViewerAgentPort(send=agent_send, connected=agent_connected, describe=agent_describe)
 
     def _start_server(
         self,
@@ -621,13 +744,38 @@ class AnnDataViewer:
         logger.info(f"Started AnnData server at {self._server.url}")
 
     def _activate(self) -> None:
-        """Publish this fully started viewer to the routing registries."""
+        """Publish this fully started viewer to the routing registries, and to
+        agent apps on this computer (``cellucid mcp``)."""
         _register_viewer_for_messages(self)
         try:
             _active_viewers.add(self)
         except BaseException:
             _unregister_viewer_for_messages(self)
             raise
+        publish_viewer(self._viewer_id, self._agent_port, runtime=self._agent_description()["runtime"])
+        weakref.finalize(self, withdraw_viewer, self._viewer_id)
+
+    def _agent_description(self) -> dict[str, Any]:
+        """The viewer as an agent connection names it (``cellucid_status``):
+        its id, the program serving it, its dataset, and the address it is
+        served at (None for a notebook widget, shown in a cell)."""
+        server = self._server
+        # Where it is served, never its page address: that carries the
+        # viewer's token, which an agent is not given.
+        try:
+            url: str | None = self._get_client_server_url()
+        except (AttributeError, RuntimeError):
+            url = None
+        if type(self).viewer_url is not AnnDataViewer.viewer_url:
+            url = None  # a notebook widget: shown in its cell, at no address
+        return {
+            "viewer": self._viewer_id,
+            "runtime": "jupyter" if self._context["in_jupyter"] else "python",
+            "dataset": None
+            if server is None
+            else {"id": server.dataset_id, "name": getattr(server, "dataset_name", None) or server.dataset_id},
+            "url": url,
+        }
 
     def _rollback_failed_construction(self) -> None:
         """Undo every resource acquired during an unsuccessful constructor."""
@@ -644,6 +792,7 @@ class AnnDataViewer:
             _unregister_viewer_for_messages(self)
         except BaseException as error:
             failures.append(error)
+        withdraw_viewer(self._viewer_id)
         _active_viewers.discard(self)
         self._hooks.clear()
         if failures:
@@ -741,18 +890,21 @@ class AnnDataViewer:
         """
         Decorator to register a handler for a failed Python → viewer command.
 
-        Called when a command this viewer sent -- ``set_color_by``,
-        ``highlight_cells``, ``set_visibility`` and the rest -- was rejected by
-        the viewer instead of applied. The commands are one-way and carry no
-        request id, so the command method itself has already returned ``None``
-        by the time the failure arrives: this hook is how a notebook learns
-        that the viewer is unchanged.
+        Called when a command this viewer sent -- an action
+        (``viewer.color_by(...)``, ``viewer.act(...)``), a session request --
+        was refused by the viewer instead of carried out. An action returns its
+        request at once, so its method has returned by the time the failure
+        arrives: this hook (or the request's ``result()``, which raises the
+        same reason) is how a notebook learns that the viewer is unchanged.
 
         Registering a handler also silences the notice Cellucid otherwise
         prints to ``sys.stderr``, so reporting happens once, where you chose.
 
         Event data:
-            - command: str - the command type that failed, e.g. ``"setColorBy"``
+            - command: str - the command type that failed: ``"action"``,
+              ``"requestSessionBundle"``, ...
+            - requestId: str or None - the request it fails (an action's
+              ``request.request_id``); None for a command that names none
             - reason: str - what the viewer reported, in one line
 
         Like every hook, this runs on the viewer channel's thread, not in your
@@ -761,9 +913,8 @@ class AnnDataViewer:
         callbacks after it do not run, and the event is not recorded in
         ``viewer.state`` or handed to ``wait_for_event``. Record the failure
         and raise from your own code.
-        There is no acknowledgement for a command that did apply, so an empty
-        record is not proof of success -- only a non-empty one is proof of
-        failure.
+        An action that did apply is answered too: its request's ``result()``
+        returns its outcome.
 
         Example::
 
@@ -773,7 +924,7 @@ class AnnDataViewer:
             def handle(event):
                 rejected.append(event)
 
-            viewer.set_color_by("cell_type")
+            viewer.color_by(field={"source": "obs", "key": "cell_type"})
             ...
             if rejected:
                 raise RuntimeError(rejected[-1]["reason"])
@@ -787,16 +938,14 @@ class AnnDataViewer:
 
         Called when the viewer reports which stored arrays it plots and reads:
         once after the dataset loads, and again whenever the mapping changes --
-        from the viewer's controls, a session, or
-        :meth:`set_data_mapping`. The viewer sends it because this package
+        from the viewer's controls, a session, or this notebook's
+        :meth:`mapping_set`. The viewer sends it because this package
         lists ``data_mapping`` among the events of ``GET /_cellucid/protocol``.
 
         Event data:
             - origin: str - why the mapping is what it is: ``"default"``,
               ``"best_guess"``, ``"session"``, ``"user"``, or
-              ``"notebook"`` (an answer to :meth:`set_data_mapping`)
-            - requestId: str or None - the request a ``"notebook"`` answer
-              completes; None for every other origin
+              ``"notebook"`` (this notebook's :meth:`mapping_set`)
             - mapping: dict - the complete data mapping, in canonical form
 
         Example::
@@ -806,6 +955,104 @@ class AnnDataViewer:
                 print(event["mapping"]["embeddings"])
         """
         return self._hooks.on("data_mapping")
+
+    @property
+    def on_history_change(self) -> Callable[[HookCallback], HookCallback]:
+        """
+        Decorator to register a handler for every change of the viewer's history.
+
+        Called when a step is recorded (by the person, an agent, or this
+        notebook), the step shown moves (undo, redo, a jump, another branch),
+        the history's structure is edited (a rename, a note, a bookmark, a
+        delete, a restore), a tracker is started, used, renamed or removed, or
+        a session is loaded. ``viewer.history`` keeps the latest.
+
+        Event data:
+            - kind: str - ``"step"``, ``"moved"``, ``"edited"``, ``"tracker"`` or ``"loaded"``
+            - tracker: str - the id of the tracker in use
+            - head: str - the step shown
+            - step: str or None - the step recorded (``"step"``), else None
+            - branch: str or None - the id of the active branch
+
+        Example::
+
+            @viewer.on_history_change
+            def handle(event):
+                if event["kind"] == "step":
+                    print("recorded", event["step"])
+        """
+        return self._hooks.on("history_changed")
+
+    @property
+    def history(self) -> LiveHistory:
+        """The viewer's history, live (:class:`~cellucid.jupyter.LiveHistory`):
+        the latest change it told, a hook on each change, and its history read
+        as a session. The history is changed through the generated
+        ``history_*`` methods (``history_undo()``, ``history_jump(step=...)``,
+        ``history_note_add(...)``, ...)."""
+        return LiveHistory(self)
+
+    @contextlib.contextmanager
+    def turn(self, label: str) -> Iterator[str]:
+        """
+        Make every action sent inside the ``with`` block one turn of the viewer's history.
+
+        The State panel shows the turn's steps as one group, labelled
+        ``label`` and by this notebook, and undoes them together (Undo turn),
+        as it does an agent's turn. Yields the turn's id. Turns do not nest.
+
+        Example::
+
+            with viewer.turn("Normalise and cluster"):
+                viewer.color_by(field={"source": "obs", "key": "leiden"})
+                viewer.highlight_cells(cells=adata.obs["leiden"] == "3", label="Leiden 3")
+        """
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError("A turn needs a label: what it does, in a few words.")
+        turn_id = f"python-{secrets.token_hex(6)}"
+        with self._state_lock:
+            if self._turn is not None:
+                raise RuntimeError(f'A turn ("{self._turn[1]}") is open already; turns do not nest.')
+            self._turn = (turn_id, " ".join(label.split()))
+        try:
+            yield turn_id
+        finally:
+            with self._state_lock:
+                self._turn = None
+
+    def load_session(self, session: str | Path | CellucidSession) -> LoadSessionRequest:
+        """
+        Load a session file into the viewer: its trackers are added beside the
+        person's own (nothing of theirs is replaced), and the file's tracker
+        shown is shown.
+
+        The session must be of the dataset this viewer shows. Returns the
+        :class:`~cellucid.jupyter.LoadSessionRequest`; its result is
+        ``{"tracker": {"id", "name"}, "head"}`` (in a notebook, collect it in
+        a later cell).
+
+        Example::
+
+            viewer.load_session("analysis.cellucid-session")
+        """
+        from ..session import CellucidSession
+
+        path = session.path if isinstance(session, CellucidSession) else Path(session).expanduser().resolve()
+        if not path.is_file():
+            raise FileNotFoundError(str(path))
+        data = path.read_bytes()
+        request_id = secrets.token_hex(16)
+        waiter = _EventWaiter(lambda _event, _payload: False)
+        with self._event_cv:
+            self._action_waiters[request_id] = waiter
+            self._action_types[request_id] = "load_session"
+        request = LoadSessionRequest(self, request_id, path.name, waiter)
+        try:
+            self.send_message({"type": "load_session", "requestId": request_id, "name": path.name, "file": data})
+        except BaseException:
+            request.cancel()
+            raise
+        return request
 
     @property
     def on_message(self) -> Callable[[HookCallback], HookCallback]:
@@ -888,6 +1135,14 @@ class AnnDataViewer:
             event, data = _require_inbound_jupyter_event(message)
         except (TypeError, ValueError) as error:
             raise ViewerProtocolError(str(error)) from error
+        # An agent app's answers (`cellucid mcp`) are its own: they reach the
+        # agent port, never the notebook's hooks or state.
+        if event in _AGENT_EVENT_TYPES:
+            self._agent_port.deliver(event, data)
+            return
+        if event == "command_error" and data["command"].startswith("agent_"):
+            self._agent_port.command_failed(data)
+            return
         # The event is recorded before any hook runs: a hook that raises is the
         # notebook's error (the channel logs it), and must not cost
         # viewer.state, wait_for_event or a session request the event.
@@ -897,36 +1152,46 @@ class AnnDataViewer:
         finally:
             if event == "command_error" and not self._hooks.has_callbacks("command_error"):
                 self._report_unhandled_command_error(data)
+            if event in {"action_result", "command_error", "session_loaded"} and data["requestId"] is not None:
+                with self._state_lock:
+                    self._action_types.pop(data["requestId"], None)
         # What waited for this event goes now.
         if event == "ready":
             self._send_pending_pushes()
-        elif event == "data_mapping":
-            self._send_pending_mapping()
 
-    def _report_local_command_error(self, command: str, error: Exception) -> None:
-        """A command that waited for the viewer and could not be built once it
-        could: reported as the viewer reports a refused command (a
-        ``command_error``: ``state.command_error``, the hooks, or printed)."""
+    def _report_local_command_error(self, request_id: str, error: Exception) -> None:
+        """An action that waited for the viewer and could not be built once it
+        could: reported as the viewer reports a refused action (a
+        ``command_error`` of its request: its request fails, and
+        ``state.command_error``, the hooks, or printed)."""
         reason = str(error).strip() or type(error).__name__
-        self._handle_frontend_message({"type": "command_error", "command": command, "reason": reason[:240]})
+        self._handle_frontend_message(
+            {"type": "command_error", "command": "action", "requestId": request_id, "reason": reason[:4000]}
+        )
 
     def _report_unhandled_command_error(self, data: dict[str, Any]) -> None:
         """
         Print one failed command to ``sys.stderr`` when nothing is listening.
 
-        Commands are one-way: ``viewer.set_color_by(...)`` returns ``None``
-        whether the viewer applied it or rejected it, and the rejection arrives
-        on the viewer channel's thread long after the cell finished. Nothing can make the
-        call itself raise without blocking every command on a browser round
-        trip, so a notebook that registered no ``command_error`` hook would
-        otherwise see a successful-looking call and an unchanged viewer.
+        An action returns its request at once: ``viewer.color_by(...)`` does
+        not wait for the viewer (a notebook widget hears it only between cells),
+        and its refusal arrives on the viewer channel's thread after the cell
+        finished. A notebook that registered no ``command_error`` hook and never
+        collects the request would otherwise see a successful-looking call and
+        an unchanged viewer; ``request.result()`` raises the same reason.
 
         This runs after the event has been recorded, so a failure to write does
         not cost the notebook the event.
         """
         command = data["command"]
+        with self._state_lock:
+            action = None if data["requestId"] is None else self._action_types.get(data["requestId"])
+        caller = (
+            f"viewer.{tool_name(action)}(...)" if command == "action" and action is not None
+            else _COMMAND_PYTHON_CALLERS[command]
+        )
         console_print(
-            f"[cellucid] {_COMMAND_PYTHON_CALLERS[command]} did not take effect "
+            f"[cellucid] {caller} did not take effect "
             f"in the viewer: {data['reason']}\n"
             "[cellucid] The viewer is unchanged. Handle this in code with "
             "@viewer.on_command_error.",
@@ -944,6 +1209,11 @@ class AnnDataViewer:
                 if waiter.payload is None and waiter.matches(event, data):
                     waiter.event = event
                     waiter.payload = data
+            if event in {"action_result", "command_error", "session_loaded"} and data["requestId"] is not None:
+                answered = self._action_waiters.pop(data["requestId"], None)
+                if answered is not None:
+                    answered.event = event
+                    answered.payload = data
 
             # Update "latest" snapshot.
             self.state.last_event_type = event
@@ -961,6 +1231,8 @@ class AnnDataViewer:
                 self.state.command_error = data
             elif event == "data_mapping":
                 self.state.data_mapping = data
+            elif event == "history_changed":
+                self.state.history = data
             elif event in {"result", "result_removed", "results"}:
                 self._record_result_event(event, data)
 
@@ -1043,24 +1315,28 @@ class AnnDataViewer:
             return self.state.ready
         return self.wait_for_event("ready", timeout=timeout)
 
-    def request_session_bundle(self) -> SessionBundleRequest:
+    def request_session(self) -> SessionRequest:
         """
-        Ask the viewer for its current `.cellucid-session` bundle, without waiting.
+        Ask the viewer for its session -- its whole history -- without waiting.
 
         The request is sent at once (or as soon as the viewer connects) and
-        the viewer answers in the background; collect the bundle with the
-        returned request's ``result()``. In a notebook widget the answer
-        arrives once the cell that asked has finished, so collect it in a later
-        cell::
+        the viewer answers in the background with a ``.cellucid-session``
+        file of format 4: every tracker of the dataset's history, each step,
+        and the values each step shows (conversations of the chat bar are
+        left out). Collect it with the returned request's ``result()`` (a
+        :class:`~cellucid.CellucidSession`). In a notebook widget the answer
+        arrives once the cell that asked has finished, so collect it in a
+        later cell::
 
-            request = viewer.request_session_bundle()
+            request = viewer.request_session()
             # next cell
-            bundle = request.result()
-            adata = bundle.apply_to_anndata(adata)
+            session = request.result()
+            plan = session.apply(adata)  # what would change, one row each
+            plan.apply()
 
         Returns
         -------
-        SessionBundleRequest
+        SessionRequest
             The request; ``request.done`` says whether the answer arrived.
         """
         request_id = secrets.token_hex(16)
@@ -1077,7 +1353,7 @@ class AnnDataViewer:
             lambda ev_type, payload: (
                 ev_type == "session_bundle" and payload["requestId"] == request_id
             )
-            or (ev_type == "command_error" and payload["command"] == "requestSessionBundle")
+            or (ev_type == "command_error" and payload["requestId"] == request_id)
         )
         with self._event_cv:
             self._waiters.append(waiter)
@@ -1093,7 +1369,7 @@ class AnnDataViewer:
                 self._waiters.remove(waiter)
             cancel_session_bundle_request(self._viewer_id, self._viewer_token, request_id)
             raise
-        return SessionBundleRequest(self, request_id, waiter)
+        return SessionRequest(self, request_id, waiter)
 
     @property
     def data_mapping(self) -> dict[str, Any] | None:
@@ -1103,7 +1379,7 @@ class AnnDataViewer:
         which embedding fills each dimension slot, the bound vector fields,
         and -- for an AnnData source -- the neighbour graph, the gene names,
         the expression matrix and the latent space. Editing the copy changes
-        nothing; use :meth:`set_data_mapping`.
+        nothing; use :meth:`mapping_set` (the ``mapping.set`` action).
         """
         with self._state_lock:
             event = self.state.data_mapping
@@ -1116,84 +1392,77 @@ class AnnDataViewer:
             event = self.state.data_mapping
             return None if event is None else str(event["origin"])
 
-    def set_data_mapping(self, **fields: Any) -> None:
+    # =========================================================================
+    # ACTIONS: everything that changes or reads the viewer's state
+    # =========================================================================
+
+    def act(self, action: str, /, **params: Any) -> ActionRequest:
         """
-        Change what the viewer plots and reads.
+        Apply (or read) one action of the viewer, by its dotted type.
 
-        Each keyword replaces one top-level field of the mapping the viewer
-        reports (:attr:`data_mapping`): ``embeddings``, ``vectorFields``,
-        ``geneNames``, ``knn``, ``expression``, ``log1p``, ``highlyVariable``
-        and ``latent`` (and ``modality`` for a MuData). ``kind`` cannot
-        change.
+        Every action has a method of its own as well (``viewer.color_by(...)``
+        is ``viewer.act("color.by", ...)``); ``act`` is the same for an action
+        named in data, and every action is listed by
+        :func:`cellucid.jupyter.action_catalog`. Parameters are checked by the
+        catalogue and converted the same way for every action: cells
+        (``x-cells``) as rows, a boolean mask or obs names; one number per cell
+        (``x-values``) as an array; everything else as JSON (NumPy values and
+        pandas indexes as lists). A parameter written ``in`` in the catalogue
+        is ``in_`` as a method's keyword.
 
-        Nothing is waited for -- a notebook widget hears the viewer only
-        between cells. The merged mapping is validated and sent at once when
-        the viewer has reported its mapping (an invalid value raises here and
-        the viewer is untouched), or as soon as it reports one (after its
-        dataset opens; a cell run before that, "Run All", is fine). The
-        viewer's answer becomes :attr:`data_mapping` (origin ``"notebook"``);
-        a mapping it refuses -- an array that fails its load-time check, for
-        example -- arrives as a ``command_error`` (``state.command_error``,
-        ``@viewer.on_command_error``, printed when no hook handles it).
+        The action is sent at once (or as soon as the viewer connects) and
+        the viewer applies it as a person's control would: one step of its
+        history, labelled as this notebook's, undone like any other. Nothing
+        waits: the returned request's :meth:`~ActionRequest.result` waits for
+        the outcome -- a read's result -- and raises :class:`ActionError` with
+        the viewer's reason when it did not apply the action. In a notebook
+        widget the answer arrives once the cell has finished, so collect it
+        in a later cell::
+
+            request = viewer.fields_list()
+            # next cell
+            fields = request.result()
 
         Example::
 
-            viewer.set_data_mapping(
-                embeddings={
-                    "enabled": [{"key": "X_pca", "columns": [0, 1]}],
-                    "defaults": {
-                        "1d": None,
-                        "2d": {"key": "X_pca", "columns": [0, 1]},
-                        "3d": None,
-                    },
-                },
-                knn="connectivities",
-            )
-            # a later cell
-            viewer.data_mapping["knn"]
+            viewer.act("color.by", field={"source": "obs", "key": "cell_type"})
+            viewer.highlight_cells(cells=adata.obs["leiden"] == "3", label="Leiden 3")
         """
-        if "kind" in fields:
-            raise TypeError("set_data_mapping cannot change the mapping kind.")
-        allowed = (_ANNDATA_MAPPING_KEYS - {"kind"}) | {MODALITY_KEY}
-        unknown = sorted(set(fields) - allowed)
-        if unknown:
-            raise TypeError(
-                f"set_data_mapping got unknown field(s) {unknown}; a data "
-                f"mapping has {sorted(allowed)}."
-            )
-        if not fields:
-            raise TypeError("Name the fields to change, for example expression='layer:counts'.")
-        with self._state_lock:
-            self._pending_mapping_fields.update(copy.deepcopy(fields))
-            reported = self.state.data_mapping is not None
-        if reported:
-            self._send_pending_mapping(raise_errors=True)
+        exact = action_params(action, params, cells=self._action_cells)
+        request = self._expect_action(action)
+        self._dispatch_action(request, exact)
+        return request
 
-    def _send_pending_mapping(self, *, raise_errors: bool = False) -> None:
-        """Send the data-mapping fields set so far, merged into the mapping the
-        viewer last reported. A merged mapping that is invalid raises when the
-        call that set the fields sends it (``raise_errors``), and is reported
-        as a ``command_error`` when it waited for the viewer."""
+    def _action_cells(self, value: Any, label: str) -> np.ndarray:
+        """Cells an action names, as original positions (``uint32``)."""
+        return cell_positions(
+            value, label=label, n_obs=self._dataset_cell_count(), obs_names=lambda: self.obs_names
+        )
+
+    def _expect_action(self, action: str) -> ActionRequest:
+        """A request for ``action``, its answer awaited from now on."""
+        request_id = secrets.token_hex(16)
+        waiter = _EventWaiter(lambda _event, _payload: False)
+        with self._event_cv:
+            self._action_waiters[request_id] = waiter
+            self._action_types[request_id] = action
+        return ActionRequest(self, request_id, action, waiter)
+
+    def _dispatch_action(self, request: ActionRequest, params: dict[str, Any]) -> None:
+        """Send ``request``'s action with ``params``; a send that fails withdraws it."""
         with self._state_lock:
-            fields = self._pending_mapping_fields
-            event = self.state.data_mapping
-            if not fields or event is None:
-                return
-            current = copy.deepcopy(event["mapping"])
-            self._pending_mapping_fields = {}
+            turn = self._turn
         try:
-            unknown = sorted(set(fields) - set(current))
-            if unknown:
-                raise TypeError(f"This dataset's data mapping has no field(s) {unknown}")
-            mapping = _require_data_mapping({**current, **fields}, label="data mapping")
-        except (TypeError, ValueError) as error:
-            if raise_errors:
-                raise
-            self._report_local_command_error("setDataMapping", error)
-            return
-        self.send_message({"type": "setDataMapping", "requestId": secrets.token_hex(16), "mapping": mapping})
+            self.send_message({
+                "type": "action", "requestId": request.request_id, "action": request.action, "params": params,
+                "turn": None if turn is None else turn[0], "turnLabel": None if turn is None else turn[1],
+            })
+        except BaseException:
+            request._forget()
+            raise
 
     # =========================================================================
+    # ROUND TRIP: results back from the viewer, columns and gene sets pushed    # =========================================================================
     # ROUND TRIP: results back from the viewer, columns and gene sets pushed
     # =========================================================================
     #
@@ -1411,36 +1680,6 @@ class AnnDataViewer:
         names = self.obs_names
         return Selection(cells=cells, obs_names=None if names is None else names[cells], source=str(event["source"]))
 
-    def _cell_positions(self, cells: Any) -> np.ndarray | list[int]:
-        """Cells given by row (ints) or by obs name, as rows of ``obs``."""
-        if isinstance(cells, str | bytes):
-            raise TypeError("cell_indices must list the cells (rows or obs names), not be one string")
-        if isinstance(cells, pd.Index | pd.Series) or (
-            isinstance(cells, list | tuple) and cells and all(isinstance(cell, str) for cell in cells)
-        ) or (isinstance(cells, np.ndarray) and cells.dtype.kind in "OUS"):
-            names = self.obs_names
-            if names is None:
-                raise ValueError(
-                    "This viewer's dataset has no obs names this process can read; name the cells by row."
-                )
-            wanted = pd.Index(cells.index if isinstance(cells, pd.Series) and cells.dtype == bool else cells)
-            if isinstance(cells, pd.Series) and cells.dtype == bool:
-                wanted = cells.index[cells.to_numpy()]
-            if not names.is_unique:
-                raise ValueError(
-                    "This viewer's dataset repeats obs names, so a name does not say which cell it is: "
-                    "name the cells by row, or make the names unique (adata.obs_names_make_unique()) and show it again."
-                )
-            positions = names.get_indexer(wanted)
-            if (positions < 0).any():
-                missing = wanted[positions < 0]
-                raise ValueError(
-                    f"{len(missing)} of the cells named are not in this viewer's dataset (first: {missing[0]!r})"
-                )
-            located: np.ndarray = positions.astype(np.int64)
-            return located
-        return _require_cell_indices(cells if isinstance(cells, np.ndarray) or type(cells) is list else list(cells))
-
     def subset(self, adata: Any, which: str | None = None) -> Any:
         """The cells of a highlight group, or of the last selection, as a new AnnData.
 
@@ -1506,9 +1745,13 @@ class AnnDataViewer:
             for _, name, entry in _gene_sets_of(self.results)
         }
 
-    def push(self, values: Any, key: str | None = None) -> None:
+    def push(self, values: Any, key: str | None = None) -> ActionRequest:
         """Show a column in the viewer as a field: labels as a categorical, numbers
         as a continuous field. Pushing the same key again replaces it.
+
+        The ``field.push`` action, made from a Python column (its own method,
+        ``viewer.field_push(...)``, takes the codes and values as the viewer
+        stores them).
 
         Args:
             values: A ``pandas.Series`` -- ``adata.obs["leiden"]``, a score --
@@ -1520,57 +1763,59 @@ class AnnDataViewer:
                 continuous field (missing: no value).
             key: The field's name in the viewer; the Series' name when None.
                 A field of that name the notebook did not push is never
-                replaced: the viewer refuses it, and says why as a
-                ``command_error`` (printed unless a hook handles it).
+                replaced: the viewer refuses it, and says why.
 
-        The column is sent at once (or, for a format only the browser reads,
-        once the viewer has said how many cells it has: a cell run before
-        that, "Run All", is fine); the viewer adds it once its dataset is
-        open, and :attr:`results` lists it from then on (in a notebook, from
-        the next cell). A column the viewer refuses, or that does not fit
-        the dataset once it is known, arrives as a ``command_error``.
+        Returns:
+            The :class:`ActionRequest`: its result is ``{"name", "kind",
+            "id"}`` once the viewer added the field (:attr:`results` lists it
+            from then on; in a notebook, from the next cell). The column is
+            sent at once, or, for a format only the browser reads, once the
+            viewer has said how many cells it has (a cell run before that,
+            "Run All", is fine). A column the viewer refuses, or that does not
+            fit the dataset once it is known, fails the request with the
+            reason (printed unless a ``command_error`` hook handles it).
         """
         name = key if key is not None else getattr(values, "name", None)
         if not isinstance(name, str) or not name.strip():
             raise ValueError("Name the field: pass key=, or a Series with a name")
+        request = self._expect_action("field.push")
         n_obs = self._dataset_cell_count()
         if n_obs is None:
             # Only the browser reads this format: the column goes once the
             # viewer says how many cells it has (its `ready`).
             with self._state_lock:
-                self._pending_pushes.append((values, name.strip()))
-            return
-        message = field_message(values, name.strip(), n_obs=n_obs, obs_names=self.obs_names)
-        self.send_message({**message, "requestId": secrets.token_hex(16)})
+                self._pending_pushes.append((values, name.strip(), request.request_id, self._turn))
+            return request
+        try:
+            params = field_push_params(values, name.strip(), n_obs=n_obs, obs_names=self.obs_names)
+        except BaseException:
+            request._forget()
+            raise
+        self._dispatch_action(request, params)
+        return request
 
     def _send_pending_pushes(self) -> None:
         """Send the columns pushed before the viewer's cell count was known; a
-        column that does not fit the dataset is reported as a
-        ``command_error`` of ``setField``."""
+        column that does not fit the dataset fails its request."""
         with self._state_lock:
             pending, self._pending_pushes = self._pending_pushes, []
         n_obs = self._dataset_cell_count()
         if n_obs is None:
             return
-        for values, name in pending:
-            try:
-                message = field_message(values, name, n_obs=n_obs, obs_names=self.obs_names)
-            except (TypeError, ValueError) as error:
-                self._report_local_command_error("setField", error)
+        for values, name, request_id, turn in pending:
+            with self._state_lock:
+                waiter = self._action_waiters.get(request_id)
+            if waiter is None:
                 continue
-            self.send_message({**message, "requestId": secrets.token_hex(16)})
-
-    def push_gene_set(self, name: str, genes: Sequence[str], description: str = "") -> None:
-        """Give the viewer a gene set: Gene signature and Dot plot offer it
-        ("From notebook"), and it is saved with the session. A set of the same
-        name the notebook pushed before is replaced. Each gene is kept once, in
-        order. Sent at once, as :meth:`push` is."""
-        if isinstance(genes, str):
-            raise TypeError("genes must list the genes, not be one string")
-        clean = list(dict.fromkeys(str(gene).strip() for gene in genes if str(gene).strip()))
-        self.send_message(
-            {"type": "setGeneSet", "requestId": secrets.token_hex(16), "name": name, "description": description, "genes": clean}
-        )
+            try:
+                params = field_push_params(values, name, n_obs=n_obs, obs_names=self.obs_names)
+            except (TypeError, ValueError) as error:
+                self._report_local_command_error(request_id, error)
+                continue
+            self.send_message({
+                "type": "action", "requestId": request_id, "action": "field.push", "params": params,
+                "turn": None if turn is None else turn[0], "turnLabel": None if turn is None else turn[1],
+            })
 
     def _dataset_cell_count(self) -> int | None:
         """The cells of the dataset this viewer serves: read by this process,
@@ -1583,66 +1828,53 @@ class AnnDataViewer:
     def apply_session_to_anndata(
         self,
         adata: Any,
-        request: SessionBundleRequest,
+        request: SessionRequest,
         *,
-        expected_dataset_id: str | None = None,
-        inplace: bool = False,
+        tracker: str | None = None,
+        branch: str | None = None,
+        step: str | None = None,
+        dry_run: bool = True,
+        overwrite: bool = False,
+        keep_session: bool = False,
         timeout: float | None = 60.0,
-        cleanup_bundle: bool = True,
-        add_highlights: bool = True,
-        highlights_prefix: str = "cellucid_highlight__",
-        add_user_defined_fields: bool = True,
-        user_defined_prefix: str = "",
-        include_deleted_user_defined_fields: bool = False,
-        store_uns: bool = True,
-        return_summary: bool = False,
-    ):
+        cleanup_file: bool = True,
+    ) -> Any:
         """
-        Apply the session a :meth:`request_session_bundle` request brought to an AnnData.
+        Plan or apply the session a :meth:`request_session` request brought to an AnnData.
 
-        The one way to get a session, in a notebook widget and a browser-tab
-        viewer alike (cellucid-r's ``cellucid_apply_session(object,
-        request)``): ask, then apply -- in a notebook, in a later cell, since
-        the viewer answers between cells::
+        The one way to get the viewer's state into an object, in a notebook
+        widget and a browser-tab viewer alike (cellucid-r's
+        ``cellucid_apply_session(object, request)``): ask, then apply -- in a
+        notebook, in a later cell, since the viewer answers between cells::
 
-            request = viewer.request_session_bundle()
+            request = viewer.request_session()
             # next cell
-            adata = viewer.apply_session_to_anndata(adata, request)
+            plan = viewer.apply_session_to_anndata(adata, request)   # what would change
+            report = plan.apply()
 
-        ``timeout`` bounds the wait for the bundle (``request.result()``; a
-        notebook widget's cell cannot wait, and says so at once when the
-        answer has not arrived), ``cleanup_bundle`` deletes the bundle file
-        afterwards (``request.result().save(...)`` first keeps a copy), and
-        ``expected_dataset_id`` defaults to the id this viewer serves. Every
-        other keyword is passed to
-        :func:`~cellucid.apply_cellucid_session_to_anndata`.
+        ``tracker``, ``branch`` and ``step`` choose the state applied: by
+        default the step the viewer shows (the active tracker's head); any
+        step of any tracker is the state as it was after that step. Every
+        other keyword but ``timeout`` (the wait for the session; a notebook
+        widget's cell cannot wait, and says so at once when the answer has not
+        arrived) and ``cleanup_file`` (delete the session file the viewer
+        sent once it is read and planned: the plan, and a record kept with
+        ``keep_session``, need it no longer; ``request.result().save(...)``
+        first keeps a copy) is :func:`~cellucid.apply_cellucid_session_to_anndata`'s.
         """
-        if type(cleanup_bundle) is not bool:
-            raise TypeError("cleanup_bundle must be exactly True or False")
-        if not isinstance(request, SessionBundleRequest) or request._viewer is not self:
-            raise TypeError("request must be what this viewer's request_session_bundle() returned")
-        bundle = request.result(timeout=timeout)
+        if type(cleanup_file) is not bool:
+            raise TypeError("cleanup_file must be exactly True or False")
+        if not isinstance(request, SessionRequest) or request._viewer is not self:
+            raise TypeError("request must be what this viewer's request_session() returned")
+        session = request.result(timeout=timeout)
         try:
-            resolved_dataset_id = expected_dataset_id
-            if resolved_dataset_id is None:
-                resolved_dataset_id = self._served_dataset_id
-                if resolved_dataset_id is None:
-                    raise RuntimeError("This viewer serves no dataset id; pass expected_dataset_id explicitly.")
-            return bundle.apply_to_anndata(
-                adata,
-                expected_dataset_id=resolved_dataset_id,
-                inplace=inplace,
-                add_highlights=add_highlights,
-                highlights_prefix=highlights_prefix,
-                add_user_defined_fields=add_user_defined_fields,
-                user_defined_prefix=user_defined_prefix,
-                include_deleted_user_defined_fields=include_deleted_user_defined_fields,
-                store_uns=store_uns,
-                return_summary=return_summary,
+            return session.apply(
+                adata, tracker=tracker, branch=branch, step=step, dry_run=dry_run, overwrite=overwrite,
+                keep_session=keep_session,
             )
         finally:
-            if cleanup_bundle:
-                bundle.path.unlink(missing_ok=True)
+            if cleanup_file:
+                session.path.unlink(missing_ok=True)
 
     def debug_connection(self, timeout: float | None = 5.0) -> dict[str, Any]:
         """
@@ -1917,13 +2149,16 @@ class AnnDataViewer:
         still loading, or the page is reconnecting -- the command waits and is
         sent, in order, the moment it connects.
 
-        A command that names cells (``highlight``, ``setVisibility``) travels
-        as one binary frame, its cells little-endian ``uint32``; every other
-        one as JSON text.
+        An ``action`` whose parameters hold NumPy arrays (cells as ``uint32``
+        original positions, a column's values) travels as one binary frame,
+        the arrays little-endian; every other command as JSON text. Use
+        :meth:`act` (or an action's own method) for actions: it checks the
+        parameters by the catalogue and returns the request its answer
+        completes.
 
         Args:
-            message: Dict with 'type' key and message-specific data. Cells are
-                a list of ints or a one-dimensional NumPy integer array.
+            message: Dict with the command's exact keys (the shared protocol's
+                ``commands``).
 
         Returns:
             True when the command was sent now, False when it is waiting for
@@ -1931,113 +2166,12 @@ class AnnDataViewer:
 
         Example::
 
-            viewer.send_message({'type': 'highlight', 'cells': [1,2,3], 'color': '#ff0000'})
+            viewer.send_message({"type": "freeze"})
         """
         serialized_message = _require_frontend_message(message)
         if not self._message_routing_registered:
             raise RuntimeError("The viewer has stopped; it accepts no more commands.")
         return send_viewer_command(self._viewer_id, self._viewer_token, serialized_message)
-
-    # =========================================================================
-    # PYTHON → FRONTEND CONVENIENCE METHODS
-    # =========================================================================
-    # These methods send commands TO the viewer (opposite direction from hooks),
-    # on the same viewer channel the events arrive on.
-
-    def highlight_cells(
-        self,
-        cell_indices: Any,
-        color: str = "#ff0000",
-        *,
-        label: str | None = None,
-    ):
-        """
-        Highlight specific cells in the viewer, as one highlight group.
-
-        Args:
-            cell_indices: The cells to highlight, in any order, each once: by
-                0-based row of ``obs`` (a list of ints, or a one-dimensional
-                NumPy integer array -- the fast form for millions of cells,
-                e.g. ``np.flatnonzero(mask)``), or by obs name (a list of
-                names, a ``pandas.Index`` such as ``adata.obs_names[mask]``).
-                They travel as one binary frame. When the viewer opened a
-                subsample, the cells it holds are highlighted.
-            color: Hex color string (default: red)
-            label: The group's name in the viewer; None names it by its
-                cell count.
-
-        Example::
-
-            viewer.highlight_cells([100, 200, 300], color="#00ff00")
-            viewer.highlight_cells(adata.obs_names[adata.obs["leiden"] == "3"], label="Leiden 3")
-        """
-        cells = self._cell_positions(cell_indices)
-        if (
-            type(color) is not str
-            or len(color) != 7
-            or color[0] != "#"
-            or any(character not in "0123456789abcdefABCDEF" for character in color[1:])
-        ):
-            raise ValueError("color must be an exact six-digit hex color")
-        self.send_message(
-            {
-                "type": "highlight",
-                "cells": cells,
-                "color": color,
-                "label": label,
-            }
-        )
-
-    def clear_highlights(self):
-        """Clear all cell highlights in the viewer: every group on every highlight page (the pages stay)."""
-        self.send_message({"type": "clearHighlights"})
-
-    def set_color_by(self, field: str):
-        """
-        Set the coloring field in the viewer.
-
-        Args:
-            field: Name of the obs column to color by
-
-        Example::
-
-            viewer.set_color_by("cell_type")
-        """
-        exact_field = _require_exact_message_text(
-            field,
-            label="field",
-            allow_whitespace=True,
-        )
-        self.send_message({"type": "setColorBy", "field": exact_field})
-
-    def set_visibility(self, cell_indices: list[int] | np.ndarray | None = None, visible: bool = True):
-        """
-        Set visibility of specific cells.
-
-        Args:
-            cell_indices: The cells, in any order, each once and at least
-                one: by 0-based row of ``obs`` (a list of ints or a
-                one-dimensional NumPy integer array) or by obs name. None for
-                every cell.
-            visible: Whether cells should be visible
-
-        Example::
-
-            viewer.set_visibility([0, 1, 2], visible=False)  # Hide cells
-        """
-        if type(visible) is not bool:
-            raise TypeError("visible must be exactly True or False")
-        self.send_message(
-            {
-                "type": "setVisibility",
-                "cells": None if cell_indices is None else self._cell_positions(cell_indices),
-                "visible": visible,
-            }
-        )
-
-    def reset_view(self):
-        """Reset the camera to the default view."""
-        self.send_message({"type": "resetCamera"})
 
     # =========================================================================
     # LIFECYCLE
@@ -2059,6 +2193,10 @@ class AnnDataViewer:
         with self._event_cv:
             self._stopped_reason = "the viewer was stopped"
             self._event_cv.notify_all()
+        # Agent apps waiting on this viewer hear it stopped, and it is no
+        # longer published to them.
+        self._agent_port.stopped("the viewer was stopped")
+        withdraw_viewer(self._viewer_id)
         finalizer = self._routing_finalizer
         # At interpreter exit the routing finalizer may already have run
         # (weakref's own exit hook): the registration is gone, and so is the
@@ -2293,10 +2431,22 @@ def _register_viewer_for_messages(viewer: AnnDataViewer):
             raise RuntimeError("The registered viewer no longer exists")
         resolved._handle_frontend_message(event)
 
+    def _socket(attached: bool) -> None:
+        # A page went: the agent calls it was running get no answer now. A
+        # page took the channel: what its tool list says may differ.
+        resolved = viewer_ref()
+        if resolved is None:
+            return
+        if attached:
+            resolved._agent_port.page_back()
+        else:
+            resolved._agent_port.page_gone()
+
     register_event_callback(
         viewer._viewer_id,
         viewer._viewer_token,
         _deliver,
+        on_socket=_socket,
     )
     try:
         viewer._routing_finalizer = weakref.finalize(

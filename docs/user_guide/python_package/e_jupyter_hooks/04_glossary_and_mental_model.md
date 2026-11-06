@@ -12,7 +12,7 @@ The helper package you use from Python/CLI. It can:
 - serve datasets (an AnnData store the viewer reads itself),
 - show the Cellucid UI in notebooks (a widget),
 - send commands to the UI and receive events back (hooks),
-- capture session bundles and apply them to AnnData.
+- capture session files and apply them to AnnData.
 
 ### Viewer / `viewer`
 The Python object returned by `show_anndata(...)`: a `cellucid.Widget`.

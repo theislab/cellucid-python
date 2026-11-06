@@ -189,7 +189,7 @@ Every word here appears on a button, a label, or a page in
 the detail.
 
 **What the Session panel calls things**, top to bottom: **`Dataset`**;
-**`Open data`** (the next three); **`Stored`**; **`Session file`**;
+**`Open data`** (the next four); **`Stored`**;
 **`Subsampling`** and **`Data mapping`**, two sections collapsed by default
 whose header says what they hold in one line (click it to open; whether each
 is open is remembered in this browser, never in a session or the address)
@@ -208,6 +208,10 @@ is open is remembered in this browser, never in a session or the address)
   instead and its label reads "Dataset from <host>". A dataset opened from a
   file, a single-dataset link or a server is not listed there; while one is
   open the dropdown shows "—".
+- **`My datasets`**: the datasets you opened in this browser, most recent
+  first; its menu offers the five most recent and **`All…`** lists every one,
+  with **`Open`**, **`Continue`** and **`Forget`**. Shown once there is one
+  ({doc}`../b_data_loading/01_loading_options_overview`).
 - **`File or folder`**: the **`Open…`** button, which reads a file or folder
   off your own computer. Its menu has **`File…`** (an `.h5ad`, `.zarr.zip`,
   `.h5mu`, `.loom`, 10x `.h5`, or an R `.rds` / `.rda` / `.RData`) and
@@ -229,8 +233,6 @@ is open is remembered in this browser, never in a session or the address)
   **`Manage…`** ("1 dataset · 99 MB · 2 more"; every kind on hover, listed
   and removed in Manage…). Hidden while nothing is kept
   ({ref}`stored-in-this-browser`).
-- **`Session file`**: the **`Save`** and **`Load`** buttons, which download
-  and restore a `.cellucid-session` bundle.
 - **`Subsampling`**: how much of the dataset is read, its header saying it
   while collapsed ("100 % cells · genes 6 %"). It holds **`Cells to open`**
   (which of the dataset's cells are on the map: every one, or a seeded
@@ -238,6 +240,35 @@ is open is remembered in this browser, never in a session or the address)
   is read for, for a file stored cell by cell; 100 % is every open cell),
   with their **`Details`** ({doc}`../b_data_loading/21_subsampled_loading`).
 - **`Data mapping`**: which stored arrays the dataset is drawn from (above).
+
+**What the State section calls things**, top to bottom
+({doc}`../m_state_history/index`):
+
+- **`Session`**: **`Share…`** writes the history of the dataset shown (or the
+  current state only, or the steps only) to a `.cellucid-session` file;
+  **`Load…`** lists every history this browser keeps and opens or replays a
+  session file.
+- **`History`**: the steps as a graph, with search, **`Undo`**, **`Redo`**,
+  **`History settings`** and the **`⋯`** menu (**`Play as a tour`**,
+  **`Compare two steps…`**, **`Branch map…`**, **`Recently deleted…`**,
+  **`Copy pseudocode`**, **`Copy methods`**, **`Print report…`**,
+  **`Replay a saved history…`**, **`Start another tracker…`**, **`Show the
+  state at…`**, **`Clear history, keep the state…`**).
+- **`Recording`**: the switch that pauses and resumes recording steps.
+- **`Main ▾`**: the branch shown; opens the branch picker (branches,
+  **`Map ⤢`**, and the tracker in use, the independent history, with start
+  another, rename and remove).
+- **Branch**, **tracker**, **turn**, **group**, **bookmark**, **note**:
+  {doc}`../m_state_history/index`.
+
+The words behind them:
+
+- **Step**: one change you (or an agent, or a notebook) made, kept in the
+  history. **Opened**, the first row, is the dataset as it opened.
+- **Branch**: a line of steps; acting after an undo starts a new one and keeps
+  the old one. The first is **Main**.
+- **Tracker**: one whole history of a dataset, with its own steps and
+  branches; a dataset can have several.
 
 **What the data itself is called**
 
@@ -370,7 +401,7 @@ Scope note:
 
 - **Analysis**: computations driven by the current dataset state (often highlights/groups).
 - **Figure export**: export an image/vector figure of the current view(s) suitable for papers.
-- **Save / Load** (under **Session file**): save/restore a `.cellucid-session` bundle that captures the application state.
+- **Share… / Load…** (under **State › Session**): write or open a `.cellucid-session` file that holds the history of the dataset.
 
 ---
 
@@ -378,14 +409,15 @@ Scope note:
 
 - **Global**: one value shared across the entire app/dataset (not specific to a view).
 - **Per view**: stored separately for each view/snapshot.
-- **Session bundle**: a saved `.cellucid-session` file (explicit user action).
+- **Session file**: a `.cellucid-session` file written by **Share…** (explicit user action) holding the history of a dataset, its current state only, or its steps only.
+- **Saved state**: a history this browser keeps, written at every step (**Autosave**) or saved under a name ({doc}`../m_state_history/03_saved_states_and_autosave`).
 - **Local storage**: persistent browser storage used for small preferences (e.g., theme, background, and the antialiasing preference under the key `cellucid_antialias`).
 - **Session storage**: storage that is cleared when the tab closes (used for sensitive tokens like GitHub OAuth in community annotation).
 - **Device preference**: a setting that describes the machine you are viewing on rather than the picture you made. A session bundle does not record it, and loading a session never changes it. `Antialiasing` is the only one; the theme, by contrast, travels with a session.
 - **Automatic (`auto`)**: a stored preference that is a deferral rather than a value. The antialiasing preference has three states — `auto`, `on`, and `off` — and `auto` is the default, and what an absent key means. Cellucid resolves it from the open dataset's cell count and the view's dimension (on below 5,000,000 cells in a 3D view and below 200,000 in a 1D or 2D view, off at or above) and decides again every time a dataset is opened or the view changes dimension. Ticking or unticking the checkbox replaces `auto` with your choice, permanently and in both directions. This is also the second reason a session does not record the setting: a checkbox cannot express `auto`, so restoring a captured tick would turn "let the dataset decide" into a choice you never made.
 
 See {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored` for what a
-session bundle carries.
+session file carries.
 
 ---
 

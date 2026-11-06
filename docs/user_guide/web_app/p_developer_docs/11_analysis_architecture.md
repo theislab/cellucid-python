@@ -95,7 +95,7 @@ Responsibilities:
 - manages shared configuration (`currentConfig`)
 - coordinates page selection and mode switching
 - triggers plot creation and manages plot lifetimes
-- restores analysis windows from their exact session descriptors
+- restores analysis windows from their exact descriptors (the `analysis` state domain)
 
 Code:
 - `cellucid/assets/js/app/analysis/comparison-module.js`
@@ -292,17 +292,54 @@ dataset reload): `cellucid/assets/js/app/analysis/shared/resource-cleanup.js`.
 
 ---
 
-## Session interaction (analysis windows + artifacts)
+## Actions, history and sessions (analysis windows + results)
 
-The session serializer can be given references to analysis managers once the module exists:
-- `sessionSerializer.setAnalysisRefs({ comparisonModule, analysisWindowManager })`
+Every analysis change is an action (`app/actions/definitions/analysis.js`,
+provided by `app/analysis/actions.js` `installAnalysisActions` once the
+module exists): `analysis.open`, `analysis.close`, `analysis.pages.set`,
+`analysis.run`, one `analysis.<mode>.set` per mode with options (its
+parameters made from the mode's options schema), and the window actions
+`analysis.window.copy`, `analysis.window.close`, `analysis.window.place`,
+`analysis.window.collapse` and an expanded view's `analysis.size.set`; the
+reads `analysis.list`, `analysis.result`, `analysis.<mode>.get` and
+`analysis.cancel` answer without a step and make no state: the panel makes a
+mode's analysis on first use, and a mode it made is part of the `analysis`
+domain, so a read of a mode the panel never made goes through
+`ComparisonModule.readPanelUI`, which makes it for a synchronous read and
+unmakes it in the same task (a read that answers a promise is refused), so the
+panel is as it was when the read ends. `ComparisonModule.getUI` only peeks
+(`AnalysisUIManager.peekUI`) and never makes one; one analysis reading
+another's results, as the dot plot and the gene signature read the marker
+genes, peeks the same way. A
+person's changes in a panel or a window are recorded by observation
+(`recordObserved`), so each is one history step.
 
-This enables:
-- reopening floating analysis windows after session restore
-- restoring analysis artifacts represented by registered session chunks
-
-See:
-- {doc}`10_sessions_persistence_and_serialization`
+What the analyses hold is the `analysis` state domain
+(`app/state/domains/analysis.js`): the floating windows (mode, title,
+settings, result) and the docked panel's
+open mode with every opened mode's settings and result. A result is kept as
+the analysis exported it (`analysis/shared/analysis-result-session.js`: JSON
+and typed arrays, the arrays by reference) and put back as it was, never
+computed again by a restore. A share that leaves results out writes each as
+the record of a result left out (`leftOutResultOf`: its kind and what it was
+computed on, no payload); once that session file or saved state is shown,
+`session/recompute-results.js` runs each analysis at the head whose result was
+left out again through `analysis.run` (origin `session`, an ordinary step),
+compares what the new result was computed on with the shared one
+(`result-provenance.js` `staleReasons`) and says why where they differ. Only
+opening does this, never a jump; an analysis that is not shown is refused
+(it cannot draw) and keeps its record, so the next opening tries again. A
+restore reopens the windows from their descriptors
+(`createFromSessionDescriptor`) and hands the docked panel its record
+(`importSessionState`) only when they differ. Where each window stands, its
+size, whether it is folded and the sizes remembered per analysis are page
+layout: the `layout` domain holds them (`layout.analysis`, read and put back
+through `exportWindowPlaces` / `applyWindowPlaces` and
+`exportViewSizes` / `importViewSizes`), so the window actions that only move,
+resize or fold a window touch `layout`, and opening, copying or closing one
+touches both. A session file holds the domain
+like every other ({doc}`29_action_layer_domains_and_history`,
+{doc}`10_sessions_persistence_and_serialization`).
 
 ---
 

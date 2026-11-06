@@ -10,6 +10,8 @@ If you are looking for Python-side APIs (`prepare`, `serve`, `show_anndata`, hoo
 - “I just need to load my dataset” → {doc}`b_data_loading/index`
 - “I need to understand filtering + selection” → {doc}`e_filtering/index` and {doc}`f_highlighting_selection/index`
 - “I want RNA velocity / vector overlays” → {doc}`i_vector_field_velocity/index`
+- “I want to undo, go back to an earlier step, or write up what I did” → {doc}`m_state_history/index`
+- “I want Claude or ChatGPT to work in Cellucid with me” → {doc}`g_agents/index`
 - “I want community annotation workflows” → {doc}`j_community_annotation/index`
 - “Something is broken” → {doc}`q_troubleshooting_index/index`
 
@@ -76,6 +78,13 @@ Selecting points, highlighting, synchronization rules, and how to reason about �
 Analysis panel workflows (e.g. marker genes / differential expression), interpretation guidance, and troubleshooting.
 :::
 
+:::{grid-item-card} {octicon}`comment-discussion;1.5em;sd-mr-1` Agents
+:link: g_agents/index
+:link-type: doc
+
+Claude, ChatGPT and local agent apps working in Cellucid: the chat bar, the connector, your permissions, Stop and Undo turn, and what agents are sent of your data.
+:::
+
 ::::
 
 ### Specialized features
@@ -108,7 +117,14 @@ Export UI walkthrough, formats, quality knobs, metadata/provenance, and edge cas
 :link: l_sessions_sharing/index
 :link-type: doc
 
-Saving/restoring UI state, share links, collaboration patterns, and “what makes a session compatible”.
+The session file (your history in one file), share links, collaboration patterns, and “what makes a session compatible”.
+:::
+
+:::{grid-item-card} {octicon}`history;1.5em;sd-mr-1` State and History
+:link: m_state_history/index
+:link-type: doc
+
+Every step you take, kept as a history: undo and redo, branches, trackers, saved states in this browser, a guided tour, and pseudocode, a methods paragraph or a printed report of what you did.
 :::
 
 ::::
@@ -158,11 +174,13 @@ c_core_interactions/index
 d_fields_coloring_legends/index
 e_filtering/index
 f_highlighting_selection/index
+g_agents/index
 h_analysis/index
 i_vector_field_velocity/index
 j_community_annotation/index
 k_figure_export/index
 l_sessions_sharing/index
+m_state_history/index
 n_benchmarking_performance/index
 o_accessibility_privacy_security/index
 p_developer_docs/index

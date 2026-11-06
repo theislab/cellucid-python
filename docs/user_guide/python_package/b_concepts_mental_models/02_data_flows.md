@@ -194,19 +194,21 @@ A whole session is a *pull* workflow in two cells (a notebook widget hears
 the viewer only between cells):
 
 ```python
-request = viewer.request_session_bundle()
+request = viewer.request_session()
 ```
 
 ```python
-bundle = request.result()
+session = request.result()
 ```
 
 What happens:
 1) Python sends a `requestSessionBundle` command on the viewer channel.
-2) The web app serializes the current session state into bytes (`.cellucid-session`).
+2) The web app writes the dataset's history (every tracker and step) as `.cellucid-session` bytes.
 3) The web app sends those bytes back on the channel as one binary frame.
 4) Python streams the frame to a temporary file.
-5) `request.result()` returns a `CellucidSessionBundle(Path(...))`.
+5) `request.result()` returns a {class}`~cellucid.CellucidSession`, read and checked whole.
+6) `session.apply(adata)` plans what applying the step it shows would change,
+   one row each; `plan.apply()` writes it into `adata`.
 
 This is covered in depth in: {doc}`05_sessions_to_anndata_bridge`.
 

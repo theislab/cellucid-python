@@ -199,11 +199,11 @@ Hide categories, set value ranges and drop outliers, and see the count as you go
 Lasso, click or drag through the neighbour graph to build named groups of cells.
 :::
 
-:::{grid-item-card} {octicon}`bookmark;1.1em;sd-mr-2` Save and share
-:link: user_guide/web_app/l_sessions_sharing/index
+:::{grid-item-card} {octicon}`history;1.1em;sd-mr-2` Every step, kept and shared
+:link: user_guide/web_app/m_state_history/index
 :link-type: doc
 
-A session file restores the whole view; a link opens the same dataset for anyone.
+Undo any step, branch off and pick up tomorrow; a session file carries the whole history, and a link opens the same dataset for anyone.
 :::
 
 :::{grid-item-card} {octicon}`image;1.1em;sd-mr-2` Export figures

@@ -321,14 +321,14 @@ the configured source generation and reports source failure directly.
 
 ---
 
-## Privacy implications of session bundles
+## Privacy implications of session files
 
 A `.cellucid-session` file is not “just UI state” — it can encode:
 - highlight membership lists (which cells you selected),
 - user-defined labels and categories,
 - potentially other feature-specific state as the format evolves.
 
-Treat session bundles as data artifacts:
+Treat session files as data artifacts:
 - don’t share them publicly if the underlying dataset is sensitive,
 - version them alongside the matching dataset file.
 

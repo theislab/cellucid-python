@@ -12,6 +12,9 @@ This page focuses on the second style, which is often easier for notebook workfl
 `viewer.state` is a small thread-safe container with:
 - `ready`, `selection`, `hover`, `click`, `command_error`, `data_mapping`: the
   *latest payload* for those event types (or `None`)
+- `history`: the latest `history_changed` payload (`kind`, `tracker`, `head`,
+  `step`, `branch`), or `None`; `viewer.history` reads it as `last_change`,
+  `tracker`, `head` and `branch`
 - `last_event_type`, `last_event`, `last_updated_at`: generic “what happened most recently”
 
 Example:
@@ -23,6 +26,7 @@ print("Last selection:", viewer.state.selection)
 print("Last hover:", viewer.state.hover)
 print("Last click:", viewer.state.click)
 print("Last rejected command:", viewer.state.command_error)
+print("Last history change:", viewer.state.history)
 ```
 
 When to use `viewer.state`:
@@ -123,4 +127,4 @@ If waiting never returns:
 ## Next steps
 
 - Event payloads: {doc}`07_frontend_to_python_events`
-- Session bundles: {doc}`10_session_bundles_request_session_bundle`
+- Session files: {doc}`10_session_bundles_request_session_bundle`

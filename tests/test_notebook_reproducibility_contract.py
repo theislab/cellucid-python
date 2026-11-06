@@ -89,15 +89,15 @@ def test_jupyter_pancreas_runs_the_widget_two_cell_pattern_before_cleanup() -> N
 
     assert "show_anndata(" in source
     assert "assert adata.n_obs == 2531" in source
-    assert 'viewer.set_color_by("clusters")' in source
+    assert 'viewer.color_by(field={"source": "obs", "key": "clusters"})' in source
     assert "viewer.pull(in_memory)" in source
     # A notebook widget hears the viewer between cells: nothing waits in the
-    # cell that asks. The session bundle is asked for in one cell and
-    # collected in the next.
+    # cell that asks. The session is asked for in one cell and collected in
+    # the next.
     for waits in ("wait_for_ready(", "wait_for_event(", "get_session_bundle(", "cellucid_session("):
         assert waits not in source, waits
     cells = {cell["id"]: "".join(cell["source"]) for cell in notebook["cells"]}
-    assert cells["session-request"] == "request = viewer.request_session_bundle()"
+    assert cells["session-request"] == "request = viewer.request_session()"
     assert "request.result()" in cells["session-roundtrip"]
     # The widget's own report: no server, so no server probes.
     assert "viewer.debug_connection()" in source

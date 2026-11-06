@@ -35,6 +35,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import zarr
+from _web_root import web_file
 from scipy import sparse
 
 from cellucid import prepare, restore_original_order
@@ -42,7 +43,6 @@ from cellucid._anndata_files import AnnDataContents
 from cellucid._launch_defaults import launch_defaults
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-WEB_ROOT = REPOSITORY.parent / "cellucid"
 R_CROSS_WRITER = REPOSITORY.parent / "cellucid-r" / "tests" / "testthat" / "fixtures" / "cross_writer_mudata"
 
 
@@ -664,13 +664,11 @@ process.stdout.write(JSON.stringify(out));
 """
 
 
-def _web_reader() -> str:
+def _web_reader() -> tuple[str, Path]:
     node = shutil.which("node")
     if node is None:
         pytest.skip("Node is not installed: the web reader cannot run")
-    if not (WEB_ROOT / "assets" / "js" / "data" / "anndata" / "open.js").is_file():
-        pytest.skip(f"the web app is not checked out beside this repository ({WEB_ROOT})")
-    return node
+    return node, web_file("assets/js/data/anndata/open.js").parents[4]
 
 
 def _placed(values: np.ndarray, obsmap: np.ndarray) -> np.ndarray:
@@ -684,12 +682,12 @@ def _placed(values: np.ndarray, obsmap: np.ndarray) -> np.ndarray:
 def test_the_web_app_reads_the_prepared_mudata_as_mudata_does(
     tmp_path: Path, name: str, output_format: str, zarr_format: int | None
 ) -> None:
-    node = _web_reader()
+    node, web_root = _web_reader()
     path = _write_mudata(tmp_path, name, output_format, zarr_format)
     # Opened whole, the web app reads the cells as stored (priority order).
     source = _stored_mudata(path)
     completed = subprocess.run(
-        [node, "--input-type=module", "-e", _WEB_READ, str(WEB_ROOT), str(path), json.dumps(["X_wnn_umap", "rna:X_umap", "prot:X_umap"]), json.dumps(["sample", "rna:leiden", "prot:isotype_ratio"])],
+        [node, "--input-type=module", "-e", _WEB_READ, str(web_root), str(path), json.dumps(["X_wnn_umap", "rna:X_umap", "prot:X_umap"]), json.dumps(["sample", "rna:leiden", "prot:isotype_ratio"])],
         capture_output=True,
         text=True,
         check=False,
@@ -768,35 +766,89 @@ def _session_mapping(**changes: Any) -> dict[str, Any]:
     return mapping
 
 
-def _session_bundle(mapping: dict[str, Any], *, var_count: int, fields: list[dict[str, Any]] | None = None) -> Any:
-    from test_session_data_mapping_contract import _Bundle
+def _session_file(directory: Path, mapping: dict[str, Any], *, var_count: int,
+                  fields: list[dict[str, Any]] | None = None, **state: Any) -> Path:
+    import _session_files as files
 
-    return _Bundle(
-        {
+    from cellucid.anndata_session._apply import cell_order_digest
+    from cellucid.anndata_session._mudata import MuDataSessionView
+
+    # The digest of what the viewer showed: the modality's embedding placed among the cells.
+    shown = np.asarray(MuDataSessionView(_session_mudata(), "rna").obsm["rna:X_umap"])[:, [0, 1]]
+    return files.session_file(
+        directory / "mudata.cellucid-session",
+        fingerprint_record={
             "datasetId": "exact",
             "name": None,
             "cellCount": 2,
             "varCount": var_count,
-            "cellOrder": {"embedding": {"key": "rna:X_umap", "columns": [0, 1]}, "dimension": 2, "digest": "0123456789abcdef"},
+            "cellOrder": {"embedding": {"key": "rna:X_umap", "columns": [0, 1]}, "dimension": 2, "digest": cell_order_digest(shown)},
             "dataMapping": mapping,
         },
-        fields,
+        trackers=[{"id": "t1", "name": "Main", "root": files.state(
+            **{"mapping": mapping, "field_overlays": files.overlays(user_fields=fields), **state},
+        )}],
     )
 
 
-def test_a_session_applies_to_a_mudata_as_the_viewer_showed_it() -> None:
-    from test_session_data_mapping_contract import _var_alias
+def test_a_session_applies_to_a_mudata_as_the_viewer_showed_it(tmp_path: Path) -> None:
+    import json
+
+    import _session_files as files
 
     from cellucid import apply_cellucid_session_to_anndata
 
     mdata = _session_mudata()
-    bundle = _session_bundle(_session_mapping(), var_count=3, fields=[_var_alias("G2")])
-    output = apply_cellucid_session_to_anndata(bundle, mdata, expected_dataset_id="exact", add_highlights=False)
-    assert output is not mdata
-    assert output.obs["copied"].tolist() == [2.0, 5.0]
-    assert "copied" not in mdata.obs.columns
-    assert output.uns["cellucid"]["session"]["dataset_fingerprint"]["dataMapping"]["modality"] == "rna"
-    assert list(output.mod) == ["rna", "prot"]
+    mdata.obs["sample"] = pd.Categorical(["a", "b"])
+    labels = files.overlays(
+        renamed_fields=[{"source": "obs", "key": "sample", "name": "donor"},
+                        {"source": "obs", "key": "rna:leiden", "name": "cluster"}],
+        renamed_categories=[{"source": "obs", "field": "sample", "category": "b", "name": "B"}],
+        user_fields=[files.user_copy("alias_1", "copied", "var", "G2"),
+                     files.user_category("cat_1", "status", ["low", "high"], [1, 0])],
+    )
+    mdata.mod["rna"].obs["leiden"] = pd.Categorical(["0", "1"])
+    path = _session_file(
+        tmp_path, _session_mapping(), var_count=3, field_overlays=labels,
+        highlights=files.highlights(files.page("page_1", "One", files.group("highlight_1", "A", [1]))),
+    )
+    plan = apply_cellucid_session_to_anndata(mdata, path)
+    rows = {(row.kind, row.name): (row.status, row.note) for row in plan.rows}
+    assert rows[("column-renamed", "donor")] == ("write", None)
+    assert rows[("column-renamed", "cluster")] == (
+        "not-applied", '"rna:leiden" is a column of a MuData modality; labels apply to the global obs.'
+    )
+    report = plan.apply()
+    assert report.adata is mdata and report.applied
+    assert mdata.obs["copied"].tolist() == [2.0, 5.0]
+    assert mdata.obs["status"].tolist() == ["high", "low"]
+    assert mdata.obs["cellucid_highlight__One__A"].tolist() == [False, True]
+    assert mdata.obs["donor"].tolist() == ["a", "B"]
+    assert "sample" not in mdata.obs.columns
+    assert "leiden" in mdata.mod["rna"].obs.columns
+    assert [entry.kind for entry in report.provenance.renamed] == ["column", "category"]
+    assert json.loads(mdata.uns["cellucid"]["history_applied"])[0]["step"] == "s0"
+    assert list(mdata.mod) == ["rna", "prot"]
+
+
+def test_a_gene_sets_var_column_goes_to_the_modality_the_mapping_reads(tmp_path: Path) -> None:
+    from cellucid import apply_cellucid_session_to_anndata
+
+    mdata = _session_mudata()
+    global_var = list(mdata.var.columns)
+    sets = {"sets": [{"name": "Markers", "description": "", "genes": ["G1", "G3"]}]}
+    path = _session_file(tmp_path, _session_mapping(), var_count=3, gene_sets=sets)
+    report = apply_cellucid_session_to_anndata(mdata, path, dry_run=False)
+    assert [row.status for row in report.plan.rows if row.kind == "gene-set"] == ["write"]
+    column = mdata.mod["rna"].var["cellucid_gene_set__Markers"]
+    assert column.dtype == bool and column.tolist() == [True, False, True]
+    assert "cellucid_gene_set__Markers" not in mdata.mod["prot"].var.columns
+    assert list(mdata.var.columns) == global_var
+    assert mdata.uns["cellucid"]["gene_sets"]["Markers"]["genes"] == ["G1", "G3"]
+    # The column reads back from .h5mu as written.
+    mdata.write(tmp_path / "applied.h5mu")
+    read = md.read_h5mu(tmp_path / "applied.h5mu")
+    assert read.mod["rna"].var["cellucid_gene_set__Markers"].tolist() == [True, False, True]
 
 
 @pytest.mark.parametrize(
@@ -804,14 +856,17 @@ def test_a_session_applies_to_a_mudata_as_the_viewer_showed_it() -> None:
     [
         pytest.param(_session_mapping(modality="atac"), 3, "modality", id="unknown-modality"),
         pytest.param({key: value for key, value in _session_mapping().items() if key != "modality"}, 3, "modalit", id="no-modality"),
-        pytest.param(_session_mapping(modality="prot"), 3, "varCount 3 != adata.n_vars 2", id="gene-count-of-the-modality"),
+        pytest.param(_session_mapping(modality="prot"), 3, "saved on a dataset of 3 genes, and this object has 2 genes", id="gene-count-of-the-modality"),
     ],
 )
-def test_a_session_that_does_not_match_the_mudata_is_refused(mapping: dict[str, Any], var_count: int, message: str) -> None:
+def test_a_session_that_does_not_match_the_mudata_is_refused(
+    tmp_path: Path, mapping: dict[str, Any], var_count: int, message: str
+) -> None:
     from cellucid import apply_cellucid_session_to_anndata
 
+    path = _session_file(tmp_path, mapping, var_count=var_count)
     with pytest.raises(ValueError, match=re.escape(message)):
-        apply_cellucid_session_to_anndata(_session_bundle(mapping, var_count=var_count), _session_mudata(), expected_dataset_id="exact")
+        apply_cellucid_session_to_anndata(_session_mudata(), path)
 
 
 # =============================================================================

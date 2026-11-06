@@ -15,6 +15,7 @@ from scripts.validate_release import (
     _validate_recipe_text,
     validate_recipe,
     validate_release,
+    validate_release_event,
     validate_sdist,
 )
 
@@ -216,7 +217,7 @@ def test_checked_in_downstream_recipe_is_one_exact_current_contract() -> None:
     version = validate_release(tag=None)
     digest = validate_recipe(version)
 
-    assert version == "0.9.6"
+    assert version == "0.9.7"
     assert len(digest) == 64
     assert digest == digest.lower()
 
@@ -272,3 +273,40 @@ def test_downstream_recipe_rejects_duplicate_or_reordered_identity(
 
     with pytest.raises(SystemExit):
         _validate_recipe_text(mutation(recipe), "0.9.1")
+
+
+def _release_event(**release: object) -> dict[str, object]:
+    return {
+        "action": "published",
+        "release": {"tag_name": "v1.2.3", "draft": False, "prerelease": False, **release},
+    }
+
+
+def test_a_published_final_release_of_the_tag_is_accepted() -> None:
+    validate_release_event(_release_event(), "v1.2.3", "1.2.3")
+
+
+@pytest.mark.parametrize(
+    ("event", "message"),
+    [
+        (_release_event(draft=True), "draft"),
+        (_release_event(prerelease=True), "marked pre-release but 1.2.3 is a final version"),
+        (_release_event(tag_name="v1.2.4"), "names tag 'v1.2.4', not 'v1.2.3'"),
+        ({**_release_event(), "action": "created"}, "must be 'published'"),
+        ({"action": "published"}, "carries no release"),
+        (_release_event(prerelease=None), "whether it is a pre-release"),
+    ],
+)
+def test_a_release_that_is_not_a_published_final_release_of_the_tag_is_refused(
+    event: dict[str, object], message: str
+) -> None:
+    with pytest.raises(SystemExit, match=message):
+        validate_release_event(event, "v1.2.3", "1.2.3")
+
+
+def test_a_pre_release_version_requires_a_release_marked_pre_release() -> None:
+    validate_release_event(
+        _release_event(tag_name="v1.2.3rc1", prerelease=True), "v1.2.3rc1", "1.2.3rc1"
+    )
+    with pytest.raises(SystemExit, match="not marked pre-release"):
+        validate_release_event(_release_event(tag_name="v1.2.3rc1"), "v1.2.3rc1", "1.2.3rc1")

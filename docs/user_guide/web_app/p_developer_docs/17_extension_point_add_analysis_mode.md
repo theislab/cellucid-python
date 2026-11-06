@@ -60,7 +60,10 @@ Every setting of a mode is one entry of its options schema under
 entry: `key`, `kind`, `label`, `tip`, `group`, `default`, …; for example
 `marker-options.js`, `de-options.js`). The form is rendered from the schema
 (`render-options-form.js`, used by `ui/analysis-types/base/form-based-analysis.js`),
-sessions save the record it validates, and each `tip` names an entry of
+the mode's `analysis.<mode>.set` action takes it as its parameters (one per
+option, typed by its kind, with no code of its own), the `analysis` state
+domain, and so every history step and session, holds the record it
+validates, and each `tip` names an entry of
 `cellucid/assets/js/app/ui/components/info-tips.js`. The user guide's options
 table is held to the schema by `tests/analysis-options-schema-contract.test.mjs`,
 so a new or changed setting updates the matching `h_analysis` page in the same

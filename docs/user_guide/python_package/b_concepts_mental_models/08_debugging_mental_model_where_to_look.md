@@ -212,13 +212,13 @@ viewer; do not copy stale viewer URLs across sessions.
 
 ---
 
-## Step 4: debug Python → frontend commands
+## Step 4: debug Python → frontend actions
 
-If you send commands like:
+If you send actions like:
 
 ```python
-viewer.highlight_cells([1, 2, 3])
-viewer.set_color_by("cell_type")
+viewer.highlight_cells(cells=[1, 2, 3])
+viewer.color_by(field={"source": "obs", "key": "cell_type"})
 ```
 
 and nothing happens:
@@ -241,14 +241,14 @@ A widget hears the viewer only between cells: ask in one cell, collect in the
 next.
 
 ```python
-request = viewer.request_session_bundle()
+request = viewer.request_session()
 ```
 
 ```python
-bundle = request.result()
+session = request.result()
 ```
 
-If `request.result()` says the bundle has not arrived (in a notebook, only a
+If `request.result()` says the session has not arrived (in a notebook, only a
 later cell can collect it):
 - the viewer never reached ready (it reports ready once the notebook's own
   dataset is on screen; a different dataset chosen in the viewer before that —
@@ -256,12 +256,12 @@ later cell can collect it):
   ready),
 - the viewer is not shown in any output, or its channel is not connected.
 
-To bring results onto AnnData you need no bundle: `viewer.pull(adata)`.
+To bring results onto AnnData you need no session: `viewer.pull(adata)`.
 
 ### In a browser tab
 
-`viewer.request_session_bundle().result(timeout=60)` waits. A “Dropped a
-session bundle nobody is waiting for” log means the bundle arrived after its
+`viewer.request_session().result(timeout=60)` waits. A “Dropped a
+session file nobody is waiting for” log means the session arrived after its
 request was cancelled; request again.
 
 For more: {doc}`05_sessions_to_anndata_bridge`
@@ -276,7 +276,7 @@ If selection indices don’t match the cells you expect in Python, the usual cul
 
 Checks:
 - confirm which AnnData was passed to `show_anndata(...)`,
-- if applying sessions, inspect `bundle.dataset_fingerprint` and `expected_dataset_id`.
+- if applying sessions, compare `session.dataset_fingerprint` with the AnnData (its cell and gene counts, `uns['cellucid']['id']`, the embedding its `cellOrder` names).
 
 See: {doc}`04_dataset_identity_and_reproducibility`
 
@@ -309,18 +309,30 @@ Fix:
 ### Symptom: “`apply_cellucid_session_to_anndata(...)` raised an error”
 
 Likely causes:
-- the required `expected_dataset_id`, cell count, or gene count does not match
-  the bundle fingerprint,
-- an output column already exists,
-- the session does not contain a requested highlight or user-defined-field
-  chunk.
+- the dataset id (when `uns['cellucid']['id']` names one), cell count, gene
+  count or cell-order digest does not match the session fingerprint,
+- the chosen step's state uses an obs column or gene the AnnData lacks,
+- the session was written by a newer Cellucid than this package, or shared
+  as its steps only.
 
 Fix:
-- read the raised exception; fingerprint mismatches and column collisions are
-  rejected before mutation,
-- pass the exact dataset ID for the AnnData object,
-- inspect `bundle.list_chunk_ids()` before selecting which current chunks to
-  apply.
+- read the raised exception; every check runs before anything is written,
+- apply to the AnnData the session was saved on, in its original order.
+
+### Symptom: “the plan has no row for my highlight group or field”, or the row is `not-applied`
+
+Likely causes:
+- the state at the step applied holds no such highlight group or
+  user-defined field (it was made later, on another branch, or on another
+  tracker),
+- a column of that name exists already and Cellucid did not write it (the
+  row's `note` says so).
+
+Fix:
+- read `plan.table` (each row's `status` and `note`),
+- read `session.tracker().steps` and `tracker.step(step).state()` to choose
+  the step (`step=`), branch (`branch=`) or tracker (`tracker=`) whose state
+  to apply.
 
 ---
 

@@ -52,8 +52,12 @@ Cellucid (web) is a stateful UI + WebGL viewer:
 
 - **Data model:** dataset → embeddings → fields → per‑view contexts → artifacts (figures/sessions).
 - **Performance model:** big arrays (positions/colors/visibility) are GPU‑resident; UI changes try to avoid hot‑path allocations.
-- **Persistence:** **Save** (under **Session file**) writes one exact-current
-  `.cellucid-session` bundle with a closed, validated chunk inventory.
+- **Persistence:** every change is a step of an action history
+  (**State › History**: undo, redo, branches, trackers), kept in this browser
+  as it is made; **Share…** (under **State › Session**) writes the history,
+  the current state only or the steps only as one `.cellucid-session` file
+  (session format 4), checked whole when it is loaded, and its steps replay
+  on another dataset.
 - **Integration:** `cellucid-python` and `cellucid-r` write a Cellucid-ready AnnData (`prepare()` / `cellucid_prepare()`) and serve data to the viewer, driving it from code (commands, events, selections): `show_anndata()` / `cellucid serve` in Python, `cellucid_view()` / `cellucid_serve()` in R.
 
 If you’re trying to reason about edge cases, start from the UI glossary ({doc}`04_ui_glossary_terminology`) and the “Core interactions” section ({doc}`../c_core_interactions/index`).
@@ -107,7 +111,9 @@ Most non-demo workflows look like this:
 3) **Explore**: switch embeddings, color by fields, filter, highlight.
 4) **Save / export**:
    - figures for papers,
-   - a `.cellucid-session` bundle for reproducibility and sharing.
+   - a `.cellucid-session` file (the history of every step) for
+     reproducibility and sharing, and a methods paragraph or a printed report
+     of what you did ({doc}`../m_state_history/04_tour_methods_and_report`).
 
 Step 1 is not Python-only: `cellucid_prepare()` in the R package writes the same
 Cellucid-ready AnnData from a Seurat or SingleCellExperiment object (or from
@@ -128,15 +134,23 @@ Cellucid is a **stateful application**. Most UI actions modify state such as:
 - highlight groups/pages,
 - view layout and per‑view contexts.
 
-You have three common “persistence” layers:
+Each of those changes is one step of the dataset's history, which you can
+undo, branch from and replay as a tour ({doc}`../m_state_history/index`).
+The history lives in three places:
 
-1) **In‑memory state** (lost on refresh/crash)
-2) **Saved session bundle** (**Save** → `.cellucid-session`)  
-   Intended to restore the app state later or share with collaborators.
-3) **Small browser preferences** (e.g. theme/background) stored in `localStorage`  
-   These are convenience settings; they are not a reproducibility mechanism.
+1) **This tab**: the history you are working on.
+2) **This browser**: every step, written a moment after you make it (on by
+   default), so a crash or a closed tab loses at most the change of its last
+   moment; reopening the dataset offers to continue ({doc}`../m_state_history/03_saved_states_and_autosave`).
+3) **A session file** (**State › Session › Share…** → `.cellucid-session`):
+   the history you choose, to reopen on any machine or share with
+   collaborators.
 
-If you care about reproducibility, prefer **session bundles + exported figures**, not “remembering what sliders you touched”.
+Small browser preferences (for example antialiasing) stay in `localStorage`;
+they are conveniences, not a reproducibility mechanism.
+
+If you care about reproducibility, keep the **session file and exported
+figures**, and paste the methods paragraph Cellucid writes for you.
 
 ---
 

@@ -22,7 +22,7 @@ library(SeuratObject)
 data("pbmc_small")
 
 viewer <- cellucid_view(pbmc_small)   # RStudio / Positron Viewer pane, else the browser
-cellucid_color_by(viewer, "groups")
+cellucid_color_by(viewer, field = list(source = "obs", key = "groups"))
 cellucid_stop(viewer)
 ```
 

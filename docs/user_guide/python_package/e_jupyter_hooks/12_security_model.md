@@ -115,9 +115,9 @@ viewer through a hub's proxy route, declare the hub's host name with
   - hover/click indices,
   - the exact ready and diagnostic fields documented in
     {doc}`07_frontend_to_python_events`.
-- Session bundles can contain user-defined labels and highlight membership.
+- Session files can contain user-defined labels and highlight membership.
 
-Treat session bundles as sensitive data:
+Treat session files as sensitive data:
 - store them like you would store curated annotations,
 - avoid committing private identifiers into public repos.
 

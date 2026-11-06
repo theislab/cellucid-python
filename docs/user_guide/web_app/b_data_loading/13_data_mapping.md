@@ -22,7 +22,7 @@ gene names and expression matrix Cellucid reads, the latent space outlier
 filters measure in, and the vector fields it draws on which embedding.
 
 It is the last group of the **Session** panel, **Data mapping**, below
-**Session file**. Its **Embeddings** list is a checklist; each further group
+**Subsampling**. Its **Embeddings** list is a checklist; each further group
 has its own disclosure.
 
 Every dataset is read as AnnData (an `.h5ad` or a Zarr store, or any other

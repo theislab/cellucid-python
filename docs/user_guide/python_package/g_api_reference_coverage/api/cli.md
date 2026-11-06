@@ -2,8 +2,10 @@
 
 The `cellucid` command-line interface is a **single entry point** for common workflows.
 
-Right now, the main user-facing command is:
-- the `serve` subcommand, which serves any file or folder Cellucid reads
+Its commands:
+- `serve`, which serves any file or folder Cellucid reads
+- `mcp`, a local MCP server that lets an agent app on this computer (Claude
+  Code, Claude Desktop, Cursor) work in a viewer ({doc}`mcp`)
 
 If you prefer Python APIs, see {doc}`server` and {doc}`jupyter`.
 
@@ -46,6 +48,13 @@ cellucid serve <data_path> [--port 8765] [--host 127.0.0.1] [--no-browser] [--qu
   GEO's `GSM4567_matrix.mtx.gz` or `GSE158055_covid19_counts.mtx.gz`, with its
   `barcodes` and `features` or `genes` lists)
 - R object: `.rds`, `.rda`, `.RData`, gzipped or not (`.rds.gz`)
+
+Cellucid's own files are not datasets, and are refused before anything is
+served with the sentence the web app says for them (the registry's
+`cellucidFiles`): a `.cellucid-session` file is the history of one dataset
+(open its dataset, then load it in the web app, or read it with
+`cellucid.read_session()`), and a `.cellucid-library` file holds datasets of
+the web app's My datasets (import it there).
 
 An h5Seurat file is not opened, so it is refused before anything is served,
 with the route that converts it: in R, read it with
@@ -107,6 +116,29 @@ A flag overrides the store's own `uns['cellucid']['defaults']` for this server
 only; the file is not changed.
 
 ---
+
+### `cellucid mcp`
+
+```bash
+cellucid mcp [--open PATH | --viewer NAME] [--port N] [--no-browser] [--web-source-url URL] [--web-cache-dir PATH] [--verbose]
+```
+
+A local MCP server over stdio for an agent app on this computer (Claude
+Code, Claude Desktop, Cursor); the app starts it ({doc}`mcp`,
+{doc}`../../d_viewing_apis/18_local_agents_mcp`). It needs
+`pip install 'cellucid[mcp]'`.
+
+- no option: drive the newest viewer open on this computer (`cellucid serve`,
+  a notebook's `show_anndata`, a script's `AnnDataViewer`, R's
+  `cellucid_view()` or `cellucid_serve()`), found again whenever the one it
+  drives stops or its page closes while another viewer's is open;
+- `--viewer NAME`: drive the viewer with this dataset id, dataset name or
+  viewer id;
+- `--open PATH`: serve this file or folder in a viewer of its own and open
+  it in the browser (`--no-browser`: print its address on stderr; `--port`:
+  its port); the viewer stops with the server.
+
+stdout is the MCP channel; everything the command says goes to stderr.
 
 ## Startup output
 
@@ -170,11 +202,13 @@ On your laptop:
 ssh -L 8765:127.0.0.1:8765 user@remote
 ```
 
-Then open:
-- `http://127.0.0.1:8765/?anndata=true`
+Then open the Viewer URL the banner printed:
+- `http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true`
 
-The Viewer URL ends in `?anndata=true`. Always copy the exact Viewer URL from
-the server banner.
+Always copy the exact Viewer URL from the server banner: its `viewerId` and
+`viewerToken` open the page's viewer channel, which `cellucid mcp` drives
+({doc}`mcp`). `http://127.0.0.1:8765/?anndata=true` opens the same dataset
+without it.
 
 ### Serving from an HPC compute node
 

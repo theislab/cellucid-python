@@ -20,7 +20,9 @@ Start with the web app user guide landing page: {doc}`../index`.
 | Learn where the code lives (file map + entry points) | {doc}`01_codebase_map_and_entry_points` | {doc}`08_ui_modules_map` |
 | Add a new sidebar feature/module | {doc}`16_extension_point_add_ui_module` | {doc}`15_extension_points_overview` |
 | Add/extend analysis (plots, compute, UI modes) | {doc}`11_analysis_architecture` | {doc}`17_extension_point_add_analysis_mode` |
-| Work on sessions (save/load) | {doc}`10_sessions_persistence_and_serialization` | {doc}`13_debugging_playbook` |
+| Add or change an action, a piece of state, undo/redo or the history | {doc}`29_action_layer_domains_and_history` | {doc}`10_sessions_persistence_and_serialization` → {doc}`16_extension_point_add_ui_module` |
+| Work on sessions (share/load) | {doc}`10_sessions_persistence_and_serialization` | {doc}`29_action_layer_domains_and_history` → {doc}`13_debugging_playbook` |
+| Work on agents (chat bar, permissions, data guard, the relay, `cellucid mcp`) | {doc}`32_agents_in_the_tab` | {doc}`31_local_agent_connection` → {doc}`30_action_reference` |
 | Work on figure export | {doc}`12_figure_export_architecture` | {doc}`18_extension_point_add_export_renderer` |
 | Understand loading sources (local/remote/GitHub/Jupyter) | {doc}`09_data_loading_pipeline_and_caching` | {doc}`../b_data_loading/index` (user-facing view) |
 | Change how data is read, priced, kept or drawn (bytes, link, share, gene sample) | {doc}`20_read_path_architecture` | {doc}`19_subsampling_specification` → {doc}`09_data_loading_pipeline_and_caching` |
@@ -33,10 +35,20 @@ Start with the web app user guide landing page: {doc}`../index`.
 - **Codebase map**: how `cellucid/index.html` boots the app and which folders correspond to state, UI, rendering, and data loading.
 - **State model**: `DataState`, events, per-view contexts, multi-page highlights, caches, and batch updates.
 - **Rendering pipeline**: the WebGL viewer, buffers, LOD, overlays (smoke + velocity), and performance footguns.
-- **Persistence**: the exact-current `.cellucid-session` format, atomic
-  transaction, closed profiles, and dataset-identity rejection.
+- **Actions, state domains and the history**: the one action catalogue
+  every control, agent and Python or R host dispatches, the fifteen state
+  domains, the history's trackers, undo, branches and autosave, and how the
+  catalogue reaches Python, R and agents.
+- **Persistence**: the one current `.cellucid-session` format (session format
+  4: the history in one file, or the state only, or the steps only), its
+  all-or-nothing load beside the person's trackers, starting views,
+  dataset-identity rejection, and My datasets' `.cellucid-library` file.
+- **Agents**: one tool call for the chat bar, Claude and ChatGPT through the
+  relay, and local apps through `cellucid mcp`; the person's permissions and
+  confirm cards; what agents are sent of the data; the generated action
+  reference.
 - **Debugging**: how to capture minimal repro steps + the exact logs that help fix issues quickly.
-- **Extension points**: the safe, repeatable steps for adding a UI module, an analysis mode, or an export renderer.
+- **Extension points**: the safe, repeatable steps for adding a UI module, an action, a piece of state, an analysis mode, or an export renderer.
 
 :::{note}
 Privacy/security and telemetry live in a separate user-facing section:

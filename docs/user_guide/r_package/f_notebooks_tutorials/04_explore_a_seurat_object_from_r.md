@@ -46,14 +46,17 @@ viewer
 ## Step 2: drive the viewer from the console
 
 ```r
-cellucid_color_by(viewer, "groups")
-cellucid_highlight(viewer, WhichCells(pbmc_small, idents = "1"), color = "#e41a1c")
+cellucid_color_by(viewer, field = list(source = "obs", key = "groups"))
+cellucid_highlight_cells(viewer, cells = WhichCells(pbmc_small, idents = "1"), color = "#e41a1c")
 ```
 
 The cells turn to the colours of `groups`, and the 25 cells of cluster 1 are
 highlighted in red. Cells are given by name (as here), by 1-based position, or
-as `TRUE`/`FALSE` per cell. A command sent before the page has connected waits
-and goes out as soon as it does.
+as `TRUE`/`FALSE` per cell. Every action of the viewer is a function like
+these (`?cellucid_act` lists the way to call any of them), each one step of
+the viewer's history labelled as R's; each returns a request at once, and
+`cellucid_action_result()` collects the viewer's answer. An action sent before
+the page has connected waits and goes out as soon as it does.
 
 ## Step 3: select cells in the viewer, get them in R
 

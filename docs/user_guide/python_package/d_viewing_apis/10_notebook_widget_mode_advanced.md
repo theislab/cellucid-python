@@ -76,24 +76,25 @@ runs cells. Hence:
 - while any later cell runs, the viewer waits for bytes it has not read yet
   (a new gene, a new embedding); what it shows stays interactive;
 - hooks run, and `viewer.state` updates, whenever the kernel is idle;
-- `wait_for_ready()`, `wait_for_event()` and a session request's `result()`
-  (and `apply_session_to_anndata(adata, request)`) wait for an answer that
-  cannot arrive while their own cell runs: they raise at once with what to do
-  instead (`set_data_mapping()` and `push()` never wait: they go as soon as
-  the viewer can take them). A thread of your own may wait (the viewer answers it as soon
-  as the cell ends). A session bundle is asked in one cell and collected in
-  the next:
+- `wait_for_ready()`, `wait_for_event()`, an action's, a session request's
+  and a session load's `result()` (and `apply_session_to_anndata(adata,
+  request)`) wait for an answer that cannot arrive while their own cell runs: they raise at
+  once with what to do instead (actions themselves never wait: they go as
+  soon as the viewer can take them). A thread of your own may wait (the
+  viewer answers it as soon as the cell ends). A session is asked in one cell
+  and collected in the next:
 
 ```python
-request = viewer.request_session_bundle()
+request = viewer.request_session()
 ```
 
 ```python
-bundle = request.result()
-adata = bundle.apply_to_anndata(adata, expected_dataset_id="example")
+session = request.result()
+plan = session.apply(adata)       # what would change, one row each
+report = plan.apply()             # writes into adata
 ```
 
-Commands (`highlight_cells`, `set_color_by`, …) are sent at once.
+Actions (`highlight_cells`, `color_by`, …) are sent at once.
 
 ## A notebook viewer starts quietly
 
@@ -160,7 +161,7 @@ It waits for nothing, and reports:
 - The output says it is waiting for the notebook kernel → a cell is still
   running; the viewer connects when it finishes.
 - A waiting call raised “… hears the viewer only between cells” → run it in a
-  later cell, use a hook, or (session bundles) `request_session_bundle()`.
+  later cell, use a hook, or keep the request (`request.result()` in a later cell).
 - The edge overlay is missing although `adata.obsp['connectivities']` exists →
   the graph is read only when a view draws edges; turn the edges on in the
   viewer, or choose the graph under **Session › Data mapping**.

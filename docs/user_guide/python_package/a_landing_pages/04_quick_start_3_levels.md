@@ -102,8 +102,8 @@ def _ready(ev):
 ### Step 5 (optional): Programmatic control
 
 ```python
-viewer.set_color_by("cluster")
-viewer.highlight_cells([0, 2], color="#00cc66")
+viewer.color_by(field={"source": "obs", "key": "cluster"})
+viewer.highlight_cells(cells=[0, 2], color="#00cc66")
 ```
 
 ### What this does (mental model)
@@ -303,7 +303,8 @@ def _on_selection(ev):
 @viewer.on_selection
 def _highlight(ev):
     cells = (ev.get("cells") or [])[:10]
-    viewer.highlight_cells(cells, color="#00cc66")
+    if cells:
+        viewer.highlight_cells(cells=cells, color="#00cc66")
 ```
 
 ### Step 4: Make callbacks robust (recommended patterns)

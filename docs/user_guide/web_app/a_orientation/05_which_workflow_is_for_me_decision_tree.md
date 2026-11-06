@@ -44,7 +44,7 @@
      they use.
 
 2) Do you need to *share* what you did?
-   - Yes → use **Save** under **Session file** to download a `.cellucid-session` file, then send it.
+   - Yes → use **Share…** under **State › Session** to download a `.cellucid-session` file, then send it.
    - If you need many people to vote on labels → use **Community annotation** instead (it’s designed for that).
 
 3) Does the dataset feel too big / slow?

@@ -56,6 +56,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -556,6 +557,78 @@ def input_formats_label(kind: str) -> str:
     raise ValueError(f"Unknown input format {kind!r}.")
 
 
+class _HostViewer:
+    """The viewer channel of a page ``serve_anndata`` / ``cellucid serve``
+    opens: one registration on the server's ``/_cellucid/ws``, whose events
+    reach no notebook (none is there) but whose agent commands and events
+    carry an agent app's calls (``cellucid mcp``): the viewer is published to
+    agents on this computer like a notebook's."""
+
+    def __init__(self, server: AnnDataServer) -> None:
+        import secrets
+
+        from ._agent_link import ViewerAgentPort, publish_viewer
+        from ._viewer_channel import (
+            register_event_callback,
+            send_viewer_command,
+            viewer_is_connected,
+        )
+        from .jupyter._wire import _require_frontend_message
+
+        self.viewer_id = secrets.token_hex(8)
+        self.viewer_token = secrets.token_hex(16)
+        self._send_viewer_command = send_viewer_command
+        self._frame = _require_frontend_message
+
+        def send(message: dict[str, Any]) -> object:
+            return send_viewer_command(self.viewer_id, self.viewer_token, _require_frontend_message(message))
+
+        self.port = ViewerAgentPort(
+            send=send,
+            connected=lambda: viewer_is_connected(self.viewer_id, self.viewer_token),
+            describe=lambda: {
+                "viewer": self.viewer_id,
+                "runtime": server.runtime,
+                "dataset": {"id": server.dataset_id, "name": server.dataset_name},
+                "url": server.url if server.is_running() else None,
+            },
+        )
+        register_event_callback(
+            self.viewer_id,
+            self.viewer_token,
+            self._deliver,
+            on_socket=lambda attached: self.port.page_back() if attached else self.port.page_gone(),
+        )
+        publish_viewer(self.viewer_id, self.port, runtime=server.runtime)
+
+    def _deliver(self, message: dict[str, Any]) -> None:
+        from ._viewer_channel import ViewerProtocolError
+        from .jupyter._wire import _AGENT_EVENT_TYPES, _require_inbound_jupyter_event
+
+        try:
+            event, data = _require_inbound_jupyter_event(message)
+        except (TypeError, ValueError) as error:
+            raise ViewerProtocolError(str(error)) from error
+        if event in _AGENT_EVENT_TYPES:
+            self.port.deliver(event, data)
+        elif event == "command_error" and data["command"].startswith("agent_"):
+            self.port.command_failed(data)
+        elif event == "session_bundle":
+            # Nobody asks for one here; a file the channel wrote is let go.
+            Path(data["path"]).unlink(missing_ok=True)
+
+    def close(self) -> None:
+        """The server stops: agents hear it, the page keeps its last view."""
+        from ._agent_link import withdraw_viewer
+        from ._viewer_channel import unregister_event_callback
+
+        self.port.stopped("the viewer was stopped")
+        withdraw_viewer(self.viewer_id)
+        with contextlib.suppress(Exception):
+            self._send_viewer_command(self.viewer_id, self.viewer_token, self._frame({"type": "freeze"}), queue=False)
+        unregister_event_callback(self.viewer_id, self.viewer_token)
+
+
 class AnnDataServer:
     """
     Server that hands one dataset (a file or folder Cellucid reads, or an
@@ -769,6 +842,13 @@ class AnnDataServer:
         #: the viewer shows it (the shared protocol's ``runtimes``): "python",
         #: or "jupyter" for a notebook viewer (:class:`AnnDataViewer` sets it).
         self.runtime = "python"
+        #: Whether the page this server opens holds a viewer channel of its
+        #: own (``serve_anndata`` and ``cellucid serve`` set it): its address
+        #: carries the viewer's id and token, and the viewer is published to
+        #: agent apps on this computer (``cellucid mcp``). A notebook viewer's
+        #: server leaves it off: :class:`AnnDataViewer` holds the channel.
+        self.viewer_channel = False
+        self._host_viewer: _HostViewer | None = None
 
         try:
             self._prepare(
@@ -1218,10 +1298,21 @@ class AnnDataServer:
             return loopback_origin_for_bind(self.host, self.port)
         return format_http_origin(self.host, self.port)
 
+    def _viewer_query(self) -> str:
+        host_viewer = self._host_viewer
+        if host_viewer is None:
+            return VIEWER_QUERY
+        from urllib.parse import urlencode
+
+        return "/?" + urlencode(
+            {"viewer": "true", "viewerId": host_viewer.viewer_id, "viewerToken": host_viewer.viewer_token, "anndata": "true"}
+        )
+
     @property
     def viewer_url(self) -> str:
-        """Get the full URL to open the viewer."""
-        return f"{self.url}{VIEWER_QUERY}"
+        """Get the full URL to open the viewer: with its viewer channel's id
+        and token when the server holds one (:attr:`viewer_channel`)."""
+        return f"{self.url}{self._viewer_query()}"
 
     @property
     def network_urls(self) -> list[tuple[str, str]]:
@@ -1233,7 +1324,7 @@ class AnnDataServer:
         origin = machine_origin(self.port)
         if origin is None:
             return []
-        return [("Machine URL:  ", origin), ("Viewer URL:   ", f"{origin}{VIEWER_QUERY}")]
+        return [("Machine URL:  ", origin), ("Viewer URL:   ", f"{origin}{self._viewer_query()}")]
 
     def start(self, blocking: bool = True):
         """Start this single-use server."""
@@ -1275,6 +1366,8 @@ class AnnDataServer:
             # The documents name the bound port, so they are built after binding.
             self._server.RequestHandlerClass = self._handler()
             self._running = True
+            if self.viewer_channel:
+                self._host_viewer = _HostViewer(self)
 
             if not self.quiet:
                 print_success("Server ready")
@@ -1372,8 +1465,14 @@ class AnnDataServer:
                 ),
             )
 
+    def _close_host_viewer(self) -> None:
+        host_viewer, self._host_viewer = self._host_viewer, None
+        if host_viewer is not None:
+            host_viewer.close()
+
     def _finish_serving(self) -> None:
         """Close the socket and release what serving held (a served store's scratch folder) after serving ended."""
+        self._close_host_viewer()
         self._running = False
         server = self._server
         self._server = None
@@ -1386,6 +1485,7 @@ class AnnDataServer:
 
     def _rollback_failed_start(self, *, shutdown: bool) -> None:
         """Rollback acquired resources without replacing the startup exception."""
+        self._close_host_viewer()
         self._running = False
         server = self._server
         if server is not None and shutdown and self._serving:
@@ -1413,6 +1513,7 @@ class AnnDataServer:
 
     def stop(self):
         """Stop the server and release what it held (a served store's scratch folder)."""
+        self._close_host_viewer()
         self._running = False
         failures: list[BaseException] = []
         server = self._server
@@ -1492,6 +1593,12 @@ def serve_anndata(
     allows it (only what a view needs is transferred), and once from the
     start for an R object or a MatrixMarket folder; nothing is converted
     first.
+
+    The page it opens (the printed Viewer URL, which carries the viewer's id
+    and token) holds a viewer channel, so an agent app on this computer can
+    work in it through ``cellucid mcp``: the viewer is published to agents
+    here (``CELLUCID_AGENTS=off`` keeps it from them). The bare
+    ``/?anndata=true`` address opens the same dataset without a channel.
 
     Parameters
     ----------
@@ -1624,5 +1731,7 @@ def serve_anndata(
         allowed_hosts=allowed_hosts,
         cache_bytes=cache_bytes,
     )
+    # Its page holds a viewer channel: agent apps on this computer can drive it.
+    server.viewer_channel = True
     server.start()
     return server

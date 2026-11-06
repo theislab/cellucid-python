@@ -69,7 +69,10 @@ without the mapping opens exactly as any AnnData file does.
 | `source` | a mapping `{name, url}` (`url` optional) | where the data comes from (the **Source** row of the **Dataset** box's **Details**, linked to `url`) |
 | `defaults` | a mapping of launch defaults (below) | the choices the dataset opens with |
 | `outlierQuantiles` | a mapping `{latentKey, minPoints, fields}`: the latent space and category size they were computed with, and one float32 array per categorical obs column (NaN where a cell has none), written by `prepare(latent_key=...)` / `cellucid_prepare(latent_key = ...)` | the outlier filter, which reads one column's array on its slider's first move instead of computing it from the latent space ({doc}`../e_filtering/02_outlier_filtering_per_active_field`) |
-| `session` | written by `apply_cellucid_session_to_anndata()` in Python | never read by the web app |
+| `priority` | a mapping `{seed, specVersion, nObs, levels}`: the file stores its cells in priority order, as `prepare()` and `cellucid_prepare()` write them | reading the first cells of a large file first; a record that does not describe the file's cells is not used, never refused ({doc}`../../python_package/c_data_preparation_api/09_cellucid_ready_anndata_specification`) |
+| `history_applied` | text: the records `apply_cellucid_session_to_anndata()` (R: `cellucid_apply_session()`; the web app's **Save AnnData with this state…**) appends, one per apply that wrote something (a JSON list) | never read by the web app |
+| `gene_sets` | a mapping by gene set name: the gene sets a pull, an applied history or **Save AnnData with this state…** wrote | never read by the web app |
+| `pulled` | a mapping by column name: what each column a pull wrote came from | never read by the web app |
 
 Rules the reader applies:
 
@@ -79,6 +82,11 @@ Rules the reader applies:
 - An address (`citation.url`, `source.url`) is an absolute `http(s)` URL.
 - A key outside this table, or a wrong value, refuses the file with a message
   naming it, so a misspelt default never passes unnoticed.
+- `history_applied`, `gene_sets` and `pulled` are the records the Python and
+  R packages keep on the object a person works with, and that the web app
+  writes into a copy saved with the **History** header's **⋯ › Save AnnData with this
+  state…** ({ref}`history-save-anndata`), so that object or file opens again
+  in the viewer after a pull or an apply.
 
 `defaults` holds the launch defaults, each optional: `embedding1d`,
 `embedding2d`, `embedding3d` (an `obsm` key, or `{key, columns}` with 0-based
@@ -157,9 +165,9 @@ a folder ({doc}`14_open_from_link`).
   `encodeURIComponent` writes it, e.g. `cell%20atlas.h5ad`), without `.`, `..`,
   a query or a fragment, and the path stays below the folder.
 - `session` (optional): the dataset's **default view**, a published
-  `.cellucid-session` file — a **Save** of the view passed through the publish
-  step, which keeps the seven chunks a default carries and binds it to the
-  catalog's dataset id (see {doc}`../l_sessions_sharing/04_official_sample_states`) —
+  `.cellucid-session` file — a session file of the view passed through the
+  publish step, which keeps one tracker of one root (no step, no cells to
+  open, no layout) and binds it to the catalog's dataset id (see {doc}`../l_sessions_sharing/04_official_sample_states`) —
   with its exact byte length
   (`bytes`) and lowercase SHA-256 (`sha256`). It is applied when the dataset
   is opened from the catalog ({doc}`../l_sessions_sharing/04_official_sample_states`).

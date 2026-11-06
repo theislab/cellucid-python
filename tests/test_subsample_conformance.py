@@ -167,7 +167,7 @@ def test_requests_outside_the_specification_are_refused() -> None:
 def test_a_session_records_its_subsample_cells_as_the_web_app_writes_them() -> None:
     import base64
 
-    from cellucid.session_bundle import _decode_cells
+    from cellucid.session import _decode_cells
 
     kept = cellucid.subsample_cells(10_000, 1_234, method="blocks", seed=9, block_size=64)
     record = {
@@ -180,9 +180,9 @@ def test_a_session_records_its_subsample_cells_as_the_web_app_writes_them() -> N
     assert decoded["spec"]["blockSize"] == 64
     with pytest.raises(ValueError, match="digest"):
         _decode_cells({**record, "digest": "0" * 16}, 1_234)
-    with pytest.raises(ValueError, match="cell count"):
+    with pytest.raises(ValueError, match="cells must keep exactly the fingerprint cell count"):
         _decode_cells(record, 1_235)
-    with pytest.raises(ValueError, match="exactly spec"):
+    with pytest.raises(ValueError, match="must contain exactly: digest, kept, spec"):
         _decode_cells({**record, "extra": 1}, 1_234)
 
 

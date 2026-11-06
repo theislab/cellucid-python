@@ -17,8 +17,8 @@ This section is the **canonical reference** for the public `cellucid` Python API
 | Arrays, an `AnnData` or a `MuData` to share or host | A Cellucid-ready AnnData (or MuData) file | {func}`~cellucid.prepare` |
 | Any file or folder Cellucid reads (`.h5ad`, AnnData or MuData Zarr, `.h5mu`, `.loom`, a 10x `.h5` or `outs/` folder, a MatrixMarket folder, `.rds`/`.rda`/`.RData`) | Browser tab (local HTTP server) | {func}`~cellucid.serve_anndata` or `cellucid serve …` (with `--dataset-name` and `--dataset-id` unless the AnnData or MuData declares `uns['cellucid']['name']` and `['id']`, as every file `prepare` writes does) |
 | A viewer, or the web app's exports (CSV, GMT, session) | Everything made in Cellucid (highlights, labels, scores, gene sets) as `obs` columns, in one call | {meth}`viewer.pull(adata) <cellucid.AnnDataViewer.pull>` or {func}`~cellucid.pull` |
-| An `obs` column or a gene set | Shown in the viewer | {meth}`viewer.push(...) <cellucid.AnnDataViewer.push>`, {meth}`viewer.push_gene_set(...) <cellucid.AnnDataViewer.push_gene_set>` |
-| A session captured in the web app | Apply highlights/fields back onto `AnnData` | {class}`~cellucid.CellucidSessionBundle` + {func}`~cellucid.apply_cellucid_session_to_anndata` |
+| An `obs` column or a gene set | Shown in the viewer | {meth}`viewer.push(...) <cellucid.AnnDataViewer.push>`, {meth}`viewer.gene_set_save(...) <cellucid.jupyter.ViewerActions.gene_set_save>` |
+| A session saved in the web app (the history of every step) | Its trackers, branches and steps; the state at any step (labels, highlights, fields, gene sets) planned, then applied onto `AnnData` | {func}`~cellucid.read_session` + {func}`~cellucid.apply_cellucid_session_to_anndata` |
 | A transition matrix + embedding | Vector field overlay in Cellucid | {func}`~cellucid.compute_transition_drift` / {func}`~cellucid.add_transition_drift_to_obsm` |
 
 ---
@@ -67,7 +67,7 @@ Pull highlights, labels, scores and gene sets into `obs` in one call; push colum
 :link: sessions
 :link-type: doc
 
-`.cellucid-session` bundles: read, inspect, and apply back to AnnData.
+`.cellucid-session` files: read the history (trackers, branches, steps), plan and apply a step back to AnnData.
 :::
 
 :::{grid-item-card} {octicon}`graph;1.5em;sd-mr-1` Vector Fields
@@ -107,4 +107,5 @@ sessions
 subsample
 vector_fields
 cli
+mcp
 ```

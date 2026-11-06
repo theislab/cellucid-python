@@ -18,7 +18,7 @@ Key sections:
 
 - `[project]`
   - `name = "cellucid"`
-  - `version = "0.9.6"` (beta) <!-- CELLUCID_VERSION -->
+  - `version = "0.9.7"` (beta) <!-- CELLUCID_VERSION -->
   - `requires-python = ">=3.11,<3.15"`
   - runtime dependencies (`numpy`, `pandas`, `scipy`, `tqdm`, `anndata`, `zarr`, `numcodecs`, `ipython`, `anywidget`)
 - `[project.optional-dependencies]`

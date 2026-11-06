@@ -5,7 +5,7 @@
 **What you’ll learn:**
 - What “dataset identity” means in Cellucid (and why it matters)
 - Where a dataset's id and name come from (`uns['cellucid']`, or the server's arguments)
-- How session bundles decide whether state is safe to restore/apply
+- How sessions decide whether state is safe to restore/apply
 - A practical versioning strategy for “paper-ready” datasets
 
 ---
@@ -24,11 +24,11 @@ In Cellucid, “dataset identity” is the answer to:
 
 Cellucid needs a dataset identity for:
 - **Session restore** (web app): restore against the exact matching dataset or
-  reject the bundle.
+  reject the session.
 - **Session → AnnData application** (Python): mutate only the exact matching
   AnnData or raise before mutation.
 - **Dataset catalogs**: how the viewer lists and labels datasets published together.
-- **Collaboration**: if you send someone a session bundle, you need a stable reference to the dataset it belongs to.
+- **Collaboration**: if you send someone a session file, you need a stable reference to the dataset it belongs to.
 
 ---
 
@@ -98,32 +98,39 @@ Sessions and community annotations are keyed by this dataset ID.
 
 ## How sessions decide “same dataset or not”
 
-A `.cellucid-session` bundle contains a lightweight **dataset fingerprint** in
-its manifest (not the full dataset). In the current session format (format 3) it has exactly six required fields: three scalars — `datasetId`,
+A `.cellucid-session` file contains a lightweight **dataset fingerprint** in
+its manifest (not the full dataset). In the current session format (format 4) it has exactly six required fields: three scalars — `datasetId`,
 `cellCount`, `varCount` — the dataset's display `name` (or null; used in
 messages only, never compared), `cellOrder`, recording *which ordering* of the
 cells the session was saved against, and `dataMapping`, recording *which arrays*
 it was showing. Beside the fingerprint, the manifest's `requires` lists every
-obs column and gene the session uses. It does not record how the dataset was opened, so a session
+obs column and gene the shown state uses. It does not record how the dataset was opened, so a session
 applies to the same dataset whether it was opened from a sample, a link, a
 server, a notebook or a local folder.
 
-In Python, `apply_cellucid_session_to_anndata(...)` uses this fingerprint as a safety guard:
-- compares `datasetId` to the required `expected_dataset_id`,
-- compares `cellCount` to `adata.n_obs`,
+In Python, `apply_cellucid_session_to_anndata(...)` uses this fingerprint as a
+safety guard, checking only what the chosen step needs:
+- compares `datasetId` to `adata.uns['cellucid']['id']`, when the object
+  names one,
+- compares `cellCount` to `adata.n_obs` (the subsample's cells, for a session
+  saved on one),
 - checks that every key `dataMapping` names exists on `adata` (its `obsm`
   embeddings and their columns, `obsp` graph, layer or `raw`, latent space, and
   gene-name column),
-- requires every obs column and gene the manifest's `requires` lists, naming
-  all that are missing,
 - compares `varCount` to the gene count of the axis that mapping reads:
   `adata.raw.n_vars` for `expression: "raw"`, `0` for a mapping without
-  expression, `adata.n_vars` otherwise.
+  expression, `adata.n_vars` otherwise,
+- takes the `cellOrder` digest of `adata`'s stored embedding over the
+  session's cells, when `adata` has that embedding,
+- requires every obs column and gene the chosen step's state uses, naming all
+  that are missing.
 
-Any mismatch raises `ValueError` before AnnData is mutated. Application is
-strict and atomic, and a bundle without `cellOrder` or `dataMapping` is refused.
+Any mismatch raises `ValueError` before AnnData is changed. Application is
+strict and atomic (a plan first, then every row written at once), and a
+session without `cellOrder` or `dataMapping` is refused. R's
+`cellucid_apply_session()` checks the same.
 
-### `cellOrder` is shape-checked here, its digest is verified in the viewer
+### `cellOrder`: checked by the viewer, and by an apply when the embedding is there
 
 `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
 16-character lowercase hexadecimal `digest` of that embedding's stored
@@ -141,20 +148,18 @@ every position now denotes a different cell.
 `vectorFields` -- plus `modality` for a dataset of several modalities (a
 MuData), naming the one its genes and expression are read from.
 
-Both readers require both records. Python validates `cellOrder`'s shape and
-never its digest: the digest is the viewer's check, taken on the cells it opens
-when it restores a session, and `apply_cellucid_session_to_anndata(...)`
-targets an `AnnData` whose rows and embeddings the caller controls (an
-embedding computed again would change the digest without changing the cells).
-Enforcing cell-order identity is the viewer's job; R's
-`cellucid_apply_session()` does the same.
-
-The consequence runs one way: **a bundle Python accepts may still be refused by
-the web app**, because only the viewer compares the digest. Do not read that as a disagreement between the two readers.
+Both readers require both records. The viewer compares the digest on the
+cells it opens when it restores a session. `apply_cellucid_session_to_anndata(...)`
+compares it too when `adata` has the embedding `cellOrder` names: it takes the
+digest of that embedding's stored values over the session's cells, and a
+mismatch refuses the object (its rows are other cells, or in another order; a
+digest is a sum over the cells, so it says the cells differ, not which). An
+`AnnData` without that embedding is not checked for cell order, and an
+embedding computed again changes the digest without changing the cells.
 
 ```{important}
 These guards prevent the most dangerous failure mode: silently applying highlights/labels to the wrong cells.
-They do not guarantee perfect identity (e.g., two datasets can have the same shape), and on the Python side the row-order assumption is yours to keep — see Rule 4 below.
+They do not guarantee perfect identity (e.g., two datasets can have the same shape), and on the Python side the row order is checked only when the object has the session's embedding — see Rule 4 below.
 Use stable IDs + versioning to make identity meaningful.
 ```
 
@@ -198,10 +203,11 @@ Many Cellucid interactions use **row index** as identity.
 If you reorder cells, previously saved sessions/highlights can map to different biological cells even if the shape is unchanged.
 
 The web app catches that for a rewritten dataset, because `cellOrder` digests
-the stored coordinates of the cells it opens. **Python does not**: applying a
-session to an `AnnData` you reordered in memory is checked only against
-`n_obs`, `n_vars`, and `datasetId`, all of which a permutation leaves intact.
-Keeping row order stable remains your responsibility on this side.
+the stored coordinates of the cells it opens. Python catches it when the
+`AnnData` still has the embedding the digest was taken on: its rows, reordered
+in memory, give another digest. Without that embedding a permutation leaves
+`n_obs`, `n_vars`, and `datasetId` intact, so keeping row order stable remains
+your responsibility.
 
 If you must reorder/subset:
 - treat it as a new dataset version (new `dataset_id`),
@@ -284,20 +290,22 @@ restore. Identity or format mismatch rejects the complete operation.
 ### Symptom: “Applying a session raises a dataset fingerprint mismatch”
 
 Likely causes:
-- `expected_dataset_id` does not match the bundle's `datasetId`,
+- `adata.uns['cellucid']['id']` names another dataset than the session's
+  `datasetId`,
 - cell or variable counts differ,
-- the bundle's `dataMapping` names an `obsm`, `obsp`, layer, `raw`, or `var`
+- the session's `dataMapping` names an `obsm`, `obsp`, layer, `raw`, or `var`
   column the target `AnnData` does not have,
 - `varCount` disagrees with the gene axis the mapping reads,
-- the bundle's `cellOrder` or `dataMapping` record is missing or malformed.
+- the cell-order digest of the session's embedding differs (other cells, or
+  another order),
+- the session's `cellOrder` or `dataMapping` record is missing or malformed.
 
-A different row order is *not* on that list. Python compares counts and the
-dataset ID, and a permutation changes neither, so it will apply the session
-without complaint. Only apply to the same dataset generation and row order.
+A different row order is refused only when `adata` has the session's
+embedding; otherwise a permutation changes neither the counts nor the dataset
+ID, and the session applies. Only apply to the same dataset generation and row
+order.
 
 Fix:
-- pass the exact ID used to create the matching viewer as
-  `expected_dataset_id=...`,
 - apply only to the same dataset generation and row order, or regenerate the
   session from the dataset version you intend to use.
 

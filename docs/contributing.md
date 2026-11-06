@@ -28,6 +28,13 @@ R writer (`cellucid_prepare()`), R-side recipes (Seurat/SCE), and R testing + do
 
 ::::
 
+## Releasing
+
+Every Cellucid package is released the same way: publish a GitHub Release
+named `vX.Y.Z` in its repository, and that repository's workflow publishes it.
+{doc}`contributing/releasing` lists the three repositories in order, the
+checklist before each release, and how to re-run one.
+
 ## Quick routing guide
 
 - **UI bug / rendering / figure export / sessions** → Web App
@@ -41,5 +48,6 @@ R writer (`cellucid_prepare()`), R-side recipes (Seurat/SCE), and R testing + do
 contributing/web_app
 contributing/python
 contributing/r
+contributing/releasing
 ```
 

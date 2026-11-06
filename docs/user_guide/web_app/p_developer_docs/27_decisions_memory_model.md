@@ -38,7 +38,12 @@ describes.
    (77 bytes) per open cell, plus named parts (`setWorkingSet`): `'graph'`
    while edges are shown, a worker's `'graph build'`, the page's
    `'cell identity'`, each reader's `'cell rows N'` (an open subsample's
-   rows, runs, inverse and ranks), and `'unaccounted'` where the browser
+   rows, runs, inverse and ranks), `'history'` (the typed arrays of the
+   action history's value pool, `app/history/dataset-history.js`: the
+   person's work, never evicted), a copy's `'anndata copy <ticket>'` while
+   the reader worker writes one (its slabs, its budget, the chunks being
+   encoded and the batches posted to the page; the budget is the
+   `columnIndex` share, {ref}`browser-anndata-copy`), and `'unaccounted'` where the browser
    measures the page (cross-origin isolated pages only, which Cellucid's
    hosts are not).
 4. **The caches** divide what is left by `RESIDENCY_SHARES` (summing to
@@ -58,7 +63,11 @@ describes.
 6. **Hidden, frozen, idle.** A hidden page lets every cache but the gene
    index and undo steps go; frozen or in the back/forward cache, the gene
    index too (`app/page-memory.js`). Workers of every pool end after
-   `WORKER_IDLE_MS` (10 s) idle (`workers/idle-retirement.js`).
+   `WORKER_IDLE_MS` (10 s) idle (`workers/idle-retirement.js`). So any tab
+   switch releases every inactive field: its arrays go and `loaded` is false,
+   what was set on it stays (its colours, every category shown, a full range),
+   and it is read again when used. The visibility pass reads the arrays of a
+   filter that narrows only, which `field/residency.js` keeps resident.
 7. **Budgets never refuse.** Each is a residency policy: what is evicted,
    spilled to disk or read again, never what can be opened or shown. No
    budget has a floor or ceiling of its own.
@@ -84,6 +93,7 @@ served store makes (`cache_bytes`, `cellucid-python/src/cellucid/_served_store.p
 | 2026-10-30 | **Analysis workers' marker contexts are counted at what they hold** (`markerContextBytes`: the codes and the 2-4 B group index each worker builds from them, `heldBytes`). | They were counted at the codes alone (1 B a cell a worker). | Uncounted per-worker indexes. |
 | 2026-10-30 | **What a share holds is counted where it is held.** An open subsample's rows and ranks (`'cell rows N'`), the page's cell identity, the view's row pointers (`heldBuffers`, reported under `columnIndex`). | A 50M reader worker held far more than it reported. | Per-cell arrays outside the ledger. |
 | 2026-10-31 | **The page's inactive field data is counted from the cached fields only** (`state/managers/field/residency.js`: each inventory indexed by cache key once per fields array and length, then a memory report looks up the cached keys, each view's active field and the user-defined aliases). | The count is asked on every memory report (each worker report, each working-set change); it walked every field of every view, 30,000 genes, each time: 0.5-1.4 s of the page's main thread per markers run at 10M cells (traced). The same answer as the walk, bit for bit (`residency-cached-keys-contract`). | Walking the inventories per report. |
+| 2026-11-06 | **A released field is no filter, and what cannot be read again is never released.** The visibility pass asks for a field's arrays only when it was read or its filter narrows (`hasCategoryFilter`, `hasRangeFilter`). Stay resident: a hidden category, the missing row hidden, a category's cell count (`_categoryCellLimits`), a filter on a deleted field, and a user-defined field's own arrays (its codes, a pushed column's values; a copy of a file's continuous column reads its values again). | A tab switch trims to nothing, so a field coloured once kept `_categoryVisible` without codes and every later pass threw: on 0.9.7 live, "Verifying the branch failed: Observation category field 4 requires exact dataset-length codes", and the same for colouring, undo and jump. A continuous field threw the same way, and a category limited by cell count and a user's own column were lost: a pushed column's values and a duplicated field's codes exist nowhere else (`tests/browser/history-verify-released-fields.spec.mjs`). The check stays for a narrowing filter on a field not read. | Clearing `_categoryVisible` on release (a kept view's copy and every later reader would still have to know); skipping unread fields whatever their filter (wrong visibility). |
 
 ## Measurements that justify it
 
@@ -181,6 +191,7 @@ removed in the change that fixes or verifies it.
 | Auto-fit against the allowance | `data/anndata/subsample-plan.js` | `cellucid/tests/scale-auto-fit-budget.test.mjs` |
 | Page holders and per-cell array ownership | `app/state/core/data-state.js` (inactive fields, unshown layouts, cell identity), `app/state/managers/field/residency.js`, `app/state/managers/per-cell-array-ownership.js` | `cellucid/tests/view-memory-ownership-contract.test.mjs`, `cellucid/tests/residency-cached-keys-contract.test.mjs`, `cellucid/tests/browser/kept-views-memory.spec.mjs` |
 | Named limits and their reasons | (every module) | `cellucid/tests/size-limit-allowlist-contract.test.mjs` |
+| A copy of the open dataset (working-set part, budget) | `data/anndata-reader-worker.js` (`writeAnnDataCopy`), `data/anndata/write/copy.js` | `cellucid/tests/anndata-copy-contract.test.mjs` |
 | Server caches | `cellucid-python/src/cellucid/_served_store.py`, `cellucid-r/R/viewer-api.R` | — |
 
 ## Related pages

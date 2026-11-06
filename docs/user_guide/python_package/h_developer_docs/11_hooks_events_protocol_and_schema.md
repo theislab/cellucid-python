@@ -31,43 +31,130 @@ Opening it:
 
 ### Python → frontend (commands)
 
-- one JSON text frame per command, exactly the keys of its type
-  (`_COMMAND_MESSAGE_FIELDS` in `jupyter/_wire.py`), validated and serialized
-  by `_require_frontend_message`
-- a command that names cells (`highlight`, `setVisibility`) is one binary
-  frame instead: a little-endian `uint32` header length, the JSON header
-  (`_BINARY_COMMAND_HEADER_FIELDS`: `{"type": "highlight", "color"}` or
-  `{"type": "setVisibility", "visible", "all"}`) padded with spaces to a
-  multiple of 4 bytes, then the cells as little-endian `uint32`, strictly
-  ascending (none for `setVisibility` with `"all": true`). The cells are
-  checked and sorted once (`_require_cell_indices`, vectorized for a NumPy
-  array) and written straight into the frame; the padding puts them on a
-  4-byte boundary, where the viewer reads them in place
+The viewer protocol is **schema 5** (`VIEWER_PROTOCOL_SCHEMA` in the web app's
+`data/viewer-protocol.js`; schema 5 added the agent messages). Ten commands,
+exactly the keys of their type
+(`_COMMAND_MESSAGE_FIELDS` and `_BINARY_COMMAND_HEADER_FIELDS` in
+`jupyter/_wire.py`), validated and serialized by `_require_frontend_message`:
+
+| Command | Keys | Answered by |
+|---|---|---|
+| `action` | `type`, `requestId`, `action`, `params`, `turn`, `turnLabel` | `action_result` or `command_error` (same `requestId`) |
+| `load_session` (binary) | `type`, `requestId`, `name`; the body is the session file | `session_loaded` or `command_error` (same `requestId`) |
+| `requestSessionBundle` | `type`, `requestId` | `session_bundle` or `command_error` (same `requestId`) |
+| `ping` | `type`, `requestId` | `pong` |
+| `debug_snapshot` | `type`, `requestId` | `debug_snapshot` |
+| `freeze` | `type` | nothing (the host stopped) |
+| `agent_list` | `type`, `requestId`, `connection` | `agent_tools` (binary: the MCP tools for that connection) |
+| `agent_call` | `type`, `requestId`, `tool`, `args`, `agent`, `connection` | exactly one `agent_result` (binary: the MCP tool result, an error included), with `agent_asking` / `agent_answered` while the person is asked |
+| `agent_cancel` | `type`, `requestId` | the call's `agent_result` (stopped: a change rolled back, a question withdrawn) |
+| `agent_answer` | `type`, `requestId`, `allowed` | the person answered the card's question in the agent's app (Allow once or Deny) |
+
+The four `agent_*` commands carry a local agent connection (`cellucid mcp`,
+`connection` `{id, client}`): the page runs each call as the agent under the
+person's permissions and answers with the agent events; a package delivers
+those events to the viewer's agent port (`_agent_link.py`), never to the
+notebook's hooks ({doc}`../../web_app/p_developer_docs/31_local_agent_connection`).
+
+- **`action` is the one command that changes or reads the viewer's state.**
+  `action` names one action of the catalogue by its dotted type (`color.by`,
+  `highlight.cells`, `history.get`, …) and `params` are its parameters; the
+  viewer checks them with the action's schema and dispatches the action with
+  origin `host` and the host's name (`python`, `jupyter`, `r`), so it takes
+  the path a person's control takes and is one step of the history, labelled
+  as the notebook's. Schema 2's state commands -- `setColorBy`,
+  `setVisibility`, `highlight`, `clearHighlights`, `resetCamera`,
+  `setDataMapping`, `setGeneSet`, `setField` -- are gone: they are the
+  actions `color.by`, `cells.visibility.set`, `highlight.cells`,
+  `highlight.clear-all`, `camera.reset`, `mapping.set`, `gene-set.save` and
+  `field.push`.
+- `turn` and `turnLabel` name the notebook turn an action belongs to: both
+  exact text (the turn's id and what it was asked to do) or both `null`
+  outside a turn. `with viewer.turn("QC"):` (Python, ids `python-<12 hex>`)
+  and `cellucid_turn(viewer, "QC", {...})` (R, ids `r-<12 hex>`) set them on
+  every action sent inside; the viewer passes them to the dispatcher, so the
+  steps are one turn of the history, shown as one group in the State panel
+  and undone together, as an agent's turn is. Turns do not nest.
+- an `action` whose `params` hold arrays is one binary frame instead: a
+  little-endian `uint32` header length, the JSON header
+  (`_BINARY_COMMAND_HEADER_FIELDS`: `type`, `requestId`, `action`, `params`
+  without the arrays, `turn`, `turnLabel` and `arrays`), padded with spaces
+  to a multiple of 4 bytes, then each array's elements, little-endian, in the order `arrays`
+  lists them. Each `arrays` entry is `{path, type, length}`: `path` the keys
+  (and list indices, for a list of objects) leading to the array in `params`,
+  ending in a key `params` does not hold; `type` one of `uint8`, `uint16`,
+  `uint32`, `float32`, `float64`. Python takes every NumPy array out of the
+  parameters in the order met (`_split_action_params`) and writes each
+  straight into the frame (`_binary_command_frame`); the viewer puts each back
+  at its path, read in place when it starts on a boundary of its element size
   (`decodeViewerBinaryCommand` in `data/viewer-protocol.js`), checked as
-  strictly as the server checks a selection
+  strictly as the server checks a selection. Cells (`x-cells` in the action's
+  schema) are `uint32` original positions; one value per cell (`x-values`)
+  any value type.
+- `load_session` pushes a `.cellucid-session` file into the viewer
+  (`viewer.load_session(path)`, R `cellucid_load_session()`): one binary
+  frame whose JSON header `{type, requestId, name}` (`name` is the file's
+  name, without a folder) is padded the same way, and whose body is the file
+  (`_load_session_frame`). The viewer loads it as the person's Load does, its
+  trackers beside the person's own, while it shows the host's dataset, and
+  answers `session_loaded`, or `command_error` with why not (another
+  dataset's session, a damaged file).
 - sent by `cellucid._viewer_channel.send_viewer_command`: on the open socket,
   or into the viewer's outbox until it connects, flushed in order on
   `welcome`; a frame that failed to go out whole stays queued, so nothing is
   sent twice
-- used for “do something now” commands (highlight, set color-by, reset camera,
-  set the data mapping, request a session bundle)
+
+### The action catalogue, one document in three repositories
+
+The actions are defined once, in the web app (`assets/js/app/actions/`), and
+the packages are generated from them: the web repository's
+`scripts/generate-action-catalog.mjs` writes `catalogDocument` of every
+definition as canonical JSON (sorted keys) to its
+`tests/fixtures/action-catalog.json`, to this package's
+`src/cellucid/action_catalog.json` and to cellucid-r's
+`inst/action_catalog.json`, byte for byte, and prints the SHA-256 the three
+test suites pin (`tests/action-catalog-document-contract.test.mjs`,
+`tests/test_action_catalog.py`, `tests/testthat/test-actions.R`).
+`scripts/generate_actions.py` then writes `jupyter/_actions_generated.py`
+(one method per action, typed, with the action's title, summary and
+parameter descriptions as its docstring); `tests/test_action_catalog.py`
+fails while that module differs from what the script writes, so an action
+added in the web app cannot be missing from Python (or R) unnoticed.
+`_actions.py` checks and converts every action's parameters by the
+catalogue, the same way for every action.
 
 ### Frontend → Python (events)
 
 - JSON text frames, at most 1 MiB each, for `hover`, `click`, `ready`, `pong`,
   `debug_snapshot`, `command_error`, `data_mapping`, `color_by`,
-  `result_removed` and `results`
-- binary frames for `selection`, `result` and `session_bundle`: a
-  little-endian `uint32` header length, a UTF-8 JSON header
-  (`{"type": "selection", "source"}`, a result's header, or
+  `result_removed`, `results`, `history_changed` and `session_loaded`
+- binary frames for `selection`, `result`, `action_result` and
+  `session_bundle`: a little-endian `uint32` header length, a UTF-8 JSON
+  header (`{"type": "selection", "source"}`, a result's header,
+  `{"type": "action_result", "requestId", "step"}`, or
   `{"type": "session_bundle", "requestId"}`), then the body
+- an `action_result`'s body is the action's outcome as UTF-8 JSON (`null`
+  for nothing to report, a read's result otherwise): a binary frame, because
+  a read's result is as large as it asks for (a picture of a view, the values
+  of many cells) and a text event holds at most 1 MiB; `step` is the history
+  step the action made, `{id, label}`, or `null`
 - a selection's body is the selected row indices as little-endian `uint32`,
   strictly ascending, one or more; the server reads it into one buffer
   (unmasked in place, no second copy), checks it
   (`_require_selection_cell_array`), and the viewer's validator decodes it
   into the `list[int]` its hooks receive
-- a session bundle's body is streamed to a temporary file, validated, and
-  turned into the server-built `session_bundle` event
+- a session's body is streamed to a temporary file, read and checked whole
+  (`cellucid.read_session`: session format 4), and turned into the
+  server-built `session_bundle` event
+
+Events the viewer keeps sending on its own -- `color_by`, `data_mapping`,
+`result` / `result_removed` / `results`, `selection`, `hover`, `click`,
+`history_changed` -- mirror the viewer's state into `viewer.state`,
+`viewer.results` and `viewer.history` as it changes, whoever changed it.
+`history_changed` tells where the history stands after each change (the web
+app's `app/viewer-host/history-events.js`); the history itself is read as a
+session (`viewer.request_session()`). An `action_result` answers the request
+that sent its action, so `data_mapping` and `result` carry no `requestId`.
 
 A selection is binary because a JSON array of indices costs about 8 bytes per
 cell to encode, parse and validate; four bytes per cell, sorted, lets both
@@ -87,13 +174,34 @@ Implementation:
 - `cellucid-python/src/cellucid/jupyter/_viewer.py`
   (`_register_viewer_for_messages`, `AnnDataViewer._handle_frontend_message`)
 - `cellucid/assets/js/data/viewer-channel.js` and `viewer-protocol.js` (web)
-- the shared rules: `cellucid/tests/fixtures/viewer-protocol.json`, kept byte
-  for byte in cellucid-python (`tests/fixtures/viewer_protocol.json`) and
-  cellucid-r, each copy SHA-pinned
+- `cellucid/assets/js/app/viewer-host/command-handler.js` (web): dispatches a
+  host's `action` as origin `host`
+- the shared rules: `cellucid/tests/fixtures/viewer-protocol.json` (schema 5,
+  with one valid frame of every kind, binary actions and a binary
+  `load_session` as exact bytes), kept byte for byte in cellucid-python
+  (`tests/fixtures/viewer_protocol.json`) and cellucid-r, each copy
+  SHA-pinned; this package's encoder makes exactly the bytes of every
+  example binary command
+- the session files a host receives and pushes: session format 4, tested in
+  the three repositories against one golden history the web app's own model
+  makes (the web repository's `scripts/generate-history-golden.mjs`: three
+  trackers, one replayed and one removed, one paused, four branches, a
+  notebook turn and an agent turn, a group, a squashed step of what changed
+  while recording was paused, notes, a bookmark, a deleted step and its
+  journal entry, a stale result, each step's parameters version), written as
+  `tests/fixtures/history-golden.cellucid-session` and
+  `history-golden.expected.json` there, as
+  `tests/fixtures/history_golden/history_golden.cellucid-session` and
+  `history_golden.expected.json` here and in cellucid-r's
+  `tests/testthat/fixtures/history_golden/`; the expected file holds the
+  reading and the apply plans every reader must find, and the web suite
+  (`tests/history-golden-fixture.test.mjs`), this package
+  (`tests/test_sessions.py`) and cellucid-r (`tests/testthat/test-sessions.R`)
+  pin the same SHA-256 digests
 
 ### Event validation in Python
 
-The viewer accepts exactly:
+Python accepts exactly (`_INBOUND_EVENT_FIELDS`):
 
 - `selection`
 - `hover`
@@ -101,8 +209,13 @@ The viewer accepts exactly:
 - `ready`
 - `pong`
 - `debug_snapshot`
+- `action_result`
 - `command_error`
 - `data_mapping`
+- `color_by`
+- `result`, `result_removed` and `results`
+- `history_changed`
+- `session_loaded`
 - the server-generated `session_bundle`
 
 Each type owns one exact required field set. Unknown types, missing fields,
@@ -159,10 +272,27 @@ Expected keys:
 - `shift`: bool
 - `ctrl`: bool
 
+### `action_result` (binary)
+
+Meaning:
+- the viewer's answer to one `action`.
+
+Expected keys (after Python decoded the body, `_wire._decode_action_result`):
+- `requestId`: the action's request
+- `step`: `{id, label}` of the history step it made, or `null` (a read, or a
+  change that changed nothing)
+- `outcome`: the body's JSON: a change's outcome (counts, names, ids) or a
+  read's result; finite numbers only
+
+It completes the `ActionRequest` registered under `requestId`
+(`AnnDataViewer._action_waiters`); an answer nobody waits for any more is
+dropped.
+
 ### `session_bundle` (Python-side event)
 
 Meaning:
-- the server received a `.cellucid-session` bundle frame and is reporting status back to Python.
+- the server received a `.cellucid-session` file (format 4) and is reporting
+  status back to Python.
 
 Expected keys:
 - `status`: exactly `"ok"`
@@ -172,46 +302,73 @@ Expected keys:
 
 Note:
 - this event is generated by the server, not directly by the frontend;
-- an invalid bundle never dispatches an error-shaped `session_bundle`: it is
-  reported as a `command_error` naming `requestSessionBundle`.
+- an invalid file never dispatches an error-shaped `session_bundle`: it is
+  reported as a `command_error` naming `requestSessionBundle` and its
+  `requestId`.
 
 ### `command_error`
 
 Meaning:
-- a command Python sent was rejected by the viewer instead of applied.
+- a command Python sent was refused by the viewer instead of carried out.
 
 Expected keys:
-- `command`: exactly one of the ten command types this protocol defines
-- `reason`: one line, at most 500 characters
+- `command`: exactly one of the six command types this protocol defines
+- `requestId`: the failed command's `requestId`, or `null` for one that names
+  none (`freeze`, or a frame the viewer could not read as far as its id)
+- `reason`: one line; the viewer sends at most 1000 characters, Python
+  accepts at most 4000
 
-Commands carry no `requestId`, so this event correlates with a command *type*
-and not with an individual call. Adding a `requestId` to the commands is not a
-compatible change: the viewer validates each command's key set exactly, so a
-new field would make every command fail on an already-deployed web build.
-
-`AnnDataViewer` prints this event to `sys.stderr` when no `command_error` hook is
-registered, because the command methods are one-way — `set_color_by` has
-already returned `None` by the time the rejection arrives on the channel's thread,
-and nothing can make it raise without blocking every command on a browser round
-trip.
+The event completes the request it names: an action's `result()` raises
+`ActionError` with `reason`. `AnnDataViewer` also prints it to `sys.stderr`
+when no `command_error` hook is registered, naming the method that sent the
+action (`viewer.color_by(...)`), because nothing has to collect a request.
 
 ### `data_mapping`
 
 Meaning:
 - the viewer resolved or changed its data mapping (which arrays it plots and
-  reads).
+  reads), whoever changed it.
 
 Expected keys:
 - `origin`: one of `default`, `best_guess`, `session`, `user`, `notebook`
-- `requestId`: a string exactly when `origin` is `notebook` (the event answers
-  that `setDataMapping` command); `null` otherwise
+  (`notebook`: this host's `mapping.set` action)
 - `mapping`: a complete data mapping, validated by
   `cellucid.data_mapping.validate_data_mapping` and stored as its canonical copy
 
-`setDataMapping` is the one command that carries a `requestId`: it is new, so
-no deployed build validates a key set for it, and `viewer.set_data_mapping()`
-needs the answer to tell an applied mapping from a refused one. Its key set is
-exactly `type`, `requestId`, `mapping`.
+### `history_changed`
+
+Meaning:
+- the viewer's history changed: a step recorded (by the person, an agent or
+  a host), the step shown moved (undo, redo, a jump, another branch), the
+  history's structure edited (a rename, a note, a bookmark, a delete, a
+  restore), a tracker started, used, renamed or removed, or a session loaded.
+  A conversation kept with a tracker is not told.
+
+Expected keys:
+- `kind`: one of `step`, `moved`, `edited`, `tracker`, `loaded`
+- `tracker`: the id of the tracker in use
+- `head`: the step shown
+- `step`: the step the change made or concerns, or `null`
+- `branch`: the id of the active branch, or `null`
+
+`viewer.state.history` keeps the latest; `viewer.history` reads it
+(`last_change`, `tracker`, `head`, `branch`) and `@viewer.on_history_change`
+runs on each. R: `cellucid_last_history_change(viewer)` and
+`cellucid_on(viewer, "history_changed", handler)`.
+
+### `session_loaded`
+
+Meaning:
+- the viewer loaded the session file of one `load_session`.
+
+Expected keys:
+- `requestId`: the `load_session` it answers
+- `tracker`: `{id, name}` of the tracker shown
+- `head`: its step shown
+
+It completes the `LoadSessionRequest` registered under `requestId`
+(`request.result()` returns `{"tracker": {"id", "name"}, "head"}`); a
+refused load is a `command_error` naming `load_session`.
 
 ---
 
@@ -299,17 +456,17 @@ so that it can never be sniffed the way a version would be:
 ```json
 {
   "channel": "_cellucid/ws",
-  "commands": ["clearHighlights", "debug_snapshot", "freeze", "highlight",
-               "ping", "requestSessionBundle", "resetCamera", "setColorBy",
-               "setDataMapping", "setField", "setGeneSet", "setVisibility"],
-  "binaryCommands": ["highlight", "setField", "setVisibility"],
-  "events": ["click", "color_by", "command_error", "data_mapping",
-             "debug_snapshot", "hover", "pong", "ready", "result",
-             "result_removed", "results", "selection", "session_bundle"]
+  "commands": ["action", "agent_answer", "agent_call", "agent_cancel", "agent_list",
+               "debug_snapshot", "freeze", "load_session", "ping", "requestSessionBundle"],
+  "binaryCommands": ["action", "load_session"],
+  "events": ["action_result", "agent_answered", "agent_asking", "agent_result", "agent_tools",
+             "agent_tools_changed", "click", "color_by", "command_error", "data_mapping",
+             "debug_snapshot", "history_changed", "hover", "pong", "ready", "result",
+             "result_removed", "results", "selection", "session_bundle", "session_loaded"]
 }
 ```
 
-`binaryCommands` names the commands sent as binary frames; a viewer refuses a
+`binaryCommands` names the commands that may be sent as binary frames (`action`, `load_session`); a viewer refuses a
 host whose list disagrees with how it reads a command it knows, or that lists
 none at all (a `cellucid` from before binary commands), and asks for an
 upgrade. `events` is every type `_require_inbound_jupyter_event` accepts, and

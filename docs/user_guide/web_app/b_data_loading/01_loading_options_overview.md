@@ -29,6 +29,7 @@ If you are new, start here. If you already know what you want, jump to the page 
 - What “lazy reading” is and why it matters for large datasets
 - How to choose between a file or folder (**Open…**), a link or a server (the
   **Link or server** bar), and **Jupyter**
+- How to open a dataset again with one click from **My datasets**
 - The top failure modes, and how to diagnose them quickly
 
 ## What Cellucid Reads
@@ -162,11 +163,12 @@ cheapest to make again),
 then the files opened least recently, never one a tab has open.
 **Session › Stored**, a section of its own right below Open data, sums it up
 on one line beside **Manage…**, never wrapped (for example *2 datasets · 540
-MB kept*, or *2 datasets · 540 MB · 3 more* when drafts, files to reopen or a
-host's speed are kept too; with no dataset kept, the one kind kept, *1
-connection speed*, or *3 items*). Hovering the line names every kind (*2
-datasets · 540 MB · 1 highlights draft · 1 file to reopen · 1 connection
-speed*), and **Manage…** lists them; its (i) says what is kept and why.
+MB kept*, or *2 datasets · 540 MB · 3 more* when saved states or a host's
+speed are kept too; with no dataset kept, the one kind kept, *1 connection
+speed*, or *3 items*). Hovering the line names every kind (*2 datasets · 540
+MB · 2 saved states · 1 connection speed*), and **Manage…** lists them; its
+(i) says what is kept and why. The line does not count **My datasets**,
+which has its own control under **Open data** ({ref}`my-datasets`).
 **Manage…** opens the *Stored in this browser* dialog, which lists each
 dataset something is kept of, by its file's name and host (*this computer*
 for a local file; never its link) and the size it all takes, with a row per
@@ -179,33 +181,44 @@ choice of cells, so the same cells opened again read their genes at once
 ({doc}`21_subsampled_loading`). Each row shows its size, when it was last
 used, and whether an open tab uses it. Tick rows and **Remove selected**,
 **Remove** one dataset's whole, or **Remove all**; a row an open tab uses
-cannot be ticked and stays until that tab closes. Under the datasets,
-*Unsaved highlights* lists the draft of the highlights made on each dataset
-that no session holds yet (kept in this browser so a reload does not lose
-them, offered back with **Restore**): a row per dataset with its size and
-when it was last saved, chosen and removed like the others. In Chrome, Edge
-and other Chromium-based browsers, *Files to reopen* lists the files and
-folders of this computer whose handle the browser gave Cellucid when you
-opened them (so a reload or a session reopens them with one click,
-{ref}`reopen-local-file`): a row each with its name, whether it is a file or
-a folder and when it was last opened, chosen and forgotten like the others
-(forgetting one deletes only the handle, never the file). Then one
-row, *Connection speeds remembered (2 hosts)*, names the hosts data was read
-from whose speed is kept (in `localStorage`, to size the next opening from
-each; {doc}`21_subsampled_loading`; its tooltip gives each host's round trip
-and rate), with its own **Remove**. Another row, *Decoder choices measured
-(4 chunk sizes)*, is which decoder (WebAssembly or JavaScript, the browser's
-own or fflate) decodes each compression fastest in this browser (in its
-IndexedDB, so a later visit skips measuring them; no dataset is kept), with
-its own **Remove**; **Remove all** forgets both too.
+cannot be ticked and stays until that tab closes.
+
+Under the datasets come the other things this browser keeps:
+
+- **Saved states** (*histories of this browser*, with their size): the
+  history of each dataset this browser kept as you worked, and the states you
+  saved under a name ({doc}`../m_state_history/03_saved_states_and_autosave`).
+  A row each, named by its dataset, with its size, what it is (*History kept
+  in this browser* or *Saved as "…"*), its steps and when it was last saved;
+  ticked and removed like the others, or all at once with the group's
+  **Remove**.
+- **My datasets**, as one row: how many datasets it lists (*7 datasets opened
+  in this browser*) and, in Chrome and Edge, how many of them are files or
+  folders of this computer it keeps the handle of (*2 files to reopen*).
+  **Show…** opens the My datasets dialog, the one place each dataset is
+  listed ({ref}`my-datasets`); **Remove** forgets the whole list with the
+  handles of its files (never the files themselves, and never the saved
+  states, which are their own rows).
+- *Connection speeds remembered (2 hosts)*: the hosts data was read from whose
+  speed is kept (in `localStorage`, to size the next opening from each;
+  {doc}`21_subsampled_loading`; its tooltip gives each host's round trip and
+  rate), with its own **Remove**.
+- *Decoder choices measured (4 chunk sizes)*: which decoder (WebAssembly or
+  JavaScript, the browser's own or fflate) decodes each compression fastest in
+  this browser (in its IndexedDB, so a later visit skips measuring them; no
+  dataset is kept), with its own **Remove**.
+
+**Remove all** removes everything no open tab uses: the kept files, every
+saved state, My datasets with its handles, the connection speeds and the
+decoder choices.
 
 The dialog's foot, **Where it's kept**, answers where all of it lives, in
 any browser on any system:
 
 | Row | What it says |
 |---|---|
-| Place | This browser's private storage for this site (the *origin private file system* of the address you opened Cellucid at, for example `www.cellucid.com`; the connection speeds are in its `localStorage`). It lives inside your browser profile and is managed by the browser — Chrome and Edge, Firefox and Safari each keep a site's storage in their own profile data — so it is not a folder you can open from your file manager. |
-| Holds | Files (in its private file system), highlight drafts and decoder choices (in its IndexedDB; in Chrome and Edge also files to reopen, the browser's handles) and connection speeds (in its `localStorage`): all of them this site's storage in this browser. |
+| Place | This browser's private storage for this site: the *origin private file system*, IndexedDB and `localStorage` of the address you opened Cellucid at, for example `www.cellucid.com`. It lives inside your browser profile and is managed by the browser — Chrome and Edge, Firefox and Safari each keep a site's storage in their own profile data — so it is not a folder you can open from your file manager. |
+| Holds | *files, saved states, My datasets, connection speeds*: files in its private file system; the saved states, My datasets (in Chrome and Edge with the browser's handles of files to reopen) and the decoder choices in its IndexedDB; the connection speeds in its `localStorage`. All of them are this site's storage in this browser. |
 | Removed by | This dialog, or the browser's *Clear site data* (also clearing cookies and site data for the site, or removing the browser profile). |
 | Space | What the whole site uses and what its quota still leaves free, marked *browser's figures*: the browser's own estimate (`navigator.storage.estimate()`). Each browser decides how much one site may use, from the disk's size and free space; Cellucid sets no limit of its own. |
 | Kept when space is low | *yes* when the browser keeps the site's storage when the disk runs low; *no, the browser may clear it* otherwise (`navigator.storage.persisted()`). **Keep it when space is low** asks the browser (`navigator.storage.persist()`), only when you press it: Firefox asks you, other browsers decide from how the site is used. What a browser clears is read again on the next opening. |
@@ -213,10 +226,11 @@ any browser on any system:
 A private or incognito window gives the site no storage that outlives the
 window: the Stored row says *Kept for this tab only*, and **Where
 it's kept** says the same. Cellucid finds this by asking the browser for its
-storage, not by its name.
+storage, not by its name. My datasets and the saved states go with the window
+too ({ref}`my-datasets`).
 
 In a private window nothing outlives the window:
-Firefox and Safari give the page no storage (WebKit's private browsing has
+Firefox and Safari give the page no file storage (WebKit's private browsing has
 neither the origin-private file system nor IndexedDB, measured in Playwright's
 WebKit, whose test windows are private ones), so the file is held in memory
 for the tab; Chrome gives it a small storage held in memory, so a large R object there
@@ -251,6 +265,7 @@ Pick the first row that matches you.
 
 | Your situation | Recommended workflow | Why |
 |---|---|---|
+| “I opened it before, in this browser.” | **My datasets** under **Open data** | One click; nothing to find again ({ref}`my-datasets`) |
 | “I just want to look at my data, no Python.” | **Open…** under **File or folder** (an `.h5ad`, a `.zarr` folder or a `.zarr.zip`) | Nothing installed or uploaded; any file size |
 | “The data is already on CELLxGENE, GEO, Zenodo, Figshare, Hugging Face, Dropbox, a public Google Drive file or any web host.” | The **Link or server** address bar | Read in place where it is published ({doc}`14_open_from_link`) |
 | “My collaborator shared a file with me on Google Drive or OneDrive.” | The **Link or server** address bar, then one sign-in | Read in place from Google or Microsoft with your own sign-in ({doc}`16_private_drive_onedrive`) |
@@ -321,11 +336,175 @@ its catalog names for that dataset. Worked example:
 :::
 
 :::{tip}
-A saved session (**Save** under **Session file**) records which of these routes its dataset
+A shared session file (**Share…** under **State › Session**) records which of these routes its dataset
 came from when another person could take it too: a sample, a link or a server.
 Loading the session then opens that dataset first. See
 {doc}`../l_sessions_sharing/03_save_restore_ux`.
 :::
+
+(my-datasets)=
+## My datasets
+
+**My datasets**, under **Open data** in the Session panel, lists the
+datasets you opened in this browser, most recently opened first, so you can
+open one again without finding it again. In another browser you can add them
+from a library file ({ref}`my-datasets-library-file`).
+
+What is listed:
+
+- a sample you chose under **Sample dataset**;
+- a link or a repository id you opened, in **Link or server** or in the
+  address that opened the page;
+- a Cellucid server (`cellucid serve`, or an address typed in **Link or
+  server**);
+- a file or folder of this computer, chosen with **Open…** or dropped on the
+  page.
+
+What is not listed:
+
+- the sample Cellucid opens by itself when it starts with nothing else to
+  open, because you did not choose it (choose it under **Sample dataset** and
+  it is listed);
+- a dataset a notebook or a Python or R viewer hands to its viewer
+  (`show_anndata()`, `cellucid_view()`): it is served to that viewer only and
+  cannot be opened again from here.
+
+A dataset is listed once. Opening it again, or opening other cells of it
+(**Cells to open**), updates its entry.
+
+### Open a dataset again
+
+The button names the dataset open now when it is listed, and reads *Choose a
+dataset…* otherwise. Its menu offers the five most recently opened datasets.
+Under each name it says the kind (*Sample*, *Link*, *Server*, *File* or
+*Folder*), where it comes from (a link's provider, such as Zenodo, or its
+host; a server's host) and when it was last opened. The dataset open now reads
+*open now* and is not offered again. **All…**, at the bottom, lists every
+dataset. While nothing is listed yet, the menu offers **All…** alone, for its
+**Import…**.
+
+Choosing one opens it, in place of the dataset open now:
+
+| Kind | What one click does |
+|---|---|
+| Sample | Opens it. |
+| Link | Opens it. What the link carried to grant access (a key, a signature, a token) is never kept, so a link that needs one may be refused: paste the whole link again in **Link or server**. |
+| Server | Opens it while the server runs at that address. Start the server again first (`cellucid serve`). |
+| File or folder, in Chrome or Edge | Reads it where it is, through the handle the browser kept of it. The browser may ask you first (*Allow this time*, *Allow on every visit*). A file that moved or changed since is not opened: choose it again ({ref}`reopen-local-file`). |
+| File or folder, in Firefox or Safari | These browsers keep no handle, so the menu says *choose it again*. The click opens **Open… › File…** (or **Folder…**), and a notification names the file to choose. |
+
+A dataset opens with the cells you chose for it: the same subsample method,
+size and seed. A dataset last open with every cell, or with as many cells as
+this device fits, opens as this tab opens datasets now (**Cells to open**,
+{doc}`21_subsampled_loading`).
+
+### All…: every dataset
+
+**All…** opens a dialog of every dataset, most recently opened first. Each
+row shows the name, the kind and when it was last opened, and one line under
+it: format, cells, genes and saved states. Type in **Filter by name…** to
+narrow the list. Click a name to see the facts behind it: where it comes from
+and how it opens again, its format and size, its cells and genes and the
+cells it opens with, when it was first and last opened (and how many times),
+its saved states, and what this browser stores of it to open it faster.
+
+Each row has three buttons:
+
+- **Open** opens it again, as the menu does.
+- **Continue** opens it, then its latest saved state, so its history is back
+  at once and nothing is asked
+  ({doc}`../m_state_history/03_saved_states_and_autosave`). It is greyed out
+  when this browser keeps no saved state of the dataset, and when a file must
+  be chosen again first: choose it, and the offer to continue where you left
+  off appears as it opens.
+- **Forget** (the bin) asks in the row first, saying what goes and what
+  stays. The dataset leaves My datasets and, for a file or folder, this
+  browser forgets its handle; the file itself is never touched. Its saved
+  states and what is stored of it stay, unless you tick *Also delete its 2
+  saved states*. **Keep** leaves everything as it was.
+
+(my-datasets-library-file)=
+### Take them to another browser: Export… and Import…
+
+My datasets and the saved states are kept in one browser. To take them to
+another browser or another computer, or to keep a copy, use the two buttons
+beside **Filter by name…** in **All…**.
+
+**Export…** shows, in place of the rows, every dataset with its saved states
+under it, all ticked except saved states kept by another version of Cellucid.
+Saved states of datasets no longer listed follow under their own heading,
+unticked. Untick what should not go. The line under the list says how many
+datasets and saved states are ticked and how much room the saved states take
+here. **Export** downloads one `.cellucid-library` file
+(*cellucid-library-2026-11-04T10-30-00.cellucid-library*).
+
+Each saved state goes whole: every tracker and branch, every step with its
+values and analysis results, notes, **Recently deleted** and the
+conversations with agents, with their exact times. Conversations can be
+private, so keep the file to yourself. Changes made while recording was paused
+and not yet kept as a step cannot go into the file: the export leaves them
+out, the history stays paused, and the export says so. Resume recording in
+that history first to keep them as a step.
+
+**Import…** asks for a `.cellucid-library` file and adds what it holds
+beside what this browser keeps. Nothing kept is replaced:
+
+- a dataset this browser does not list is added; one it lists stays as it is;
+- each saved state is kept as a named saved state, *Figure 2 (imported)*, or
+  *Autosave of Pancreas (imported)* for an autosave. Importing the same file
+  twice keeps two copies.
+
+The line above the list then says what was added and what was already there:
+*Added 2 datasets and 3 saved states; 1 dataset was already in My datasets.*
+**Continue** and **State › Session › Load…** open an imported
+saved state like any other.
+
+A library file dropped on the page, or chosen in **Open… › File…**, is
+imported the same way: **All…** opens and its line says what was added. A
+session file dropped or chosen there is not a dataset: it is refused with a
+sentence saying where it goes (**State › Session › Load… › Open a session
+file…**, with its dataset open).
+
+The whole file is read and checked before anything is added, and an import
+adds everything or nothing: the saved states are kept in one go, and the
+datasets are added only once they are; a damaged or truncated file, a browser
+with no room left, or a list that cannot be written adds nothing, and the line
+says why. A session file chosen here is refused with *This
+file is a Cellucid session file (the history of one dataset), not a library
+file. Open it with State › Session › Load… › Open a session file…*, and a library file chosen in
+**Load… › Open a session file…** with *This file is a Cellucid library file (datasets and saved states
+of My datasets), not a session file. Import it with Session › Open data › My
+datasets › All… › Import….*
+
+The file is the session file's container under its own signature
+(`CELLUCID_LIBRARY/1`): a manifest of the dataset entries and the saved
+states, then each saved state as one complete `.cellucid-session` file
+(format 4). What a dataset entry holds is what My datasets keeps of it (below):
+a link in its public form, never what it carried to grant access.
+
+### Kept in this browser only
+
+My datasets is kept in this browser's own storage (IndexedDB), never
+uploaded: there is no server and no account. It leaves the browser only in a
+library file you export. For each dataset it keeps its
+name and how it opens again (a link in its public form, never the key,
+signature or token it carried; a server's address; a file's or folder's
+name, never its path or content), its format, size, cells and genes, the
+cells it was last open with, and when it was opened. A file's handle is the
+browser's own reference to it, usable only by this site in this browser. The
+full list is in {doc}`../o_accessibility_privacy_security/02_privacy_model`.
+
+To clear it, **Forget** datasets one by one in **All…**, or press **Remove**
+on the My datasets row under **Session › Stored › Manage…**
+({ref}`stored-in-this-browser`). Clearing this site's data in the browser
+removes it too.
+
+A private or incognito window keeps My datasets only until the window closes,
+like everything else of the site. The line under the menu says when the list
+will not outlast the window or the page: *Kept only until this window
+closes.*, or *Kept for this page only: this window keeps nothing for this
+site.* when the browser gives the page no IndexedDB at all (the list then
+goes with a reload).
 
 ## Minimal Commands (Copy/Paste)
 
@@ -378,14 +557,38 @@ viewer = show_anndata("data.h5ad", dataset_name="My study", dataset_id="my-study
 For the complete verified loading gallery, see {doc}`09_screenshots`.
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Subsampling and Data mapping sections, each one line with its summary.
+:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, My datasets naming the open sample, the Open… button and the Link or server bar; the Stored line; and the collapsed Subsampling and Data mapping sections.
 :width: 532px
 
-The browser routes in the table above are the controls in this panel; a
-server started in a terminal or from Python is reached through the **Link or
-server** bar, and a notebook needs no control at all because its widget
-hands the data over itself.
+The Session panel with a sample open: the **Dataset** box, **Open data**,
+and the collapsed **Subsampling** and **Data mapping** sections.
 ```
+
+The browser routes in the tables above are the controls of the **Session**
+panel in the sidebar. From the top:
+
+- **Dataset**: the dataset open now ([The Dataset box](#the-dataset-box),
+  below).
+- **Open data**, four ways to open a dataset. Opening one replaces the
+  dataset open now.
+
+  | Control | What it opens |
+  |---|---|
+  | **Sample dataset** | A public dataset of the page's sample catalog, read in place as each view needs it. While a catalog of several datasets is connected, it lists that catalog's datasets instead. |
+  | **My datasets** | A dataset you opened in this browser, again with one click ({ref}`my-datasets`); **All…** also exports and imports them with their saved states ({ref}`my-datasets-library-file`). |
+  | **File or folder** | **Open…**, then **File…** or **Folder…**: a file or folder of this computer; nothing is uploaded ({doc}`03_browser_file_picker_tutorial`). Dropping one on the page does the same. |
+  | **Link or server** | A link or an id of published data, or the address of a Cellucid server (`localhost:8765`, or just the port), then **Open** ({doc}`14_open_from_link`). |
+
+- **Stored**, once something is kept: one line of what this browser keeps,
+  and **Manage…** ({ref}`stored-in-this-browser`).
+- **Subsampling** and **Data mapping**, each collapsed to one line that says
+  what it holds ({doc}`21_subsampled_loading`, {doc}`13_data_mapping`).
+
+A server started in a terminal or from Python is reached through the **Link
+or server** bar, and a notebook needs no control at all because its widget
+hands the data over itself. Sharing and loading a session file is in the
+sidebar's **State** section, under **Session** (**Share…** and **Load…**;
+{doc}`../m_state_history/index`).
 
 ## The Dataset box
 

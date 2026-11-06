@@ -93,18 +93,24 @@ def on_selection(event):
 
 ### 4) A minimal “control” example (Python → viewer)
 
+Every action of the viewer is a method; each returns an `ActionRequest`
+whose `result()` (in a later cell) is the viewer's answer:
+
 ```python
-# Highlight a few cells (indices into the dataset)
-viewer.highlight_cells([0, 10, 20], color="#ff0000")
+# Highlight a few cells (rows of obs, a boolean mask, or obs names)
+viewer.highlight_cells(cells=[0, 10, 20], color="#ff0000")
 
 # Color points by an obs field (must exist in the dataset/AnnData)
-viewer.set_color_by("cell_type")
+viewer.color_by(field={"source": "obs", "key": "cell_type"})
 
-# Hide a subset (or pass None to apply to all)
-viewer.set_visibility([1, 2, 3], visible=False)
+# Hide a subset (or pass None for every cell)
+viewer.cells_visibility_set(cells=[1, 2, 3], visible=False)
 
-# Reset the camera
-viewer.reset_view()
+# Reset the camera of the live view
+viewer.camera_reset(view="live")
+
+# Read: the fields the viewer has (request.result() in a later cell)
+request = viewer.fields_list()
 ```
 
 ### 5) Running code once the viewer is ready (robust notebooks)
@@ -121,20 +127,23 @@ or read `viewer.state.ready` in a later cell. (`viewer.wait_for_ready()`
 returns at once when it is ready, and raises in a cell that would have to
 wait: the viewer is heard only between cells.)
 
-### 6) Capturing a `.cellucid-session` bundle without downloading (advanced)
+### 6) Capturing a `.cellucid-session` without downloading (advanced)
 
 This is the “no browser download” workflow, in two cells: ask, then collect.
 
 ```python
-request = viewer.request_session_bundle()
+request = viewer.request_session()
 ```
 
 ```python
-bundle = request.result()
-print(bundle.list_chunk_ids())
+session = request.result()
+print(session.tracker().steps[["id", "label", "origin"]])
+plan = session.apply(adata)       # what applying the step shown would change
 ```
 
-See {doc}`sessions` for what a session bundle contains and how to apply it back onto an AnnData.
+See {doc}`sessions` for what a session contains and how to apply it back
+onto an AnnData. `viewer.load_session(path)` goes the other way: it adds a
+saved session's trackers to the viewer's history.
 
 ---
 
@@ -249,9 +258,9 @@ What’s happening:
   what to do instead.
 
 Fix:
-- Use a hook or `viewer.state` in a later cell; for a session bundle,
-  `request = viewer.request_session_bundle()` in one cell and
-  `request.result()` in the next.
+- Use a hook or `viewer.state` in a later cell; for an action's answer or a
+  session, keep the request (`request = viewer.request_session()`) in one
+  cell and call `request.result()` in the next.
 
 ---
 
@@ -270,14 +279,15 @@ Fix:
 
 ---
 
-### Symptom: “`viewer.set_color_by(...)` does nothing”
+### Symptom: “`viewer.color_by(...)` does nothing”
 
 Likely causes:
 - The field name does not exist in `obs` (or has a different spelling/case).
 
 How to confirm:
-- Print `adata.obs.columns` and confirm the field exists.
-- Register `@viewer.on_command_error`: a refused command reports why.
+- Collect the request: `request.result()` (in a later cell) raises
+  `ActionError` with the viewer's reason, which lists fields like the one named.
+- Register `@viewer.on_command_error`: a refused action reports why.
 
 Fix:
 - Use the exact field name.
@@ -288,11 +298,13 @@ Fix:
 ### Symptom: “`viewer.highlight_cells(...)` does nothing”
 
 Likely causes:
-- Indices are out of range (wrong dataset / wrong cell order).
+- Rows are out of range (wrong dataset / wrong cell order): Python refuses a
+  row beyond the dataset before sending.
 
 How to confirm:
-- Try highlighting a small index like `[0]`.
-- Register `@viewer.on_command_error`: a refused command reports why.
+- Try highlighting a small set like `cells=[0]`.
+- Collect the request (`request.result()`) or register
+  `@viewer.on_command_error`: a refused action reports why.
 
 Fix:
 - Ensure indices correspond to the dataset loaded in the viewer.
@@ -358,4 +370,4 @@ Fix:
 
 - {doc}`server` for browser-tab workflows and SSH tunneling
 - {doc}`prepare` for Cellucid-ready AnnData files (`prepare(...)`)
-- {doc}`sessions` for `.cellucid-session` bundles (capture + apply)
+- {doc}`sessions` for `.cellucid-session` files (capture + apply)

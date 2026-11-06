@@ -109,7 +109,9 @@ Implication:
 ### 5) Session bundles
 
 - arrive on the viewer channel as one binary frame, for notebook “no
-  download” session capture
+  download” session capture; `viewer.load_session(path)` sends a file the
+  other way, as one binary `load_session` command, which the viewer checks
+  whole as it checks a file the person opens
 
 Guards:
 - only on an authenticated channel, and only for a request Python registered
@@ -158,13 +160,18 @@ When adding screenshots to docs, follow:
 `.cellucid-session` bundles can come from users, browsers, and shared files.
 
 Python-side parsing and application takes a defensive stance:
-- bounds checks on indices/codes
-- a required exact dataset ID and exact cell/variable-count fingerprint check
-  that raises before mutation on any mismatch
-- chunk size guards for gzip decompression
+- the whole file read and checked before anything is applied: every chunk
+  inflated to exactly its declared size, every array checked by its digest,
+  every value by its hash, every tracker's tree whole, trailing bytes refused
+- bounds checks on cells and codes
+- before an apply writes anything, the checks the chosen step needs: the cell
+  and gene counts, the dataset id when `uns['cellucid']['id']` names one, the
+  data mapping, the cell-order digest of the session's embedding, and the
+  fields the step uses; a failed check raises before any change, and a file
+  written by a newer Cellucid is refused as newer, never read in part
 
 Related code:
-- `cellucid-python/src/cellucid/session_bundle.py`
+- `cellucid-python/src/cellucid/session.py`
 - `cellucid-python/src/cellucid/anndata_session/`
 
 If you extend session parsing, keep the “untrusted input” stance.

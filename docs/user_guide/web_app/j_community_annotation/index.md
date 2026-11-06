@@ -31,7 +31,8 @@ Community annotation is “offline-first” after you connect a repo:
   mutation; a failure is terminal and does not switch to the other route.
 - Your GitHub sign-in token expires after 8 hours. It is stored only in this
   tab's `sessionStorage` (a reload keeps it until it expires; closing the tab
-  ends it), and **Sign out** revokes it at GitHub.
+  ends it), and **Disconnect GitHub** (the GitHub sync dialog) revokes it at
+  GitHub and disconnects this dataset's repository too.
 
 Practical implication after a repository has been connected and its state is
 available locally:
@@ -131,7 +132,7 @@ This section defines terms you will see across all pages. (Computational readers
 - **Suggestion**: a proposed label for a category (e.g. “CD4 T cell”).
 - **Vote**: an upvote (▲) or downvote (▼) on a suggestion.
 - **Consensus**: the current “winning” label for a category under the author’s rules.
-- **Pull**: download the current GitHub files into your local cache and rebuild the merged view in your browser.
+- **Pull**: download the GitHub files that changed into your local cache and rebuild the merged view in your browser. A file that is not valid is left out on its own and reported; it never stops the Pull.
 - **Publish**: upload your changes directly when GitHub reports push
   permission, or by fork + Pull Request only when the repository allows
   forking. The selected route never switches to another mutation route.
@@ -187,7 +188,7 @@ For each bucket (one column + one category), Cellucid computes:
 
 Consensus status:
 
-- **Pending**: `voters < minAnnotators`
+- **Pending**: `voters < minAnnotators`, or nobody voted
 - **Consensus**: one suggestion leads after ranking first by net vote and then
   by upvote count, and `confidence >= threshold`
 - **Disputed**: otherwise. A top tie exists only when suggestions have both
@@ -211,8 +212,8 @@ There are two different local storage layers (both scoped by dataset + repo + us
    - Purpose: preserve your work immediately, even before you Publish.
 
 2) **Downloaded files cache** (raw GitHub files)
-   - Stores fetched JSON files from the repo (`annotations/users/*.json`, optional `annotations/moderation/merges.json`).
-   - Purpose: make Pull fast and deterministic without re-downloading unchanged files.
+   - Stores what each file fetched from the repo holds for this dataset (`annotations/users/*.json`, optional `annotations/moderation/merges.json`), by Git blob id, with the reason for any file a Pull left out.
+   - Purpose: make Pull fast and deterministic without re-downloading unchanged files, and let an interrupted Pull resume.
 
 The annotation repo is the shared source of truth. The exact local scope is
 dataset id + `owner/repo` + branch + numeric GitHub user id. If any component
@@ -227,11 +228,11 @@ comments, repository connection, or GitHub authentication.
 - GitHub tokens live in `sessionStorage` and expire after 8 hours.
 - Votes/suggestions/comments and the repo connection use annotation-specific
   local storage.
-- Raw pulled GitHub file bodies use IndexedDB, while the cache's SHA index uses
-  local storage. The persistent raw-file cache requires both IndexedDB and
-  local storage. Cellucid never switches to an in-memory cache. If either
-  storage boundary is unavailable, Pull fails without replacing the current
-  annotation view.
+- Raw pulled GitHub file bodies use IndexedDB, keyed by Git blob id (there is
+  no index in local storage). The persistent raw-file cache requires
+  IndexedDB, and annotation state requires local storage. Cellucid never
+  switches to an in-memory cache. If either storage boundary is unavailable,
+  Pull fails without replacing the current annotation view.
 
 Use **Publish** for collaboration, not session export. See
 {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
@@ -250,6 +251,7 @@ Use this as a first-stop map. Each row links to the page where the full troubles
 | You voted, but others don’t see it | You didn’t Publish, or PR not merged | Publish (or check PR merge) → others Pull | {doc}`01_annotator_guide` |
 | Everything is disabled | Column is closed 🗳️🏁, or you’re signed out | Check column badge → re-sign-in → Pull | {doc}`01_annotator_guide` |
 | Pull/Publish keeps failing | Network / rate limits / storage restrictions | Retry; then check browser storage and exact error text | {doc}`03_ui_reference` |
+| Pull warns that files were left out | Those contributor files are not valid annotation files | Open the warning's details; ask the author to fix them | {doc}`02_author_guide` |
 
 ---
 

@@ -1,207 +1,64 @@
 """
-The exact shapes a Cellucid session declares.
+The shapes of the state-domain values a session is applied from.
 
-Every closed key set, chunk profile, and chunk-id prefix the session contract
-defines is written once here, so the chunk validator, the highlight planner and
-the field planner cannot drift from each other about what a session may
-contain. A key set is closed on purpose: an unknown key is a session this
-version does not understand, and applying it partially would put columns on an
-AnnData that nothing describes.
+A session file holds every state domain's value at every step
+(:mod:`cellucid.session`); applying one to an AnnData reads four of them, as
+``cellucid/assets/js/app/state/domains/`` captures them (``README.md``, and
+each module's header): ``cells`` (which cells were open), ``field-overlays``
+(renames, deletions and the fields a person or a notebook made),
+``highlights`` (pages of highlight groups) and ``gene-sets`` (the notebook's
+gene sets). Every key set is written once here and is closed on purpose: a
+key this version does not know is a value it does not understand, and
+applying it partly would put data on an AnnData that nothing describes.
 """
 
 from __future__ import annotations
 
-import re
-from typing import cast
+#: The state domains a session is applied from.
+CELLS_DOMAIN = "cells"
+FIELD_OVERLAYS_DOMAIN = "field-overlays"
+HIGHLIGHTS_DOMAIN = "highlights"
+GENE_SETS_DOMAIN = "gene-sets"
 
-_WIRE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$")
+#: ``cells``: ``{open: null | the subsample's specification (without nObs), genes}``.
+CELLS_KEYS = frozenset({"open", "genes"})
 
-_HIGHLIGHT_ROOT_KEYS = {"pages", "activePageId"}
-_HIGHLIGHT_PAGE_KEYS = {"id", "name", "color", "highlightedGroups"}
-_HIGHLIGHT_GROUP_REQUIRED_KEYS = {
-    "id",
-    "type",
-    "label",
-    "enabled",
-    "cellCount",
+#: ``field-overlays``.
+OVERLAY_KEYS = frozenset({"renamedFields", "renamedCategories", "deletedFields", "userFields"})
+RENAMED_FIELD_KEYS = frozenset({"source", "key", "name"})
+RENAMED_CATEGORY_KEYS = frozenset({"source", "field", "category", "name"})
+DELETED_FIELD_KEYS = frozenset({"source", "key", "purged"})
+#: Every user field; a purged one, and a continuous copy of another field
+#: (``sourceField`` set: its values are read from that field), hold only these.
+USER_FIELD_KEYS = frozenset({
+    "id", "source", "kind", "key", "deleted", "purged", "createdAt", "sourceField", "operation",
+})
+#: A categorical user field that is not purged.
+USER_CATEGORY_KEYS = USER_FIELD_KEYS | {
+    "categories", "codes", "sourcePages", "overlapStrategy", "overlapLabel", "intersectionLabels", "uncoveredLabel",
 }
-# A field-bound group names its field and category; their positions in the
-# viewer's inventories are resolved from the names and are not stored.
-_HIGHLIGHT_FIELD_GROUP_KEYS = _HIGHLIGHT_GROUP_REQUIRED_KEYS | {
-    "fieldKey",
-    "fieldSource",
-}
-_HIGHLIGHT_CATEGORY_GROUP_KEYS = _HIGHLIGHT_FIELD_GROUP_KEYS | {
-    "categoryName",
-}
-_HIGHLIGHT_RANGE_GROUP_KEYS = _HIGHLIGHT_FIELD_GROUP_KEYS | {
-    "rangeMin",
-    "rangeMax",
-}
-_HIGHLIGHT_GROUP_TYPES = {
-    "annotation",
-    "category",
-    "combined",
-    "knn",
-    "lasso",
-    "proximity",
-    "range",
-}
-_OVERLAY_ROOT_KEYS = {"renames", "deletedFields", "userDefinedFields"}
-_FIELD_COMMON_KEYS = {
-    "id",
-    "source",
-    "kind",
-    "key",
-    "isDeleted",
-    "isPurged",
-    "sourceField",
-    "operation",
-    "createdAt",
-}
-_CATEGORY_FIELD_KEYS = _FIELD_COMMON_KEYS | {
-    "categories",
-    "codesLength",
-    "codesType",
-    "sourcePages",
-    "overlapStrategy",
-    "overlapLabel",
-    "intersectionLabels",
-    "uncoveredLabel",
-}
-_CONTINUOUS_FIELD_KEYS = _FIELD_COMMON_KEYS
-# A continuous field that holds its own values (a column a notebook pushed)
-# names their length and type; they are the chunk ``user-defined/values/<id>``.
-_STORED_CONTINUOUS_FIELD_KEYS = _FIELD_COMMON_KEYS | {"valuesLength", "valuesType"}
-_OVERLAP_STRATEGIES = {"first", "last", "overlap-label", "intersections"}
-_CHUNK_META_KEYS = {
-    "id",
-    "contributorId",
-    "priority",
-    "kind",
-    "codec",
-    "label",
-    "datasetDependent",
-    "storedBytes",
-    "uncompressedBytes",
-}
-_STATIC_PROFILE_KEYS = {
-    "id",
-    "contributorId",
-    "priority",
-    "kind",
-    "codec",
-    "label",
-    "datasetDependent",
-}
-_CURRENT_GENERIC_STATIC_CHUNK_PROFILES = (
-    {
-        "id": "core/field-overlays",
-        "contributorId": "field-overlays",
-        "priority": "eager",
-        "kind": "json",
-        "codec": "gzip",
-        "label": "Field overlays",
-        "datasetDependent": True,
-    },
-    {
-        "id": "core/state",
-        "contributorId": "core-state",
-        "priority": "eager",
-        "kind": "json",
-        "codec": "gzip",
-        "label": "Core state",
-        "datasetDependent": True,
-    },
-    {
-        "id": "ui/dockable-layout",
-        "contributorId": "dockable-layout",
-        "priority": "eager",
-        "kind": "json",
-        "codec": "gzip",
-        "label": "Floating panels",
-        "datasetDependent": False,
-    },
-    {
-        "id": "ui/figure-export",
-        "contributorId": "figure-export",
-        "priority": "eager",
-        "kind": "json",
-        "codec": "gzip",
-        "label": "Figure export",
-        "datasetDependent": False,
-    },
-    {
-        "id": "analysis/windows",
-        "contributorId": "analysis-windows",
-        "priority": "eager",
-        "kind": "binary",
-        "codec": "gzip",
-        "label": "Analysis windows",
-        "datasetDependent": True,
-    },
-    {
-        "id": "analysis/docked",
-        "contributorId": "analysis-docked",
-        "priority": "eager",
-        "kind": "binary",
-        "codec": "gzip",
-        "label": "Docked analysis",
-        "datasetDependent": True,
-    },
-    {
-        "id": "highlights/meta",
-        "contributorId": "highlights-meta",
-        "priority": "eager",
-        "kind": "json",
-        "codec": "gzip",
-        "label": "Highlight metadata",
-        "datasetDependent": True,
-    },
-    {
-        "id": "cinematic/camera",
-        "contributorId": "cinematic-camera",
-        "priority": "eager",
-        "kind": "json",
-        "codec": "gzip",
-        "label": "Cinematic camera path",
-        "datasetDependent": True,
-    },
-)
-_STATIC_PROFILE_BY_ID = {
-    cast(str, profile["id"]): profile for profile in _CURRENT_GENERIC_STATIC_CHUNK_PROFILES
-}
-_CURRENT_EXACT_CHUNK_CONTRIBUTORS = {
-    chunk_id: cast(str, profile["contributorId"])
-    for chunk_id, profile in _STATIC_PROFILE_BY_ID.items()
-}
-_CONTRIBUTOR_ORDER = (
-    "field-overlays",
-    "user-defined-codes",
-    "user-defined-values",
-    "gene-sets",
-    "cinematic-camera",
-    "core-state",
-    "dockable-layout",
-    "figure-export",
-    "analysis-windows",
-    "analysis-docked",
-    "highlights-meta",
-    "highlights-cells",
-)
-_CONTRIBUTOR_INDEX = {
-    contributor_id: index for index, contributor_id in enumerate(_CONTRIBUTOR_ORDER)
-}
-_HIGHLIGHT_CELLS_PREFIX = "highlights/cells/"
-_USER_DEFINED_CODES_PREFIX = "user-defined/codes/"
-_USER_DEFINED_VALUES_PREFIX = "user-defined/values/"
-#: The gene sets a notebook pushed to the viewer, written only when there are some.
-_GENE_SETS_CHUNK_PROFILE = {
-    "id": "gene-sets/notebook",
-    "contributorId": "gene-sets",
-    "priority": "eager",
-    "kind": "json",
-    "codec": "gzip",
-    "label": "Notebook gene sets",
-    "datasetDependent": False,
-}
+#: A continuous user field holding its own values (a column a notebook pushed), not purged.
+USER_VALUES_KEYS = USER_FIELD_KEYS | {"values"}
+#: A per-cell column: ``cells`` null (every cell, ``values[p]`` is original
+#: position ``p``'s) or the ascending original positions it holds a value for.
+COLUMN_KEYS = frozenset({"cells", "values"})
+#: What a continuous copy's ``sourceField`` may name.
+SOURCE_FIELD_KEYS = frozenset({"sourceKey", "sourceIndex", "kind"})
+OVERLAP_STRATEGIES = frozenset({"first", "last", "overlap-label", "intersections"})
+#: A categorical field's codes: each code type's largest value marks a cell
+#: with no category.
+CODE_TYPES = {"Uint8Array": 0xFF, "Uint16Array": 0xFFFF, "Uint32Array": 0xFFFF_FFFF}
+
+#: ``highlights``.
+HIGHLIGHTS_KEYS = frozenset({"active", "pages"})
+PAGE_KEYS = frozenset({"id", "name", "color", "groups"})
+GROUP_KEYS = frozenset({"id", "type", "label", "enabled", "cells"})
+CATEGORY_GROUP_KEYS = GROUP_KEYS | {"field", "category"}
+RANGE_GROUP_KEYS = GROUP_KEYS | {"field", "range"}
+GROUP_TYPES = frozenset({"annotation", "category", "combined", "knn", "lasso", "proximity", "range"})
+FIELD_REF_KEYS = frozenset({"source", "key"})
+RANGE_KEYS = frozenset({"min", "max"})
+
+#: ``gene-sets``.
+GENE_SETS_KEYS = frozenset({"sets"})
+GENE_SET_KEYS = frozenset({"name", "description", "genes"})

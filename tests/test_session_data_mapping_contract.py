@@ -12,9 +12,10 @@ with values from the mapping's expression matrix.
 from __future__ import annotations
 
 import copy
-import json
+from pathlib import Path
 from typing import Any
 
+import _session_files as files
 import anndata as ad
 import numpy as np
 import pandas as pd
@@ -22,74 +23,10 @@ import pytest
 from scipy import sparse
 
 from cellucid.anndata_session import apply_cellucid_session_to_anndata
+from cellucid.anndata_session._apply import cell_order_digest
 
 # The duplicate var names are the point of several cases here.
 pytestmark = pytest.mark.filterwarnings("ignore:Variable names are not unique:UserWarning")
-
-_PROFILES = {
-    "core/field-overlays": ("field-overlays", "json", "Field overlays", True),
-    "cinematic/camera": ("cinematic-camera", "json", "Cinematic camera path", True),
-    "core/state": ("core-state", "json", "Core state", True),
-    "ui/dockable-layout": ("dockable-layout", "json", "Floating panels", False),
-    "ui/figure-export": ("figure-export", "json", "Figure export", False),
-    "analysis/windows": ("analysis-windows", "binary", "Analysis windows", True),
-    "analysis/docked": ("analysis-docked", "binary", "Docked analysis", True),
-    "highlights/meta": ("highlights-meta", "json", "Highlight metadata", True),
-}
-
-
-class _Bundle:
-    """An in-memory bundle with the current chunk inventory and given overlays."""
-
-    def __init__(self, fingerprint: dict[str, Any], fields: list[dict[str, Any]] | None = None):
-        self.dataset_fingerprint = fingerprint
-        self._chunks: dict[str, Any] = {
-            "core/field-overlays": {
-                "renames": {"fields": {}, "categories": {}},
-                "deletedFields": {"deleted": [], "purged": []},
-                "userDefinedFields": fields or [],
-            },
-            "cinematic/camera": {"notDecoded": True},
-            "core/state": {"notDecoded": True},
-            "ui/dockable-layout": {"notDecoded": True},
-            "ui/figure-export": {"notDecoded": True},
-            "analysis/windows": {"notDecoded": True},
-            "analysis/docked": {"notDecoded": True},
-            "highlights/meta": {
-                "pages": [{"id": "page_1", "name": "Page 1", "color": "#2563eb", "highlightedGroups": []}],
-                "activePageId": "page_1",
-            },
-        }
-        chunks = []
-        for chunk_id, (contributor_id, kind, label, dataset_dependent) in _PROFILES.items():
-            payload = json.dumps(self._chunks[chunk_id], separators=(",", ":")).encode("utf-8")
-            chunks.append(
-                {
-                    "id": chunk_id,
-                    "contributorId": contributor_id,
-                    "priority": "eager",
-                    "kind": kind,
-                    "codec": "gzip",
-                    "label": label,
-                    "datasetDependent": dataset_dependent,
-                    "storedBytes": len(payload),
-                    "uncompressedBytes": len(payload),
-                }
-            )
-        self.manifest = {
-            "createdAt": "2026-10-18T00:00:00.000Z",
-            "datasetFingerprint": fingerprint,
-            "source": None,
-            "requires": {"obs": [], "var": []},
-            "chunks": chunks,
-        }
-
-    def list_chunk_ids(self) -> list[str]:
-        return list(self._chunks)
-
-    def decode_chunk(self, chunk_id: str) -> Any:
-        return self._chunks[chunk_id]
-
 
 def _adata() -> ad.AnnData:
     adata = ad.AnnData(
@@ -143,6 +80,13 @@ def _embeddings(enabled: list[dict[str, Any]], default_2d: dict[str, Any]) -> di
     return {"enabled": enabled, "defaults": {"1d": None, "2d": default_2d, "3d": None}}
 
 
+def _digest(embedding: dict[str, Any]) -> str:
+    values = _adata().obsm.get(embedding["key"])
+    if values is None or max(embedding["columns"]) >= values.shape[1]:
+        return "0123456789abcdef"
+    return cell_order_digest(np.asarray(values)[:, embedding["columns"]])
+
+
 def _fingerprint(mapping: dict[str, Any], *, var_count: int = 3) -> dict[str, Any]:
     defaults = mapping["embeddings"]["defaults"]
     slot, embedding = next((slot, ref) for slot, ref in defaults.items() if ref is not None)
@@ -155,42 +99,58 @@ def _fingerprint(mapping: dict[str, Any], *, var_count: int = 3) -> dict[str, An
         "cellOrder": {
             "embedding": copy.deepcopy(embedding),
             "dimension": dimension,
-            "digest": "0123456789abcdef",
+            # The cells of `_adata()`, in their order: an apply checks the digest
+            # (a placeholder where the mapping names what `_adata()` lacks).
+            "digest": _digest(embedding),
         },
         "dataMapping": mapping,
     }
 
 
 def _var_alias(source_key: str, *, key: str = "copied") -> dict[str, Any]:
-    return {
-        "id": "alias_1",
-        "source": "var",
-        "kind": "continuous",
-        "key": key,
-        "isDeleted": False,
-        "isPurged": False,
-        "sourceField": {"sourceKey": source_key, "kind": "continuous"},
-        "operation": {"type": "copy-field", "source": "var", "sourceKey": source_key},
-        "createdAt": 1,
-    }
+    return files.user_copy("alias_1", key, "var", source_key)
+
+
+class _Bundle:
+    """A session whose head holds ``fields`` (user fields), saved on ``fingerprint``."""
+
+    def __init__(self, fingerprint: dict[str, Any], fields: list[dict[str, Any]] | None = None):
+        self.fingerprint = fingerprint
+        self.fields = fields or []
+
+
+@pytest.fixture(autouse=True)
+def _session_directory(tmp_path: Path) -> None:
+    global _DIRECTORY
+    _DIRECTORY = tmp_path
+
+
+_DIRECTORY = Path()
 
 
 def _apply(bundle: _Bundle, adata: ad.AnnData) -> ad.AnnData:
-    return apply_cellucid_session_to_anndata(
-        bundle,
-        adata,
-        expected_dataset_id="exact",
-        add_highlights=False,
+    path = files.session_file(
+        _DIRECTORY / "mapping.cellucid-session",
+        fingerprint_record=bundle.fingerprint,
+        trackers=[{"id": "t1", "name": "Main", "root": files.state(
+            mapping=bundle.fingerprint.get("dataMapping"), field_overlays=files.overlays(user_fields=bundle.fields),
+        )}],
     )
+    return apply_cellucid_session_to_anndata(adata, path, dry_run=False).adata
 
 
-def test_a_matching_anndata_mapping_is_applied_and_recorded() -> None:
+def test_a_matching_anndata_mapping_passes_every_check() -> None:
     adata = _adata()
     mapping = _anndata_mapping()
-    output = _apply(_Bundle(_fingerprint(mapping)), adata)
-    recorded = output.uns["cellucid"]["session"]["dataset_fingerprint"]
-    assert recorded["dataMapping"] == mapping
-    assert recorded["cellOrder"]["embedding"] == {"key": "X_pca", "columns": [3, 1]}
+    path = files.session_file(
+        _DIRECTORY / "mapping.cellucid-session",
+        fingerprint_record=_fingerprint(mapping),
+        trackers=[{"id": "t1", "name": "Main", "root": files.state(mapping=mapping)}],
+    )
+    plan = apply_cellucid_session_to_anndata(adata, path)
+    # The opening state holds nothing to write: a plan with no rows.
+    assert (plan.step, plan.rows) == ("s0", ())
+    assert plan.apply().applied is False
 
 
 def test_a_session_saved_with_the_removed_export_kind_is_refused() -> None:
@@ -275,7 +235,7 @@ def test_a_raw_mapping_needs_raw() -> None:
 def test_var_count_is_the_size_of_the_mapped_gene_axis(expression: str | None, var_count: int) -> None:
     mapping = _anndata_mapping(expression=expression)
     _apply(_Bundle(_fingerprint(mapping, var_count=var_count)), _adata())
-    with pytest.raises(ValueError, match=f"varCount {var_count + 1} != "):
+    with pytest.raises(ValueError, match=f"saved on a dataset of {var_count + 1} genes?, and this object has {var_count}"):
         _apply(_Bundle(_fingerprint(mapping, var_count=var_count + 1)), _adata())
 
 
@@ -303,7 +263,7 @@ def test_a_gene_is_found_by_the_mapping_gene_name_column() -> None:
     assert output.obs["copied"].tolist() == [3.0, 6.0]
     output = _apply(_Bundle(_fingerprint(mapping), [_var_alias("MATR3")]), _adata())
     assert output.obs["copied"].tolist() == [2.0, 5.0]
-    with pytest.raises(ValueError, match="source gene 'MATR3-1' must exist exactly once"):
+    with pytest.raises(ValueError, match="copies the gene 'MATR3-1', which must exist exactly once"):
         _apply(_Bundle(_fingerprint(mapping), [_var_alias("MATR3-1")]), _adata())
 
 
@@ -329,26 +289,10 @@ def test_a_mapping_without_expression_copies_no_gene() -> None:
 
 
 def test_a_user_defined_category_carrying_centroids_is_refused() -> None:
-    field = {
-        "id": "cat_1",
-        "source": "obs",
-        "kind": "category",
-        "key": "status",
-        "categories": ["A"],
-        "isDeleted": False,
-        "isPurged": False,
-        "codesLength": 2,
-        "codesType": "Uint8Array",
-        "centroidsByDim": {},
-        "sourceField": None,
-        "operation": None,
-        "sourcePages": [],
-        "overlapStrategy": "first",
-        "overlapLabel": None,
-        "intersectionLabels": None,
-        "uncoveredLabel": None,
-        "createdAt": 1,
-    }
+    # Label positions are derived from codes and coordinates whenever an
+    # embedding is shown; a value carrying them is not one this version reads.
+    field = files.user_category("cat_1", "status", ["A"], [0, 0])
+    field["centroidsByDim"] = {}
     with pytest.raises(ValueError, match="unknown centroidsByDim"):
         _apply(_Bundle(_fingerprint(_anndata_mapping()), [field]), _adata())
     field.pop("centroidsByDim")
@@ -361,5 +305,5 @@ def test_a_user_defined_category_carrying_centroids_is_refused() -> None:
 def test_the_apply_path_requires_both_mapping_keys(missing: str) -> None:
     fingerprint = _fingerprint(_anndata_mapping())
     del fingerprint[missing]
-    with pytest.raises(ValueError, match=f"missing {missing}"):
+    with pytest.raises(ValueError, match=f"missing: {missing}"):
         _apply(_Bundle(fingerprint), _adata())

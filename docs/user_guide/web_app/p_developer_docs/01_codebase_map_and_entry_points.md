@@ -37,9 +37,17 @@ Cellucid is intentionally organized into layers so performance-critical code sta
   - Goal: “load only what you need” + predictable caching.
 
 - **App layer** (`cellucid/assets/js/app/`)
-  - **State** (`app/state/`): `DataState` and its managers (fields, filters, colors, highlights, views).
+  - **State** (`app/state/`): `DataState` and its managers (fields, filters,
+    colors, highlights, views); the owners of the state domains
+    (`app/state/domains/`).
+  - **Actions** (`app/actions/`): the one way state changes. Every change and
+    read is an action of one catalogue; controls, agents, Python and R hosts
+    and the history all dispatch them ({doc}`29_action_layer_domains_and_history`).
+  - **History** (`app/history/`): trackers of step trees, undo, redo,
+    branches, the autosave and saved states, the history in words.
   - **UI** (`app/ui/`): DOM wiring and sidebar modules.
-  - **Session + persistence** (`app/session/`, `app/state-serializer/`).
+  - **Sessions** (`app/session/`): the `.cellucid-session` file, session
+    format 4, which holds the history ({doc}`10_sessions_persistence_and_serialization`).
   - Goal: connect data + rendering + UI without hot-path regressions.
 
 ---
@@ -51,6 +59,9 @@ The frontend lives in `cellucid/` (this section is documented from the Python do
 ```
 cellucid/
 ├── index.html                     # Single-page app shell (sidebar + canvas + scripts)
+├── relay/                         # The Cellucid relay: a Cloudflare Worker that makes
+│                                  #   Cellucid a connector in Claude and ChatGPT
+│                                  #   (remote MCP + OAuth; see 32_agents_in_the_tab)
 └── assets/
     ├── css/                       # Design system + themes
     ├── external/                  # Vendored third-party libraries, served from
@@ -75,22 +86,60 @@ cellucid/
         │                          #   so a blocker refusing it cannot stop the app.
         │                          #   schema.js declares every event and parameter
         │                          #   (the GA4 event dictionary and admin setup).
-        ├── app/                   # App layer (state + UI wiring + sessions + analysis)
+        ├── app/                   # App layer (state + actions + history + UI + sessions + analysis)
         │   ├── main.js            # App entry point (bootstrap + dataset load orchestration)
+        │   ├── actions/           # The action catalogue (catalog.js, schema.js,
+        │   │                      #   definitions/<area>.js, definitions/params.js),
+        │   │                      #   the dispatcher, the state domain list (domains.js),
+        │   │                      #   a control's dispatch (control-dispatch.js),
+        │   │                      #   outcomes as JSON (outcome.js), and names to
+        │   │                      #   current objects (targets/: fields.js, pages.js,
+        │   │                      #   views.js, names.js)
+        │   ├── history/           # Trackers and step trees (tree.js), the value pool
+        │   │                      #   (value-pool.js, value-parts.js), the history
+        │   │                      #   (history.js), a dataset's history (dataset-history.js),
+        │   │                      #   autosave and saved states (autosave.js,
+        │   │                      #   autosave-store.js), current.js, exports/
         │   ├── state/             # DataState (state/core) + managers
-        │   │                      #   (fields/filters/colors/highlights/views)
-        │   ├── ui/                # UI coordinator (ui/core) + sidebar modules (ui/modules)
-        │   ├── session/           # Session bundle save/load (.cellucid-session)
-        │   ├── state-serializer/  # Feature-scoped snapshot/restore helpers (used by session)
+        │   │                      #   (fields/filters/colors/highlights/views);
+        │   │                      #   state/domains/: one owner per state domain
+        │   │                      #   (cells.js ... layout.js; cell-positions.js,
+        │   │                      #   fields.js, view-list.js, fingerprint.js);
+        │   │                      #   state/actions/: the state's own action handlers
+        │   ├── ui/                # UI coordinator (ui/core) + sidebar modules (ui/modules;
+        │   │                      #   ui/modules/state/: the State panel;
+        │   │                      #   ui/modules/my-datasets/: My datasets)
+        │   ├── session/           # Session files (.cellucid-session, format 4: the history)
+        │   ├── state-serializer/  # The sidebar's control inventory (ui-controls.js,
+        │   │                      #   controlDomainOf: which domain holds a control)
+        │   ├── library/           # My datasets (my-datasets.js, IndexedDB cellucid-library)
+        │   │                      #   and kept file handles (local-file-handles.js)
+        │   ├── viewer-host/       # A Python or R host's actions (command-handler.js),
+        │   │                      #   pointer delivery, results
+        │   ├── agent/             # Agents in this tab: what they are told
+        │   │                      #   (instructions.js), one tool call and the
+        │   │                      #   relay's tab end (bridge/: tool-call.js,
+        │   │                      #   agent-calls.js, data-guard.js, mcp-tools.js),
+        │   │                      #   the Connect panel (connect/), permissions,
+        │   │                      #   confirm cards and activity lines (presence/),
+        │   │                      #   the chat bar (chat/) and its model providers
+        │   │                      #   (providers/), chats and the history
+        │   │                      #   (history-link.js), the per-dataset switch
+        │   │                      #   "names and summaries only" (data-scope.js)
         │   ├── analysis/          # Analysis module (compute backends + plugins + UI)
         │   ├── community-annotations/ # GitHub-backed annotation voting (auth + sync + cache)
         │   ├── dockable-accordions/   # Sidebar panel docking/undocking
         │   ├── notification-center/   # The toast/notification surface
         │   └── registries/            # Shared registration points
         ├── data/                  # Data sources, input-format registry, link providers
-        │                          #   (data/sources/), AnnData reader worker + views
+        │                          #   (data/sources/), AnnData reader worker + views;
+        │                          #   data/anndata/write/: the AnnData writers (the
+        │                          #   element layer the transcoders share, and a copy
+        │                          #   of the open dataset as a .zarr.zip)
         ├── formats/               # Container readers: hdf5/, zarr/, zip/, rds/,
-        │                          #   text/ (MatrixMarket), io/ (byte sources, decode pool)
+        │                          #   text/ (MatrixMarket), io/ (byte sources, decode pool);
+        │                          #   writers: zarr/writer.js (Zarr v2), zip/writer.js
+        │                          #   (stored ZIP, ZIP64), hdf5/writer.js
         ├── dev/                   # benchmark.js — the measurement harness behind
         │                          #   the Benchmark panel. Lazily
         │                          #   imported; never on the product render path.
@@ -130,7 +179,11 @@ It is the bootstrap orchestrator and intentionally contains *no* per-frame logic
   `apis.google.com`). Adding a CDN dependency means editing this policy, which
   is the intended friction. It grants `'wasm-unsafe-eval'`, so the readers can
   compile the WebAssembly decoders (`assets/wasm/codecs.wasm`), and no
-  JavaScript evaluation.
+  JavaScript evaluation. `blob:` is allowed for images (`img-src`: a figure
+  export's PNG and a picture drawn for the report or an agent), for
+  `connect-src` and for workers (`worker-src`); `connect-src` also allows
+  `https:`, `wss:`, `http:` and `ws:`, since a dataset, a provider's API or
+  the relay can be at any address.
 - The `<canvas id="glcanvas">` used by the WebGL renderer.
 - The sidebar markup (accordion sections, inputs, buttons). Data-source,
   renderer and benchmark controls are authored **disabled** and are enabled
@@ -155,17 +208,24 @@ It is the bootstrap orchestrator and intentionally contains *no* per-frame logic
 - UI initialization (`initUI` from `assets/js/app/ui/core/ui-coordinator.js`)
 - data source registration and initial dataset selection (`DataSourceManager`)
 - dataset loading (obs/var/connectivity/embeddings) via `assets/js/data/data-loaders.js`
-- session persistence (`createSessionSerializer` from `assets/js/app/session/index.js`)
+- session files (`createSessionSerializer` from `assets/js/app/session/index.js`)
+- each dataset's history (`createDatasetHistories` from
+  `assets/js/app/history/dataset-history.js`) and the owners of the state
+  domains (`installStateDomains` from `assets/js/app/state/domains/index.js`)
+- My datasets (`recordDatasetOpened` from `assets/js/app/library/my-datasets.js`,
+  once a dataset is published)
 - analysis initialization (comparison module)
 
 It also exposes dev-friendly globals:
 - `window._cellucidViewer`
 - `window._cellucidState`
+- `window._cellucidHistories` (the dataset histories: `current()` is the
+  history of the dataset shown)
 - `window._comparisonModule` (analysis)
 
 ### 3) `cellucid/assets/js/app/ui/core/ui-coordinator.js` (UI coordinator)
 
-`initUI()` (about 850 lines of wiring) does three things:
+`initUI()` (about 1,200 lines of wiring) does three things:
 - collects DOM references once (`ui/core/dom-cache.js`)
 - initializes UI modules (`ui/modules/*`)
 - wires callbacks across modules without creating tight coupling
@@ -192,7 +252,11 @@ The public API is assembled from manager mixins (see `app/state/managers/*`).
 Each folder of `cellucid/assets/js/` that is edited often has a short
 `README.md` (what it owns, entry points, invariants, tests):
 `formats/`, `formats/io/`, `data/`, `data/anndata/`, `data/sources/`,
-`rendering/`, `utils/`, `app/`. `assets/js/ARCHITECTURE.md` holds the
+`rendering/`, `utils/`, `app/`, `app/actions/`, `app/history/`,
+`app/history/exports/`, `app/library/`, `app/session/`, `app/state/domains/`,
+`app/state-serializer/`, `app/agent/` (and its `bridge/`, `chat/`,
+`presence/`), `app/ui/modules/state/`,
+`app/ui/modules/my-datasets/`. `assets/js/ARCHITECTURE.md` holds the
 layers, the glossary (one word per concept) and the full "where to change X"
 index; {doc}`20_read_path_architecture` follows one read from a source to
 the pixels, naming the module that owns each step; the decision records
@@ -210,13 +274,18 @@ say why each subsystem is built the way it is.
 | “How much memory may the app use?” | `cellucid/assets/js/data/memory-budget.js` | `data/memory-census.js`, `app/page-memory.js` |
 | “Where are the codecs and decode workers?” | `cellucid/assets/js/formats/io/decode-pool.js` | `formats/io/decoder-choice.js`, `formats/io/wasm-codecs.js` |
 | “Where is a link provider (Zenodo, GEO, CELLxGENE, …)?” | `cellucid/assets/js/data/sources/providers/` | `data/sources/registry.js` |
-| “How does the Python or R viewer talk to the page?” | `cellucid/assets/js/data/viewer-protocol.js` | `data/viewer-channel.js`, `data/viewer-host-source.js`, `app/viewer-host-*.js` |
+| “How does the Python or R viewer talk to the page?” | `cellucid/assets/js/data/viewer-protocol.js` | `data/viewer-channel.js`, `data/viewer-host-source.js`, `app/viewer-host/` (`command-handler.js`: a host's `action` command dispatched as an action) |
+| “Where is an action defined, and what does it change?” | `cellucid/assets/js/app/actions/definitions/<area>.js` | `app/actions/catalog.js`, `app/actions/dispatcher.js`, the module that provides it (`app/actions/README.md`), {doc}`29_action_layer_domains_and_history` |
+| “How does a step name a field, a page or a view?” | `cellucid/assets/js/app/actions/targets/` | `app/actions/definitions/params.js` |
+| “What does a step, an undo or a session hold of a piece of state?” | `cellucid/assets/js/app/actions/domains.js` | `app/state/domains/<domain>.js`, `app/state/domains/README.md` |
+| “Where are undo, redo, branches and the autosave?” | `cellucid/assets/js/app/history/history.js` | `app/history/tree.js`, `app/history/autosave.js`, `app/ui/modules/state/` (the State panel) |
+| “Where is My datasets?” | `cellucid/assets/js/app/library/my-datasets.js` | `app/library/local-file-handles.js`, `app/ui/modules/my-datasets/` |
 | “Where are filters implemented?” | `cellucid/assets/js/app/state/managers/filter-manager.js` | `cellucid/assets/js/app/ui/modules/filter-controls.js` |
 | “Where does color-by happen?” | `cellucid/assets/js/app/state/managers/color-manager.js` | `cellucid/assets/js/app/ui/modules/legend-renderer.js` |
 | “How are unread, zero and coloured cells drawn?” | `cellucid/assets/js/rendering/alpha-visibility.js` | `rendering/read-cell-layer.js`, `rendering/high-perf-renderer.js` |
 | “Where do highlights live?” | `cellucid/assets/js/app/state/managers/highlight-manager.js` | `cellucid/assets/js/app/ui/modules/highlight-controls.js` |
 | “Where is multi-view (‘Keep view’) handled?” | `cellucid/assets/js/app/state/managers/view-manager.js` | `cellucid/assets/js/app/ui/modules/view-controls.js` |
-| “Where are sessions saved/loaded?” | `cellucid/assets/js/app/session/session-serializer.js` | {doc}`10_sessions_persistence_and_serialization` |
+| “Where are sessions saved/loaded?” | `cellucid/assets/js/app/session/session-serializer.js` | `app/session/history-file.js` (format 4), `app/session/README.md`, {doc}`10_sessions_persistence_and_serialization` |
 | “Where is analysis computed?” | `cellucid/assets/js/app/analysis/` | {doc}`11_analysis_architecture` |
 | “Where is figure export implemented?” | `cellucid/assets/js/app/ui/modules/figure-export/README.md` | {doc}`12_figure_export_architecture` |
 | “Where is community annotation?” | `cellucid/assets/js/app/ui/modules/community-annotation-controls.js` | `cellucid/assets/js/app/community-annotations/REPO_SETUP.md` |
@@ -229,7 +298,15 @@ These show up everywhere (state, UI, analysis, sessions):
 
 - **Dataset**: a logical unit with a stable `datasetId` (see {doc}`../b_data_loading/06_dataset_identity_why_it_matters`).
 - **Field**: an `obs` categorical/continuous field, or a `var` “gene expression” field.
-- **View**: the **live** view or a **snapshot** view (created by “Keep view”).
+- **View**: the **live** view or a **kept** view (created by “Keep view”; the
+  code calls it a snapshot view). An action names a view `"live"` or
+  `"View N"`, its row in the Compare views list.
+- **Action**: a named, parameterised change or read of the catalogue
+  (`color.by`, `filter.category.visibility`); every state change is one.
+- **State domain**: one of the fifteen units state is captured, undone and
+  saved in (`cells`, `mapping`, … `layout`).
+- **Step**, **tracker**: one recorded action in the history; a tree of
+  steps of one dataset.
 - **Visibility**: what points are currently shown after filters/outliers.
 - **Highlight**: annotation overlay on top of visibility (can exist even for filtered-out points).
 - **Highlight page**: independent collection of highlight groups; switching pages changes overlay state.

@@ -247,7 +247,7 @@ the notebook widget, whose token is never in an address.
 Practical guidance:
 - keep the server bound to localhost unless you have a strong reason,
 - don’t embed the viewer inside untrusted web pages,
-- and treat session bundles as potentially sensitive (they can encode selections, highlights, and analysis state).
+- and treat session files as potentially sensitive (they can encode selections, highlights, and analysis state).
 
 ## Troubleshooting security/networking issues
 
