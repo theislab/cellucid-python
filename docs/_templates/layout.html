@@ -1,5 +1,10 @@
 {% extends "pydata_sphinx_theme/layout.html" %}
 
+{# The page title names its guide (conf.py, _title_suffix): no two pages share one. #}
+{% block htmltitle %}
+<title>{{ title|striptags|e }}{{ cellucid_title_suffix|e }}</title>
+{% endblock %}
+
 {% block extrahead %}
 {{ super() }}
 <!-- Google Analytics -->

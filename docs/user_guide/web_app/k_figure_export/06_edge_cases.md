@@ -1,4 +1,4 @@
-# Edge cases
+# Figure export edge cases
 
 **Audience:** computational users + power users  
 **Time:** 10–20 minutes  

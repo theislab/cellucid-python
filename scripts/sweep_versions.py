@@ -150,14 +150,28 @@ DECLARATIONS: tuple[Declaration, ...] = (
     Declaration(
         "cellucid",
         "index.html",
-        r'(?m)^    "softwareVersion": "([^"]+)",$',
+        r'(?m)^ +"softwareVersion": "([^"]+)",$',
         RELEASE,
-        "the structured data search engines read",
+        "the structured data search engines read (the WebApplication node of its @graph)",
         marker_alternative='<meta name="cellucid-version"',
         marker_reason=(
             "JSON-LD has no comment syntax and the block is hashed into the "
             "Content-Security-Policy; the marked cellucid-version meta element "
             "in the same file declares the same value"
+        ),
+    ),
+    Declaration(
+        "cellucid",
+        "relay/server.json",
+        r'(?m)^  "version": "([^"]+)",$',
+        RELEASE,
+        "the relay's entry in the official MCP Registry, published once per "
+        "release with mcp-publisher",
+        marker_alternative=f'"cellucid-version-marker": "{MARKER}"',
+        marker_reason=(
+            "JSON has no comment syntax, so the marker is a field of the "
+            "registry's publisher-provided _meta object, as npm's is a field of "
+            "its config object"
         ),
     ),
     Declaration(

@@ -1,3 +1,11 @@
+---
+myst:
+  html_meta:
+    description: "Documentation for Cellucid, the free, open-source web app for interactive single-cell data visualization, and its Python and R packages."
+og:title: "Cellucid documentation"
+og:description: "Cellucid is a free, open-source web app for interactive single-cell data visualization: millions of cells in 2D and 3D UMAP, in your browser. The web app, Python and R guides."
+---
+
 # Cellucid
 
 <!-- The home page. Its look lives in `_static/home.css` (every rule scoped to
