@@ -562,6 +562,35 @@ be redeployed). The main changes are:
 - A dataset whose published sample view is of another session format, as happens
   for minutes during a release, opens on its default view with one short line
   instead of an error.
+- A gene chosen while a MatrixMarket folder's matrix is still being read is
+  read with its values once they arrive. It was refused as having "no value in
+  any cell", because the page counted genes as read for every cell while the
+  open cells grew; the gene sample now stays "none read" until the matrix says
+  otherwise, and a gene read meanwhile waits for it.
+- A field chosen from a menu stays chosen while it loads. A refresh of the
+  menus meanwhile (the gene list arriving late, an annotation connection
+  changing) showed **None** until the read ended; a stopped choice no longer
+  leaves the menus disabled.
+- When the browser's graphics stop working as Cellucid starts (a WebGL context
+  already lost, as Safari gives after a GPU reset), startup says so and asks
+  for a reload instead of failing on a shader. A field or gene with nothing to
+  draw is refused before the active field changes.
+- After the browser restores a lost graphics context (a GPU reset, a driver
+  update), a black, white or grid background comes back as it was instead of
+  transparent, and so does the chosen backdrop look with its motion.
+- On a slow GPU, smoke, flowing velocity particles and a backdrop's motion no
+  longer slow the page: their frames give way when the page's own frames run
+  late, so clicks and changes are shown promptly. A GPU that keeps up draws
+  them at full rate as before.
+- **Search and link previews.** The description, canonical, Open Graph and
+  Twitter tags are the first thing in the page head: a link preview reads only
+  a prefix of the page (Slack the first 32 KB), and they used to start after
+  the 116 KB import map, so a link to www.cellucid.com in Slack showed its
+  title only. The structured data adds a WebSite node (the site name a search
+  result shows), and the crawlable text, the JSON-LD and `llms.txt` name every
+  format the app opens (they named AnnData only). `llms.txt` gains the key
+  documentation pages, the MCP connector and how to cite. `relay/server.json`
+  is the relay's entry for the official MCP Registry.
 
 ### Python
 
@@ -665,6 +694,10 @@ be redeployed). The main changes are:
   is refused.
 - `cellucid serve` and `show_anndata()` refuse a `.cellucid-session` or
   `.cellucid-library` file, saying what it is.
+- On Windows, a file `cellucid serve` is serving can be saved over (a new
+  file moved over it, as `write_h5ad` to another name and a rename does) or
+  removed while the viewer reads it; it failed with "Access is denied". The
+  viewer is then told the file is a new version.
 
 ### Releases
 
@@ -682,6 +715,11 @@ be redeployed). The main changes are:
   class is gone). A failed run is re-run with **Re-run jobs**.
 - The headings of the released 0.9.3 to 0.9.6 carry their publication dates;
   the bump that opens a version dates the one released before it.
+- The PyPI release run no longer requires the source distribution to match
+  the conda recipe's `source.sha256` (`validate_release.py` lost
+  `--match-recipe-digest`): every source edit made that digest stale and only
+  the release noticed. It is recorded from the published PyPI file when the
+  recipe goes to conda-forge (`scripts/publishing/PUBLISHING.md`).
 
 ### Docs
 
@@ -725,6 +763,13 @@ be redeployed). The main changes are:
   generated action reference, the agent data guard, the browser AnnData copy
   in the Cellucid-ready AnnData specification, and the Python and R session
   readers.
+- **Search results, link previews and AI assistants.** Every page has a meta
+  description and Open Graph and Twitter card tags (`sphinxext-opengraph`,
+  pinned in the `docs` extra), so a shared docs link shows a card with the
+  app's preview image; the home page is titled *Cellucid documentation*, and
+  every guide page's title names its guide, so the Python, R and web app pages
+  of one name are no longer duplicate titles. `sphinx-llms-txt` writes
+  https://docs.cellucid.com/en/latest/llms.txt and `llms-full.txt`.
 
 ## [0.9.6] - 2026-11-01
 

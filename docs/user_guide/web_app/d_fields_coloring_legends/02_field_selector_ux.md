@@ -178,7 +178,7 @@ does not contain it”. See {doc}`07_genes_in_the_built_in_samples`.
 ```
 
 :::{note}
-Loading a gene can take time (especially on remote datasets). While a gene is loading, Cellucid temporarily disables other selectors so the active field state can’t race.
+Loading a field or a gene can take time (especially on remote datasets). While one is loading, the menus show the field or gene you chose and are disabled until it is shown, so the active field state can’t race; a refresh of the menus meanwhile (the gene list arriving, an annotation connection changing) keeps showing your choice.
 :::
 
 ### What the list contains

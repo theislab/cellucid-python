@@ -11,7 +11,6 @@ release.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import subprocess
@@ -117,12 +116,20 @@ def _validate_recipe_text(recipe: str, version: str) -> str:
         _recipe_requirements(recipe, "run", "test") == CURRENT_CONDA_RUNTIME_REQUIREMENTS,
         "meta.yaml runtime requirements do not match the validated current contract",
     )
-    return digest_matches[0]
 
 
-def validate_recipe(version: str) -> str:
-    """Validate the downstream recipe and return its source-distribution digest."""
-    return _validate_recipe_text(_read("scripts/publishing/meta.yaml"), version)
+def validate_recipe(version: str) -> None:
+    """Validate the downstream recipe's identity and requirements.
+
+    Its ``source.sha256`` is a fact about the source distribution PyPI holds,
+    recorded from that file when the recipe goes to conda-forge
+    (``scripts/publishing/PUBLISHING.md``); only its form is checked here. It
+    used to be required, at release, to equal the candidate archive: every
+    source edit made it stale, nothing before the release noticed, and a
+    release failed on it (0.9.6's first PyPI run; 0.9.7's candidate was stale
+    again). The owner dropped that gate from the release run (2026-11-07).
+    """
+    _validate_recipe_text(_read("scripts/publishing/meta.yaml"), version)
 
 
 #: Top-level directories that must never reach the public source distribution.
@@ -141,18 +148,9 @@ def _sdist_excluded_members(archive: tarfile.TarFile, version: str) -> tuple[str
     )
 
 
-def validate_sdist(path: Path, version: str, expected_digest: str | None) -> Path:
-    """Require one normalized source distribution, optionally matching the recipe.
-
-    ``expected_digest`` is ``None`` on the push path. The conda recipe records the
-    SHA-256 of the *published* sdist, so it can only be correct once the artifact
-    it names exists; asserting it on every push made a hand-maintained constant a
-    function of every byte of packaged source, and every source edit broke the
-    build gate on all ten matrix jobs until someone remembered to recompute it.
-    That is a tripwire on unrelated work, not a gate. The structural checks below
-    run on every push, where they catch real packaging mistakes; the digest is
-    checked at release, where it means something.
-    """
+def validate_sdist(path: Path, version: str) -> Path:
+    """Require one normalized source distribution named for ``version`` that
+    ships none of ``EXCLUDED_SDIST_DIRECTORIES``."""
     if path.is_dir():
         candidates = sorted(path.glob("cellucid-*.tar.gz"))
         _require(
@@ -165,15 +163,6 @@ def validate_sdist(path: Path, version: str, expected_digest: str | None) -> Pat
         path.name == f"cellucid-{version}.tar.gz",
         f"source distribution must be named cellucid-{version}.tar.gz",
     )
-    if expected_digest is not None:
-        actual_digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        _require(
-            actual_digest == expected_digest,
-            (
-                f"source-distribution SHA-256 {actual_digest} does not match "
-                f"meta.yaml {expected_digest}"
-            ),
-        )
     with tarfile.open(path, mode="r:gz") as archive:
         excluded = _sdist_excluded_members(archive, version)
     _require(
@@ -377,15 +366,6 @@ def main() -> int:
         type=Path,
         help="Normalized source distribution, or directory containing exactly one.",
     )
-    parser.add_argument(
-        "--match-recipe-digest",
-        action="store_true",
-        help=(
-            "Also require the source distribution to match the SHA-256 recorded "
-            "in the conda recipe. Meaningful only for the artifact being "
-            "published; see validate_sdist()."
-        ),
-    )
     arguments = parser.parse_args()
     version = validate_release(
         arguments.tag,
@@ -397,20 +377,9 @@ def main() -> int:
         _require(isinstance(event, dict), "the GitHub event file is not a JSON object")
         validate_release_event(event, arguments.tag, version)
     if arguments.sdist is not None:
-        # `validate_recipe` still runs on every push: the recipe's name, version,
-        # entry point and dependency pins are facts about the source and must
-        # stay true. Only the digest, which is a fact about a published file,
-        # waits for the release.
-        expected_digest = validate_recipe(version)
-        validated_sdist = validate_sdist(
-            arguments.sdist,
-            version,
-            expected_digest if arguments.match_recipe_digest else None,
-        )
-        if arguments.match_recipe_digest:
-            print(f"Source distribution matches the recipe: {validated_sdist}")
-        else:
-            print(f"Source distribution is well formed: {validated_sdist}")
+        validate_recipe(version)
+        validated_sdist = validate_sdist(arguments.sdist, version)
+        print(f"Source distribution is well formed: {validated_sdist}")
     print(f"Cellucid Python release contract is valid for v{version}.")
     return 0
 

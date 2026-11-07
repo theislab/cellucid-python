@@ -352,7 +352,7 @@ whole or has given it up (`deferWebGLErrorCheck`'s `readAfter`), because in
 Chromium every `getError` is a round trip that waits for all commands queued
 before it, a whole frame of a large view, even after the fence passed; the
 permute pass reads the generic value of its attribute from the state shadow
-(`gl-state-shadow.js`, read once where the context is made) instead of
+(`gl-state-shadow.js`, read where the context is made and again where it is restored) instead of
 `getVertexAttrib`, which waited the same way. A tree built under a priority
 the cells no longer have, whose order that priority decided, is dropped when
 it lands (`builtUnderStalePriority`, the rule `setCellPriority` applies to the
@@ -1089,7 +1089,7 @@ preview sends on most pointer moves), any viewer input that changes something (a
 selection gesture, `Alt`, navigation keys outside text fields, releasing a held
 key), and any canvas resize marks the next frame for drawing — hovering or typing
 into a sidebar field draws nothing; held navigation keys, inertia, smooth zoom, a grid fade, smoke mode
-while it animates or is still waiting for its noise volumes, an overlay while it draws something that moves (velocity particles flowing in a presented view, or a spawn table being built for one; with no field for the layout, nothing visible, particles off at this level of detail, or in smoke mode it keeps no frames going), visible highlights in a quality whose highlight style animates (only `full`: its ring pulses and shimmers; every other quality draws a still ring, and a selection there costs nothing while the view is idle; a frame the pulse alone asks for is paced by `rendering/ambient-frame-pacing.js`, which measures each drawn frame from its start to the first task after it and holds the next pulse-only frame until the main thread has been free that long; while it pulses, each pane's base layer, everything under the highlights, is kept in a framebuffer of `rendering/pulse-layer-cache.js` and a pulse-only frame draws only the layer over it, pixel for pixel the frame drawn whole; a multisampled frame keeps the scene target's own samples instead, and a pulse-only frame resets and draws again only the samples the rings cover, which the ring pass of the frame before marked in the stencil, `rendering/pulse-sample-mask.js`), and live projectiles
+while it animates or is still waiting for its noise volumes, an overlay while it draws something that moves (velocity particles flowing in a presented view, or a spawn table being built for one; with no field for the layout, nothing visible, particles off at this level of detail, or in smoke mode it keeps no frames going), visible highlights in a quality whose highlight style animates (only `full`: its ring pulses and shimmers; every other quality draws a still ring, and a selection there costs nothing while the view is idle; a frame that only an ambient animation asks for (a backdrop's ambient motion, smoke that animates, flowing velocity particles, the highlight pulse) is paced by `rendering/ambient-frame-pacing.js` under two rules: it waits until the main thread has been free as long as the last frames held it, and, once the page's frames have run a display frame late or more while the GPU was still running the viewer's last frame (a fence read when a frame is due, then every half display interval until the GPU finishes, so a page that stopped meanwhile, a hidden tab or a long task, is not counted as GPU time), it waits as long again, the viewer timing the frames in between without drawing; the display interval is measured on an idle GPU before the first ambient frame; a GPU that keeps up is never held back, and an overlay's frames that converge (a spawn table being built or not yet taken up) are drawn at once; while it pulses, each pane's base layer, everything under the highlights, is kept in a framebuffer of `rendering/pulse-layer-cache.js` and a pulse-only frame draws only the layer over it, pixel for pixel the frame drawn whole; a multisampled frame keeps the scene target's own samples instead, and a pulse-only frame resets and draws again only the samples the rings cover, which the ring pass of the frame before marked in the stencil, `rendering/pulse-sample-mask.js`), and live projectiles
 keep frames drawing, and so does a camera motion still waiting for its
 `camera-settled` event and an adaptive LOD still stepping toward the level its
 camera distance asks for (hysteresis moves one level per drawn frame; the
@@ -1455,12 +1455,23 @@ detail, culling, forced level, cell priority), the live cells, each kept view
 with its own geometry, centroids and colours, the highlights
 (`HighlightTools#resumeRendering`), the connectivity edges (the layer's
 `suspend`/`resume`), the grid, studio and centroid programs, the antialiasing
-target and smoke settings; the velocity overlay and the smoke volume are drawn
-again by their owners (`onGraphicsReset`, the smoke source change).
+target and smoke settings, the backdrop look with its ambient motion; the
+velocity overlay and the smoke volume are drawn again by their owners
+(`onGraphicsReset`, the smoke source change). A restored context has every
+value of its state back at the initial one, so the viewer sets again what it
+set on the context itself (`applyViewerGlState`: depth test, blending and the
+background's clear colour, without which a black, white or grid background
+cleared to transparent black), and the state shadow forgets what it knew and
+reads the context afresh (`primeGlState`, `gl-state-shadow.js`).
 Filters, selections, kept views and analyses never leave the page. Only if
 restoring fails does the dialog offer Reload, and the captured session is
 written to disk first. `tests/browser/graphics-context-restore.spec.mjs`
-proves the same pixels after a restore on every engine.
+proves it on every engine, on the studio and the black background: a steady
+pulse frame before and after submits the same draws, programs and uniforms
+(`helpers/gl-submissions.mjs`), and draws the same pixels (on hosted macOS
+Firefox, where every GPU object of the restored context is new, within the
+rounding bound of `helpers/hosted-gl.mjs`); a backdrop look comes back with
+its ambient motion.
 
 Mitigation:
 - reduce smoke settings / disable heavy overlays

@@ -42,7 +42,7 @@ from cellucid._anndata_files import (
     classify_anndata_path,
     read_anndata_contents,
 )
-from cellucid._file_versions import path_version
+from cellucid._file_versions import open_shared, path_version
 from cellucid.anndata_server import AnnDataServer
 from cellucid.prepare_data._priority import ORIGINAL_POSITION_COLUMN, CellPriority, prefix_levels
 
@@ -417,6 +417,40 @@ def test_a_file_is_read_with_exact_ranges(tmp_path: Path) -> None:
         for absent in ("/_cellucid/anndata/x.h5ad", "/_cellucid/anndata/store-contract.h5ad/x",
                        "/store-contract.h5ad", "/_cellucid/anndata/"):
             assert _request(host, port, "GET", absent)[0] == 404, absent
+
+
+def test_a_served_file_is_held_only_while_its_bytes_are_sent(tmp_path: Path) -> None:
+    """A person saves a new version over a served file -- written to another
+    file and moved over it, as ``write_h5ad`` to a temporary name does -- or
+    removes it. On Windows no file held open can have another moved over it,
+    so the server holds a served file only while it sends its bytes: right
+    after any answer without a body (``HEAD``, the dataset list) the file is
+    replaced, every time (a handle still held then failed the save with
+    "Access is denied", Python package run on windows-latest, 2026-11-07).
+    While bytes are sent it is opened sharing deletion (``open_shared``): it
+    can be removed meanwhile, and the open file keeps reading the version
+    it opened."""
+    source = tmp_path / "x.h5ad"
+    _in_priority_order(_adata()).write_h5ad(source)
+    route = "/_cellucid/anndata/store-contract.h5ad"
+    with _serving(source) as (_server, host, port):
+        for attempt in range(40):
+            if attempt % 2:
+                _request(host, port, "HEAD", route)
+            else:
+                _json(host, port, "/_cellucid/datasets")
+            replacement = tmp_path / f"saved-{attempt}.h5ad"
+            replacement.write_bytes(source.read_bytes())
+            os.replace(replacement, source)
+
+    removed = tmp_path / "removed.bin"
+    removed.write_bytes(b"its version")
+    with open_shared(removed) as held:
+        removed.unlink()
+        assert held.read() == b"its version"
+    assert not removed.exists()
+    with pytest.raises(FileNotFoundError):
+        open_shared(removed)
 
 
 def test_a_file_that_changes_on_disk_names_its_new_version(tmp_path: Path) -> None:

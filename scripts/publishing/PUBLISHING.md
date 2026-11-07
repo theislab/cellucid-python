@@ -37,7 +37,7 @@ python -m sphinx -W --keep-going -b html docs docs/_build/html
 python -m pip install "build==1.5.0" "twine==6.2.0"
 SOURCE_DATE_EPOCH=315532800 python -m build
 python scripts/normalize_sdist.py dist
-python scripts/validate_release.py --tag v0.9.7 --sdist dist --match-recipe-digest  # CELLUCID_VERSION
+python scripts/validate_release.py --tag v0.9.7 --sdist dist  # CELLUCID_VERSION
 python -m twine check --strict dist/*
 ```
 
@@ -48,14 +48,16 @@ requirements for a conda-forge recipe submission. Before opening a downstream
 pull request:
 
 1. verify the version and runtime requirements equal the Python package;
-2. require the normalized candidate digest to equal `source.sha256` before
-   publication (`--match-recipe-digest` above, the same check the publish
-   workflow makes: update `source.sha256` whenever the source distribution
-   changes, before the GitHub Release is published);
-3. download the published source distribution;
-4. require its SHA-256 digest to equal the already-gated `source.sha256`;
-5. run the recipe import, `pip check`, version, and CLI tests; and
-6. submit the recipe through the conda-forge review process.
+2. download the source distribution PyPI published for that version and
+   record its SHA-256 digest as `source.sha256`;
+3. run the recipe import, `pip check`, version, and CLI tests; and
+4. submit the recipe through the conda-forge review process.
+
+The digest is recorded from the published file, never checked before it: a
+release run that required the candidate archive to match it failed whenever
+the source had changed since it was last recorded (0.9.6's first PyPI run),
+and nothing before the release could notice. The release run checks only the
+recipe's identity and requirements.
 
 The recipe is downstream metadata. It is never sent to PyPI and does not change
 the Python wheel.

@@ -91,7 +91,7 @@ from ._contracts import (
     _require_dataset_id,
     _require_dataset_name,
 )
-from ._file_versions import file_version, path_version
+from ._file_versions import file_version, open_shared, path_version
 from ._launch_defaults import launch_defaults
 from ._plural import plural
 from ._served_store import NotReady, StoreBody, require_cache_bytes
@@ -412,13 +412,17 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
         except ValueError:
             return False
 
-    def _not_modified(self, etag: str) -> bool:
-        """Answer 304 when the browser already holds this version (``If-None-Match``)."""
+    def _holds_version(self, etag: str) -> bool:
+        """Whether the browser already holds this version (``If-None-Match``)."""
         condition = self._request_headers().get("If-None-Match")
         if condition is None:
             return False
         tags = {tag.strip().removeprefix("W/") for tag in condition.split(",")}
-        if etag not in tags and "*" not in tags:
+        return etag in tags or "*" in tags
+
+    def _not_modified(self, etag: str) -> bool:
+        """Answer 304 when the browser already holds this version (``If-None-Match``)."""
+        if not self._holds_version(etag):
             return False
         self.send_response(HTTPStatus.NOT_MODIFIED)
         self.send_header("ETag", etag)
@@ -450,29 +454,48 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
         The body goes from the page cache to the socket with ``sendfile``
         (``socket.sendfile``; a plain copy loop where the platform has none):
         no read into Python, no copy per request, nothing held in memory.
+
+        The file is held open (``open_shared``) only while its body is sent:
+        an answer without one (``HEAD``, 304, 416, an empty file) is sent
+        after the file is closed. On Windows a file held open cannot have
+        another moved over it (a person's ``write_h5ad`` to a temporary name
+        and a rename; ``open_shared`` lets it be removed, not replaced), and a
+        handle still held after the answer arrived failed that save with
+        "Access is denied" (Python package run on windows-latest, 2026-11-07).
         """
         try:
-            file = open(path, "rb", buffering=0)  # noqa: SIM115 - closed below
+            file = open_shared(path)
         except OSError:
             self.send_error_response(404, f"{path.name} is no longer readable")
             return
-        with file:
+        try:
             size, etag = file_version(file.fileno())
-            if self._not_modified(etag):
-                return
-            interval = self._range_interval(size, etag)
-            if interval is False:
-                self.send_range_not_satisfiable(size)
-                return
+            interval = None if self._holds_version(etag) else self._range_interval(size, etag)
             assert interval is not True
-            length = self._send_head(size=size, interval=interval, etag=etag)
-            if head_only or length == 0:
+            sends_body = (
+                not head_only
+                and size > 0
+                and interval is not False
+                and not self._holds_version(etag)
+            )
+            if not sends_body:
+                file.close()
+                if self._not_modified(etag):
+                    return
+                if interval is False:
+                    self.send_range_not_satisfiable(size)
+                    return
+                self._send_head(size=size, interval=interval, etag=etag)
                 return
+            assert interval is not False
+            length = self._send_head(size=size, interval=interval, etag=etag)
             sent = self.connection.sendfile(file, 0 if interval is None else interval[0], length)
             if sent != length:
                 # The file shrank after its size was sent: the response
                 # cannot be completed, so the connection is closed.
                 self.close_connection = True
+        finally:
+            file.close()
 
     def _send_bytes(self, body: StoreBody, etag: str, *, head_only: bool) -> None:
         """Answer bytes made on request: only the interval asked for is made,
@@ -1154,7 +1177,7 @@ class AnnDataServer:
             body = f"Not found: {route}".encode()
             return 404, {"Content-Type": "text/plain", "Content-Length": str(len(body))}, body
         try:
-            file = None if not isinstance(resolved, Path) else open(resolved, "rb", buffering=0)  # noqa: SIM115 - closed below
+            file = None if not isinstance(resolved, Path) else open_shared(resolved)
         except OSError:
             body = f"{route} is no longer readable".encode()
             return 404, {"Content-Type": "text/plain", "Content-Length": str(len(body))}, body

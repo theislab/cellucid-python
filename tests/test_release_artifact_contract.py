@@ -56,10 +56,6 @@ def _write_source_distribution(
             archive.addfile(unsafe, io.BytesIO(b"x"))
 
 
-def _digest_of(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def test_manifest_prunes_the_tests_directory() -> None:
     """The one line that holds the tests out of the sdist must stay present.
 
@@ -74,11 +70,7 @@ def test_manifest_prunes_the_tests_directory() -> None:
 def test_source_distribution_may_not_ship_excluded_directories(
     tmp_path: Path, excluded_directory: str
 ) -> None:
-    """A matching digest must not be enough to pass an archive that ships them.
-
-    Deleting ``MANIFEST.in`` republishes ``tests/`` to PyPI, and before this
-    check the release gate still passed once the digest was re-recorded.
-    """
+    """Deleting ``MANIFEST.in`` would republish ``tests/`` to PyPI."""
     archive_path = tmp_path / "cellucid-0.9.1.tar.gz"
     _write_source_distribution(
         archive_path,
@@ -87,7 +79,7 @@ def test_source_distribution_may_not_ship_excluded_directories(
     )
 
     with pytest.raises(SystemExit) as excluded_failure:
-        validate_sdist(archive_path, "0.9.1", _digest_of(archive_path))
+        validate_sdist(archive_path, "0.9.1")
 
     assert excluded_directory in str(excluded_failure.value)
     assert "test_smuggled.py" in str(excluded_failure.value)
@@ -97,7 +89,7 @@ def test_source_distribution_without_excluded_directories_passes(tmp_path: Path)
     archive_path = tmp_path / "cellucid-0.9.1.tar.gz"
     _write_source_distribution(archive_path, timestamp=1_700_000_000)
 
-    assert validate_sdist(archive_path, "0.9.1", _digest_of(archive_path)) == archive_path
+    assert validate_sdist(archive_path, "0.9.1") == archive_path
 
 
 def test_source_distribution_excludes_only_whole_directory_names(tmp_path: Path) -> None:
@@ -109,7 +101,7 @@ def test_source_distribution_excludes_only_whole_directory_names(tmp_path: Path)
         extra_members=("cellucid-0.9.1/src/cellucid/testing_helpers.py",),
     )
 
-    assert validate_sdist(archive_path, "0.9.1", _digest_of(archive_path)) == archive_path
+    assert validate_sdist(archive_path, "0.9.1") == archive_path
 
 
 def test_source_distribution_normalization_is_byte_reproducible(tmp_path: Path) -> None:
@@ -215,11 +207,9 @@ def test_source_distribution_normalization_enforces_the_release_size_limit(
 
 def test_checked_in_downstream_recipe_is_one_exact_current_contract() -> None:
     version = validate_release(tag=None)
-    digest = validate_recipe(version)
+    validate_recipe(version)
 
     assert version == "0.9.7"
-    assert len(digest) == 64
-    assert digest == digest.lower()
 
     project = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
         "project"

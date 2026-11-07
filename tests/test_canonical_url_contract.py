@@ -225,6 +225,77 @@ def test_sphinx_declares_the_canonical_docs_host_and_publishes_a_sitemap() -> No
     assert re.search(r'"sphinx-sitemap==\d+\.\d+\.\d+",', pyproject)
 
 
+def test_docs_pages_carry_a_description_a_link_card_and_a_unique_title() -> None:
+    """Search results and link previews of every documentation page.
+
+    sphinxext-opengraph gives each page a meta description and Open Graph tags
+    on the canonical host, with the web app's 1200 x 630 card image (the URL
+    cellucid's tests/seo-head-contract.test.mjs pins); a title suffix names the
+    guide, so the Python, R and web app pages of one name stay distinct.
+    """
+    conf = (DOCS_ROOT / "conf.py").read_text(encoding="utf-8")
+    assert '"sphinxext.opengraph",' in conf
+    assert "ogp_site_url = html_baseurl" in conf
+    assert 'ogp_image = "https://www.cellucid.com/assets/img/og-preview.jpg"' in conf
+    assert '<meta name="twitter:card" content="summary_large_image" />' in conf
+    assert 'ogp_social_cards = {"enable": False}' in conf
+    for prefix in ("user_guide/web_app/", "user_guide/python_package/", "user_guide/r_package/"):
+        assert f'("{prefix}", " — Cellucid ' in conf
+    assert 'app.connect("html-page-context", _title_suffix, priority=600)' in conf
+    # The reading card (Audience, Time, ...) leaves the doctree before the
+    # extension reads it, so 172 descriptions are not one boilerplate.
+    assert 'app.connect("html-page-context", _drop_reading_card, priority=400)' in conf
+    layout = (DOCS_ROOT / "_templates" / "layout.html").read_text(encoding="utf-8")
+    assert "<title>{{ title|striptags|e }}{{ cellucid_title_suffix|e }}</title>" in layout
+
+    index = (DOCS_ROOT / "index.md").read_text(encoding="utf-8")
+    front_matter = index.split("---\n")[1]
+    assert "myst:\n  html_meta:\n    description: " in front_matter
+    assert 'og:title: "Cellucid documentation"' in front_matter
+
+    pyproject = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert re.search(r'"sphinxext-opengraph==\d+\.\d+\.\d+",', pyproject)
+
+
+def test_no_two_pages_of_one_guide_share_a_title() -> None:
+    """A page's <title> is its first heading plus its guide's suffix (conf.py)."""
+    import json
+
+    guides = ("user_guide/web_app/", "user_guide/python_package/", "user_guide/r_package/")
+    titles: dict[tuple[str, str], list[str]] = {}
+    for path in sorted(DOCS_ROOT.rglob("*")):
+        relative = path.relative_to(DOCS_ROOT).as_posix()
+        if path.suffix not in {".md", ".ipynb"} or relative.startswith(("_", "user_guide/web_app/r_screenshot_checklist")):
+            continue
+        if path.suffix == ".md":
+            text = path.read_text(encoding="utf-8")
+        else:
+            cells = json.loads(path.read_text(encoding="utf-8"))["cells"]
+            text = "\n".join("".join(cell["source"]) for cell in cells if cell["cell_type"] == "markdown")
+        heading = re.search(r"(?m)^# (.+)$", text)
+        if heading is None:
+            continue
+        guide = next((prefix for prefix in guides if relative.startswith(prefix)), "")
+        titles.setdefault((guide, heading.group(1).strip()), []).append(relative)
+    assert {key: pages for key, pages in titles.items() if len(pages) > 1} == {}
+
+
+def test_docs_publish_llms_txt_with_the_summary_the_web_app_uses() -> None:
+    conf = (DOCS_ROOT / "conf.py").read_text(encoding="utf-8")
+    assert '"sphinx_llms_txt",' in conf
+    pyproject = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert re.search(r'"sphinx-llms-txt==\d+\.\d+\.\d+",', pyproject)
+    summary = re.search(r"llms_txt_summary = \(\n((?:    \".*\"\n)+)\)", conf)
+    assert summary is not None
+    text = "".join(re.findall(r'"(.*)"', summary.group(1)))
+    # The first two sentences are the web app's llms.txt and JSON-LD wording.
+    assert text.startswith(
+        "Cellucid is a free, open-source web app for interactive single-cell data "
+        "visualization. It renders millions of cells on the GPU in the browser"
+    )
+    assert f"{CANONICAL_APP_ORIGIN}/" in text
+
+
 def test_docs_robots_txt_allows_crawling_and_advertises_the_sitemap() -> None:
     robots = (DOCS_ROOT / "_extra" / "robots.txt").read_text(encoding="utf-8")
     lines = [line.strip() for line in robots.splitlines() if line.strip()]

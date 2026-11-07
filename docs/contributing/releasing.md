@@ -28,8 +28,7 @@ From a workspace that holds the repositories side by side:
    `test.yml` in `cellucid`), on the commit the release will tag.
 3. **The Python release contract holds.** In `cellucid-python`,
    `python scripts/validate_release.py --tag vX.Y.Z` prints
-   `Cellucid Python release contract is valid for vX.Y.Z.`, and the normalized
-   source distribution matches `scripts/publishing/meta.yaml`
+   `Cellucid Python release contract is valid for vX.Y.Z.`
    ({doc}`/user_guide/python_package/h_developer_docs/14_release_process`).
 4. **The R package checks clean.** `testthat::test_local()` and
    `R CMD check --as-cran` pass, and `cran-comments.md` is current

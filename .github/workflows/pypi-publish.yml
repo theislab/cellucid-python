@@ -107,7 +107,7 @@ jobs:
         run: |
           python -m build
           python scripts/normalize_sdist.py dist
-          python scripts/validate_release.py --sdist dist --match-recipe-digest
+          python scripts/validate_release.py --sdist dist
           python -m twine check --strict dist/*
 
       - name: Upload the exact distributions

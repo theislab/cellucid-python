@@ -162,6 +162,7 @@ repository.
 | 2026-10-28 | Levels of detail and culling turn on automatically only when measured too slow, and are kept only when measured faster | Small data never needs them; a 2D full framing got slower with culling | Turning them on by cell count or by dimension |
 | 2026-10-29 | Gene on a sample: unread cells fade almost to the background, distinct from the grey for 0; read cells drawn on top at a size set by the sample's on-screen density; no extra downloads | The expression pattern must read at once on a map of all cells | Drawing unread cells as no-value grey; reading more to fill the map |
 | 2026-10-30 | The grey for 0 and missing values comes from the theme (fixed L\* contrast) | On a dark background grey 211 outshone the darker colormap cells (seen on a real atlas) | One fixed grey on every theme |
+| 2026-11-07 | Ambient animations (smoke, flowing velocity particles, backdrop motion, the highlight pulse) are paced by how late the page's own frames run behind the GPU, confirmed by a fence read only when a frame is due, with the display interval measured | On a slow GPU (CI software GL; hosted macOS Firefox) an endless animation saturated the GPU and every click waited behind it (overlay on: 17.7 page fps under SwiftShader, clicks of 10–15 s on hosted macOS Firefox); a GPU that keeps up is never held back | Pacing every frame by fence latency, which throttled fast GPUs |
 | 2026-10-31 | Gray for zero is a per-field switch, off by default; off, a gene's 0 takes the scale's lowest colour (as before 2026-10-28); on, the theme's grey beneath. The verbose legend note under the colour bar is removed; a gene sample keeps one line naming its states | Owner, on HLCA and Suo: a 0 is a value, and the grey should be a choice, explained by an (i), not a fixed rule and a paragraph | Gray for 0 always on; a note under every gene's colour bar |
 | 2026-10-30 | A level ranks a cell by its identity under the share's seed, whatever order it is open in | The same cells come first in every order, step, view, revisit and session | Ranking by open position |
 | 2026-10-30 | Rendering and app timings only on a real GPU (Chromium `--use-angle=metal` on macOS); software renderers are refused unless asked for (`--software-gl`, never a timing) | SwiftShader draws on the CPU and holds the main thread on synchronous GL calls | Any timing from SwiftShader or llvmpipe |
@@ -174,6 +175,7 @@ repository.
 
 ## Measurements that justify it
 
+- **Ambient pacing** (2026-11-07, Apple M1 Pro; page fps is the page's own rAF rate): SwiftShader with the velocity overlay, page 17.3–17.9 → 34–38 fps, overlay 17.9 → 17.5–17.8 fps, clicks 111–148 → 30–121 ms; SwiftShader smoke, page 25 → 41 fps; default headless Chromium overlay, page 17.6 → 45 fps, clicks 650 → 22–94 ms; native Metal (Chromium 60, Firefox 120, WebKit 60 fps) unchanged.
 - **Real atlas walk** (2026-10-30, Chromium on Metal, Apple M1 Pro, HLCA
   full, 2,282,447 cells): opening 12.9–17.0 s, a gene 4.6–5.4 s on a sample
   of 1,759–2,273 cells, read-size multiplier 8.6–10.35 at a base point of
@@ -211,6 +213,7 @@ repository.
 
 ## Tried and reverted
 
+- **Pacing every ambient frame by a GPU fence's latency** (2026-11-07). A fence measures latency, not occupancy, so it held back GPUs that keep up: smoke on Metal went from 60 to 45 fps. Replaced by pacing on the page's own lateness, confirmed by the fence only when a frame is due.
 - **Unread cells as the no-value grey** (design of 2026-10-28). Cells not
   read were NaN and drawn in the grey beneath, with the difference stated
   only in text. On a large map a 0 and "not read" looked the same. It was

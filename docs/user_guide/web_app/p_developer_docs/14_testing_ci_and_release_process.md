@@ -41,14 +41,23 @@ operating system runs nightly and on manual dispatch. A failed browser job
 uploads its Playwright screenshots and error context as a workflow artifact.
 Each job runs one shard through `scripts/run-browser-shard-bounded.mjs`,
 which refuses a shard whose files need more browser processes than its
-runner allows; `tests/browser-shard-capacity-contract.test.mjs` plans every
+runner allows. A test belongs to the spec file whose top-level suite holds
+it, not to the file its `test()` call is written in (the control walk's four
+files declare theirs through `helpers/control-walk.mjs`; grouped by that
+helper, the runner once ran none of their 15 tests and reported success),
+and before each batch runs the runner lists exactly what it will pass to
+Playwright and refuses a selection other than the plan.
+`tests/browser-shard-capacity-contract.test.mjs` plans every
 shard of the matrix for every engine and runner from one Playwright listing
-(`tests/helpers/shard-plan-reporter.mjs` replicates Playwright 1.62.0's
-`createTestGroups` and `filterForShard`, refuses another version, and is
+(`tests/helpers/shard-plan-reporter.mjs` replicates Playwright 1.65.0's
+`createTestGroups` and `filterForShard`, a group weighed by its tests not
+expected to be skipped, refuses another version, and is
 compared test for test with real `--shard` listings of every other shard
 and the last, which hold every boundary). It listed each of the 21 shards
 in a process of its own before: 26 s idle and 166 s under load, past the
-suite's 120 s a test; it now takes 5 processes, 7 to 15 s idle and 72 s at a
+suite's former bound of 120 s a file (the contract suite now bounds progress
+instead: a file stops only after finishing no test for 5 minutes,
+`scripts/run-web-tests.mjs`); it now takes 5 processes, 7 to 15 s idle and 72 s at a
 load average of 40 to 54.
 
 ### Contract tests that hold on every Node version and operating system
@@ -56,6 +65,18 @@ load average of 40 to 54.
 What the contract suite once got wrong only on some CI cells (fixed
 2026-11-01):
 
+- **A process started in a group of its own** (`detached`, so a hung test
+  file can be stopped with everything it started) no longer hears the
+  terminal's Ctrl-C or a cancelled job's SIGTERM: whoever started it forwards
+  them (`scripts/run-web-tests.mjs` stops every file it started, 2026-11-07).
+- **Starting a process is measured, never assumed**: on a runner five times
+  slower than its peers, starting Node and the network guard took longer than
+  a margin chosen on a fast machine; a test of a time bound times a short run
+  first and scales from it (`tests/web-test-runner-contract.test.mjs`).
+- **A rate is judged only on a watchdog tick that came on time**: when the
+  whole process paused past a measuring window, the timer ran before the
+  bytes that arrived were read, and a healthy transfer looked empty
+  (`scripts/install-linux-engine-libraries.mjs`).
 - **A file path from a module URL** is
   `fileURLToPath(new URL('…', import.meta.url))`, never `.pathname`: on
   Windows that is `/D:/a/…`, which Node opens as `D:\D:\a\…`.
@@ -329,7 +350,8 @@ retry would hide exactly these failures.
   transform-feedback pass that writes the new level's highlight words) and a
   later pulse frame on the other. Four animation frames after a change had
   stood for "a pulse frame has been drawn", which holds where frames are
-  fast; the pulse is paced by the measured frame cost, so on a slow renderer
+  fast; ambient frames are paced by what frames cost the main thread and how
+  late they leave the page's frames, so on a slow renderer
   the first frame was still the last one drawn. Whether that frame's two
   pixels are a defect of that renderer is not known; the spec now reads
   steady frames (below) and compares them for equality there as everywhere.
@@ -483,15 +505,28 @@ retry would hide exactly these failures.
   them, `declareWalkTests`) or does not end with a newline.
 - **The control walk** (`tests/browser/helpers/control-walk.mjs`) walks every
   control the page shows and fails on a control that changes state with no
-  step, an outside change, more than one step, or an undo that does not put
-  back exactly ({doc}`29_action_layer_domains_and_history`, "Drift guards").
+  step, an outside change, more than one step after the step shown, or an
+  undo that does not put back exactly
+  ({doc}`29_action_layer_domains_and_history`, "Drift guards"); new steps on
+  another branch none of which follows the step shown (Clear history keeping
+  the state, Branch without this step replaying the later steps) are judged
+  as an edit of the history.
   It is one test per sidebar section, one for everything outside them and the
   graph-and-vectors test, spread over `control-walk-1-of-4.spec.mjs` …
   `4-of-4`, and runs on Chromium only. Run one part with
   `npx playwright test tests/browser/control-walk- --project=chromium --grep "<section id>"`,
   or the four files side by side with `--shard=<i>/4`; each part prints
-  where its time went, by section and phase (about 15 minutes for the whole
-  walk). After Escape it waits until the page is still, never a fixed time.
+  where its time went, by section, its slowest controls and phase (about 15
+  minutes for the whole walk on a GPU). A control is judged by what it does,
+  never by how long it takes: under the runners' software GL a control with
+  the velocity overlay flowing or smoke animating takes 15 to 25 s, nearly
+  all of it the page's frames. What bounds the walk is its progress: a wait
+  of the walk that has not ended after ten times the slowest wait the part
+  has seen end (and at least two minutes) is a hang, which names the control
+  and ends the part; the part's test timeout moves with each wait that ends;
+  a Playwright action waits 20 of the page's frames as the last settle
+  measured them (at least 5 s). After Escape it waits until the page is
+  still, never a fixed time.
 - **History stress** (`tests/stress/`, `npm run stress:history`, which runs
   `scripts/history-stress.mjs`: `--steps 1000,10000,50000,100000`,
   `--cells`, `--quick`, `--readers` for the Python and R session readers):
@@ -642,7 +677,7 @@ contracts workflow (`cellucid/.github/workflows/test.yml`), run 41213981681
   | What an analysis kind cost (`analysis/shared/progressive-cells.js`) | Whether a later run of it shows a sample pass first | Measured | the final result is the same cells' and is what specs wait for |
   | Analysis read and task times (`run-tuner.js`) | How far ahead genes are read, how many tasks are in flight | Measured | scheduling only |
   | The GPU's time for a frame (`rendering/full-detail-frame-cost.js`) | Level of detail and culling by itself | Held: `gpu` (a simulated timer) | held |
-  | A frame's cost (`rendering/ambient-frame-pacing.js`) | Which highlight-pulse frames are skipped | Measured | pacing of an animation: specs wait for the page at rest, never for a frame count |
+  | What frames held the main thread, how late the page's frames ran behind the GPU, and the display interval (`rendering/ambient-frame-pacing.js`) | Which ambient frames (pulse, smoke, velocity particles, backdrop motion) are held back | Measured | specs wait for what was drawn (an overlay draw, the page at rest), never for a frame count |
   | The GPU's time for a level of a backdrop's sky (`rendering/backdrops/backdrop-look-renderer.js`) | How far the sky is refined (its faces' resolution) | Measured | not verified for every spec: the look shows from its first level on any GPU, and a slow one stops refining sooner (a coarser sky), so a spec may assert a look only against the same page |
   | What a neighbour row cost from the file, and a pass over the held edges (`app/main.js` `knnRowReader`) | Which of the two gives a cell's neighbours | Measured | both give the same rows |
   | The cores | Pool sizes | Held: `hardwareConcurrency` (page `navigator`, the machine's `cores` in workers) | held |
@@ -867,13 +902,37 @@ contracts workflow (`cellucid/.github/workflows/test.yml`), run 41213981681
   that need them failed there on every run. Safari is covered by WebKit on
   macOS (every push) and Linux.
 
-Playwright's headless Chromium (1.62) drew with SwiftShader on an Apple M1
-Pro too (`ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device …))`, 2026-11-01)
-unless launched with `--use-angle=metal`. Reproduce software GL locally with Chromium under SwiftShader: a config that
-extends `playwright.config.mjs` with
-`launchOptions: { args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] }`
-for the `chromium` project. It is slower than a GPU but faster than a hosted
-runner, so a race that needs a runner's speed may still not show. To run the
+Playwright's headless Chromium (1.62, and 1.65 on 2026-11-07) draws with
+SwiftShader on an Apple M1 Pro too (`ANGLE (Google, Vulkan 1.3.0 (SwiftShader
+Device …))`, 2026-11-01) unless launched with `--use-angle=metal`, and it
+composites the page in software (`SystemInfo.getInfo`: `gpu_compositing:
+disabled_software`, `rasterization: disabled_software`): the configuration
+Chromium chooses itself when SwiftShader is its only GL. The plain `chromium`
+project is therefore the local reproduction of software GL. It is slower than a
+GPU but faster than a hosted runner, so a race that needs a runner's speed may
+still not show.
+
+Do not force SwiftShader onto the whole GPU process instead (`--use-gl=angle
+--use-angle=swiftshader --enable-unsafe-swiftshader`): that is a machine no
+runner and no reader has. It also turns on GPU compositing and GPU
+rasterization, with Skia Graphite on Dawn over SwiftShader, so every
+composited frame is drawn on the CPU by the GPU process's main thread, the
+thread every WebGL context's commands run on, and on macOS that thread holds
+each frame about 100 ms until it is finished
+(`SkiaOutputSurfaceImplOnGpu::EndAccessImages`). An animation the compositor
+thread runs on its own (the opening's spinner and indeterminate bar) asks for
+a frame at every vsync, so the thread is busy with frames all the time and
+WebGL commands run only in the gaps: through the opening, each synchronous
+WebGL call of the page waited 74-263 ms (Chrome trace, 2026-11-07). When the
+figure-export worker created its WebGL2 context at the same time
+(`figure-export.spec.mjs`, "export cancellation settles worker work and
+cleans download staging", which asks the worker for `spriteZoomLimit` as the
+page loads), the page's next `getError` was not run for 88 s to over 150 s:
+the opening could not end, so its animation never stopped. All 12 runs hung;
+all 8 with `reducedMotion: 'reduce'` (which stops every animation) passed, as
+did all 9 in the three engines' default configurations. A spec that fails only
+under the forced configuration measures that configuration, not the app. To
+run the
 automatic level of detail and culling in every engine as a runner does, run
 the specs on a copy of the tree with `INTERACTIVE_FRAME_BUDGET_MS` set to 0 in
 `rendering/full-detail-frame-cost.js` (every frame of every cell is then too

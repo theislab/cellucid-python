@@ -14,8 +14,10 @@ checks it and publishes it to PyPI. Pushing a tag alone publishes nothing.
 - Git tags use the exact package version with a `v` prefix, such as `v0.9.7`. <!-- CELLUCID_VERSION -->
 - PyPI distributions, citation metadata, documentation, and the downstream
   recipe declare the same version.
-- The normalized source distribution has one reproducible byte stream, and its
-  SHA-256 digest must equal `scripts/publishing/meta.yaml`.
+- The normalized source distribution has one reproducible byte stream. The
+  downstream recipe's `source.sha256` is recorded from the file PyPI
+  published, when the recipe goes to conda-forge
+  (`scripts/publishing/PUBLISHING.md`); no release step compares it.
 - Wheel ZIP timestamps use the fixed ZIP-compatible epoch
   `SOURCE_DATE_EPOCH=315532800` (1980-01-01T00:00:00Z), so two builds of the
   same source and exact backend produce identical wheel bytes.
@@ -121,16 +123,13 @@ python -m pip install --upgrade pip
 python -m pip install "build==1.5.0" "twine==6.2.0"
 SOURCE_DATE_EPOCH=315532800 python -m build
 python scripts/normalize_sdist.py dist
-python -c "import hashlib, pathlib; p=next(pathlib.Path('dist').glob('cellucid-*.tar.gz')); print(hashlib.sha256(p.read_bytes()).hexdigest())"
 python scripts/validate_release.py --tag v0.9.7 --sdist dist  # CELLUCID_VERSION
 python -m twine check --strict dist/*
 ```
 
-Record the printed SHA-256 digest as `source.sha256` in
-`scripts/publishing/meta.yaml`, then rerun the validator with `--sdist`.
-Neither the recipe nor the tests reach the public source distribution, so
-recording the digest does not alter the candidate archive — but they are held
-out by two different mechanisms. `scripts/` is not a package and no rule adds
+The validator requires one source distribution named for the version that
+ships neither the downstream recipe nor the tests. They are held out by two
+different mechanisms. `scripts/` is not a package and no rule adds
 it, so the downstream recipe never enters the archive's file set at all;
 `MANIFEST.in` is the one line `prune tests`, and that line is what removes the
 repository tests, which setuptools would otherwise carry. `normalize_sdist.py`
