@@ -1,7 +1,7 @@
 # State and History
 
 The **State** section of the sidebar keeps the history of everything you do
-with the dataset shown. Every change you make is one **step**: what you colour
+with the dataset shown. Every change you make is one **step**: what you color
 by, a filter, a renamed category, a highlight, a kept view, a camera move, a
 panel you dock. You can go back to any step, try something else from there,
 keep several independent lines of work, and come back to all of it later.

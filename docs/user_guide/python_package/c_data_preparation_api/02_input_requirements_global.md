@@ -66,7 +66,7 @@ store (folders of a Zarr store), so on every platform they must:
 - not end with a space or a dot,
 - not be a Windows device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`,
   `LPT1`–`LPT9`),
-- differ from their neighbours by more than letter case (`Sex` and `sex` are
+- differ from their neighbors by more than letter case (`Sex` and `sex` are
   one folder on macOS and Windows).
 
 A column named `_index` is refused: AnnData stores the row names under it.
@@ -76,8 +76,9 @@ A column named `_index` is refused: AnnData stores the row names under it.
 - `dataset_id`: 1–180 ASCII letters, digits, `.`, `_` or `-`, starting with a
   letter or digit and not ending with `.`.
 - `dataset_name`, `dataset_description`, `citation_text`, `source_name`: text
-  the viewer draws exactly as stored — no control or zero-width characters, no
-  leading or trailing white space. `dataset_description` may be empty.
+  the viewer draws as stored, written with white space at either end removed
+  (as the web app reads it) — no control or zero-width characters inside.
+  `dataset_description` may be empty.
 - `citation_url`, `source_url`: absolute `http(s)` addresses, each only with
   its text (`citation_text`, `source_name`).
 

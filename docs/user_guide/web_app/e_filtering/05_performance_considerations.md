@@ -50,9 +50,9 @@ you are comparing against an older recollection or an older screenshot.
 
 Hidden points used to be shrunk to zero size in the vertex shader. That is not
 enough: the driver clamps point size to a minimum of one pixel, so every hidden
-point was still assembled, rasterised and shaded before being thrown away in
+point was still assembled, rasterized and shaded before being thrown away in
 the fragment stage. Filtering therefore made rendering *slower*. Hidden points
-are now rejected in clip space instead, before rasterisation, so they cost
+are now rejected in clip space instead, before rasterization, so they cost
 essentially nothing.
 
 The same change fixed a **correctness** bug that matters more than the speed:
@@ -125,15 +125,10 @@ For continuous fields:
 
 This avoids recomputing on every slider step.
 
-:::{warning}
-**`Live filtering` does not stay off.** The toggle is rebuilt with the legend
-and returns to `On` whenever the legend re-renders — changing the active field,
-changing the colormap, switching between kept views, and loading a session all
-do that. It is not saved in a `.cellucid-session` either. On an
-eighteen-million-cell dataset, switching palette from Viridis to Cividis is
-enough to put you back on live recomputation with no other signal, so glance at
-the toggle before every drag.
-:::
+`Live filtering` then stays off for the page — every continuous field and gene,
+every view, every palette — until you turn it on again or reload the page, so
+a large dataset is not put back on live recomputation behind your back. It is
+not saved in a `.cellucid-session`.
 
 ```{figure} ../../../_static/screenshots/filtering/type-numeric-range.png
 :alt: The Visible range block of the continuous S_score legend with Live filtering switched off: Minimum and Maximum sliders with their values, and the Filter button beside Reset enabled, with the pointer on Filter.

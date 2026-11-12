@@ -78,7 +78,7 @@ note saying so; a port given explicitly is used or refused.
    (IRkernel spends about 1.7 ms of its own on each message: 450 requests in
    450 messages took 1.28 s, in 15 messages 0.27 s). A request waiting in
    the widget that the page withdraws
-   (`{t: 'cancel', id}`, sent when the read that asked it is cancelled, from
+   (`{t: 'cancel', id}`, sent when the read that asked it is canceled, from
    the reader worker through the page) is dropped before the kernel reads
    for it. A request the kernel already holds is answered, and its answer
    dropped. A request the kernel leaves unanswered for long (a cell running)
@@ -139,7 +139,7 @@ viewer.highlight_cells(cells=[1, 2, 3], color="#ff0000")
 
 the generated method (`_actions_generated.ViewerActions`) calls
 `viewer.act("highlight.cells", ...)`, which checks and converts the
-parameters by the action catalogue (`_actions.action_params`: cells by row,
+parameters by the action catalog (`_actions.action_params`: cells by row,
 mask or obs name as `uint32` original positions), registers the request its
 answer completes, and sends one `action` command. Python validates the
 command (`_wire._require_frontend_message`) and sends it on the channel
@@ -151,7 +151,7 @@ turn (`turn`, `turnLabel`), so the viewer records its steps as one turn of
 the history. Before the viewer has connected, the command waits in the
 viewer's outbox and is sent, in order, when it connects.
 
-Every change and every read is an `action` (colouring, highlighting,
+Every change and every read is an `action` (coloring, highlighting,
 filtering, labels, pushed fields and gene sets, the camera, the data mapping,
 analyses, the history). The other commands are `freeze` before shutdown,
 `requestSessionBundle` for the session, `load_session` (a session file

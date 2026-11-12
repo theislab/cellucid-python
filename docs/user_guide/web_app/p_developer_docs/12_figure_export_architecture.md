@@ -92,7 +92,7 @@ Every per-cell pass and every encode runs in the export worker
 
 Each rendered file opens a worker session: a typed array is copied to the
 worker once per session, and closing the session releases it. An export that is
-cancelled (**Cancel export**, the button's label while an export runs; or
+canceled (**Cancel export**, the button's label while an export runs; or
 closing the panel) rejects its pending requests at once. The worker hears the
 session's `cancel` ahead of its queue and skips every request of that session
 still queued. The pass already running ends (one synchronous draw) and its late
@@ -146,8 +146,54 @@ The module includes shared builders:
 - orientation indicator (3D widget)
 - centroid overlay builder
 
-Key design constraint:
+Key design constraints:
 - Legends should be sourced from the same model as interactive legends so colors match exactly.
+- **A legend entry is never cut** (owner decision, 2026-11-10). A legend is as
+  large as its entries need: `planLegend()` (`components/legend-builder.js`)
+  plans each entry's whole text, its columns (each as wide as its longest
+  entry, `(hidden)` marker included) and the box, with the one text
+  measurement of `utils/text-measure.js` (the canvas's `measureText` for the
+  figure's font); `utils/layout.js` reserves exactly that box and the figure
+  grows around it; the SVG and Canvas builders draw the plan and measure
+  nothing. Before, the box was capped at the plot's size and the builders cut
+  names to their columns with "…" (Suo `cell_type`, 69 categories, at
+  720 × 500; and a grid panel's legend of 69 entries drawn as swatches and
+  "…").
+- **Axes are laid out once, from their text** (F158, 2026-11-11).
+  `planFigureAxes()` (`components/axes-builder.js`) places every axis line,
+  tick, tick label and axis label of a plot and gives the margins they need on
+  each side, from the measured tick labels and the fonts: the y-axis label past
+  the widest y tick label, a corner tick label or an over-long axis label
+  reserved where it reaches. The layout plans each plot's axes and reserves
+  those margins; `renderSvgAxes()` and `drawCanvasAxes()` draw that plan and
+  measure nothing. Before, the y label stood a fixed distance from the axis
+  and ran into wide tick labels (17 px ticks, 20 px label: "UMAP 2" over
+  "-0.5"), the margins were a fixed 62 px at any text size, and the PNG put
+  the y tick labels 2 px from their ticks where the SVG put them 8 px.
+- **One layout call per export.** `computeFigureLayout(payload)`
+  (`utils/layout.js`) reads each panel's axes, legend and the highlight's
+  legend entry from the payload and lays the figure out; the PNG and SVG
+  renderers both call it, so they cannot place anything differently.
+- **Highlighted cells are in the legend.** A figure draws the active highlight
+  page's cells in the highlight's color (`HIGHLIGHT_COLOR`,
+  `rendering/shaders/high-perf-shaders.js`, the one color the viewer, the point
+  raster and the vector rings use); `utils/highlight-legend.js` gives the
+  legend entry for them (that color, the page's name from
+  `payload.selection.pageName`, its cell count) and which panels draw them,
+  and `planLegend({ highlight })` plans it as one more legend row.
+- **Grid geometry has one owner.** `computeGridFigureLayout()` lays out the
+  whole multi-panel figure for both renderers. A panel legend that cannot name
+  its entries in half its cell beside the plot moves below the plot; rows grow
+  to the tallest need, so the figure can come out larger than the requested
+  size.
+- **The only size limit is the browser's canvas.** A million-category legend
+  once asked for a canvas millions of pixels wide and the PNG never came; the
+  cap that answered it cut every legend. Now the PNG canvas is allocated at the
+  figure's size and checked by drawing a pixel in its far corner and reading
+  it back (`utils/figure-canvas.js`); where the browser cannot draw it, the
+  export is refused before rendering with one sentence naming the size and the
+  remedy (turn the legend off or show fewer categories; or a smaller size or
+  DPI when the figure is too large without its legend).
 
 ---
 
@@ -172,7 +218,12 @@ history".
 
 The figure renderer also draws the read `view.picture` (a PNG of a view,
 returned as data and never downloaded), which the printable history report
-uses for its pictures (`app/history/exports/report.js`).
+uses for its pictures (`app/history/exports/report.js`). What a figure cannot
+draw (the vector field's flow, the connectivity edges) is in a picture with
+`source: "screen"`: the view's pane of the viewer's canvas as drawn now
+(`app/reads/views.js`; the drawing buffer is kept between frames), so an
+agent tuning an overlay sees what you see. A figure picture taken while an
+overlay is on says so and names the screen picture.
 
 See:
 - `cellucid/assets/js/app/state-serializer/README.md` (the control inventory)

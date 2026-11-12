@@ -94,8 +94,15 @@ before assuming the coordinator does.
 
 The `ui/` layer also has directories this page does not otherwise cover:
 `ui/components/` (shared widgets — the coordinator initializes
-`components/info-popovers.js` directly), `ui/category-builder/`,
-`ui/onboarding/` (welcome modal and the global keyboard shortcuts), and
+`components/info-popovers.js` directly; `components/menu.js` is every menu's
+look and keys: `openMenu` builds a menu for the items of the moment, at a
+button or a point, and `menuKeyDown` is the keys the markup menus below answer
+too; `components/app-dialog.js` is every modal dialog: `wireAppDialog` opens a
+native `<dialog>` with `showModal()` and adds the close button, the backdrop
+click, focus back to the opener, keys kept from the page and the notification
+cards kept above it (`keepAboveModals`), and `components/confirm-dialog.js`
+is the one confirmation built on it), `ui/category-builder/`,
+`ui/onboarding/` (the welcome dialog and the global keyboard shortcuts), and
 `ui/keyboard-move.js`.
 :::
 
@@ -104,10 +111,11 @@ The `ui/` layer also has directories this page does not otherwise cover:
 | Module | File | Owns |
 |---|---|---|
 | Sidebar toggle/resize | `ui/modules/sidebar-controls.js` | sidebar visibility (`inert` while hidden) + `--sidebar-width`; publishes the sidebar's left occlusion of the canvas, from which the viewer resolves the presented layout |
-| Selection bar placement | `ui/modules/select-bar-placement.js` | centres `#select-bar` in the viewer's presented area (`viewer.onPresentedLayoutChange`) |
+| Selection bar placement | `ui/modules/select-bar-placement.js` | centers `#select-bar` in the viewer's presented area (`viewer.onPresentedLayoutChange`) |
 | Stats display | `ui/modules/stats-display.js` | top stats line (dataset/field/cell counts) |
 | Cell info | `ui/modules/cell-info.js` | the card describing the cell under the pointer (**Show cell info**) |
 | Cite dialog | `ui/modules/cite-dialog.js` | the footer's Cite Cellucid dialog, read from the deployed `CITATION.cff` |
+| License dialog | `ui/modules/license-dialog.js` | the footer's license link and the BSD 3-Clause text it opens |
 | Place names | `ui/place-names.js` | the names of the panels and blocks a message sends someone to (`PLACES`, `placePath`), as their headings write them; `tests/ui-place-names-contract.test.mjs` holds each to its heading in `index.html` and fails on a message that names a place in words of its own |
 
 ### Dataset + session modules
@@ -116,23 +124,23 @@ The `ui/` layer also has directories this page does not otherwise cover:
 |---|---|---|
 | Dataset controls | `ui/modules/dataset-controls.js` | dataset dropdown (the samples, or a connected catalog's datasets as "Dataset from <host>"; `__dataset_unlisted__` while a file, single-dataset link or server dataset is open) |
 | Dataset box | `ui/modules/dataset-card.js` | the **Dataset** box (`#dataset-info`, `data-state` empty/loading/ready): name, cells · genes, format · host, description, bytes read in place, **Details**; the retry notification |
-| Open… menu | `ui/modules/open-data-menu.js` | the **Open…** button's two-item menu (**File…**, **Folder…**) and its keyboard handling |
+| Open… menu | `ui/modules/open-data-menu.js` | a menu written in the markup bound to its button (the **Open…** button's **File…** / **Folder…**, My datasets, the History panel's ⋯), with the keys of every menu (`menuKeyDown`, `ui/components/menu.js`) |
 | Address routing | `ui/modules/address-routing.js` | what the **Link or server** bar opens: a `cellucid serve` server, linked data, or (asked over `/_cellucid/health`) either |
 | Dataset connections | `ui/modules/dataset-connections.js` | local file and folder pickers, the **Link or server** bar (server and link connectors), the **Server** / **Link** connection lines with **Disconnect**, the sign-in step |
 | Dataset drop | `ui/modules/dataset-drop.js` | a file or folder dropped anywhere on the page, opened as the matching picker would (initialized by `dataset-connections.js`; `ui/core/file-drop-guard.js` stops the browser navigating to a dropped file; a folder listed concurrently by `data/local-folder.js`; in Chromium the item's handle kept to reopen, `app/library/local-file-handles.js`) |
-| Share dialog | `ui/modules/share-dialog.js` | the Dataset box's **Share**: link, badge and embed snippet for a dataset a URL can reopen |
+| Share dialog | `ui/modules/share-dialog.js` | the Dataset box's **Share…**: link, badge and embed snippet for a dataset a URL can reopen |
 | Session controls | `ui/modules/session-controls.js` | Loading a `.cellucid-session` file (format 4: the history; State › Session › **Load…** › **Open a session file…**) and opening a saved state of this browser: the session's own dataset and cells are opened first, then its history is loaded. Writing one is the history's action `history.share` (State › Session › **Share…**, `ui/modules/state/share-dialog.js`) or `history.save` (the Load dialog) |
 | My datasets | `ui/modules/my-datasets/` (`index.js` `initMyDatasets`, `menu.js`, `dialog.js`, `model.js`) | Session › Open data › **My datasets**: the five most recent datasets opened in this browser (`RECENT_DATASETS`), the one open now marked, then **All…**, a dialog of every dataset (Open, Continue its latest saved state, Forget); drawn from `app/library/my-datasets.js`, `app/library/local-file-handles.js` and the saved states, keeping no list of its own; opening runs inside the person's click. Not a session control and not a history step |
-| Session sections | `ui/modules/session-sections.js` | the Session panel's collapsible sections, **Subsampling** (`#reading-section`) and **Data mapping** (`#data-mapping-controls`): collapsed by default, each a one-line summary in its header while collapsed (`setSummary`; `subsamplingSummary`: "100 % cells · genes 6 %"), the open state kept per viewer in `localStorage` (`cellucid_session_sections`, every access guarded; never a session or the address), and `expandSessionSection`, which whatever leads into one calls first |
+| Session sections | `ui/modules/session-sections.js` | the Session panel's collapsible sections, **Subsampling** (`#reading-section`) and **Data mapping** (`#data-mapping-controls`): collapsed by default, each a one-line summary in its header while collapsed (`setSummary`; `subsamplingSummary`: "100% cells · genes 6%"), the open state kept per viewer in `localStorage` (`cellucid_session_sections`, every access guarded; never a session or the address), and `expandSessionSection`, which whatever leads into one calls first |
 | Cells to open | `ui/modules/subsample-control.js` | Session › Subsampling › **Cells to open**: the share slider, method and seed, **Apply**, one status line and its **Details** table |
-| Genes read for | `ui/modules/gene-read-control.js` | Session › Subsampling › **Genes read for**: the slider of the share of the open cells a gene is read for (steps: the share now, then 1, 5, 10, 25, 50, 100 % up to what the gene index fits, `geneReadSteps`), its one status line (`geneReadStatus`: the chosen cells and their cost, repriced every 5 s while shown; while reading, the cells read and the time left), **Read** / **Stop** (`readGenesForMoreCellsSaid`). The one place the gene sample changes; `createGeneReadNote` / `createGeneReadLink` are the lines in a gene's legend and an analysis's result that link to it (`revealGeneReadControl`) |
+| Genes read for | `ui/modules/gene-read-control.js` | Session › Subsampling › **Genes read for**: the slider of the share of the open cells a gene is read for (steps: the share now, then 1, 5, 10, 25, 50, 100% up to what the gene index fits, `geneReadSteps`), its one status line (`geneReadStatus`: the chosen cells and their cost, repriced every 5 s while shown; while reading, the cells read and the time left), **Read** / **Stop** (`readGenesForMoreCellsSaid`). The one place the gene sample changes; `createGeneReadNote` / `createGeneReadLink` are the lines in a gene's legend and an analysis's result that link to it (`revealGeneReadControl`) |
 | Stored line | `ui/modules/kept-stores-line.js` | Session › **Stored**: what this browser keeps, one line beside **Manage…** (`summarizeKeptStores`: `{text, title}`, the title naming every kind) |
-| Data mapping controls | `ui/modules/data-mapping-controls.js` (+ `ui/modules/data-mapping/`) | Session › Data mapping (its summary through `onSummary`): the Embeddings checklist (on/off, defaults, column selections; arrays rarely drawn under **Other arrays (N)**), the Genes (**Modality** for a dataset of several, Expression, Gene names, Values, Highly variable genes), Neighbour graph, Latent space and Vector fields sections, Revert/Apply |
+| Data mapping controls | `ui/modules/data-mapping-controls.js` (+ `ui/modules/data-mapping/`) | Session › Data mapping (its summary through `onSummary`): the Embeddings checklist (on/off, defaults, column selections; arrays rarely drawn under **Other arrays (N)**), the Genes (**Modality** for a dataset of several, Expression, Gene names, Values, Highly variable genes), Neighbor graph, Latent space and Vector fields sections, Revert/Apply |
 
 ### State panel
 
 `ui/modules/state/` (its `README.md` is the full map). Header
-`History (i) 🔍 ↶ ↷ ⚙ ⋯`, a status line, a virtualised branch graph; the
+`History (i) 🔍 ↶ ↷ ⚙ ⋯`, a status line, a virtualized branch graph; the
 session's **Share…** and **Load…** sit above it.
 
 | Module | File | Owns |
@@ -140,13 +148,13 @@ session's **Share…** and **Load…** sit above it.
 | State section | `index.js` (`initStateSection`) | The history of the dataset shown, drawn from the page's current history (`app/history/current.js`): the header (search, undo, redo, History settings, the menu, whose **Save AnnData with this state…** dispatches `history.anndata.save`, which tells its own progress, outcome and refusals), the status line (recording switch, branch picker, steps, stale), the graph's row operations, each a `history.*` action dispatched as the person's; one operation at a time; while recording is paused, Keep / Discard / Cancel before the history moves |
 | The seam to the history | `history-source.js` | `trackerView` (the tracker in use as accessors and derived facts), `createHistoryActions` (the only way the panel acts), the plans a confirmation is worded from |
 | Branch graph | `graph-layout.js` (pure), `graph.js` | Rows, lanes and segments (path, fork stubs, expanded branches, turns, groups, folded runs, the paused marker); only the rows in view are in the DOM. Click selects, Shift+click extends, double-click (or a double tap) shows, `›` opens details, ▸ expands |
-| Details, notes, search | `step-details.js`, `notes.js`, `search.js` | A step's, branch's, turn's, group's or run's details and actions (**Run again** only on a stale step of an action marked `rerun` in the catalogue); notes (a Markdown subset from text nodes); the search box and Filter menu |
+| Details, notes, search | `step-details.js`, `notes.js`, `search.js` | A step's, branch's, turn's, group's or run's details and actions (**Run again** only on a stale step of an action marked `rerun` in the catalog); notes (a Markdown subset from text nodes); the search box and Filter menu |
 | Branches | `branch-picker.js`, `branch-map-dialog.js`, `compare.js` | The branch picker (trackers, branches, archived, New branch); the branch map (every branch as a lane graph and a table; archive or delete several); two branches side by side through the views' own actions (`view.keep` with each branch, `view.layout.set`) |
 | Share and Load | `share-dialog.js`, `saved-states-dialog.js` | Share this history (History / Current state only / Steps only, and what goes in; `history.share`); Load (saved states of this browser: open, replay here, rename, delete; save as history, state or steps, `history.save`; open or replay a session file) |
 | Recently deleted, banners, replays | `recently-deleted.js`, `workflow-banner.js`, `replay-report-dialog.js` | Every undoable edit of the history with Restore and Empty; the line above the graph for a loaded, shared-state or replayed tracker; a replay's report |
 | Compare two steps | `diff-dialog.js` | What differs between two steps (`history.diff`) |
 | Tour, copy, report | `tour.js`, `share.js`, `dataset-facts.js` | The guided tour (each step shown by `history.jump`); copy pseudocode or methods (`history.pseudocode`, `history.methods`); the printable report, pictures drawn on demand (none stored) |
-| Undo keys, menus, words | `keyboard.js`, `menu.js`, `model.js`, `shared.js` | Ctrl/⌘+Z and Ctrl/⌘+Shift+Z (left to text fields, dialogs, menus and a selection in progress); menus at a row or the pointer; the words of rows and the status line (`GRAPH_SHORTCUTS`); every question in the app's one confirmation dialog, the edit toast with Undo |
+| Undo keys, words | `keyboard.js`, `model.js`, `shared.js` | Ctrl/⌘+Z and Ctrl/⌘+Shift+Z (left to text fields, dialogs, menus and a selection in progress); the menus at a row or the pointer are the shared `openMenu` (`ui/components/menu.js`); the words of rows and the status line; the list's keys are the History list group of the one shortcut table (`ui/onboarding/shortcut-table.js`); every question in the app's one confirmation dialog, the edit toast with Undo |
 
 The panel keeps no history of its own: it reads the current history and
 redraws when it tells of a change, at most once a frame and only while it can
@@ -175,7 +183,7 @@ controls they stand behind and record what a person changes by hand:
 |---|---|---|
 | Settings actions | `ui/modules/settings-actions.js` (`installSettingsActions`, from `main.js`) | `setting.set` and `settings.list` over every control of the inventory but the layout's; a person's change of a settings control recorded by observation |
 | Layout actions | `ui/modules/layout-actions.js` (`installLayoutActions`, from `main.js`) | The `layout.*` actions (sections, panels, sidebar, theme) and their observed changes |
-| Field actions | `app/state/actions/field-actions.js` (`installFieldActions`, from the coordinator) | The state's own actions: fields, categories, colours, filters, cells hidden by hand, gene sets, the data mapping |
+| Field actions | `app/state/actions/field-actions.js` (`installFieldActions`, from the coordinator) | The state's own actions: fields, categories, colors, filters, cells hidden by hand, gene sets, the data mapping |
 
 ### Field/filter/highlight modules
 
@@ -220,7 +228,7 @@ These are bigger subsystems but still treated as modules:
 
 :::{note}
 `ui/modules/cross-highlight/` exists but contains only a `.gitkeep`. There is no
-cross-highlight UI module today — cross-view highlight synchronisation is
+cross-highlight UI module today — cross-view highlight synchronization is
 handled in the state layer (`app/state/managers/highlight-manager.js`) and in
 `ui/modules/highlight/`. A reader who trusts a complete module map would go
 looking for a module that is not there.

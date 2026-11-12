@@ -1,6 +1,6 @@
 """Contract for user-supplied paths and rejected input types.
 
-Three behaviours are pinned here:
+Three behaviors are pinned here:
 
 1. A relative ``out_path`` is resolved against the working directory that is
    current when :func:`cellucid.prepare` is called.

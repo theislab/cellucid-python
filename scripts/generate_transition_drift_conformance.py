@@ -224,13 +224,13 @@ def _general_case(
     width: int,
     normalize_rows: bool,
     sparse: bool,
-    neighbours: int,
+    neighbors: int,
     scale: float,
 ) -> _Case:
     generator = random.Random(seed)
     rows: list[list[tuple[int, float]]] = []
     for _ in range(n_cells):
-        columns = _distinct_columns(generator, n_cells, neighbours) if sparse else list(range(n_cells))
+        columns = _distinct_columns(generator, n_cells, neighbors) if sparse else list(range(n_cells))
         values = [generator.random() if sparse or generator.random() < 0.7 else 0.0 for _ in columns]
         if all(value == 0 for value in values):
             values[0] = generator.random() + 0.5
@@ -269,17 +269,17 @@ def fixture_text() -> str:
             width=2,
             normalize_rows=True,
             sparse=False,
-            neighbours=0,
+            neighbors=0,
             scale=10.0,
         ),
         _general_case(
-            "general, sparse neighbours, rows normalized",
+            "general, sparse neighbors, rows normalized",
             7,
             n_cells=60,
             width=3,
             normalize_rows=True,
             sparse=True,
-            neighbours=8,
+            neighbors=8,
             scale=10.0,
         ),
         _general_case(
@@ -289,7 +289,7 @@ def fixture_text() -> str:
             width=2,
             normalize_rows=False,
             sparse=True,
-            neighbours=6,
+            neighbors=6,
             scale=10.0,
         ),
         _general_case(
@@ -299,7 +299,7 @@ def fixture_text() -> str:
             width=2,
             normalize_rows=True,
             sparse=True,
-            neighbours=5,
+            neighbors=5,
             scale=1.0e4,
         ),
     ]

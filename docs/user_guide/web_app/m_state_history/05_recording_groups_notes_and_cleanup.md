@@ -107,7 +107,7 @@ reverses it, and each is listed in **Recently deleted**.
 ## Notes and bookmarks
 
 - **Notes.** A step, a branch, a group, a turn and a tracker each take notes
-  (**+ Note** in the details; an agent's turn calls its first note its
+  (**Add note** in the details; an agent's turn calls its first note its
   **Summary**). A note is plain text with a little Markdown (`*emphasis*`,
   `` `code` ``, `[links](https://…)`); `Ctrl+Enter` saves it. Each note keeps
   who wrote it and when, and can be edited or removed. The tracker's first

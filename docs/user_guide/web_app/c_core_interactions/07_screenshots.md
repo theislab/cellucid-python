@@ -43,11 +43,11 @@ is the exception and stays in both modes. Choosing smoke also shows a `Beta` pil
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/window-smoke-cloud.png
-:alt: The whole window in Volumetric smoke cloud mode: the Pancreas cells drawn as a soft cloud tinted with the colours of their clusters, and the sidebar showing Render mode set to Volumetric smoke cloud (beta) with its Beta tag above the Smoke quality, Smoke shape, Smoke lighting and Performance controls, Animation speed at Still.
+:alt: The whole window in Volumetric smoke cloud mode: the Pancreas cells drawn as a soft cloud tinted with the colors of their clusters, and the sidebar showing Render mode set to Volumetric smoke cloud (beta) with its Beta tag above the Smoke quality, Smoke shape, Smoke lighting and Performance controls, Animation speed at Still.
 :width: 1440px
 
-**Volumetric smoke cloud**, coloured by `clusters`. The cloud carries each
-cluster's legend colour, the `Beta` pill is showing, and every smoke control is
+**Volumetric smoke cloud**, colored by `clusters`. The cloud carries each
+cluster's legend color, the `Beta` pill is showing, and every smoke control is
 at its initial value except `Animation speed`, held at 0 (`Still`) so the
 frame stops changing and the capture is reproducible. Scenario
 `core-window-smoke-cloud`.
@@ -97,7 +97,7 @@ is the **2D** capture above.
 ## Comparing views
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: The whole window in Grid compare with the sidebar open: two equal panels to the right of the sidebar show the Pancreas 3D embedding from the same linked camera — view 1 coloured by cell_type, view 2 recoloured by S_score on a Viridis scale — each under a title chip naming its embedding and field. The sidebar shows Compare views with the two view rows, each marked linked and Orbit, View 2 shows UMAP · 3D, Keep view, Link cameras, Layout Grid compare and Clear, and Coloring & filtering with S_score in the Continuous obs select.
+:alt: The whole window in Grid compare with the sidebar open: two equal panels to the right of the sidebar show the Pancreas 3D embedding from the same linked camera — view 1 colored by cell_type, view 2 recolored by S_score on a Viridis scale — each under a title chip naming its embedding and field. The sidebar shows Compare views with the two view rows, each marked linked and Orbit, View 2 shows UMAP · 3D, Keep view, Link cameras, Layout Grid compare and Clear, and Coloring & filtering with S_score in the Continuous obs select.
 :width: 1440px
 
 Two views compare one dataset side by side; each row under **Views** names
@@ -109,7 +109,7 @@ cell_type, the selected view 2 by S_score.
 ## Connectivity edges
 
 ```{figure} ../../../_static/screenshots/web_app/connectivity-edges-controls.png
-:alt: The whole window with Show connectivity edges on: the neighbour graph drawn as thin lines between the Pancreas cells, and the sidebar showing the Connectivity block with Edge color, Edge opacity, Line width and Max edges.
+:alt: The whole window with Show connectivity edges on: the neighbor graph drawn as thin lines between the Pancreas cells, and the sidebar showing the Connectivity block with Edge color, Edge opacity, Line width and Max edges.
 :width: 1440px
 
 When a connectivity graph is present, the **Connectivity** block of
@@ -118,7 +118,7 @@ rendered edge count, with the counts of edges in total, visible and shown.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/connectivity-multiview.png
-:alt: Two equal panels filling the whole window with the sidebar closed (the ☰ button at the top left), both showing the Pancreas 3D embedding coloured by cell_type from the same linked camera, each under a title chip, and in both the neighbour-graph edges, drawn at line width 2.0, form a grey web between the cells.
+:alt: Two equal panels filling the whole window with the sidebar closed (the ☰ button at the top left), both showing the Pancreas 3D embedding colored by cell_type from the same linked camera, each under a title chip, and in both the neighbor-graph edges, drawn at line width 2.0, form a gray web between the cells.
 :width: 1440px
 
 Connectivity settings apply to every panel: the edges were switched on, and

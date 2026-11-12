@@ -54,11 +54,19 @@ cellucid-r reads the same records function for function
 - **Labels** → renamed `.obs` columns and categories
 - **Highlights** → one boolean `.obs` column per highlight group
 - **User-defined categorical and continuous fields** → cell-aligned `.obs` columns
+- **Colors** → each written, renamed or relabeled column's
+  `uns["<column>_colors"]`, as Scanpy keeps them: a categorical field the
+  colors it is shown in (in the view in focus, a category's color the person
+  or an agent chose, else its `palette`, else Cellucid's own category
+  colors), any other written column none; a dataset column recolored in the
+  view in focus, the colors it is shown in ({ref}`apply-column-colors`)
 - **Gene sets** → `adata.uns["cellucid"]["gene_sets"]`, and one boolean
   `var` column each, `cellucid_gene_set__<name>`, on the gene axis the data
   mapping reads
-- **Presentation** (filters, colours, views, the camera, analyses) → one row
-  per domain the step changed, reported and never applied
+- **Presentation** (filters, colors, views, the camera, analyses, the
+  expression values) → one row per domain the step changed, reported and
+  never applied; the expression values (normalized, log1p) are recorded in
+  the apply's provenance (`expression`), and `X` keeps its values
 
 Each row's status is `write`, `unchanged`, `replace` (with `overwrite=True`,
 only a column or gene set an earlier apply wrote) or `not-applied` (with the
@@ -147,7 +155,7 @@ session file as one binary `load_session` command, answered by
 
 Guardrails:
 - Python registers an expected `(viewerId, requestId)` pair until the request
-  is collected or cancelled.
+  is collected or canceled.
 - Python accepts exactly one bundle for that pair (consumes the pending
   request); a late one is dropped.
 - The frame is streamed to disk, so the temporary directory's free space is
@@ -168,7 +176,7 @@ A `.cellucid-session` file is:
 
 The manifest contains:
 - what wrote it (the Cellucid version and the digest of its action
-  catalogue), the action types its steps use, and what the share kept
+  catalog), the action types its steps use, and what the share kept
   (`scope`)
 - dataset fingerprint (id, display name, counts, cell order, data mapping)
 - the dataset source (sample, link, server, or local file name)
@@ -260,7 +268,7 @@ embedding is not checked for cell order.
 ### Symptom: “Dropped a session bundle nobody is waiting for” (log)
 
 Meaning:
-- the bundle arrived after its request was cancelled (`request.cancel()`,
+- the bundle arrived after its request was canceled (`request.cancel()`,
   or the viewer stopped).
 
 Fix:

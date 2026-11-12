@@ -5,12 +5,12 @@
 **Goal:** install `cellucid`, verify the CLI, and avoid the most common environment pitfalls
 
 :::{note}
-**Active package version: 0.9.7.** Version 0.9.7 is the current PyPI <!-- CELLUCID_VERSION -->
+**Active package version: 0.9.8.** Version 0.9.8 is the PyPI submission <!-- CELLUCID_VERSION -->
 release. If the [PyPI package page](https://pypi.org/project/cellucid/) lists
-0.9.7, the normal install and pin commands below retrieve it. Until then, they <!-- CELLUCID_VERSION -->
+0.9.8, the normal install and pin commands below retrieve it. Until then, they <!-- CELLUCID_VERSION -->
 resolve only to versions available from PyPI; install the active source
 straight from the official GitHub repository (see **From the official source
-repository** below) when validating 0.9.7 before publication. <!-- CELLUCID_VERSION -->
+repository** below) when validating 0.9.8 before publication. <!-- CELLUCID_VERSION -->
 :::
 
 ## Requirements
@@ -21,16 +21,20 @@ repository** below) when validating 0.9.7 before publication. <!-- CELLUCID_VERS
 - **Network (at viewer startup):** the Python server establishes the exact web
   generation published by `https://www.cellucid.com` before it starts serving
   the viewer. The configured source must be reachable for every
-  `cellucid serve`, `serve_anndata(...)`, or `show_anndata(...)` startup that serves the
-  web UI.
+  `cellucid serve`, `serve_anndata(...)` or `AnnDataViewer(...)` startup that
+  serves the web UI. The first one downloads the app (about 1,200 files,
+  40 MB: under a minute on a typical connection); later ones reuse it while
+  the published build is the same. A notebook viewer (`show_anndata(...)`)
+  downloads nothing: the browser loads the app itself.
 
 ```{note}
 Your **data is not uploaded** to `cellucid.com` by the Python package. The
 network request retrieves only the declared viewer files (HTML, JavaScript,
 CSS, icons, and related static assets). Cellucid verifies the source inventory,
 byte lengths, hashes, MIME types, build identity, and complete file set before
-publishing that generation locally. An existing cached generation is not used
-as a substitute when the configured source is unavailable.
+publishing that generation locally. When the source cannot be reached, a cached
+build whose every file still matches its checksums is that exact build, and
+the viewer starts from it offline, saying so.
 ```
 
 ## Fast path (recommended)
@@ -120,7 +124,7 @@ pip install -U cellucid
 Pin a specific version (recommended for paper pipelines):
 
 ```bash
-pip install "cellucid==0.9.7"  # CELLUCID_VERSION
+pip install "cellucid==0.9.8"  # CELLUCID_VERSION
 ```
 
 ### Core scientific runtime
@@ -167,8 +171,8 @@ browser loads the app from `https://www.cellucid.com`
 
 `ensure_web_ui_cached()` exercises the same exact source-generation contract as
 viewer startup. Run it ahead of time to confirm that the configured source is
-reachable and the selected cache directory is writable. It does not enable
-later offline startup.
+reachable and the selected cache directory is writable. Once it has run, a
+later start with no network serves that verified build.
 
 1) Check where the cache will live:
 
@@ -287,7 +291,9 @@ python -m pip show cellucid
   python -c "from cellucid.web_cache import ensure_web_ui_cached; print(ensure_web_ui_cached())"
   ```
 - If the source is blocked, allow access to the configured
-  `--web-source-url`; Cellucid does not substitute an older cached build.
+  `--web-source-url`, or start once where it is reachable: later starts serve
+  the verified cached build (the error names the cache folder it looked in,
+  and says when the copy there does not check out).
 - If the destination is not writable, retry with
   `--web-cache-dir /path/to/writable/directory`.
 

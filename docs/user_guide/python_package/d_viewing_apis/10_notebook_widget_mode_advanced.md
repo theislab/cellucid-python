@@ -170,6 +170,6 @@ It waits for nothing, and reports:
   construct without the parameter.
 - Construction raised “Cellucid found nothing to plot” → no `obsm` array can be
   plotted. The message lists every `obsm` entry and why it was not used; name a
-  usable one with `embedding_keys={"2d": "<key>"}`. (“… has no cell embedding”
+  usable one with `embedding_defaults={"2d": "<key>"}`. (“… has no cell embedding”
   means `obsm` holds no dense numeric array at all: {ref}`no-cell-embedding`.)
   {doc}`08_anndata_mode_show_anndata_and_serve_anndata` has the complete rules.

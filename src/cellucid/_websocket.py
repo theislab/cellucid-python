@@ -36,7 +36,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
-from typing import BinaryIO
+from typing import BinaryIO, Protocol
 
 import numpy as np
 
@@ -173,6 +173,52 @@ def _readiness_poller(connection: socket.socket) -> Callable[[float], bool]:
     return lambda seconds: bool(select.select([connection], [], [], max(0.0, seconds))[0])
 
 
+class _Readable(Protocol):
+    def readinto(self, buffer: memoryview) -> int: ...
+
+
+def read_exact_by_receipt(message: _Readable, size: int) -> bytearray:
+    """Exactly ``size`` bytes of a binary message, or a protocol error if it
+    ends first; the buffer grows at most :data:`_READ_AHEAD_BYTES` past what
+    has arrived (the WebSocket's and the notebook widget's messages alike)."""
+    result = bytearray()
+    while len(result) < size:
+        filled = len(result)
+        result.extend(bytes(min(size - filled, _READ_AHEAD_BYTES)))
+        with memoryview(result) as whole, whole[filled:] as view:
+            count = message.readinto(view)
+        del result[filled + count :]
+        if count == 0:
+            raise WebSocketProtocolError(CLOSE_POLICY_VIOLATION, "Binary message ended early")
+    return result
+
+
+def read_rest_by_receipt(message: _Readable, limit: int | None) -> bytearray:
+    """The rest of a binary message, its buffer grown as its bytes arrive
+    (at most doubling what has arrived, at least :data:`_READ_AHEAD_BYTES`),
+    never to a length the peer named: a frame header claiming 2**63 bytes
+    allocates nothing before the bytes are there. A message longer than
+    ``limit`` bytes (None: no bound but what arrives) is refused (1009) as
+    soon as it passes it, before more is read."""
+    result = bytearray()
+    while True:
+        filled = len(result)
+        step = max(_READ_AHEAD_BYTES, filled)
+        if limit is not None:
+            # One byte past the bound is enough to know it was passed.
+            step = min(step, limit - filled + 1)
+        result.extend(bytes(step))
+        with memoryview(result) as whole, whole[filled:] as view:
+            count = message.readinto(view)
+        del result[filled + count :]
+        if count == 0:
+            return result
+        if limit is not None and len(result) > limit:
+            raise WebSocketProtocolError(
+                CLOSE_MESSAGE_TOO_BIG, f"Binary message longer than the {limit:,} {plural(limit, 'byte')} it can hold"
+            )
+
+
 class _Frame:
     __slots__ = ("fin", "mask", "opcode", "remaining")
 
@@ -222,35 +268,19 @@ class BinaryMessage:
         return written
 
     def read_exact(self, size: int) -> bytearray:
-        """Read exactly ``size`` bytes of the message, or raise if it ends first."""
-        result = bytearray(size)
-        filled = 0
-        with memoryview(result) as view:
-            while filled < size:
-                count = self.readinto(view[filled:])
-                if count == 0:
-                    raise WebSocketProtocolError(
-                        CLOSE_POLICY_VIOLATION, "Binary message ended early"
-                    )
-                filled += count
-        return result
+        """Read exactly ``size`` bytes of the message, or raise if it ends first.
 
-    def read_rest(self, initial: int = 0) -> bytearray:
-        """Read the rest of the message into one buffer, sized from its frames."""
-        result = bytearray(max(initial, self._frame.remaining))
-        filled = 0
-        while True:
-            if filled == len(result):
-                if self.done:
-                    break
-                result.extend(bytes(max(self._frame.remaining, 64 * 1024)))
-            with memoryview(result) as whole, whole[filled:] as view:
-                count = self.readinto(view)
-            if count == 0:
-                break
-            filled += count
-        del result[filled:]
-        return result
+        The buffer grows with the bytes that arrive, never to the size the
+        peer named: a header length of 4 GiB, said in four bytes, allocates
+        nothing before the bytes it names are there.
+        """
+        return read_exact_by_receipt(self, size)
+
+    def read_rest(self, limit: int | None) -> bytearray:
+        """Read the rest of the message into one buffer grown as it arrives,
+        never sized from the length a frame header claims; longer than
+        ``limit`` bytes is refused (:func:`read_rest_by_receipt`)."""
+        return read_rest_by_receipt(self, limit)
 
     def drain(self) -> None:
         """Read and discard what is left of the message."""

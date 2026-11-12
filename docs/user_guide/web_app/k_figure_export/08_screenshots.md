@@ -25,7 +25,7 @@ Preview exposes the current framing and visual state before any file is written.
 ```
 
 ```{figure} ../../../_static/screenshots/figure_export/framing.png
-:alt: The Framing group open: Plot size on Screen (half) with its W and H boxes, and Preview with its Show preview checkbox, above the Export button.
+:alt: The Framing group open: Figure width on its default, Double column · 183 mm, with its W box at 183 mm and the printed size under it (183 mm wide · height from its plot), and Preview with its Show preview checkbox, above the Export button.
 :width: 532px
 
 **Framing.** The width and height boxes are the **plot content** size, not the
@@ -37,13 +37,12 @@ frame, appears only once `Show preview` is on (see the window capture above).
 ## Labels, style, and output
 
 ```{figure} ../../../_static/screenshots/figure_export/labels-annotations.png
-:alt: The Labels and annotations group open: the Title box pre-filled, starting with the dataset name; the Annotations checkboxes Axes, Legend, Reference grid, 3D orientation and Depth sort; the X and Y axis labels; Legend: Right; and Emphasize selection.
+:alt: The Figure export section with its Labels and annotations group open and Framing, Style and Download folded: the Title box pre-filled, starting with the dataset name; the Annotations checkboxes Axes, Legend, Reference grid, 3D orientation and Depth sort; the X and Y axis labels; Legend: Right; Emphasize selection, unchecked; and the Export button at the bottom.
 :width: 532px
 
 **Labels and annotations.** The **Title** box arrives pre-filled from the
 dataset (see {doc}`05_metadata_and_provenance`); below it the **Annotations**
-checkboxes, the axis labels, the legend position, and **Emphasize
-selection**.
+checkboxes, the axis labels and the legend position.
 ```
 
 ```{figure} ../../../_static/screenshots/figure_export/style.png
@@ -54,10 +53,11 @@ Style controls expose background, typography, and text sizing.
 ```
 
 ```{figure} ../../../_static/screenshots/figure_export/download.png
-:alt: The Download group open with the format set to SVG: the SVG point strategy select on its placeholder, shortened to "Choose S…", and Export all views (split-view) with the pointer on its checkbox, above the Export button.
+:alt: The Download group open with the format set to SVG: the SVG point strategy select on Full vector, and Export all views (split-view) with the pointer on its checkbox, above the Export button.
 :width: 532px
 
-**Download.** Output format, then an explicit SVG point strategy for SVG (or
+**Download.** Output format, then the SVG point strategy for SVG (Full vector
+until another is chosen; or
 the DPI for PNG), and
 whether all views are exported. A single output downloads in its native format;
 a multi-file request downloads once as a ZIP containing the native files.
@@ -66,14 +66,14 @@ a multi-file request downloads once as a ZIP containing the native files.
 ## When the app refuses
 
 ```{figure} ../../../_static/screenshots/figure_export/read-export-blocked-dialog.png
-:alt: The Export blocked dialog over the app: "Cellucid will not create an export that differs from the active view", Velocity overlay not exported with its reason, and a single Back button.
+:alt: The Export blocked dialog over the app: "Cellucid will not create an export that differs from the active view", Connectivity overlay not exported with its reason, and the buttons Back and Turn off edges and export.
 :width: 1440px
 
-Pressing **Export** with the velocity overlay running raises this. It is a
+Pressing **Export** with the connectivity edges shown raises this. It is a
 modal, not a toast, and there is no “export anyway”. Besides **Back**, a view
-blocked only by the edges or the vector field offers **Turn off … and
-export**, which turns those layers off and exports the points as shown
-(the screenshot predates that button). The rule behind it is that a figure must match the view it claims to
+blocked only by the edges offers **Turn off edges and export**, which turns
+them off and exports the points as shown. (The vector field does not block: a
+figure draws it as arrows on a grid, {doc}`06_edge_cases`.) The rule behind it is that a figure must match the view it claims to
 be, so anything the exporter cannot reproduce blocks the export rather than
 being silently dropped. See {doc}`06_edge_cases`.
 ```

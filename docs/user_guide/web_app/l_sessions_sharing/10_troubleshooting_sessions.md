@@ -12,7 +12,7 @@
 
 | Symptom | Meaning | First action |
 |---|---|---|
-| **Share…** is greyed out | no dataset is open | open a dataset first |
+| **Share…** is grayed out | no dataset is open | open a dataset first |
 | File picker never opens | browser policy, embedded-context restriction, or handler error | use the ordinary browser tab, check Console, and retry from a direct click |
 | No dataset is loaded | sessions contain the history, not the dataset; one saved on a sample, link or server opens its dataset when loaded, one saved on a local file only where this browser kept the file (Chrome and Edge: **Reopen <name>**), one saved in a notebook cannot | click **Reopen <name>** if offered; otherwise open that dataset first, then load the file again |
 | Dataset identity error | one of dataset id, cell count, gene count, data mapping, or cell order differs, or the dataset lacks a field or gene the session uses, each with its own message | read the exact message first, then load the exact dataset the session was saved on |
@@ -20,8 +20,9 @@
 | "saved by a newer version of Cellucid" | the session was saved by a later release | open it in that version of Cellucid |
 | "not a Cellucid session file of format 4" | the file does not start with the session signature `CELLUCID_SESSION/4` | check that you picked a session file saved by this release |
 | Your file's dataset differs, but you want its steps | a session restores only onto its own dataset | replay its steps by name on the dataset shown: **Load… › Replay a session file here…** ({doc}`../m_state_history/06_sharing_and_replay`) |
-| "This session file is damaged: …" | the file breaks the format (a manifest, chunk, step or value that does not check out) | obtain a fresh unchanged file from **Share…** |
-| "This history holds state this version of Cellucid does not have" | it was saved by a version with a part of the state this one lacks | open it in the version of Cellucid it was saved with |
+| "the file is damaged, so it was not opened; the history shown is unchanged." (what is wrong under **Details**, starting *This session file is damaged:*) | the file breaks the format (a manifest, chunk, step or value that does not check out) | obtain a fresh unchanged file from **Share…** |
+| "it does not hold together as a history, so it was not opened; the history shown is unchanged." | a saved state or file whose steps, branches or groups break the history's own rules (the rule and the ids under **Details**) | open another saved state, or report it with its **Details**: a history Cellucid wrote should always hold together |
+| "Session restored but for … A part of the state this version of Cellucid does not have (…) is left out" | it was saved by a version with a part of the state this one lacks; the rest is restored | nothing to fix here; open it in the version of Cellucid it was saved with to see that part |
 | Gzip, byte-length, truncation, or trailing-data error | corrupt or dishonest file | transfer/download the original again; do not edit it |
 | Progress disappears after Cancel or a newer load | intentional stop | no action; the older load neither succeeded nor failed |
 | **Session fully restored.**, but the view was already similar | a complete load with a subtle visual change | compare the high-signal state below |
@@ -40,19 +41,19 @@ reports **Session fully restored.** only after:
 4. the step shown is put back; and
 5. every other step's values are read and checked.
 
-That notification, **Loaded** with **Session fully restored.**, is the load's
-one report of success. If any step fails, what was shown before comes back,
-the trackers you had stay, and the same progress entry ends as **Loading
-failed** with the reason.
+That notice, **Session fully restored.**, is the load's one report of
+success. If any step fails, what was shown before comes back, the trackers you
+had stay, and the load's progress notification ends as **Loading failed**
+with the reason.
 
 ## Save
 
 ### The button produces no file
 
-1. Wait until the dataset and controls are ready; **Share…** stays greyed out
+1. Wait until the dataset and controls are ready; **Share…** stays grayed out
    until a dataset is open.
 2. Click **Share…** under **State › Session**, then **Save file** again. When
-   no branch is ticked, **Save file** is greyed out and the dialog says
+   no branch is ticked, **Save file** is grayed out and the dialog says
    *Choose a branch to share.*
 3. Check for a `Sharing the history failed: …` notification, and the browser
    Console for `[state] Sharing the history failed`.
@@ -144,7 +145,7 @@ Read the message before changing anything; each cause has its own:
   with the reason). A session whose embeddings this dataset *does* have is not
   refused: they are put back. Open the dataset version the session was saved
   on.
-- **"This session uses … as its neighbour graph, which this dataset does not
+- **"This session uses … as its neighbor graph, which this dataset does not
   have"** (or modality, gene names, expression matrix, latent space, vector
   fields): the session names an array this dataset does not have or cannot
   use. One it has is put back instead of refused.
@@ -187,8 +188,10 @@ it. A file of another format version is refused naming its version; for format
 
 > This session was saved by an earlier version of Cellucid (session format 3), which this version no longer reads: a session file now holds the history of every step (session format 4). It was not opened. Open it in the version of Cellucid that saved it, or re-create the session in this version.
 
-A format-4 file that breaks the format is refused with a sentence starting
-*This session file is damaged:* that names what is wrong, for example:
+A format-4 file that breaks the format is refused: the notification says the
+file is damaged and that the history shown is unchanged, and its **Details**
+hold a sentence starting *This session file is damaged:* that names what is
+wrong, for example:
 
 - a manifest key missing or extra;
 - a chunk listed twice, a chunk no tracker owns, or an eager chunk after a lazy

@@ -7,7 +7,7 @@ This page is a **symptom → diagnosis → fix** guide for filtering issues.
 ## Quick triage checklist (do this first)
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-three-rows.png
-:alt: The Filters block holding three rows of different kinds at once: an S_score range row ending in its cell count, cut off with an ellipsis, a clusters hiding row, and a clusters: outlier ≤ 95% row with no count.
+:alt: The Filters block reading Showing 768 of 3,696 cells above three rows of different kinds: S_score: -0.146 – 1.… and clusters: hiding Du…, each cut off with an ellipsis and followed by the cell count 768, and clusters: outlier ≤ 95% with no count.
 :width: 496px
 
 This is the block every answer on this page starts from. Scroll to the bottom
@@ -53,7 +53,7 @@ the reassurance: the data loaded, and one filter row is hiding all of it.
 2) You hid categories until none remain visible.
 3) You are on a snapshot with a different filter stack than you expect.
 4) Outlier filtering is active and set aggressively (rare but possible).
-5) A gene-range filter is active (it applies whatever is coloured; see **Filters**).
+5) A gene-range filter is active (it applies whatever is colored; see **Filters**).
 
 ### How to confirm
 
@@ -127,7 +127,7 @@ Use the fastest safe resets:
 2) No latent space is chosen: there is no slider, only a **Choose latent
    space** button (its tooltip names the file's candidate arrays).
 3) The quantiles are still being read or computed (a progress bar under the
-   slider), or you cancelled that read, which put the slider back at `100%`.
+   slider), or you canceled that read, which put the slider back at `100%`.
 4) The outlier filter is disabled in Filters (shows `(disabled)`).
 5) Many cells have missing outlier quantiles (categories smaller than
    `centroid_min_points`, or no category), so fewer cells are affected.
@@ -141,7 +141,7 @@ Use the fastest safe resets:
    slider, that says why it cannot filter yet.
 
 ```{figure} ../../../_static/screenshots/filtering/window-outlier-100-off.png
-:alt: The whole window coloured by clusters with the Outlier filter at its default 100 percent: scattered cells sit between and around the clusters, and the Filters block reads Showing all 3,696 cells.
+:alt: The whole window colored by clusters with the Outlier filter at its default 100 percent: scattered cells sit between and around the clusters, and the Filters block reads Showing all 3,696 cells.
 :width: 1440px
 
 The commonest cause: the slider is present and correct, but still at `100%`,
@@ -151,7 +151,7 @@ appears once the threshold drops below `99.99%`.
 
 2) Set it to something obviously aggressive like `50%` as a diagnostic.
 3) Look for an entry in the **Filters** list like: `Field: outlier ≤ 50%`.
-4) If it exists, confirm the row is not greyed and struck through (that means
+4) If it exists, confirm the row is not grayed and struck through (that means
    you disabled it).
 
 ### Fix
@@ -169,7 +169,7 @@ appears once the threshold drops below `99.99%`.
 ### Prevention
 
 - Use outlier filtering as a “clean up clusters” tool, not a general QC replacement.
-- Keep in mind it keeps applying when you colour by another field, until you remove or disable it under **Filters**.
+- Keep in mind it keeps applying when you color by another field, until you remove or disable it under **Filters**.
 
 ---
 
@@ -232,7 +232,7 @@ appears once the threshold drops below `99.99%`.
 
 :::{note}
 **“The more I hide, the slower it gets” is no longer a symptom.** Hidden points
-are rejected before rasterisation, so a heavily filtered view draws faster than
+are rejected before rasterization, so a heavily filtered view draws faster than
 an unfiltered one. If filtering feels slow, the cost is in recomputing the mask
 while you drag, not in drawing the result — which is exactly why the
 apply-once workflow below helps.

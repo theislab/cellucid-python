@@ -18,6 +18,29 @@ viewer or the web app's exports (:func:`~cellucid.pull`). One rule each:
 Cells are original positions: rows of the object's ``obs`` in order.
 :func:`write_columns` puts every planned column on at once, after every one
 was built, so a failure leaves the object as it was.
+
+Its colors go with a column, the way Scanpy keeps them:
+``uns['<column>_colors']``, one color a category in the column's order (the
+viewer opens a column in them). One rule, :func:`write_columns`', the same in
+cellucid-r and the web app's "Save AnnData with this state…":
+
+- a column written (added or replaced) has the colors it is shown in when
+  the writer knows them (a session's categorical field:
+  :func:`._colors.shown_category_colors`), and none otherwise: colors held
+  under its name described another column;
+- a column removed takes its colors with it;
+- a column renamed takes its colors along when they are Scanpy's form, a list
+  of text (colors of another form are removed: they cannot be carried);
+- a categorical column relabeled in place keeps its colors when no
+  categories merged; when some did, each category keeps the color of the first
+  one it was made from (it takes that one's place), and colors that are not a
+  list of text with one a category before are removed; a text column
+  relabeled loses its colors (Scanpy colors a text column by its sorted
+  labels, which a rename reorders);
+- a dataset column the session recolored (``recolor``) takes the colors it is
+  shown in (:func:`._colors.plan_column_colors`), after its renames.
+
+A column left as it is keeps its colors.
 """
 
 from __future__ import annotations
@@ -29,6 +52,7 @@ import numpy as np
 import pandas as pd
 
 from .._plural import plural
+from .._scanpy_colors import colors_key, text_colors
 from ._records import _ColumnPlan
 
 
@@ -131,6 +155,49 @@ def without_unknown(values: pd.Series, known: np.ndarray | None) -> pd.Series:
     return pd.Series(numbers, index=values.index)
 
 
+def _next_colors(
+    target: Any,
+    plans: Sequence[_ColumnPlan],
+    remove: Sequence[str],
+    replace: Sequence[_ColumnPlan],
+    rename: Mapping[str, str],
+    recolor: Mapping[str, Sequence[str]] | None = None,
+) -> dict[str, list[str] | None]:
+    """The ``uns`` colors a :func:`write_columns` call leaves (see the module):
+    each ``uns`` key it changes, to its colors or None (removed)."""
+    uns = target.uns
+    changed: dict[str, list[str] | None] = {}
+
+    def held(column: str) -> Any:
+        key = colors_key(column)
+        return changed[key] if key in changed else uns.get(key)
+
+    def put(column: str, colors: list[str] | None) -> None:
+        changed[colors_key(column)] = colors
+
+    for name in remove:
+        put(name, None)
+    for plan in replace:
+        if plan.sources is None:
+            put(plan.name, None)
+            continue
+        before = len(target.obs[plan.name].cat.categories)
+        if len(plan.sources) == before:
+            continue
+        colors = text_colors(held(plan.name))
+        put(plan.name, None if colors is None or len(colors) < before else [colors[at] for at in plan.sources])
+    moved = {old: text_colors(held(old)) for old in rename}
+    for old in rename:
+        put(old, None)
+    for old, new in rename.items():
+        put(new, moved[old])
+    for name, shown in (recolor or {}).items():
+        put(name, list(shown))
+    for plan in plans:
+        put(plan.name, None if plan.colors is None else list(plan.colors))
+    return changed
+
+
 def write_columns(
     target: Any,
     plans: Sequence[_ColumnPlan],
@@ -138,12 +205,17 @@ def write_columns(
     remove: Sequence[str] = (),
     replace: Sequence[_ColumnPlan] = (),
     rename: Mapping[str, str] | None = None,
+    recolor: Mapping[str, Sequence[str]] | None = None,
 ) -> None:
     """Change ``target.obs`` in one assignment: drop the columns in ``remove``,
     put each of ``replace`` in place of the column of its name, rename the
     columns ``rename`` names (old name to new, all at once, each keeping its
     place), then put every planned column on (replacing a column of the same
-    name). Every column is built before this runs, so ``obs`` changes once."""
+    name). Every column is built before this runs, so ``obs`` changes once.
+    Each column's colors in ``uns`` follow it (the module's rule); a column
+    ``recolor`` names (by its name after the renames) takes the colors given."""
+    colors = _next_colors(target, plans, [name for name in remove if name in target.obs.columns], replace, rename or {},
+                          recolor)
     next_obs = target.obs.copy(deep=False)
     for name in remove:
         if name in next_obs.columns:
@@ -155,3 +227,8 @@ def write_columns(
     for plan in plans:
         next_obs[plan.name] = plan.values
     target.obs = next_obs
+    for key, value in colors.items():
+        if value is None:
+            target.uns.pop(key, None)
+        else:
+            target.uns[key] = value

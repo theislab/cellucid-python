@@ -22,7 +22,7 @@ the workspace already ships:
   cells), as it is.
 
 The files stand in for the reader's own; the pictures show what Cellucid
-does with each format, on cells a reader of the documentation recognises.
+does with each format, on cells a reader of the documentation recognizes.
 """
 
 from __future__ import annotations

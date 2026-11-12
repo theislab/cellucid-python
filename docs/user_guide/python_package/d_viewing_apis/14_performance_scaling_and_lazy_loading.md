@@ -58,7 +58,7 @@ Gene expression is huge (`n_cells × n_genes`). Loading it all into browser memo
 
 Every route reads gene expression **on demand**:
 - the viewer fetches only the genes you request,
-- an embedding, an `obs` column, the neighbour graph, or a vector field is read
+- an embedding, an `obs` column, the neighbor graph, or a vector field is read
   when a view needs it.
 
 ### Which modes are lazy?
@@ -90,7 +90,7 @@ whose expression matrix is row-major (CSR) and gzip-compressed:
 | Every later gene | under 1 ms |
 | 100 genes at once | ~20 ms |
 | 1,000 cell rows | 0.55 s |
-| Neighbour graph, when a view draws it | 0.65 s |
+| Neighbor graph, when a view draws it | 0.65 s |
 
 A row-major matrix stores cells, not genes, so the browser builds a gene index
 over it once. The browser measures the link to the server while the dataset
@@ -142,11 +142,11 @@ served before:
 
 | Opened | Bytes sent (open, a field, the UMAP, two genes) | Requests |
 |---|---|---|
-| 1 % of the cells, served in priority order | 0.18 MB | 19 |
-| 1 %, before (`blocks`) | 2.1 MB | 168 |
-| 1 %, before (`uniform`) | 10.6 MB | 23 |
-| 10 %, served in priority order | 1.4 MB | 19 |
-| 10 %, before (`blocks` or `uniform`) | 10.6 MB | 23 |
+| 1% of the cells, served in priority order | 0.18 MB | 19 |
+| 1%, before (`blocks`) | 2.1 MB | 168 |
+| 1%, before (`uniform`) | 10.6 MB | 23 |
+| 10%, served in priority order | 1.4 MB | 19 |
+| 10%, before (`blocks` or `uniform`) | 10.6 MB | 23 |
 | every cell, served in priority order | 14.2 MB | 39 |
 | every cell, before | 10.6 MB | 23 |
 
@@ -194,7 +194,7 @@ Inputs that add work:
   HDF5 filter such as Blosc or Zstandard, a Zarr codec such as bz2): each chunk
   is decoded on the kernel when it is asked for. Step 1 names those arrays.
 
-## The neighbour graph is read when drawn
+## The neighbor graph is read when drawn
 
 `knn_key` (`--knn`) names the `obsp` graph the viewer opens on; without it the
 viewer uses `obsp['connectivities']` when the store has it. Either way the

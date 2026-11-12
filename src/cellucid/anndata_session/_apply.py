@@ -21,7 +21,7 @@ compared with one shared expected plan (``history_golden.expected.json``,
   renamed categories, then deleted fields, then user-defined fields;
   ``gene-sets``: each set; ``highlights``: each group of every page; every
   other domain whose value at the step differs from the tracker's opening is
-  one ``presentation`` row, not applied (filters, colours, views, the camera,
+  one ``presentation`` row, not applied (filters, colors, views, the camera,
   analyses are how the data was shown, not the data).
 - **Statuses**: ``write`` (the object lacks it), ``unchanged`` (the object
   holds exactly it already: applying again is a no-op, never a failure),
@@ -34,8 +34,14 @@ compared with one shared expected plan (``history_golden.expected.json``,
   ``Provenance``): the session's SHA-256, the tracker, branch and step, when,
   the package and its version, the columns it owns (which a later apply
   replaces only with ``overwrite=True``), what it renamed, what it did not
-  apply, and, with ``keep_session=True``, the session file itself (base64),
-  so the history can be rebuilt from the object.
+  apply, the step's expression values (``expression``: its ``expression``
+  value, ``{"normalize": bool, "log1p": bool}``, None when the session
+  holds none), and, with ``keep_session=True``, the session file itself
+  (base64), so the history can be rebuilt from the object. The expression
+  values say what the person looked at the genes in (normalized to 10,000
+  counts per cell, log1p, both, or as stored); they are never applied: ``X``
+  and the layers keep their values, and the ``expression`` domain is a
+  ``presentation`` row like the others.
 - **Gene sets** go to ``uns['cellucid']['gene_sets']`` by name (origin
   ``session``) and, one ``bool`` column each, to the ``var`` of the genes the
   data mapping reads: ``var`` when it reads ``X`` or a layer, the modality's
@@ -53,6 +59,31 @@ compared with one shared expected plan (``history_golden.expected.json``,
   its column stay. ``expected.apply.sequence[].var_columns`` pins the
   columns. The plan's rows and the provenance's ``columns`` (obs columns)
   are the same as without them.
+- **Colors** go with the columns, as Scanpy keeps them
+  (``uns['<column>_colors']``, :func:`._columns.write_columns`; a MuData's
+  global ``uns``): a categorical user field written or replaced with the
+  colors it is shown in, one ``#rrggbb`` a category in its order
+  (:mod:`._colors`): in the view in focus at the step, the color the person
+  or an agent gave a category (the ``colors`` value), else the color it
+  opens with -- its ``palette`` (a field made from highlight pages takes its
+  pages'), else Cellucid's own category colors by position; any other
+  column written or replaced with none (the colors held under its name
+  described another column); a renamed column's colors carried along; a
+  relabeled categorical's kept, a merged category taking the color of the
+  first category it was made from. A column the apply leaves as it is
+  (``unchanged``, ``not-applied``) keeps its colors, but a column that came
+  with the dataset and was recolored in the view in focus: one
+  ``column-colors`` row each (domain ``colors``, before the domain's
+  presentation row), written with the colors it is shown in
+  (:func:`._colors.plan_column_colors`). The ``colors`` domain's
+  presentation row stays ``not-applied`` (every other color is how the data
+  was shown), its note saying so when colors went with a column
+  (``COLORS_NOTE``). The web app's copy writes the same (``colorChanges``).
+- **The dataset** is the session's: its id (``datasetId``) must be the one
+  the object declares (``uns['cellucid']['id']``), or the one it was shown
+  under when the viewer was given another (``dataset_id=``; a viewer's
+  :meth:`~cellucid.jupyter.AnnDataViewer.apply_session_to_anndata` names the
+  id it served the object under itself).
 - **The priority-order column** ``obs['cellucid_original_position']`` (each
   row's original position in a file stored in priority order) is never
   written, renamed or replaced: a plan that would, or that renames another
@@ -78,6 +109,7 @@ import pandas as pd
 from .. import _history_model as model
 from .. import _history_rules as _rules
 from .._anndata_files import is_mudata
+from .._contracts import _require_dataset_id
 from .._plural import plural
 from ..data_mapping import (
     MODALITY_KEY,
@@ -89,21 +121,26 @@ from ..data_mapping import (
 from ..history import DOMAIN_NAMES, Step, Tracker
 from ..session import CellucidSession, package_version
 from ._cells import known_cells
+from ._colors import COLORS_NOTE, focused_column_recolors, focused_recolors, plan_column_colors
 from ._columns import write_columns
 from ._fields import _plan_user_fields
 from ._highlights import _plan_highlights, column_part, unique_column
 from ._labels import _plan_labels
 from ._mudata import MuDataSessionView
-from ._primitives import _require_exact_keys, _require_list, _require_text
+from ._primitives import _require_bool, _require_exact_keys, _require_list, _require_text
 from ._records import _Candidate, _ColumnPlan
 from ._schema import (
     CELLS_DOMAIN,
+    COLORS_DOMAIN,
+    EXPRESSION_DOMAIN,
+    EXPRESSION_KEYS,
     FIELD_OVERLAYS_DOMAIN,
     GENE_SET_KEYS,
     GENE_SETS_DOMAIN,
     GENE_SETS_KEYS,
     HIGHLIGHTS_DOMAIN,
     OVERLAY_KEYS,
+    VIEWS_DOMAIN,
 )
 
 #: The ``uns['cellucid']`` key every apply appends its record to (JSON text).
@@ -177,24 +214,41 @@ def _require_session(session: Any) -> CellucidSession:
 # The dataset the session was saved on
 
 
-def _check_fingerprint(fingerprint: dict[str, Any], adata: Any, *, open_cells: int) -> Any:
+def declared_dataset_id(adata: Any) -> str | None:
+    """The id an object declares (``uns['cellucid']['id']``; a MuData's
+    global ``uns``), or None when it names none."""
+    uns = getattr(adata, "uns", None)
+    record = uns.get("cellucid") if isinstance(uns, Mapping) else None
+    own_id = record.get("id") if isinstance(record, Mapping) else None
+    return own_id if isinstance(own_id, str) and own_id else None
+
+
+def _check_fingerprint(fingerprint: dict[str, Any], adata: Any, *, open_cells: int, shown_as: str | None) -> Any:
     """Check the object against the session's dataset before anything is planned.
 
     Returns what the session is checked and planned against: ``adata``
     itself, or for a MuData the cells and the modality its data mapping
     names, as the viewer showed them (:class:`MuDataSessionView`). The order
-    is the viewer's: the dataset's id (when the object names one in
-    ``uns['cellucid']['id']`` and the session names one), the cell count,
-    then the data mapping -- every key it names must exist on the object --
-    and the gene count of the axis that mapping reads.
+    is the viewer's: the dataset's id (when the session names one: the id
+    the object was shown under, ``shown_as``, when given -- a viewer given
+    ``dataset_id=`` serves an object under that id, not the one it declares
+    -- else the one the object declares in ``uns['cellucid']['id']``, when
+    it declares one), the cell count, then the data mapping -- every key it
+    names must exist on the object -- and the gene count of the axis that
+    mapping reads.
     """
-    record = getattr(adata, "uns", {}).get("cellucid") if isinstance(getattr(adata, "uns", None), Mapping) else None
-    own_id = record.get("id") if isinstance(record, Mapping) else None
     dataset_id = fingerprint["datasetId"]
-    if isinstance(own_id, str) and own_id and dataset_id is not None and own_id != dataset_id:
+    own_id = declared_dataset_id(adata)
+    if dataset_id is not None and shown_as is not None and shown_as != dataset_id:
+        raise ValueError(
+            f"This session was saved on the dataset {dataset_id!r}, and this object was shown as {shown_as!r}. "
+            "Apply it to the dataset it was saved on."
+        )
+    if dataset_id is not None and shown_as is None and own_id is not None and own_id != dataset_id:
         raise ValueError(
             f"This session was saved on the dataset {dataset_id!r}, and this object is {own_id!r} "
-            "(uns['cellucid']['id']). Apply it to the dataset it was saved on."
+            "(uns['cellucid']['id']). Apply it to the dataset it was saved on; when it is that dataset, "
+            f"shown under another id (dataset_id= when it was shown), name that id: dataset_id={dataset_id!r}."
         )
     if fingerprint["cellCount"] != open_cells:
         raise ValueError(
@@ -226,7 +280,7 @@ def cell_order_digest(values: np.ndarray, positions: np.ndarray | None = None) -
     """The cell-order digest of some cells' stored embedding values
     (``data/cell-order-digest.js``): two MurmurHash3 lanes per cell over its
     original position and its float32 values on up to three axes, summed,
-    finalised with the cell count; 16 lower-case hex digits.
+    finalized with the cell count; 16 lower-case hex digits.
 
     ``values`` is one row per cell, 1 to 3 columns; ``positions`` each row's
     original position (None: row ``i`` is position ``i``).
@@ -310,7 +364,7 @@ def _check_cell_order(fingerprint: dict[str, Any], shown: Any, kept: np.ndarray 
 
 def required_fields(state: Mapping[str, Any]) -> dict[str, list[str]]:
     """The dataset fields a step's state uses (``collectRequiredFields``): every
-    obs column and gene a view colours by or filters on, or a highlight group
+    obs column and gene a view colors by or filters on, or a highlight group
     is bound to, by the key the dataset gives it; fields the session made
     itself are not listed. Sorted as JavaScript sorts text."""
     required: dict[str, set[str]] = {"obs": set(), "var": set()}
@@ -381,7 +435,13 @@ def _read_gene_sets(value: Any) -> list[dict[str, Any]]:
 
 def history_applied(adata: Any) -> list[dict[str, Any]]:
     """Every apply recorded on an object (``uns['cellucid']['history_applied']``),
-    oldest first, each the model's ``Provenance`` as JSON."""
+    oldest first, each the model's ``Provenance`` as JSON: the session's
+    SHA-256, the tracker, branch and step, ``applied_at``,
+    ``cellucid_version``, ``package``, the ``columns`` it wrote, what it
+    ``renamed`` and ``skipped``, the step's ``expression`` values
+    (``{"normalize": bool, "log1p": bool}``: what the person looked at the
+    genes in, recorded and never applied; None when the session holds none)
+    and the kept ``session`` (or None)."""
     uns = getattr(adata, "uns", None)
     if not isinstance(uns, Mapping):
         raise TypeError("adata.uns must be a dictionary")
@@ -440,6 +500,9 @@ class _Writes:
     var_columns: list[_VarColumn]
     var_modality: str | None
     var_notes: list[str]
+    #: The dataset columns recolored, by their name after the renames, to the
+    #: colors each is shown in (:func:`._colors.plan_column_colors`).
+    recolor: dict[str, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -475,7 +538,7 @@ class ApplyPlan(model.ApplyPlan):
         """
         context = cast(_PlanContext, getattr(self, _CONTEXT))
         again = _plan(context.session, context.adata, tracker=context.tracker, branch=context.branch, step=context.step,
-                      overwrite=context.overwrite, keep_session=False)
+                      overwrite=context.overwrite, keep_session=False, shown_as=context.shown_as)
         if again.rows != self.rows:
             raise ValueError("The object changed since this plan was made; make the plan again (dry_run=True) and apply that.")
         object.__setattr__(again, _CONTEXT, replace(cast(_PlanContext, getattr(again, _CONTEXT)), kept=context.kept))
@@ -506,10 +569,14 @@ class _PlanContext:
     branch: str | None
     step: str | None
     overwrite: bool
+    # The id the object was shown under (``dataset_id``), None: the one it declares.
+    shown_as: str | None
     # The session file's bytes, read once when the plan is made with
     # keep_session (so the file may go before the plan is applied).
     kept: bytes | None
     writes: _Writes
+    # The step's expression values (the provenance's ``expression``).
+    expression: dict[str, bool] | None
 
 
 def _choose(session: CellucidSession, *, tracker: str | None, branch: str | None, step: str | None) -> tuple[Tracker, str, Step]:
@@ -557,6 +624,7 @@ def _plan(
     step: str | None,
     overwrite: bool,
     keep_session: bool,
+    shown_as: str | None,
 ) -> ApplyPlan:
     """Check the object and plan every row, writing nothing."""
     if session.scope.content == "steps":
@@ -593,7 +661,7 @@ def _plan(
         kept = saved_on["kept"]
         open_cells = int(kept.size)
     fingerprint = session.dataset_fingerprint
-    shown = _check_fingerprint(fingerprint, adata, open_cells=open_cells)
+    shown = _check_fingerprint(fingerprint, adata, open_cells=open_cells, shown_as=shown_as)
     _check_cell_order(fingerprint, shown, kept)
     mapping = {key: value for key, value in fingerprint["dataMapping"].items() if key != MODALITY_KEY}
     raw = chosen_tracker._raw_state(chosen.id)
@@ -627,7 +695,7 @@ def _plan(
         if candidate.values is None:
             return _row(candidate.kind, candidate.domain, name, "not-applied", cells=candidate.cells, note=candidate.note)
         if name not in present_after:
-            columns.append(_ColumnPlan(name=name, values=candidate.values, metadata=candidate.metadata))
+            columns.append(_ColumnPlan(name=name, values=candidate.values, metadata=candidate.metadata, colors=candidate.colors))
             return _row(candidate.kind, candidate.domain, name, "write", cells=candidate.cells)
         existing_name = next((old for old, new in labels.rename.items() if new == name), name)
         existing = adata.obs[existing_name]
@@ -636,19 +704,35 @@ def _plan(
         if _same_column(existing, candidate.values):
             return _row(candidate.kind, candidate.domain, name, "unchanged", cells=candidate.cells)
         if overwrite:
-            columns.append(_ColumnPlan(name=name, values=candidate.values, metadata=candidate.metadata))
+            columns.append(_ColumnPlan(name=name, values=candidate.values, metadata=candidate.metadata, colors=candidate.colors))
             return _row(candidate.kind, candidate.domain, name, "replace", cells=candidate.cells,
                         note=f"Written by an earlier apply (step {owners[name]}); replaced.")
         return _row(candidate.kind, candidate.domain, name, "not-applied", cells=candidate.cells, note=owned_note(name, owners[name]))
 
-    field_rows = [settle(candidate) for candidate in _plan_user_fields(overlays["userFields"], shown, mapping=mapping, known=known)]
+    recolors = focused_recolors(raw.get(COLORS_DOMAIN), raw.get(VIEWS_DOMAIN))
+    fields = _plan_user_fields(overlays["userFields"], shown, mapping=mapping, known=known, recolors=recolors)
+    field_rows = [settle(candidate) for candidate in fields]
+    # Whether a field written or replaced took colors the step's colors value gave it.
+    recolored_written = any(
+        row["status"] in ("write", "replace") and recolors.get((candidate.metadata["source"], candidate.metadata["field_id"]))
+        for candidate, row in zip(fields, field_rows, strict=True)
+    )
     step_sets = _read_gene_sets(raw[GENE_SETS_DOMAIN])
     gene_set_rows, gene_sets = _plan_gene_sets(step_sets, adata, session, overwrite=overwrite)
     var_columns, var_notes = _plan_gene_set_columns(step_sets, gene_set_rows, gene_sets, shown=shown, mapping=mapping)
     highlight_rows = [settle(candidate) for candidate in _plan_highlights(raw[HIGHLIGHTS_DOMAIN], n_obs=n_obs, index=adata.obs_names, known=known)]
     _refuse_original_position(columns, labels.replaced, labels.rename)
+    column_colors = plan_column_colors(
+        focused_column_recolors(raw.get(COLORS_DOMAIN), raw.get(VIEWS_DOMAIN)), adata,
+        replaced=labels.replaced, rename=labels.rename,
+        earlier_names={entry["from"]: entry["to"] for entry in earlier_renames if entry["kind"] == "column"},
+        modality_columns=modality_columns,
+    )
+    # Whether any colors went with a column: a field's, or a recolored dataset column's.
+    colors_went = recolored_written or any(row["status"] != "not-applied" for row in column_colors.rows)
     presentation = {
-        domain: _row("presentation", domain, DOMAIN_NAMES[domain], "not-applied", note=PRESENTATION_NOTE)
+        domain: _row("presentation", domain, DOMAIN_NAMES[domain], "not-applied",
+                     note=COLORS_NOTE if domain == COLORS_DOMAIN and colors_went else PRESENTATION_NOTE)
         for domain in model.DOMAINS
         if domain not in DATA_DOMAINS and hashes.get(domain) != root.get(domain)
     }
@@ -657,6 +741,8 @@ def _plan(
         GENE_SETS_DOMAIN: gene_set_rows,
         HIGHLIGHTS_DOMAIN: highlight_rows,
     }
+    if column_colors.rows:
+        by_domain[COLORS_DOMAIN] = [*column_colors.rows, *([presentation[COLORS_DOMAIN]] if COLORS_DOMAIN in presentation else [])]
     rows = [row for domain in model.DOMAINS for row in by_domain.get(domain, [presentation[domain]] if domain in presentation else [])]
     plan = ApplyPlan(
         session_sha256=session.sha256,
@@ -669,13 +755,25 @@ def _plan(
     writes = _Writes(
         columns=columns, replaced=labels.replaced, rename=labels.rename, gene_sets=gene_sets, renamed=labels.renamed,
         var_columns=var_columns, var_modality=fingerprint["dataMapping"][MODALITY_KEY] if is_mudata(adata) else None,
-        var_notes=var_notes,
+        var_notes=var_notes, recolor=column_colors.recolor,
     )
     object.__setattr__(plan, _CONTEXT, _PlanContext(
-        session=session, adata=adata, tracker=tracker, branch=branch, step=step, overwrite=overwrite,
+        session=session, adata=adata, tracker=tracker, branch=branch, step=step, overwrite=overwrite, shown_as=shown_as,
         kept=_session_bytes(session) if keep_session else None, writes=writes,
+        expression=_expression_values(raw.get(EXPRESSION_DOMAIN), chosen.id),
     ))
     return plan
+
+
+def _expression_values(value: Any, step: str) -> dict[str, bool] | None:
+    """The expression values a step's state holds, as the provenance records
+    them (the model's ``ExpressionValues``): ``{"normalize", "log1p"}``, or
+    None when the session holds no ``expression`` value."""
+    if value is None:
+        return None
+    label = f"expression value at step {step}"
+    record = _require_exact_keys(value, EXPRESSION_KEYS, label=label)
+    return {key: _require_bool(record[key], label=f"{label}'s {key}") for key in ("normalize", "log1p")}
 
 
 def _plan_gene_sets(
@@ -811,6 +909,7 @@ def _write(plan: ApplyPlan) -> ApplyReport:
         "columns": [row.name for row in plan.rows if row.kind in ("user-field", "highlight") and row.status in ("write", "replace")],
         "renamed": copy.deepcopy(writes.renamed),
         "skipped": [{"kind": row.kind, "name": row.name, "note": row.note or ""} for row in plan.rows if row.status == "not-applied"],
+        "expression": None if context.expression is None else dict(context.expression),
         "session": None if context.kept is None else base64.b64encode(context.kept).decode("ascii"),
     }
     _rules.check_record("Provenance", provenance, "provenance")
@@ -830,7 +929,7 @@ def _write(plan: ApplyPlan) -> ApplyReport:
         next_var = var_owner.var.copy(deep=False)
         for column in writes.var_columns:
             next_var[column.name] = column.values
-    write_columns(target, writes.columns, replace=writes.replaced, rename=writes.rename)
+    write_columns(target, writes.columns, replace=writes.replaced, rename=writes.rename, recolor=writes.recolor)
     if next_var is not None:
         var_owner.var = next_var
     target.uns["cellucid"] = record
@@ -857,6 +956,7 @@ def apply_cellucid_session_to_anndata(
     dry_run: bool = True,
     overwrite: bool = False,
     keep_session: bool = False,
+    dataset_id: str | None = None,
 ) -> ApplyPlan | ApplyReport:
     """What applying one step of a session to its AnnData would change, or the change made.
 
@@ -875,13 +975,14 @@ def apply_cellucid_session_to_anndata(
 
     - the dataset: the cell count (of the subsample the session was saved
       on, when it was), the data mapping's keys and gene count, the dataset
-      id when the object names one (``uns['cellucid']['id']``), and the cell
-      order: when the object has the embedding the session names, the
+      id (the one the object was shown under, ``dataset_id``, when given;
+      else the one it declares, ``uns['cellucid']['id']``, when it names
+      one), and the cell order: when the object has the embedding the session names, the
       cell-order digest of its stored values over the session's cells must be
       the session's (the rows are those cells, in that order); a digest is a
       sum over the cells, so a mismatch says the cells differ, not which;
     - the fields the chosen step's state uses (the obs columns and genes its
-      views colour by or filter on, and its highlight groups are bound to);
+      views color by or filter on, and its highlight groups are bound to);
       the session's own ``requires`` is the shown state's.
 
     What a plan's rows are, in domain order: ``column-renamed`` (an obs
@@ -896,7 +997,14 @@ def apply_cellucid_session_to_anndata(
     from the page's name and the group's label, ASCII letters and digits with
     every other run one underscore, ``_2``, ``_3``... when two read alike) and
     ``presentation`` (a domain the step changed that is how the data was shown
-    -- filters, colours, views, the camera, analyses -- never applied).
+    -- filters, colors, views, the camera, analyses, the expression values --
+    never applied).
+
+    The expression values the genes were shown in at the step (Session ›
+    Data mapping › Expression values: normalized to 10,000 counts per cell,
+    log1p, both, or as stored) go into the apply's record (``expression``),
+    so a notebook knows what the person looked at; ``X`` and the layers keep
+    their values.
 
     What each row's status is: ``write``; ``unchanged`` (the object holds it
     already: applying the same step again changes nothing and reports so);
@@ -917,6 +1025,24 @@ def apply_cellucid_session_to_anndata(
     or no expression (no ``var`` to mark: the sets stay in ``uns`` only).
     Nothing is removed: a gene set the step no longer holds keeps its record
     and its column.
+
+    Colors go with the columns, as Scanpy keeps them
+    (``uns['<column>_colors']``, ``mdata.uns`` for a MuData): a categorical
+    field written or replaced gets the colors it is shown in, one
+    ``#rrggbb`` a category in the column's order (every category, used or
+    not) -- in the view in focus at the step, the color the person or an
+    agent gave a category, else the color it opens with: its ``palette`` (a
+    field made from highlight pages takes its pages'), else Cellucid's own
+    category colors by position. The ``colors`` row stays ``not-applied``
+    (every other color -- a dataset column's, a color map, another view's --
+    is how the data was shown), and says so when a field's colors went with
+    its column. Any other column written or replaced gets none (colors held
+    under its name described another column, and are removed). A renamed column
+    takes its colors along (a list of text; another form is removed); a
+    categorical whose categories merged keeps, for each category, the color
+    of the first one it was made from (colors that did not cover its
+    categories are removed); a text column relabeled loses its colors. A
+    column left as it is keeps its colors. Dry runs write nothing.
 
     ``obs['cellucid_original_position']`` (each row's original position in a
     file stored in priority order) is never written, renamed or replaced: a
@@ -959,6 +1085,14 @@ def apply_cellucid_session_to_anndata(
         ``source`` (where the viewer opened the dataset, which may be a
         private link); the whole file kept this way does, unless it was
         shared without one.
+    dataset_id : str, optional
+        The id the object was shown under, when the viewer was given another
+        than the one it declares (``show_anndata(..., dataset_id=...)``,
+        ``serve_anndata``, ``cellucid serve --dataset-id``): the session is
+        saved under that id. Default: the id the object declares
+        (``uns['cellucid']['id']``). A viewer's
+        :meth:`~cellucid.jupyter.AnnDataViewer.apply_session_to_anndata`
+        names the id it served the object under itself.
 
     Returns
     -------
@@ -976,8 +1110,8 @@ def apply_cellucid_session_to_anndata(
         A session file that is damaged, of another format, written by a newer
         Cellucid, or shared as its steps only; a tracker, branch or step it
         does not hold, or a step not on the branch named; an object that is
-        not the dataset the session was saved on, or lacks a field the step
-        uses; a plan that would write, rename or replace
+        not the dataset the session was saved on (another id, cell count,
+        data mapping or cell order), or lacks a field the step uses; a plan that would write, rename or replace
         ``obs['cellucid_original_position']``; a value this version does not
         read.
     """
@@ -985,20 +1119,21 @@ def apply_cellucid_session_to_anndata(
     for label, value in (("tracker", tracker), ("branch", branch), ("step", step)):
         if value is not None and not isinstance(value, str):
             raise TypeError(f"{label} must be a string (a name or an id) or None")
+    shown_as = None if dataset_id is None else _require_dataset_id(dataset_id, label="dataset_id")
     plan = _plan(_require_session(session), adata, tracker=tracker, branch=branch, step=step, overwrite=overwrite,
-                 keep_session=keep_session)
+                 keep_session=keep_session, shown_as=shown_as)
     if dry_run:
         return plan
     return _write(plan)
 
 
-def session_columns(session: Any, adata: Any) -> tuple[list[_Candidate], list[dict[str, Any]]]:
+def session_columns(session: Any, adata: Any, *, shown_as: str | None) -> tuple[list[_Candidate], list[dict[str, Any]]]:
     """The highlight groups and user-defined fields a session shows (its
     active tracker's head) as columns of ``adata``, and its gene sets: what
     :func:`~cellucid.pull` writes from a session file, checked as an apply
-    checks it."""
+    checks it (``shown_as``: its ``dataset_id``)."""
     found = _require_session(session)
-    plan = _plan(found, adata, tracker=None, branch=None, step=None, overwrite=False, keep_session=False)
+    plan = _plan(found, adata, tracker=None, branch=None, step=None, overwrite=False, keep_session=False, shown_as=shown_as)
     chosen = found.tracker().step(plan.step)
     raw = found.tracker()._raw_state(chosen.id)
     saved_on = found.cells
@@ -1008,6 +1143,7 @@ def session_columns(session: Any, adata: Any) -> tuple[list[_Candidate], list[di
     overlays = _require_exact_keys(raw[FIELD_OVERLAYS_DOMAIN], OVERLAY_KEYS, label="field-overlays value")
     candidates = [
         *_plan_highlights(raw[HIGHLIGHTS_DOMAIN], n_obs=int(adata.n_obs), index=adata.obs_names, known=known),
-        *_plan_user_fields(overlays["userFields"], shown, mapping=mapping, known=known),
+        *_plan_user_fields(overlays["userFields"], shown, mapping=mapping, known=known,
+                           recolors=focused_recolors(raw.get(COLORS_DOMAIN), raw.get(VIEWS_DOMAIN))),
     ]
     return [candidate for candidate in candidates if candidate.values is not None], _read_gene_sets(raw[GENE_SETS_DOMAIN])

@@ -73,6 +73,27 @@ To benefit:
    `Force LOD level` by a few steps only when you need to go past `Auto`'s
    floor, which the forced slider is deliberately not bounded by.
 
+### 5) Under reduced motion the overlay costs one trace, then nothing
+
+With the operating system's **reduce motion** setting on
+({doc}`../o_accessibility_privacy_security/01_accessibility`), the overlay
+does not animate. It draws a **still picture of the flow** instead: every
+particle starts from a cell chosen by a fixed seed and is traced 48 steps of
+one 60 Hz frame each (about 0.8 s of the moving flow), all at once, each step
+faded as the moving flow's trail would have left it. Each streak shows the
+direction of its cell's vector (a bright head, a fading tail) and its speed
+(the streak's length and color). The picture is seeded from the first fill of
+the overlay's seeds only (with more than 65,536 visible cells the moving flow
+refills them in turn, {doc}`03_core_parameters_document_exact_ui_labels`), so
+it is the same picture every time.
+
+The trace runs again only when what it shows changes — the camera, the
+visible cells, the field, any overlay setting — and costs about 48 small
+particle passes in that one frame. In between the viewer draws nothing: a
+still scene requests no frames, so the GPU is idle. Turning the setting off
+while the overlay is on resumes the moving flow at once, and turning it on
+stills it into the same picture.
+
 ---
 
 ## Recommended presets (copy/paste mental defaults)
@@ -203,4 +224,4 @@ Use this when you want to quickly decide whether you have:
    - `Bloom strength` 0.00
 6) If it is still slow: reduce window size and reduce number of views.
 7) If you see errors/toasts: go to {doc}`07_troubleshooting_velocity_overlay` and match the symptom.
-8) If the entire canvas goes blank or you see “WebGL context lost”: reload the page and consider lowering GPU load (density, trails, bloom, fewer views).
+8) If the entire canvas goes blank or you see **Graphics reset by the browser**: wait for the graphics to come back (they restore themselves; only if the dialog says they could not, reload and open the session it saved), then lower GPU load (density, trails, bloom, fewer views).

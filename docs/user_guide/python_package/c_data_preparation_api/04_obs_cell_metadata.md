@@ -6,7 +6,7 @@
 
 `obs` is a pandas DataFrame with one row per cell, in the cell order of the
 embeddings. Its index names the cells ({doc}`02_input_requirements_global`).
-Every column is stored; the viewer lists them as fields to colour and filter
+Every column is stored; the viewer lists them as fields to color and filter
 by.
 
 ## How each column is stored
@@ -61,7 +61,7 @@ embeddings; nothing about them is stored.
 
 Latent-space outlier quantiles are stored when you name a latent space with
 `latent_key`: for every categorical `obs` column (categorical, text, boolean
-or nullable boolean), each cell's distance to its category's centre in that
+or nullable boolean), each cell's distance to its category's center in that
 latent space, as the share of its category at that distance or closer, in
 `uns['cellucid']['outlierQuantiles']`. A category with fewer than
 `centroid_min_points` cells (10 when None) gets none, and a column none of

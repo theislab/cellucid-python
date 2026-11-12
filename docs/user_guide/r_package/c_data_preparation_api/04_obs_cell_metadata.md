@@ -65,11 +65,11 @@ number of categories.
   obs column 'day' is a Date column, which has no AnnData encoding Cellucid writes. Convert it first, for example with as.character() or as.numeric().
   ```
 
-- **An infinite value** in a double column (a colour scale has no position for
+- **An infinite value** in a double column (a color scale has no position for
   it); use `NA` for a missing value instead:
 
   ```text
-  obs column 'score' holds 1 infinite value (first at row 2). A colour scale has no position for an infinity; replace it with NA, which is written as a missing value.
+  obs column 'score' holds 1 infinite value (first at row 2). A color scale has no position for an infinity; replace it with NA, which is written as a missing value.
   ```
 
 - **A different number of rows** than the embeddings:
@@ -93,7 +93,7 @@ column of `obs`, at most once.
 ## Tips
 
 - Turn a numeric cluster id into a factor (`factor(seurat_clusters)`) if you
-  want it coloured by category rather than on a continuous scale.
+  want it colored by category rather than on a continuous scale.
 - Set factor levels in the order you want the legend to show.
 - Category labels are stored exactly as given: `"T cell"` and `"T cell "` are
   two categories.

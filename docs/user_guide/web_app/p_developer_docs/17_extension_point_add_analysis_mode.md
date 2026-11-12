@@ -69,6 +69,24 @@ table is held to the schema by `tests/analysis-options-schema-contract.test.mjs`
 so a new or changed setting updates the matching `h_analysis` page in the same
 change.
 
+An agent sees each option as a parameter described by its `label`. Where the
+label and the values do not say what a choice does, or the values come from
+the data (a cell scope's `all`, `visible`, `page:<page name>`; a sample field
+that makes the test pseudobulk), give the entry `means`: a short phrase
+appended to the description. It is sent with every call an agent makes, so
+add it only where it earns that.
+
+### Step A3c: Say how a result was computed
+
+A mode with a Run button implements `_resultTable(result, top)`, what an
+agent reads (`analysis.result`): the top rows, their columns and, as
+`about`, how the result was computed as the expanded view's statistics say
+it: the groups and their cells, the test and correction, the expression
+matrix, what the rows are (the `about` properties are declared in
+`actions/definitions/analysis.js`; null when the mode has nothing to say). An
+agent without it guessed that values were raw counts from their being whole
+numbers, and could not weigh a marker without its group's size.
+
 ### Step A4: Wire data access through `DataLayer`
 
 Do not read raw `DataState` internals from the UI directly.

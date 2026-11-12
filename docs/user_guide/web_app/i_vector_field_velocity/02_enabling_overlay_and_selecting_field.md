@@ -58,26 +58,33 @@ then reload the dataset.
 
 Read the message beneath the controls:
 
-- `Vector fields are bound to X_umap, X_umap_3d. Show one of them in this view to enable.`
+- `Vector fields are bound to UMAP · 2D, UMAP · 3D. Show one of them in this view to enable.`
   means no field is bound to the embedding the selected view shows. The list
-  names every embedding some field is bound to (by its label), so it tells you
-  which embedding to show — another dimension, or another embedding of the same
-  dimension in **View N shows** under **Compare views**.
-- `Available on X_umap, X_umap_3d. Select a vector field before enabling the overlay.`
-  means matching fields exist, but none is selected.
+  names every embedding some field is bound to as **View N shows** names it
+  (two embeddings named alike there add their `obsm` key: `UMAP · 2D (X_umap_raw)`),
+  so it tells you which embedding to show — another dimension, or another
+  embedding of the same dimension in **View N shows** under **Compare views**.
+  The dimmed `Show overlay` says the same when you point at it.
+- `Available on UMAP · 2D, UMAP · 3D. Select a vector field before enabling the overlay.`
+  means several fields are bound to the embedding the view shows and none is
+  selected.
 
 Only fields bound to the embedding the view shows appear in `Vector field`.
-Cellucid does not silently choose the first field. A declared default is selected
-only when that same field is bound to that embedding.
+When exactly one is, it is selected: there is nothing to choose. Among several,
+Cellucid does not guess: the dataset's declared default is selected when it is
+bound to that embedding, and otherwise you pick one.
 
 ### Overlay enabled
 
 The status becomes `Available on …`. `Vector field` and all core/advanced
 controls are visible. Changing the field shows `Loading vector field…`; on
-success the overlay uses the newly selected field.
+success the overlay uses the newly selected field. While a field loads, `Show
+overlay` and `Vector field` wait (dimmed, "the vector field is loading"); a
+newer choice arriving then (a session, an undo, an agent) is the one shown.
 
-If loading fails, the error notification contains the underlying message, the
-checkbox is turned off, and the status reads `Failed to load vector field.`.
+If loading fails, one error notification reads `The vector field could not be
+shown: …` with the reason (a problem inside Cellucid says so, its own words
+under **Details**), the checkbox is turned off, and the status reads `The vector field could not be shown.`.
 Follow {doc}`07_troubleshooting_velocity_overlay` rather than repeatedly
 toggling it.
 
@@ -128,6 +135,14 @@ For the same loaded dataset, a `.cellucid-session` captures `Show overlay`,
 `Sync with LOD`. Restore still validates the current field options; the session
 does not contain the vector arrays or dataset. See
 {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
+
+## Figures
+
+A figure exported while the overlay is on (PNG, SVG, the export preview)
+draws the same field as a still picture: arrows on a grid, the mean of nearby
+cells' vectors, colored by speed with the overlay's `Color scheme`, with a key
+naming the field. See
+{doc}`../k_figure_export/06_edge_cases` (The vector field: arrows on a grid).
 
 ## Verified interface
 

@@ -29,7 +29,7 @@ These checks solve most “it’s broken” reports in under a minute:
      the Highlighting panel or on the selection bar at the bottom of the plot)?
      See {ref}`select-mode`.
 8) **Tool mode:** are you in the tool you think you are in (Lasso vs Proximity vs KNN vs Annotation)?
-   - **Annotation** additionally needs a coloured field. With none, the
+   - **Annotation** additionally needs a colored field. With none, the
      panel replaces its `Alt+click` invitation with the sentence that asks for
      one; the other three tools never read the active field.
 9) **Where you released:** did the mouse come up over the plot, or over the
@@ -83,7 +83,7 @@ Which tools report which:
 - **“did not land on a cell”** comes from **Annotation**, **KNN drag**,
   and **Proximity drag** — the tools that need a cell under the pointer to
   begin. Lasso does not need one, so it never reports this. Proximity reports it
-  only when it cannot place a centre at all; with a candidate set already
+  only when it cannot place a center at all; with a candidate set already
   standing it places one anyway (see the proximity symptom below).
 - **“ended outside the view”** comes from all four tools, Lasso included.
 
@@ -129,23 +129,29 @@ Repeat the gesture you are actually debugging before you trust the line.
 
 ## Symptom: “The highlight count says cells are highlighted, but the plot looks unhighlighted”
 
+A highlighted cell is a cyan dot inside a black ring, whatever the coloring: on
+a map colored by the very field the highlight was made from (say `cell_type`,
+with one of its categories highlighted), the black rings mark the cells even
+where their own color is close to the cyan.
+
 ### Likely causes (ordered)
-1) Highlight style is subtle relative to your color-by/background/point size.
-2) Only a small fraction of points are highlighted and you are zoomed out.
-3) The highlighted cells are mostly filtered out (so only a few are visible).
+1) Only a small fraction of points are highlighted and you are zoomed out:
+   at a point size of a pixel or two, the dot and its ring are one speck.
+2) The highlighted cells are mostly filtered out (so only a few are visible).
+3) The highlight page you are looking at is not the active one (only the
+   active page draws).
 
 ### How to confirm
-- Switch to a simple color-by (or a plain-looking field) temporarily.
 - Zoom in until points are larger on screen.
 - Check whether the count says “X of Y visible”.
+- Check which page tab is active in **Highlights**.
 
 ### Fix
-- Zoom in; highlights are easiest to see when points are not subpixel-sized.
-- Adjust display settings (point size/background) if your build exposes them.
+- Zoom in, or raise the point size; highlights are easiest to see when points
+  are not subpixel-sized.
 - Temporarily simplify filters to increase visible highlighted cells.
 
 ### Prevention
-- When validating a selection, use a plain or high-contrast coloring.
 - Capture “before/after” screenshots when documenting a workflow ({doc}`07_screenshots`).
 
 ---
@@ -278,10 +284,10 @@ based** selection, not only Lasso.
 
 ### Likely causes (ordered)
 1) You clicked empty space with **no** candidate set standing, so there was no
-   valid centre and the gesture never started. The app says so: *“That click did
+   valid center and the gesture never started. The app says so: *“That click did
    not land on a cell, so there is nothing to select…”*
 2) You clicked empty space **with** a candidate set standing, so the tool placed
-   a centre anyway — and it is not where you expected. See below.
+   a center anyway — and it is not where you expected. See below.
 3) Your radius is too small (tiny drag) or too large (huge drag).
 4) Filters are hiding nearby cells; selection only considers visible cells.
 5) The camera is far out with **Visualization → Performance →
@@ -294,20 +300,20 @@ based** selection, not only Lasso.
 
 ### How to confirm
 - Read the line under the **Tool** buttons: a refused click names
-  itself; a click that places a centre anyway does not.
+  itself; a click that places a center anyway does not.
 - Start by `Alt+click` directly on a clearly visible cell (zoom in).
 - Drag slowly and watch the overlay radius.
 - Temporarily disable filters and try again.
 - If a click is refused only when zoomed out, zoom in and seed again — or turn
   **Level of detail (LOD)** off for the seed click.
 
-### Clicking empty space (what the centre actually is)
-When you `Alt+click` empty space and a candidate set already exists, the centre
+### Clicking empty space (what the center actually is)
+When you `Alt+click` empty space and a candidate set already exists, the center
 is **not** the centroid of that selection. It is the point where your click ray
 crosses the plane that passes through the centroid facing the camera — in
 effect, *where you clicked, at the selection’s depth*. That is what makes
 “grow/shrink around the current selection” work in 3D without picking a cell
-first, and it is why the resulting blob is centred on your pointer rather than
+first, and it is why the resulting blob is centered on your pointer rather than
 on the selection.
 
 ### Fix
@@ -324,7 +330,7 @@ on the selection.
 ## Symptom: “KNN drag says no neighbor graph is available (or does nothing)”
 
 ### Likely causes (ordered)
-1) Your dataset holds no neighbour graph (`obsp`).
+1) Your dataset holds no neighbor graph (`obsp`).
 2) Edges exist but are not loaded yet (often loaded when you enable “Show edges”).
 3) You are using a data loading mode that doesn’t provide connectivities.
 
@@ -404,7 +410,7 @@ on the selection.
 - If step controls appear but Confirm is disabled, you likely have an empty candidate set.
 - **Undo** is enabled immediately after the first step: the empty state before
   that step is recorded like any other, so one undo takes you back to it. A
-  greyed-out Undo right after a gesture landed means the gesture produced no
+  grayed-out Undo right after a gesture landed means the gesture produced no
   step — read the message line to find out why.
 
 ### Fix

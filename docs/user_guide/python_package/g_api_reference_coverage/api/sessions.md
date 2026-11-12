@@ -212,7 +212,8 @@ The rows, in domain order:
 | `user-field` | one column per field the session made, named by its key: a categorical as `category` (no category: missing), a column a notebook pushed as `float32` (no value: `NaN`), a continuous copy of another field copied from that obs column or gene (under the session's data mapping); a field deleted in the session is not applied |
 | `gene-set` | each gene set, written to `adata.uns["cellucid"]["gene_sets"]` as `cellucid.pull` writes them, and as one `bool` column `cellucid_gene_set__<name>` of the `var` of the gene axis the data mapping reads, `True` on the set's genes ({ref}`apply-gene-set-var-columns`) |
 | `highlight` | one boolean column per group of every page, `cellucid_highlight__<page>__<group>` from the page's name and the group's label |
-| `presentation` | one row per other domain the step changed (filters, colours, views, the camera, analyses): how the data was shown, reported and never applied |
+| `column-colors` | a dataset column whose categories were recolored in the view in focus: its `uns['<column>_colors']` written with the colors it is shown in ({ref}`apply-column-colors`) |
+| `presentation` | one row per other domain the step changed (filters, colors, views, the camera, analyses, the expression values): how the data was shown, reported and never applied |
 
 Each row's `status`:
 - `write`: the object lacks it;
@@ -230,13 +231,17 @@ text keeps `.h5ad` and Zarr files writable). Read it with
 `cellucid.history_applied(adata)`: each record names the session's SHA-256,
 the tracker, branch and step, `applied_at`, the package and its version, the
 columns it wrote (which a later apply replaces only with `overwrite=True`),
-the renames it applied, what it did not apply, and, with
-`keep_session=True`, the session file itself (base64), so the history can be
+the renames it applied, what it did not apply, the expression values the
+genes were shown in at the step (`expression`, `{"normalize", "log1p"}`, None
+when the session holds none: recorded, never applied, so `X` keeps its
+values), and, with `keep_session=True`, the session file itself (base64), so the history can be
 rebuilt from the object alone.
 
 Only what the chosen step needs is checked, before anything is written: the
 cell count (of the subsample the session was saved on, when it was), the
-dataset id when `adata.uns["cellucid"]["id"]` names one, the data mapping's
+dataset id (the one `adata` was shown under, `dataset_id=`, when given: a
+viewer given another id than the one the data declares saves its session under
+it; else `adata.uns["cellucid"]["id"]` when it names one), the data mapping's
 keys and gene count, the cell order (when `adata` has the embedding the
 session names, the cell-order digest of its stored values over the session's
 cells must be the session's), and the obs columns and genes the step's state
@@ -250,6 +255,34 @@ The target may also be a MuData: the session is checked against what the
 viewer showed (the cells, and the modality its data mapping names), labels
 and columns apply to the global `mdata.obs`, and `mdata.uns` records the
 apply.
+
+(apply-column-colors)=
+#### Colors go with the columns
+
+Colors go with the columns, as Scanpy keeps them (`uns['<column>_colors']`,
+one color a category in the column's order, which `sc.pl.*` and the viewer
+open the column in). The same rule in Python, R and the web app's "Save
+AnnData with this state…":
+
+| What the apply does to a column | Its `uns['<column>_colors']` |
+|---|---|
+| writes or replaces a categorical field | the colors it is shown in, one `#rrggbb` a category, every category, used or not: in the view in focus at the step, the color the person or an agent gave a category (the session's `colors` value), else the color it opens with — its `palette` (a field made from highlight pages, in Create categorical: its pages' colors), else Cellucid's own category colors by position |
+| writes or replaces any other column (a pushed or copied continuous field, a highlight group) | none: colors held under its name described another column, and are removed |
+| renames it | carried along to the new name (a list of text; colors of another form are removed); stale colors under the new name are replaced |
+| relabels a categorical in place, no categories merged | kept as they are |
+| merges categories of a categorical | each category keeps the color of the first one it was made from (it takes that one's place); colors that did not cover the column's categories (fewer than its categories, or not text) are removed |
+| relabels a text column | removed (Scanpy colors a text column by its sorted labels, which a rename reorders) |
+| leaves it as it is (`unchanged`, `not-applied`) | kept as they are, unless the session recolored it (below) |
+| a column that came with the dataset, recolored in the view in focus at the step (one `column-colors` row each) | the colors it is shown in, one `#rrggbb` a category in the column's order once the apply's renames are made: the color the person or an agent gave a category, else the color it opens with — the column's own `uns` colors as the viewer draws them (`#rgb` widened, the alpha of `#rrggbbaa` dropped), when there is a hex color for every category, else Cellucid's own category colors by position. `write` when that differs from what the column holds, `unchanged` when it holds them already; `not-applied` for a column that is not categorical, a column of a MuData modality, or a column with none of the categories recolored (a recolored category the column lacks is named in the note) |
+
+The plan's `colors` row (when the step's colors differ from the tracker's
+opening) stays `not-applied`: every other color the step holds — a color map
+or range, a gene's colors, another view's colors — is how the data was shown.
+Its note says so when a field's or a dataset column's colors went with its
+column.
+
+A dry run writes nothing. For a MuData the colors go to `mdata.uns`, beside
+the global `mdata.obs` columns they color.
 
 ---
 
@@ -287,7 +320,7 @@ The `.cellucid-session` framing (session format 4) is:
 4. repeated chunks: `[chunkByteLength (u32 LE), chunkBytes...]`
 
 The manifest holds `createdAt`, `app` (the Cellucid version that wrote it and
-the SHA-256 of its action catalogue), `actions` (one stamp per action type
+the SHA-256 of its action catalog), `actions` (one stamp per action type
 and parameters version its steps use, `{type, version, params}`, sorted by
 type then version, `params` the digest of that version's parameter schema), `scope` (what the share
 chose to include: the trackers and branches, `content` -- `history`, `state`
@@ -491,9 +524,15 @@ keep the result.
 Likely causes:
 - You are applying the session to a different AnnData (another cell count,
   gene count, or dataset id in `uns["cellucid"]["id"]`).
+- The viewer was given another `dataset_id=` than the one the object declares
+  (“saved on the dataset 'x', and this object is 'y'”): the session is saved
+  under the id the viewer was given.
 
 Fix:
 - Apply to the original AnnData the session was saved on.
+- For a viewer given another id: apply through it
+  (`viewer.apply_session_to_anndata(adata, request)` names the id itself), or
+  name the id: `apply_cellucid_session_to_anndata(adata, path, dataset_id="x")`.
 
 ### Symptom: “This object's cells are not the cells the session was saved on, in the same order …”
 The cell-order digest of the session's embedding differs: the rows are other
@@ -524,7 +563,7 @@ The share left the values out, so there is no state to apply. Replay it in
 Cellucid on its dataset, or ask for a share that keeps the values.
 
 ### Symptom: “The state at step … uses the obs column … which this dataset does not have”
-The chosen step's state colours by, filters on or binds a highlight group to
+The chosen step's state colors by, filters on or binds a highlight group to
 fields the AnnData lacks: every missing obs column and gene is listed. Apply
 the session to the AnnData it was saved on (or with the same data mapping and
 gene names).

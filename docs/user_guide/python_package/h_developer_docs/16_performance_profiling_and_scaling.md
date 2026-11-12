@@ -78,7 +78,7 @@ gzip): startup 0.16 s, obs fields about 90 ms, 2D/3D UMAP about 40 ms each,
 the gene index about 2 s in the background from the moment the dataset opens
 (the browser measures a localhost link as fast as a disk), then a gene in a few
 ms and 100 genes in about 20 ms (1.3 s for a gene asked before the index is
-built), 1,000 cell rows 0.55 s, neighbour graph 0.65 s when drawn. The same object in memory: 0.8 s to
+built), 1,000 cell rows 0.55 s, neighbor graph 0.65 s when drawn. The same object in memory: 0.8 s to
 write the temporary CSC `.h5ad` (925 MB), then first gene 8 ms and 100 genes
 68 ms.
 

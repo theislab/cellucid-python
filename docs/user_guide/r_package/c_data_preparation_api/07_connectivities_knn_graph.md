@@ -1,8 +1,8 @@
-# Connectivities (neighbour graph)
+# Connectivities (neighbor graph)
 
 **Audience:** computational users
 **Time:** 10 minutes
-**Goal:** store a neighbour graph the viewer can draw and use.
+**Goal:** store a neighbor graph the viewer can draw and use.
 
 ## What to pass
 
@@ -24,18 +24,18 @@ finds it without configuration.
   draw, so the diagonal is dropped (Seurat's `RNA_snn` has 1 there), as the
   viewer and `prepare()` drop it.
 - **Exactly symmetric** in topology and weight (an undirected graph).
-  `Connectivity matrix must be exactly symmetric: a directed neighbour graph (Seurat's '<assay>_nn', ...) is not one the viewer draws; ...`
+  `Connectivity matrix must be exactly symmetric: a directed neighbor graph (Seurat's '<assay>_nn', ...) is not one the viewer draws; ...`
 - A stored zero is not an edge and is dropped (`Matrix::drop0()`).
 
 With `data =`, the object's graph is chosen for you by the viewer's default
 rule: one named `connectivities`, else Seurat's `<active assay>_snn`, else
-another shared-nearest-neighbour graph (`<assay>_snn` or `SNN`, a
+another shared-nearest-neighbor graph (`<assay>_snn` or `SNN`, a
 SingleCellExperiment `colPair` the same); {doc}`../e_integrations_recipes/index`.
 Seurat's `seu@graphs[["RNA_snn"]]` can also be passed as it is. A directed
 graph needs one step first:
 
 ```r
-# A directed k-nearest-neighbour graph: make it symmetric (stays sparse).
+# A directed k-nearest-neighbor graph: make it symmetric (stays sparse).
 graph <- (knn + Matrix::t(knn)) / 2
 ```
 

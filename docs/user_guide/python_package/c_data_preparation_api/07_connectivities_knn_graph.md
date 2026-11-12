@@ -1,8 +1,8 @@
-# Connectivities (neighbour graph)
+# Connectivities (neighbor graph)
 
 **Audience:** computational users
 **Time:** 5 minutes
-**Goal:** store the neighbour graph the viewer draws as edges
+**Goal:** store the neighbor graph the viewer draws as edges
 
 `connectivities` is a cells × cells matrix — usually
 `adata.obsp["connectivities"]` from `sc.pp.neighbors` — sparse or dense. It is

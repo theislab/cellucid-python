@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 #: The SHA-256 of the ``history_model.schema.json`` this module was written from.
-HISTORY_MODEL_SHA256: Final = "bc403ababa0a52bf62a1446b6f3598135b1990cd5a4116818ab26e3696004bc7"
+HISTORY_MODEL_SHA256: Final = "0896116c1e791e370b7247d61e734bc22f96047f5d1ed49a39738cf4f8a5333c"
 #: The model's version (``HISTORY_MODEL_VERSION``).
 HISTORY_MODEL_VERSION: Final = 2
 
@@ -37,9 +37,9 @@ ROOT_LABELS: Final[_Mapping[str, str]] = {'import': 'Loaded from a session file'
 #: White space in a name, as code points: trimmed from both ends, each inner run one space.
 NAME_WHITE_SPACE: Final = (0x0009, 0x000a, 0x000b, 0x000c, 0x000d, 0x0020, 0x00a0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff)
 #: The state domains, in the order a full restore applies them.
-DOMAINS: Final = ('cells', 'mapping', 'field-overlays', 'gene-sets', 'views', 'active-field', 'filters', 'colors', 'visibility', 'highlights', 'camera', 'camera-path', 'settings', 'analysis', 'layout')
+DOMAINS: Final = ('cells', 'mapping', 'expression', 'field-overlays', 'gene-sets', 'views', 'active-field', 'filters', 'colors', 'visibility', 'highlights', 'camera', 'camera-path', 'settings', 'analysis', 'layout')
 #: What an action may declare it reads: the domains and ``history``.
-READ_INPUTS: Final = ('cells', 'mapping', 'field-overlays', 'gene-sets', 'views', 'active-field', 'filters', 'colors', 'visibility', 'highlights', 'camera', 'camera-path', 'settings', 'analysis', 'layout', 'history')
+READ_INPUTS: Final = ('cells', 'mapping', 'expression', 'field-overlays', 'gene-sets', 'views', 'active-field', 'filters', 'colors', 'visibility', 'highlights', 'camera', 'camera-path', 'settings', 'analysis', 'layout', 'history')
 #: The structural edits the journal keeps.
 JOURNAL_OPS: Final = ('step.delete', 'branch.delete', 'branch.rename', 'branch.archive', 'branch.set-main', 'branch.lock', 'group.create', 'group.rename', 'group.extend', 'group.remove', 'squash', 'clear', 'note.add', 'note.edit', 'note.remove', 'bookmark.set', 'tracker.rename', 'tracker.remove', 'turn.undo', 'journal.undo', 'load')
 #: The tracker fields a journal entry may put back.
@@ -55,7 +55,7 @@ SHARE_CONTENTS: Final = ('history', 'state', 'steps')
 SHARE_RESULTS: Final = ('include', 'recompute')
 SHARE_TIMES: Final = ('exact', 'dates', 'none')
 SHARE_SOURCES: Final = ('full', 'name')
-APPLY_ROW_KINDS: Final = ('user-field', 'highlight', 'column-renamed', 'categories-renamed', 'categories-merged', 'field-deleted', 'gene-set', 'presentation')
+APPLY_ROW_KINDS: Final = ('user-field', 'highlight', 'column-renamed', 'categories-renamed', 'categories-merged', 'field-deleted', 'gene-set', 'column-colors', 'presentation')
 APPLY_ROW_STATUSES: Final = ('write', 'replace', 'unchanged', 'not-applied')
 APPLY_PACKAGES: Final = ('python', 'r', 'web')
 #: The records read as maps of domain ids (``{domain: value hash}``), not as dataclasses.
@@ -81,8 +81,8 @@ FIELDS: Final[_Mapping[str, tuple[tuple[str, str, _Mapping[str, Any], bool], ...
         ('rows', 'rows', {'type': 'array', 'item': {'type': 'record', 'name': 'ApplyPlanRow', 'nullable': False}, 'nullable': False}, False),
     ),
     'ApplyPlanRow': (
-        ('kind', 'kind', {'type': 'enum', 'values': ['user-field', 'highlight', 'column-renamed', 'categories-renamed', 'categories-merged', 'field-deleted', 'gene-set', 'presentation'], 'nullable': False}, False),
-        ('domain', 'domain', {'type': 'enum', 'values': ['cells', 'mapping', 'field-overlays', 'gene-sets', 'views', 'active-field', 'filters', 'colors', 'visibility', 'highlights', 'camera', 'camera-path', 'settings', 'analysis', 'layout'], 'nullable': False}, False),
+        ('kind', 'kind', {'type': 'enum', 'values': ['user-field', 'highlight', 'column-renamed', 'categories-renamed', 'categories-merged', 'field-deleted', 'gene-set', 'column-colors', 'presentation'], 'nullable': False}, False),
+        ('domain', 'domain', {'type': 'enum', 'values': ['cells', 'mapping', 'expression', 'field-overlays', 'gene-sets', 'views', 'active-field', 'filters', 'colors', 'visibility', 'highlights', 'camera', 'camera-path', 'settings', 'analysis', 'layout'], 'nullable': False}, False),
         ('name', 'name', {'type': 'text', 'nullable': False}, False),
         ('column', 'column', {'type': 'text', 'nullable': True}, False),
         ('from', 'from_', {'type': 'array', 'item': {'type': 'text', 'nullable': False}, 'nullable': False}, False),
@@ -158,6 +158,7 @@ FIELDS: Final[_Mapping[str, tuple[tuple[str, str, _Mapping[str, Any], bool], ...
         ('camera-path', 'camera-path', {'type': 'hash', 'nullable': False}, True),
         ('cells', 'cells', {'type': 'hash', 'nullable': False}, True),
         ('colors', 'colors', {'type': 'hash', 'nullable': False}, True),
+        ('expression', 'expression', {'type': 'hash', 'nullable': False}, True),
         ('field-overlays', 'field-overlays', {'type': 'hash', 'nullable': False}, True),
         ('filters', 'filters', {'type': 'hash', 'nullable': False}, True),
         ('gene-sets', 'gene-sets', {'type': 'hash', 'nullable': False}, True),
@@ -167,6 +168,10 @@ FIELDS: Final[_Mapping[str, tuple[tuple[str, str, _Mapping[str, Any], bool], ...
         ('settings', 'settings', {'type': 'hash', 'nullable': False}, True),
         ('views', 'views', {'type': 'hash', 'nullable': False}, True),
         ('visibility', 'visibility', {'type': 'hash', 'nullable': False}, True),
+    ),
+    'ExpressionValues': (
+        ('normalize', 'normalize', {'type': 'boolean', 'nullable': False}, False),
+        ('log1p', 'log1p', {'type': 'boolean', 'nullable': False}, False),
     ),
     'Group': (
         ('id', 'id', {'type': 'id', 'kind': 'group', 'nullable': False}, False),
@@ -249,6 +254,7 @@ FIELDS: Final[_Mapping[str, tuple[tuple[str, str, _Mapping[str, Any], bool], ...
         ('columns', 'columns', {'type': 'array', 'item': {'type': 'text', 'nullable': False}, 'nullable': False}, False),
         ('renamed', 'renamed', {'type': 'array', 'item': {'type': 'record', 'name': 'Renamed', 'nullable': False}, 'nullable': False}, False),
         ('skipped', 'skipped', {'type': 'array', 'item': {'type': 'record', 'name': 'Skipped', 'nullable': False}, 'nullable': False}, False),
+        ('expression', 'expression', {'type': 'record', 'name': 'ExpressionValues', 'nullable': True}, False),
         ('session', 'session', {'type': 'text', 'nullable': True}, False),
     ),
     'Reads': (
@@ -258,6 +264,7 @@ FIELDS: Final[_Mapping[str, tuple[tuple[str, str, _Mapping[str, Any], bool], ...
         ('camera-path', 'camera-path', {'type': 'hash', 'nullable': False}, True),
         ('cells', 'cells', {'type': 'hash', 'nullable': False}, True),
         ('colors', 'colors', {'type': 'hash', 'nullable': False}, True),
+        ('expression', 'expression', {'type': 'hash', 'nullable': False}, True),
         ('field-overlays', 'field-overlays', {'type': 'hash', 'nullable': False}, True),
         ('filters', 'filters', {'type': 'hash', 'nullable': False}, True),
         ('gene-sets', 'gene-sets', {'type': 'hash', 'nullable': False}, True),
@@ -330,7 +337,7 @@ FIELDS: Final[_Mapping[str, tuple[tuple[str, str, _Mapping[str, Any], bool], ...
         ('trackers', 'trackers', {'type': 'array', 'item': {'type': 'record', 'name': 'Tracker', 'nullable': False}, 'nullable': False}, False),
     ),
     'Skipped': (
-        ('kind', 'kind', {'type': 'enum', 'values': ['user-field', 'highlight', 'column-renamed', 'categories-renamed', 'categories-merged', 'field-deleted', 'gene-set', 'presentation'], 'nullable': False}, False),
+        ('kind', 'kind', {'type': 'enum', 'values': ['user-field', 'highlight', 'column-renamed', 'categories-renamed', 'categories-merged', 'field-deleted', 'gene-set', 'column-colors', 'presentation'], 'nullable': False}, False),
         ('name', 'name', {'type': 'text', 'nullable': False}, False),
         ('note', 'note', {'type': 'text', 'nullable': False}, False),
     ),
@@ -362,7 +369,7 @@ FIELDS: Final[_Mapping[str, tuple[tuple[str, str, _Mapping[str, Any], bool], ...
         ('until', 'until', {'type': 'time', 'nullable': True}, False),
         ('merged', 'merged', {'type': 'integer', 'minimum': 1, 'maximum': None, 'nullable': False}, False),
         ('ms', 'ms', {'type': 'number', 'minimum': 0, 'nullable': True}, False),
-        ('touches', 'touches', {'type': 'array', 'item': {'type': 'enum', 'values': ['cells', 'mapping', 'field-overlays', 'gene-sets', 'views', 'active-field', 'filters', 'colors', 'visibility', 'highlights', 'camera', 'camera-path', 'settings', 'analysis', 'layout'], 'nullable': False}, 'nullable': False}, False),
+        ('touches', 'touches', {'type': 'array', 'item': {'type': 'enum', 'values': ['cells', 'mapping', 'expression', 'field-overlays', 'gene-sets', 'views', 'active-field', 'filters', 'colors', 'visibility', 'highlights', 'camera', 'camera-path', 'settings', 'analysis', 'layout'], 'nullable': False}, 'nullable': False}, False),
         ('before', 'before', {'type': 'record', 'name': 'DomainValues', 'nullable': False}, False),
         ('after', 'after', {'type': 'record', 'name': 'DomainValues', 'nullable': False}, False),
         ('reads', 'reads', {'type': 'record', 'name': 'Reads', 'nullable': False}, False),
@@ -445,6 +452,7 @@ DESCRIPTIONS: Final[_Mapping[str, str]] = {
     'DatasetIdentity': 'The dataset a history is of.',
     'DatasetName': 'A dataset as a link names it.',
     'DomainValues': 'The value hash of each state domain a step changed (or, for the root, of every domain).',
+    'ExpressionValues': "The expression values the genes were shown and analyzed in at a step (its `expression` value: the Data mapping's Expression values): the transform asked, which never changes the values an object stores.",
     'Group': 'A named folder over consecutive steps of one branch (metadata only): each of its steps names it (Step.group).',
     'History': 'Every tracker of the open dataset.',
     'JournalEntry': 'One structural edit of the history, undoable from Recently deleted or the toast.',
@@ -502,7 +510,7 @@ class ActionStamp:
     version: int
     """The version of its parameters the steps were recorded with (Step.v)."""
     params: str | None
-    """SHA-256 of the shape of that version's params schema (actionParamsShape, canonical JSON) when the writer's catalogue is at that version; null for an earlier version, whose upgraders take it forward."""
+    """SHA-256 of the shape of that version's params schema (actionParamsShape, canonical JSON) when the writer's catalog is at that version; null for an earlier version, whose upgraders take it forward."""
 
 
 @dataclass(frozen=True)
@@ -512,7 +520,7 @@ class AppStamp:
     version: str
     """The Cellucid version."""
     catalog: str
-    """The SHA-256 of the action catalogue document it was written with."""
+    """The SHA-256 of the action catalog document it was written with."""
 
 
 @dataclass(frozen=True)
@@ -584,7 +592,7 @@ class Branch:
     by: By
     """Who made it."""
     lane: int
-    """Its colour slot (--history-lane-<lane>)."""
+    """Its color slot (--history-lane-<lane>)."""
     locked: bool
     """No new step, rename, delete or compaction until unlocked."""
     archived: bool
@@ -697,6 +705,16 @@ class DatasetName:
     """Its identity id."""
     name: str | None
     """Its name."""
+
+
+@dataclass(frozen=True)
+class ExpressionValues:
+    """The expression values the genes were shown and analyzed in at a step (its `expression` value: the Data mapping's Expression values): the transform asked, which never changes the values an object stores."""
+
+    normalize: bool
+    """Each cell scaled to 10,000 total counts (scanpy's normalize_total(target_sum=1e4))."""
+    log1p: bool
+    """Then ln(1 + x) (scanpy's log1p); both false: the values as stored."""
 
 
 @dataclass(frozen=True)
@@ -824,9 +842,9 @@ class OutsideAct:
     """What a turn did outside the state that no undo takes back (a vote published, a file written): no step records it."""
 
     type: str
-    """The action (annotation.vote, figure.export, …)."""
+    """The action (annotation.publish, figure.export, …)."""
     label: str
-    """What it did, as its step would be labelled."""
+    """What it did, as its step would be labeled."""
     at: float | None
     """When it was done."""
 
@@ -885,6 +903,8 @@ class Provenance:
     """What it renamed."""
     skipped: tuple[Skipped, ...]
     """What it did not apply."""
+    expression: ExpressionValues | None
+    """The expression values of the step applied (what the person looked at the genes in), recorded, never applied: X keeps its values. Null when the session holds none (a session from before them: the values as stored)."""
     session: str | None
     """The session file itself, base64, when kept to rebuild the history."""
 
@@ -1086,7 +1106,7 @@ class Step:
     params: dict[str, Any] | None
     """The action's parameters, by name (cells by original position); null for the root and a squashed step."""
     v: int | None
-    """The version of the action's parameters it was recorded with (the catalogue's version); null but for an action."""
+    """The version of the action's parameters it was recorded with (the catalog's version); null but for an action."""
     code: str | None
     """Its pseudocode line as recorded; null for the root, an outside change and a squashed step."""
     label: str

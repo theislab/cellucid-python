@@ -4,7 +4,7 @@
 **Time:** 25–40 minutes  
 **What you’ll learn:**
 - Where the legend lives and when it appears
-- Everything you can do in a **categorical legend** (hide/show, keep only some cells, recolor, rename, merge, delete-to-unassigned)
+- Everything you can do in a **categorical legend** (hide/show, keep only some cells, recolor, rename, merge, delete-to-Unassigned)
 - Everything you can do in a **continuous legend** (colormaps, log scale, rescale, filters)
 - How counts and disabled rows behave when other filters are active
 - What extra controls exist (centroids, latent outlier filter) and how they interact with views
@@ -41,12 +41,13 @@ Each category row contains:
 - optional tools: **rename** (pencil) and **delete** (trash)
 
 ```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
-:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a color swatch, a label, a cell count, a rename pencil and a delete bin.
 :width: 488px
 
 One row, read left to right: **checkbox · swatch · label · count · rename ·
 delete**. The pencil renames the category; the bin merges it into
-`unassigned` and does **not** delete any cells.
+`Unassigned` and does **not** delete any cells. The rows run in the field's
+own category order (see {doc}`03_color_by_behavior`).
 ```
 
 ### Show all / Hide all
@@ -69,11 +70,11 @@ Interpretation:
 - **visible** ≈ cells currently shown after applying category visibility
 
 A category that keeps only some of its cells shows its count in the link
-colour (`200 / 1,200 cells`); see
+color (`200 / 1,200 cells`); see
 [Keep only some cells of a category](#keep-only-some-cells-of-a-category-the-count).
 
 If a category has `0 available` cells, its checkbox and color picker are
-disabled, the row is greyed out, and hovering it shows
+disabled, the row is grayed out, and hovering it shows
 `No cells available in this category after other filters`.
 
 On a subsample the counts are of the open cells, and a line above them says
@@ -81,13 +82,13 @@ so: *Counted on the 240 of 1,200 cells open.*
 ({doc}`../b_data_loading/21_subsampled_loading`).
 
 ```{figure} ../../../_static/screenshots/filtering/legend-category-unavailable.png
-:alt: The clusters legend under a narrow S_score range filter: Alpha, Ductal, Ngn3 high EP and Ngn3 low EP stay ticked with small counts, while Beta, Delta, Epsilon and Pre-endocrine are greyed out with disabled checkboxes and read 0 cells.
+:alt: The clusters legend under a narrow S_score range filter: Alpha, Ductal, Ngn3 high EP and Ngn3 low EP stay ticked with small counts, while Beta, Delta, Epsilon and Pre-endocrine are grayed out with disabled checkboxes and read 0 cells.
 :width: 488px
 
-All three count states at once: `0 cells` on four disabled rows, and small
-plain counts on the four rows that still have cells. A row only prints
-`visible / available` when the two numbers differ *and* available is above
-zero.
+Two of the three count states at once: `0 cells` on four disabled rows, and
+plain counts on the four rows that still have cells. The third,
+`visible / available`, is printed only when the two numbers differ *and*
+available is above zero.
 ```
 
 ### Change a category color (swatch)
@@ -118,9 +119,9 @@ to show only some of its cells.
 1. Click the category's count (for example `1,200 cells`). A small box takes
    its place, reading `all`.
 2. Type how many cells to keep, for example `200`, and press {kbd}`Enter`
-   ({kbd}`Escape`, or clicking elsewhere, cancels).
+   (clicking elsewhere applies it too; {kbd}`Escape` cancels).
 3. The category now shows 200 of its cells, chosen at random. Its count reads
-   `200 / 1,200 cells` in the link colour, and hovering it says *Keeps a
+   `200 / 1,200 cells` in the link color, and hovering it says *Keeps a
    random 200 cells of Beta (seed 0); click to change, or type all*.
 
 To show every cell of it again, click the count and type `all` (or any number
@@ -150,12 +151,22 @@ any seed.
 ---
 
 ### Cells without a category (Missing)
-When some cells have no category (an unlabelled cell, a classifier that gave
+When some cells have no category (an unlabeled cell, a classifier that gave
 none), a **Missing** row under the categories counts them (`visible /
 available`) and shows or hides them with its checkbox. They are drawn in the
-neutral “None” grey. Hiding them is a filter like hiding a category: listed
-under **Filters**, applied whatever is coloured, saved in sessions. The row is
+neutral “None” gray. Hiding them is a filter like hiding a category: listed
+under **Filters**, applied whatever is colored, saved in sessions. The row is
 absent when every cell has a category.
+
+### Categories with no name: (empty) and (blank)
+A category whose name is empty is shown as *(empty)*, and one made of spaces
+alone as *(blank)*, in a quieter style, so its row can be told apart and
+found; a name with spaces at an end is shown in quotes (`" x "`), so it is
+told from `x`. The same names appear wherever a category is named: the hover
+card, the filters, menus, the Group categories dialog, figure legends,
+analysis groups and what an agent reads (an agent can name the category so).
+Only the display changes: the value in the data, in sessions and in exported
+values stays what the file holds.
 
 ## Editing category labels (rename, merge, delete)
 
@@ -170,8 +181,21 @@ Editing behavior depends on whether the current field is a **source field** or a
 
 An edit in place changes the field in every view at once: a kept view that
 shows the field is drawn again with its new categories, and keeps its own
-colours and hidden categories for the categories it already had.
+colors and hidden categories for the categories it already had.
 :::
+
+:::{tip}
+To put several categories together at once (a lineage from cell types),
+use **Group** on the Categorical obs row instead of merging them one pair at
+a time: it makes a new field of the groups in one step and leaves this one as
+it is ({ref}`group-categories-into-a-new-field`).
+:::
+
+### A long category name
+
+Each category keeps one line in the sidebar, so a long name is cut with "…".
+Click (or tap) the name to see it whole; click it again, or anywhere else, to
+close it. Hovering shows it too, above the row's hint.
 
 ### Rename a category
 
@@ -179,12 +203,22 @@ Two ways:
 - click the pencil icon, or
 - double-click the category label
 
-Rules:
-- label cannot be empty
-- max label length is enforced (very long labels are rejected)
+Type the name and press {kbd}`Enter`, or click elsewhere; {kbd}`Escape` leaves
+it as it was. A name the rules below refuse is said on the box, which stays
+open until you change it.
 
-Undo:
-- rename the category back to its original label (Cellucid tracks originals).
+Rules (the same for every label you give: a rename, a merged category's
+label, a group of **Group**, a page's label in **Create categorical**):
+- label cannot be empty
+- one line, with no leading or trailing whitespace and no control or
+  zero-width character (`U+200B`, `U+2060`, `U+FEFF`) —
+  `"<label>" cannot be a category label: …`
+- label must be unique in the field
+
+A label a dataset brings is shown as it is, whatever it holds.
+
+Each rename is one step of the history: **Undo** (`Ctrl+Z` / `⌘Z`) takes it
+back.
 
 ### Merge categories (drag-and-drop)
 
@@ -198,19 +232,41 @@ Cellucid creates a merged bucket label like:
 
 The merged bucket color comes from the **dragged** category.
 
-### Delete a category label (merge into “unassigned”)
+An agent (or a notebook, `merge_categories(..., label=...)`) merging `A` into
+`B` can name the merged category: given `label` `B`, the merged category
+keeps the name `B` (the color is still the dragged one's); without a label it
+is named as the drag names it.
+
+### Delete a category label (merge into “Unassigned”)
 
 Click the trash icon to “delete” a label.
 
 This does not delete cells. It changes the category assignment by merging that category into:
-- `unassigned` (a special catch-all bucket)
+- `Unassigned` (a special catch-all bucket, made when the field has none; the
+  same spelling **Create categorical** gives the cells on no page). An agent
+  or a notebook can name another (`unassigned_label`). A new `Unassigned`
+  takes the palette color of its place when it can be told apart from the
+  categories' colors, else the next palette color that can: it never shares a
+  kept category's color.
+
+Colors the app picks (a new `Unassigned`, a category a relabel adds, a
+group, the categories **Create categorical** adds beyond its pages, a new
+highlight page) are told apart by one rule: two colors closer than 0.08 in
+OKLab, a color space in which equal distances look equally different, are
+taken for one, and the next palette color that is far enough from all the
+others is used instead. Scanpy's default ten colors are all farther apart than
+that. Colors you or a file chose are never changed by it; a file's categories
+keep the color of their place, so a share of the cells and all of them show
+one color.
 
 This is useful for:
 - removing junk labels like `doublet`/`unknown`/`low_quality`,
 - iteratively collapsing labels while keeping a reversible history.
 
-Undo:
-- restore the original field from **Deleted fields** (if a new derived field was created).
+A merge and a delete are each one step of the history: **Undo** (`Ctrl+Z` /
+`⌘Z`) takes either back, whether it edited a field of your own in place or
+made a new field and moved the file's field to **Deleted fields**. The
+confirmation says which of the two it does.
 
 ---
 
@@ -225,6 +281,9 @@ You see a continuous legend when the active field is:
 At the top, you’ll see:
 - `Color scale (<ColormapName>)`
 - a gradient bar you can click
+- for a gene shown in transformed values, a line naming their units, as
+  `Values: log1p(norm.) (Data mapping › Expression values)` (`norm.`,
+  `log1p` or `log1p(norm.)`; none for values as stored or an obs field)
 
 Click the gradient bar to open the **colormap menu**, then click a palette to apply it.
 
@@ -232,11 +291,11 @@ The numbers under the bar are the scale's ends, written as every measured
 value in the app is: three significant figures, in scientific notation below
 0.01 and from 10,000 (`0.0123`, `1230`, `1.23e4`), the notation chosen after
 rounding (`9999.6` is `1e4`, never `10.0e3`). Exported figures write their
-colour bars and axis ticks by the same rule (ticks with as many figures as
+color bars and axis ticks by the same rule (ticks with as many figures as
 tell them apart).
 
 ```{figure} ../../../_static/screenshots/web_app/legend-colormap-menu-open.png
-:alt: The colormap list open under the S_score colour bar: seven named gradients, Viridis, Plasma, Inferno, Magma, Cividis, Turbo and Twilight, with Viridis marked as the active one.
+:alt: The colormap list open under the S_score color bar: seven named gradients, Viridis, Plasma, Inferno, Magma, Cividis, Turbo and Twilight, with Viridis marked as the active one.
 :width: 488px
 
 The colormap menu, open. The active palette is marked, and the heading above
@@ -248,10 +307,10 @@ Practical guidance:
 - Prefer **Viridis** / **Cividis** for scientific readability (especially colorblind-friendly workflows).
 - Use diverging palettes (e.g., **RdBu**) only when your values have a meaningful “center” (like 0).
   A diverging palette (Coolwarm, Blue-Red, Spectral, RdYlBu, RdBu, PiYG,
-  PRGn, BrBG, Seismic) on a linear scale whose range spans 0 is **centred at
+  PRGn, BrBG, Seismic) on a linear scale whose range spans 0 is **centered at
   0**: the scale runs from −m to m, m the larger of |minimum| and |maximum|,
   so 0 is drawn in its neutral middle (z-scores, scores, fold changes). The
-  legend says *Centred at 0* under the bar, and exported figures note it
+  legend says *Centered at 0* under the bar, and exported figures note it
   under theirs. Over data of one sign, or with a sequential palette, the scale
   spans the data's own range.
 
@@ -263,20 +322,20 @@ it. It is shown for a gene with no negative value (a scaled layer has none of
 this, nor has an obs field: a zero there is a value).
 
 - **Off** (the default): a gene's 0 is a value like any other and is drawn in
-  the colour scale's lowest colour.
+  the color scale's lowest color.
 - **On**: the cells where the gene is 0 are drawn in the theme's neutral gray
   (made from the background: a step darker than a light one, a step lighter
-  than a dark one), beneath the cells that express it, so the colours show
+  than a dark one), beneath the cells that express it, so the colors show
   only where the gene is expressed.
 - On a **log scale** a 0 has no logarithm and is gray either way; the switch is
-  then greyed out and says so on hover.
+  then grayed out and says so on hover.
 
 It is per field, like the log scale and Rescale to range: each gene keeps its
 own setting, kept views and multiview keep the setting of the view it was set
 in, and a `.cellucid-session` saves it (only when it is on). Everything that
-draws the colouring follows it: 2D and 3D, smoke, kept and compared views,
+draws the coloring follows it: 2D and 3D, smoke, kept and compared views,
 the cell info card's swatch, and exported figures (PNG, SVG and hybrid). A
-figure whose zeros are gray says **Gray: 0** under its colour bar (with a gene
+figure whose zeros are gray says **Gray: 0** under its color bar (with a gene
 sample, **Faded: not read · gray: 0**).
 
 ### Log scale toggle
@@ -305,7 +364,7 @@ Under **Visible range** you’ll see:
 - **Live filtering** toggle
 - **Minimum** and **Maximum**, each on one row: its label, a slider and a
   number box, the two rows aligned in columns. Type an exact bound, or drag
-  (thousandths of the range; log-spaced on a log colour scale). Only the bound
+  (thousandths of the range; log-spaced on a log color scale). Only the bound
   you change moves. The box shows the bound in as many figures as fit it (at
   most seven characters: `5.65685` of 5.656854249492381, `1.23e11`), never cut
   off; hovering it shows the exact bound applied, and a bound you type is
@@ -320,14 +379,14 @@ Behavior summary:
 - Reset works in both states and restores the full numeric range for that field.
 
 Filtering notes:
-- `Live filtering` starts `On`, and it goes back to `On` every time the legend
-  is rebuilt — a different active field, a different colormap, a different kept
-  view, or a loaded session. It is not saved in a `.cellucid-session`.
+- `Live filtering` starts `On`. Turned off, it stays off for the page — for
+  every continuous field and gene, every view and palette — until you turn it
+  on again or reload the page. It is a way of working rather than something
+  shown, so a `.cellucid-session` does not save it.
 - Missing (`NaN`) values are excluded when a numeric filter is active.
 - These filters appear in the **Filters** box and (for obs fields) stack with other obs filters.
 
-The complete filter inventory, with a screenshot of the disabled `Filter`
-button, is in
+The complete filter inventory is in
 {doc}`../e_filtering/04_common_filter_types_document_every_filter_the_ui_exposes`.
 
 ---
@@ -355,32 +414,32 @@ When the active field is categorical, you’ll also see:
 These controls toggle additional overlays that summarize categories in the embedding.
 
 ```{figure} ../../../_static/screenshots/web_app/window-centroids-and-labels.png
-:alt: The Pancreas embedding coloured by clusters with Show centroids and Show labels both ticked, so each cluster carries a marker at its centre with its category name printed on it.
+:alt: The Pancreas embedding colored by clusters with Show centroids and Show labels both ticked, so each cluster carries a marker at its center with its category name printed on it.
 :width: 1440px
 
-**Show centroids** puts a marker at each category's centre; **Show labels**
-prints its name there. Together they turn a colour legend you have to
+**Show centroids** puts a marker at each category's center; **Show labels**
+prints its name there. Together they turn a color legend you have to
 cross-reference into a picture you can read directly — which is usually what
 you want in a figure.
 ```
 
-Where the centres come from:
-- a dataset's own categorical fields get each category's centre computed in
+Where the centers come from:
+- a dataset's own categorical fields get each category's center computed in
   the browser from its codes and the cells' positions, once per embedding the
   first time a view draws it, and cached on the field;
 - a field you create — with `Create categorical`, by merging or deleting a
-  category, by duplicating a field — gets each category's centre as the plain
-  mean of its cells' positions in the embedding the view draws. Centres are
+  category, by duplicating a field — gets each category's center as the plain
+  mean of its cells' positions in the embedding the view draws. Centers are
   computed when the field is made, for every embedding already loaded; an
-  embedding loaded later gets its centres when a view switches to it. Merging
+  embedding loaded later gets its centers when a view switches to it. Merging
   or deleting its categories recomputes them, and a saved session stores the
-  field's codes, from which its centres come back exactly where they were.
+  field's codes, from which its centers come back exactly where they were.
 
 Notes for multiview users:
 - centroid visibility is tracked per view, so different snapshots can show/hide centroids independently.
 
 Notes on counts:
-- a category no cell belongs to has no centre, so it gets no marker and no
+- a category no cell belongs to has no center, so it gets no marker and no
   label: a field whose category list is far longer than the categories its
   cells use draws only the ones they use. A category that gains its first
   cell (a merge, a rebuilt consensus column) gets its centroid then;

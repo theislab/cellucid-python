@@ -101,6 +101,10 @@ Authors can share a link like:
 - `?annotations=owner/repo@branch`
 
 This can pre-select the annotation repo, but you still must sign in and Pull.
+Until you are signed in, the panel says which repository the link names
+("This link names the repository "owner/repo@branch": Connect repo connects
+it, signing in with GitHub first."); a value that is no `owner/repo` is said
+as the link's ("This link's "annotations" is not a repository …").
 
 ---
 
@@ -199,7 +203,7 @@ At the top of the voting modal you will see one of:
 
 - **Consensus:** a single leading label has enough support
 - **Disputed:** there is no clear winner (often due to close votes or ties)
-- **Pending:** not enough unique voters yet (author-configured `minAnnotators`)
+- **Pending:** no one voted yet, or not enough unique voters yet (author-configured `minAnnotators`)
 
 ### What “confidence” means (so you don’t misread it)
 

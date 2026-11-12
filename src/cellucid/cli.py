@@ -19,10 +19,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import errno
 import logging
 import platform
-import socket
 import sys
 import traceback
 from pathlib import Path
@@ -187,7 +185,7 @@ def _detect_data_format(path: Path) -> str:
         The input format id of the registry (``'h5ad'``, ``'zarr'``,
         ``'h5mu'``, ``'mudata-zarr'``, ``'loom'``, ``'tenx-h5'``,
         ``'tenx-outs'``, ``'rds'``, ``'rda'``, ``'mtx'``); ``'unknown'``
-        when the path is none of them, or a format Cellucid recognises but
+        when the path is none of them, or a format Cellucid recognizes but
         never opens (an h5Seurat file) or one of Cellucid's own files (a
         ``.cellucid-session`` or ``.cellucid-library`` file)
     """
@@ -250,7 +248,7 @@ Examples:
     # Choose what is plotted: t-SNE in 2D, PCA components 1 and 2 in a second
     # run, and expression from a layer named by the gene-symbol column
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \\
-        --embedding-2d X_tsne --expression layer:log1p --gene-id-column gene_symbols
+        --embedding-2d X_tsne --expression layer:log1p --var-gene-id-column gene_symbols
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \\
         --embedding-2d X_pca:0,1
 
@@ -371,7 +369,7 @@ Examples:
     )
 
     serve_parser.add_argument(
-        "--gene-id-column",
+        "--var-gene-id-column",
         type=str,
         default=None,
         metavar="COLUMN",
@@ -472,7 +470,7 @@ def _positive_int(value: str) -> int:
 
 
 def _parse_embedding_flag(value: str, *, flag: str) -> str | tuple[str, list[int]]:
-    """Parse ``KEY`` or ``KEY:c0,c1`` into an ``embedding_keys`` value.
+    """Parse ``KEY`` or ``KEY:c0,c1`` into an ``embedding_defaults`` value.
 
     The columns are 0-based. A key that itself contains ``:`` is read whole
     unless what follows its last ``:`` is a comma-separated list of integers.
@@ -501,23 +499,19 @@ def _run_serve(args: argparse.Namespace) -> None:
 
     if data_format == "unknown":
         if not data_path.exists():
-            raise FileNotFoundError(f"Path not found: {data_path}")
-        from ._anndata_files import RefusedFormatError, classify_anndata_path
+            raise FileNotFoundError(f"Nothing exists at {data_path}.")
+        from ._anndata_files import classify_anndata_path
 
         # The registry's own explanation of why the path is none of its
-        # formats, or of how to convert one it recognises but never opens.
-        try:
-            classify_anndata_path(data_path)
-        except RefusedFormatError:
-            raise
-        except ValueError as error:
-            raise ValueError(f"Unable to detect format for: {data_path}. {error}") from error
+        # formats (naming the path and what Cellucid opens), or of how to
+        # convert one it recognizes but never opens: said as it is.
+        classify_anndata_path(data_path)
 
     # The viewer reads the store; the server names it, as given here or as
     # its uns['cellucid'] declares.
-    from .anndata_server import serve_anndata
+    from .anndata_server import _serve_viewer
 
-    embedding_keys = {
+    embedding_defaults = {
         f"{dimension}d": _parse_embedding_flag(
             getattr(args, f"embedding_{dimension}d"),
             flag=f"--embedding-{dimension}d",
@@ -525,7 +519,9 @@ def _run_serve(args: argparse.Namespace) -> None:
         for dimension in (1, 2, 3)
         if getattr(args, f"embedding_{dimension}d") is not None
     }
-    serve_anndata(
+    # The viewer names what opened it, ``cellucid serve``, in what it says.
+    _serve_viewer(
+        "cellucid-serve",
         data=str(data_path),
         port=args.port,
         host=args.host,
@@ -537,13 +533,13 @@ def _run_serve(args: argparse.Namespace) -> None:
         allowed_hosts=args.allowed_host,
         cache_bytes=args.cache_bytes,
         latent_key=args.latent_key,
-        gene_id_column=args.gene_id_column,
+        var_gene_id_column=args.var_gene_id_column,
         normalize_embeddings=args.normalize_embeddings,
         centroid_min_points=args.centroid_min_points,
         dataset_name=args.dataset_name,
         dataset_id=args.dataset_id,
         obs_keys=args.obs_key,
-        embedding_keys=embedding_keys or None,
+        embedding_defaults=embedding_defaults or None,
         knn_key=args.knn,
         expression_source=args.expression,
         vector_field_default=args.vector_field_default,
@@ -554,46 +550,28 @@ def _run_serve(args: argparse.Namespace) -> None:
 def _report_error(message: str) -> None:
     """Write one final ``Error:`` line to stderr, after everything already said.
 
-    Progress output goes to stdout and is block-buffered whenever the command is
-    piped into a file or a pager, so without this flush the failure line lands
-    above the banner and steps it followed. The documentation tells readers to
-    read the last ``Error:`` line; that has to hold when the transcript is saved,
-    not only when it is watched live.
+    Progress output goes to stdout, which is block-buffered whenever the command
+    is piped into a file or a pager; ``console_print`` flushes each line it
+    writes, and this flush sends anything else written there first, so the
+    failure line never lands above the banner and steps it followed. The
+    documentation tells readers to read the last ``Error:`` line; that has to
+    hold when the transcript is saved, not only when it is watched live.
     """
     sys.stdout.flush()
     console_print(f"Error: {message}", file=sys.stderr)
 
 
-def _bind_target(args: argparse.Namespace) -> str:
-    """Describe the address the operator asked the server to bind."""
-    return f"{getattr(args, 'host', DEFAULT_HOST)}:{getattr(args, 'port', DEFAULT_PORT)}"
-
-
 def _operating_system_message(error: OSError, args: argparse.Namespace) -> str:
-    """Name the operating-system condition and the flag that resolves it."""
+    """Name the operating-system condition and the flag that resolves it:
+    a bind in the API's sentence (``anndata_server.bind_refusal``) with the
+    command line's spelling of each setting."""
+    from .anndata_server import bind_refusal
+
     host = getattr(args, "host", DEFAULT_HOST)
     port = getattr(args, "port", DEFAULT_PORT)
-
-    if isinstance(error, socket.gaierror) or error.errno == errno.EADDRNOTAVAIL:
-        return (
-            f"Host {host!r} is not an address this machine can serve from. Use "
-            "--host 127.0.0.1 to serve only this computer, which is the default, or "
-            "--host 0.0.0.0 to accept connections from other machines."
-        )
-    if error.errno == errno.EADDRINUSE:
-        return (
-            f"Port {port} is already in use on {host}, so Cellucid could not start its "
-            "server there. Another program is listening on that port, often an earlier "
-            "Cellucid that was never stopped. Serve on a different port with "
-            "--port 9000, or let the operating system pick a free one with --port 0 and "
-            "use the Viewer URL it prints."
-        )
-    if error.errno in {errno.EACCES, errno.EPERM} and error.filename is None:
-        return (
-            f"The operating system refused to let Cellucid bind {_bind_target(args)}. "
-            "Ports below 1024 need administrator rights on most systems, so choose a "
-            "higher port such as --port 8765, or --port 0 for any free port."
-        )
+    said = bind_refusal(error, host, port, spelled=lambda name, value: f"--{name} {value}")
+    if said is not None:
+        return said
     if error.filename is not None:
         detail = error.strerror or "could not be read"
         return (

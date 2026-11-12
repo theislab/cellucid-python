@@ -33,7 +33,7 @@ my_dataset.zarr/
   obs/                           cell metadata data frame (_index = cell names)
   var/                           gene metadata data frame (_index = gene names)
   obsm/                          every embedding, every vector field (float32)
-  obsp/connectivities/           neighbour graph (float32 csr_matrix), when supplied
+  obsp/connectivities/           neighbor graph (float32 csr_matrix), when supplied
   varm/ varp/ layers/            empty, as anndata writes them
   uns/title                      the dataset name
   uns/cellucid/                  schema, id, name, description, citation, source, defaults

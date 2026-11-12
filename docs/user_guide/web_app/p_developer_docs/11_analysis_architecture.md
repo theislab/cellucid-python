@@ -182,7 +182,7 @@ Every gene and observation-field load goes through one download scheduler
 (`cellucid/assets/js/data/fetch-scheduler.js`), entered from
 `app/state/managers/field/loading.js`:
 
-- **Priorities.** A gene the user chose or the field a view is coloured by
+- **Priorities.** A gene the user chose or the field a view is colored by
   (`high`), work the user started and is watching, such as a gene signature
   or a correlation (`normal`), one of a long run's genes (`bulk`) and a
   prefetch on intent (`low`). `high` and `normal` reads start at once; while
@@ -220,7 +220,7 @@ Every gene and observation-field load goes through one download scheduler
   a larger working set, another page of the origin), and buffered
   genes hold at most 30% of the budget. The tuner never decides network
   parallelism; the scheduler above does. A worker the pool replaces during a
-  run (a cancelled task outlived its grace) gets a new port; the genes on
+  run (a canceled task outlived its grace) gets a new port; the genes on
   their way to the old one are read again.
 - **Two groups, read in their cells.** Differential expression of two groups
   streams through the same loop over the groups' cells only
@@ -244,14 +244,14 @@ Every gene and observation-field load goes through one download scheduler
   built.
 - **Cancellation.** A finished or aborted run cancels its reads still
   waiting in the scheduler (they never start) and those under way; a shared
-  read is cancelled only when every caller has left. Each dataset load has
+  read is canceled only when every caller has left. Each dataset load has
   its own scheduler: replacing the dataset closes the previous one, which
   aborts and rejects every read it still held, so a stalled read of the
   old dataset never holds back the new dataset's reads. No task has a
   deadline: a task is one synchronous call with no progress to measure, so a
   bound would only turn a slow success (10M cells on few cores) into a
   failure of every window's tasks. A task stops through its signal, and a
-  worker that does not come back from a cancelled task is replaced. A
+  worker that does not come back from a canceled task is replaced. A
   failed task's error reaches the caller with its class
   (`utils/error-wire.js`).
 - **Progress.** Every read is reported to the read activity log
@@ -288,7 +288,9 @@ per-cell state for, and its workers end once idle for 10 s
 (`workers/idle-retirement.js`), starting again for the next task.
 
 Components still clean up what they own (plots purged, caches cleared on a
-dataset reload): `cellucid/assets/js/app/analysis/shared/resource-cleanup.js`.
+dataset reload). The page data cache (`shared/lru-cache.js`) has that share
+as its one bound: no entry count and no age, so a sweep over many small
+page × variable results keeps them all while memory is free.
 
 ---
 

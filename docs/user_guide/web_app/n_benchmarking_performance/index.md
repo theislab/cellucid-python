@@ -18,7 +18,7 @@ The fastest fix is almost always: **identify which one you hit first**, then cha
 :::
 
 :::{note}
-Two behaviours in this section are the opposite of what most people assume, and
+Two behaviors in this section are the opposite of what most people assume, and
 both are worth knowing before you start tuning:
 
 - **Hiding cells with a filter makes navigation faster**, not slower. Hidden
@@ -50,7 +50,7 @@ Use this table when you’re in the middle of work and just need relief.
 | Slider scrubbing (filters) stutters | CPU | Turn **Live filtering** off and use **Filter** to apply once | {doc}`02_performance_considerations_what_gets_slow_and_why` |
 | Loading takes forever or tab freezes | I/O or memory | Keep the file on a local disk; for a large cell-major `.h5ad`, write a gene-major copy with `prepare()` | {doc}`03_large_dataset_best_practices` |
 | Fans spin up / laptop throttles | GPU + thermals | Lower quality knobs (smoke/grid, overlays), reduce window size, clear snapshots | {doc}`06_edge_cases_performance` |
-| “WebGL context lost” / blank canvas | GPU memory | Reload, then reduce GPU load (no smoke, no snapshots, smaller highlights, lower overlay density) | {doc}`07_troubleshooting_performance` |
+| “Graphics reset by the browser” / blank canvas | GPU memory | Wait: the graphics restore themselves (only if the dialog says they could not, reload and open the session it saved); then reduce GPU load (no smoke, no snapshots, smaller highlights, lower overlay density) | {doc}`07_troubleshooting_performance` |
 | “It got slower after a change” | Regression | Run a small benchmark loop and compare numbers | {doc}`04_benchmarking_methodology_and_metrics` |
 
 If you suspect an environment/browser issue (not your data), also read:

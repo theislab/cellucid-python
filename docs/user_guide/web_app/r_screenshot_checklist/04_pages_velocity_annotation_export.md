@@ -64,7 +64,7 @@ Verified from the existing browser specs, so the screenshot tool can reuse a pro
 
 **Velocity is a Figure-Export blocker.** `figure-export/utils/overlay-fidelity.js` (`VELOCITY_OVERLAY_CONTROL_ID = 'velocity-overlay-enabled'`) blocks export while the overlay is on. **All velocity imagery must be canvas/viewport capture of `#glcanvas`, never Figure Export output.**
 
-**Animation determinism.** The overlay is a 5-pass GPU particle simulation with curl-noise turbulence and a persistent trail framebuffer. Two captures of the *same* settings differ. For any before/after pair the tool must: same dataset, same camera (`Reset camera`), toggle the overlay off→on to clear trail buffers, change exactly one slider, then settle a **fixed** number of frames before capturing both halves. Without that, a "density 5K vs 200K" pair also differs in particle placement and the reader cannot attribute the difference to the parameter.
+**Determinism.** Captures run under reduced motion, where the overlay is a still picture of the flow: the particles respawn from fixed seeds and are traced a fixed number of fixed steps, once (`stillFlowTrace`, `velocity-overlay.js`). Two captures of the same settings and camera are the same bytes, and a before/after pair differs only by the parameter changed. Wait for the viewer to settle after turning the overlay on (its spawn table builds first; `VIEWER_SETTLED` in `scenarios.mjs`).
 
 ---
 
@@ -120,7 +120,7 @@ Controls (label verbatim / selector / min–max–step / default). All 24 slider
 | Cinematic Effects | `Film grain:` | `#velocity-film-grain` | 0 | 0.1 | 0.002 | 0 | |
 | Cinematic Effects | `Chromatic aberr.:` | `#velocity-chromatic-aberration` | 0 | 1 | 0.05 | 0 | |
 
-**Gotcha for the tool:** the label reads `Trail persistence:` but the id is `#velocity-trail-fade`. The JS internal validation label is also `Trail fade`. Docs and screenshot both correctly say *Trail persistence* — no staleness, but a scripting trap.
+**Gotcha for the tool:** the label reads `Trail persistence:` but the id is `#velocity-trail-fade` (a scripting trap). The JS validation label is `Trail persistence` too, held to the page's labels by `velocity-overlay-labels-contract.test.mjs`.
 
 ### Honest triage: still vs pair vs recording
 
@@ -143,7 +143,7 @@ The overlay is animated, so ask per parameter *"does a frozen frame carry the in
 
 **needs**
 - Dataset: `pancreas` (the only bundled sample with velocity).
-- Interaction: load `?dataset=pancreas` → `dismissWelcome` → open `Visualization` accordion → `Compare Views → Shows` (`#view-representation-select`) = `UMAP · 2D`, `Mode:` = `Planar` → check `#velocity-overlay-enabled` → wait for `#velocity-overlay-info` to read `Available on UMAP · X_umap_1d, UMAP · X_umap, UMAP · X_umap_3d.` and for the `Velocity overlay ready` toast → settle 120 frames.
+- Interaction: load `?dataset=pancreas` → `dismissWelcome` → open `Visualization` accordion → `Compare Views → Shows` (`#view-representation-select`) = `UMAP · 2D`, `Mode:` = `Planar` → check `#velocity-overlay-enabled` → wait for `#velocity-overlay-info` to read `Available on UMAP · 3D, UMAP · 2D, UMAP · 1D.` and for the `Velocity overlay ready` toast → settle 120 frames.
 - Crop: full app viewport, 1440×900 logical, but **crop the right edge to where the data ends** — do not ship 300 px of empty grid (the current section images all do).
 - Cursor: no.
 - Filename: `vector_field_velocity/pancreas-2d-overview.png` at `:width: 1440px`.
@@ -164,13 +164,13 @@ The overlay is animated, so ask per parameter *"does a frozen frame carry the in
 1. *"What good looks like vs what noise looks like"* — same Pancreas 2D view, two captures: (a) `Turbulence:` 0.00, `Bloom strength:` 0.00, `Trail length:` 3.0s — coherent flow along the endocrine continuum; (b) `Turbulence:` 1.00 — the same field rendered as procedural wander. Crop `#glcanvas` only, square, ~800×800 logical each. No cursor. Filenames `vector_field_velocity/flow-coherent.png` / `flow-turbulent.png`, `:width: 400px` each so they sit side by side. **This is the single highest-value velocity image in the section**, because §"The flow looks random" and `i/04`'s repeated "turbulence can suggest structure that isn't in the data" warning are currently pure assertion.
 2. *The availability hint* — see `i/02` step 2 below; reference the same file rather than duplicating.
 
-**notes** — §"How to tell whether your dataset contains vector fields" says "If the dataset has **no vector fields**, the **Vector Field Overlay** block will not appear." **Verified correct** — `syncAvailability()` sets `#velocity-overlay-controls.style.display = 'none'`; it is hidden, not greyed. The three "Implementation references" at the foot of the page all resolve to real files.
+**notes** — §"How to tell whether your dataset contains vector fields" says "If the dataset has **no vector fields**, the **Vector Field Overlay** block will not appear." **Verified correct** — `syncAvailability()` sets `#velocity-overlay-controls.style.display = 'none'`; it is hidden, not grayed. The three "Implementation references" at the foot of the page all resolve to real files.
 
 ---
 
 ## {doc}`/user_guide/web_app/i_vector_field_velocity/02_enabling_overlay_and_selecting_field`
 
-**explains** — Where the toggle lives, the three deliberate availability states, what dimension switching does, and dataset/session reset behaviour.
+**explains** — Where the toggle lives, the three deliberate availability states, what dimension switching does, and dataset/session reset behavior.
 
 **has** — `none`. (Points at ``08_screenshots`` in prose only.)
 
@@ -179,13 +179,13 @@ The overlay is animated, so ask per parameter *"does a frozen frame carry the in
 **needs** — one ordered strip, all on `pancreas`, all cropped to `#velocity-overlay-controls`, `:width: 246px`:
 
 1. **Block present, overlay off.** State before: dataset loaded, `Visualization` open. Action: none. State after: `#velocity-overlay-enabled` unchecked, `#velocity-overlay-settings` hidden. Cursor: **yes, hovering `#velocity-overlay-enabled`** — this is the "step 6: Check Show overlay" instruction. → `vector_field_velocity/enable-01-off.png`
-2. **Disabled for the embedding this view shows.** No bespoke dataset needed: choose `PCA · 2D` in `Shows` (`#view-representation-select`) (the Pancreas `velocity` field is bound to its three UMAPs only). State after: checkbox **disabled**, `#velocity-overlay-info` reads `Vector fields are bound to UMAP. Show one of them in this view to enable.` (the three bound UMAPs share the label `UMAP`). Crop `#velocity-overlay-controls`. Cursor: no. → `vector_field_velocity/enable-02-wrong-embedding.png`
+2. **Disabled for the embedding this view shows.** No bespoke dataset needed: choose `PCA · 2D` in `Shows` (`#view-representation-select`) (the Pancreas `velocity` field is bound to its three UMAPs only). State after: checkbox **disabled**, `#velocity-overlay-info` reads `Vector fields are bound to UMAP · 3D, UMAP · 2D, UMAP · 1D. Show one of them in this view to enable.` (each bound UMAP as **Shows** names it). Crop `#velocity-overlay-controls`. Cursor: no. → `vector_field_velocity/enable-02-wrong-embedding.png`
 3. **Loading.** Route-delay `vectors/0_2.bin.gz` (the `velocity` payload bound to `X_umap`) by ~2 s, check the box, capture while `#velocity-overlay-info` reads `Loading vector field…`. Cursor: no. → `vector_field_velocity/enable-03-loading.png`
-4. **Enabled.** `#velocity-overlay-settings` visible, `#velocity-overlay-info` = `Available on …` (each embedding the field is bound to, as `UMAP · X_umap`), `Vector field:` = `velocity`. Cursor: no. → `vector_field_velocity/enable-04-ready.png`
+4. **Enabled.** `#velocity-overlay-settings` visible, `#velocity-overlay-info` = `Available on …` (each embedding the field is bound to, as **Shows** names it: `UMAP · 2D`), `Vector field:` = `velocity`. Cursor: no. → `vector_field_velocity/enable-04-ready.png`
 
 Plus one small extra: the **info popover**. The page says "A small `i` button beside the heading explains that the animation uses per-cell velocity or drift vectors, each exported for one embedding" — that popover has never been shown. Un-`hidden` `#vector-field-help-tooltip`, crop the header row + tooltip, cursor on `#vector-field-help-btn`. → `vector_field_velocity/overlay-info-popover.png`, `:width: 246px`.
 
-**notes** — The four literal status strings quoted in this page (`Vector fields are bound to …. Show one of them in this view to enable.`, `Available on …. Select a vector field …`, `Loading vector field…`, `Failed to load vector field.`) match `velocity-overlay-controls.js` exactly, including the U+2026 ellipsis.
+**notes** — The four literal status strings quoted in this page (`Vector fields are bound to …. Show one of them in this view to enable.`, `Available on …. Select a vector field …`, `Loading vector field…`, `The vector field could not be shown.`) match `velocity-overlay-controls.js` exactly, including the U+2026 ellipsis.
 
 ---
 
@@ -232,7 +232,7 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 *Group crops* — five geometric crops of the expanded `#velocity-overlay-settings > details > div.mt-1`, one per header. There is **no per-group container element**, so the tool must crop from each `div.legend-help.font-medium` header's top to the bottom of the last `.control-block` before the next header. Cursor: no. `:width: 224px`.
 `vector_field_velocity/adv-particle-rendering.png`, `adv-trail-settings.png`, `adv-hdr-bloom.png`, `adv-color-grading.png`, `adv-cinematic-effects.png`.
 
-*Parameter pairs* — same capture discipline as `03`. Prioritised, because 18 pairs is 36 images:
+*Parameter pairs* — same capture discipline as `03`. Prioritized, because 18 pairs is 36 images:
 
 | Priority | Parameter | Low | High | Why it earns an image |
 |---|---|---|---|---|
@@ -243,11 +243,11 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 | **should** | `Intensity:` | 0.05 | 1.50 | First remedy for "too faint" in `05` and `07`. |
 | **should** | `Glow amount:` | 0.00 | 1.00 | |
 | **nice** | `Anamorphic ratio:` | 1.0 | 3.0 | Visually dramatic, cheap to capture. |
-| **nice** | Colour grading | 2×2 sheet: `Saturation` 0.5/2.0 × `Contrast` 0.5/2.0 | | Four subtle controls do not each deserve a pair; one contact sheet does. |
+| **nice** | Color grading | 2×2 sheet: `Saturation` 0.5/2.0 × `Contrast` 0.5/2.0 | | Four subtle controls do not each deserve a pair; one contact sheet does. |
 
 *Skip entirely* (state so rather than shipping weak images): `Core sharpness`, `Chromatic fade`, `Exposure`, `Bloom threshold`, `Highlights`, `Shadows`, `Vignette`, `Film grain`, `Chromatic aberr.` — the group crop shows the control, the table gives the range, and a low/high pair at documentation scale would be near-indistinguishable. Document that decision in the section's screenshot page instead of silently omitting.
 
-**notes** — All 18 ranges/defaults match the markup. One engine detail the page could state and does not: particle colour is `texture(u_colormapTex, vec2(v_speedNorm, 0.5))` — colour is **only** normalized speed, there is no direction encoding and no alternative colour mode. The page says this correctly in `03` ("it does not encode direction") but a reader on `04` looking at *Color Grading* might infer otherwise.
+**notes** — All 18 ranges/defaults match the markup. One engine detail the page could state and does not: particle color is `texture(u_colormapTex, vec2(v_speedNorm, 0.5))` — color is **only** normalized speed, there is no direction encoding and no alternative color mode. The page says this correctly in `03` ("it does not encode direction") but a reader on `04` looking at *Color Grading* might infer otherwise.
 
 ---
 
@@ -297,7 +297,7 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 
 **needs** — three `#velocity-overlay-controls` crops, `:width: 246px`, no cursor, each reached by route interception:
 
-1. *"Overlay toggle instantly turns off"* — `page.route()` the vector binary to a 500. Capture with `#velocity-overlay-info` = `Failed to load vector field.` **and** the error toast (`.notification-error`) visible in the same frame — the page says "You may also see a toast/notification containing an error message" and that pairing is exactly what makes the picture worth having. Crop must include both the sidebar block and the toast, so this one is a viewport crop, `:width: 900px`. → `vector_field_velocity/error-failed-to-load.png`
+1. *"Overlay toggle instantly turns off"* — `page.route()` the vector binary to a 500. Capture with `#velocity-overlay-info` = `The vector field could not be shown.` **and** the error toast (`.notification-error`) visible in the same frame — the page says "You may also see a toast/notification containing an error message" and that pairing is exactly what makes the picture worth having. Crop must include both the sidebar block and the toast, so this one is a viewport crop, `:width: 900px`. → `vector_field_velocity/error-failed-to-load.png`
 2. *"No fields appear in dropdown"* — the `h5ad-ui-smoke.spec.mjs` path: after switching to a no-vector sample, `#velocity-field` has value `''` and **0 options**. Capture the open, empty select. → `vector_field_velocity/error-empty-field-select.png`
 3. *"Velocity rendering unavailable."* — `#velocity-overlay-info` in that state (the spec drives it by failing the transform-feedback allocation). → `vector_field_velocity/error-rendering-unavailable.png`
 
@@ -335,7 +335,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 **notes**
 - The page's provenance claim — "3,696 cells with independent 1D, 2D, and 3D UMAP embeddings, a 2D PCA view, and one `velocity` field bound to each of the three UMAPs" — is **verified** against the Pancreas sample's identity at audit time (prepared, before 0.9.5; embeddings `X_umap_1d`, `X_pca`, `X_umap`, `X_umap_3d`; `embeddings.default_dimension 3`; the field `velocity` bound to the three UMAPs). `overlay-controls.png` and `pancreas-velocity-3d.png` still show the field's previous name, `velocity_umap`, in the **Vector field** selector; their re-shoots must show `velocity`.
-- The 3D caption says the view is "colored by `clusters`". `CATEGORICAL OBS: clusters` is indeed visible in the crop, but the particle layer at 60 % opacity almost completely occludes the point cloud, so the *claim* is not visible in the *image*. Either lower `Opacity:` to ~35 % for that capture or drop the colour claim from the caption.
+- The 3D caption says the view is "colored by `clusters`". `CATEGORICAL OBS: clusters` is indeed visible in the crop, but the particle layer at 60% opacity almost completely occludes the point cloud, so the *claim* is not visible in the *image*. Either lower `Opacity:` to ~35% for that capture or drop the color claim from the caption.
 - This page is where the "skipped parameter pairs" decision from `i/04` should be recorded, and where the honest statement about `Flow speed:` being unrepresentable in a still belongs.
 
 ---
@@ -358,7 +358,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 ## {doc}`/user_guide/web_app/j_community_annotation/01_annotator_guide`
 
-**explains** — The annotator's whole round: connect, Pull, find the 🗳️ column, open the voting modal, read the consensus line, vote, comment, propose a suggestion, Publish, wrap up; then a large troubleshooting catalogue.
+**explains** — The annotator's whole round: connect, Pull, find the 🗳️ column, open the voting modal, read the consensus line, vote, comment, propose a suggestion, Publish, wrap up; then a large troubleshooting catalog.
 
 **has** — 1 figure, L82 `community_annotation/lifecycle-01-disconnected.png`, `:width: 504px`. Same file as the other three pages.
 
@@ -372,7 +372,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 ## {doc}`/user_guide/web_app/j_community_annotation/02_author_guide`
 
-**explains** — The author's setup and operations: dataset-id stability, repo layout, `annotations/config.json` schema, GitHub App install, self-hosted Worker contract, enabling columns, tuning thresholds, merging duplicates, derived columns, consensus export, and a large troubleshooting catalogue. 38 kB — the largest page in all three sections.
+**explains** — The author's setup and operations: dataset-id stability, repo layout, `annotations/config.json` schema, GitHub App install, self-hosted Worker contract, enabling columns, tuning thresholds, merging duplicates, derived columns, consensus export, and a large troubleshooting catalog. 38 kB — the largest page in all three sections.
 
 **has** — 1 figure, L61 `community_annotation/lifecycle-01-disconnected.png`, `:width: 504px`. Same file again.
 
@@ -390,7 +390,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 ## {doc}`/user_guide/web_app/j_community_annotation/03_ui_reference`
 
-**explains** — Explicitly a "**button-by-button** reference" for every Community Annotation surface: the sidebar accordion, the 4-step GitHub sync wizard, the identity modal, MANAGE ANNOTATION, DERIVED CONSENSUS COLUMN, CONSENSUS SNAPSHOT + LOCAL CACHE, and the voting modal — plus a troubleshooting catalogue.
+**explains** — Explicitly a "**button-by-button** reference" for every Community Annotation surface: the sidebar accordion, the 4-step GitHub sync wizard, the identity modal, MANAGE ANNOTATION, DERIVED CONSENSUS COLUMN, CONSENSUS SNAPSHOT + LOCAL CACHE, and the voting modal — plus a troubleshooting catalog.
 
 **has** — 1 figure, L34 `community_annotation/lifecycle-01-disconnected.png`, `:width: 504px`. Same file, fourth use.
 
@@ -405,7 +405,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 ---
 
-## Judgement on the shared `disconnected-panel.png`
+## Judgment on the shared `disconnected-panel.png`
 
 The image itself is not *wrong*: 246×123, correct content — `COMMUNITY ANNOTATION` header, the `i` info button, `No annotation repo connected.`, and the `CONNECT REPO` button. It matches the prose in `03` §"Entry button states" exactly.
 
@@ -566,15 +566,15 @@ openCommunityAnnotationVotingModal({ defaultCatIdx, defaultFieldKey, state });
 | MANAGE ANNOTATION | `.analysis-accordion-item.open` whose `.analysis-accordion-title` is `MANAGE ANNOTATION` |
 | Derived column | same, title `DERIVED CONSENSUS COLUMN` |
 | Snapshot + cache | same, title `CONSENSUS SNAPSHOT + LOCAL CACHE` |
-| Voting modal | `.community-annotation-modal-overlay`, title **`Community voting`** |
+| Voting modal | `dialog.community-annotation-dialog:not(.community-annotation-details-dialog)`, title **`Community voting`** |
 | Voting detail only | `.community-annotation-voting-detail` |
 | One suggestion card | `.community-annotation-suggestion-card` (> `-top`, `-label`, `-ontology`, `-net`, `-meta`, `-evidence`, `-actions`) |
 | Vote buttons | `.community-annotation-vote-btn.vote-up` / `.vote-down` (text `▲ 7` / `▼ 2`, `aria-pressed`, `.is-mine`, `.is-delegated`) |
 | New-suggestion form | `.community-annotation-dashed-box` containing `.community-annotation-new-title` = `New suggestion` |
 | CAP results | `.cap-search-results` (items `.cap-search-item`) |
-| Comments / merged / evidence | `.community-annotation-secondary-overlay` (titles `Comments · <label>`, `Merged suggestions`, `Evidence`) |
+| Comments / merged / evidence | `dialog.community-annotation-details-dialog` (titles `Comments · <label>`, `Merged suggestions`, `Evidence`) |
 | Identity modal | `.community-annotation-modal.community-annotation-modal--narrow`, title **`Your identity`** |
-| Confirm dialog | `.confirm-dialog-overlay` |
+| Confirm dialog | `dialog.confirm-dialog` |
 
 **Do not target** `.community-annotation-panel`, `.community-annotation-panel-title`, `.community-annotation-badge*`, `.community-annotation-cluster-*`, `.community-annotation-category-*`, `.legend-vote-btn`, `.community-annotation-repo-row` — these exist in `_community-annotations.css` but **no JS emits them**. There is likewise no `#community-annotation-panel`.
 
@@ -716,8 +716,8 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 ### 15. Derived consensus column
 - **Before:** consensus computed.
 - **Action:** open `DERIVED CONSENSUS COLUMN`, pick `clusters`, type `community_cell_type`, set threshold/min annotators, click `Build derived column`.
-- **After:** the new column exists; the embedding recolours to consensus labels plus `Disputed` / `Pending`.
-- **Crop:** two images — the accordion body (`:width: 246px`), and the recoloured `#glcanvas` + legend (`:width: 900px`). The second is the payoff image for the entire feature: *this is what community annotation gets you.*
+- **After:** the new column exists; the embedding recolors to consensus labels plus `Disputed` / `Pending`.
+- **Crop:** two images — the accordion body (`:width: 246px`), and the recolored `#glcanvas` + legend (`:width: 900px`). The second is the payoff image for the entire feature: *this is what community annotation gets you.*
 - **Cursor:** on `Build derived column` in the first.
 - **Files:** `community_annotation/lifecycle-15a-derived-column-controls.png`, `lifecycle-15b-derived-column-view.png`.
 - **Mock-reachable:** **YES** — purely local.
@@ -790,7 +790,7 @@ I checked it at full size: it shows the `FIGURE EXPORT` header, the intro senten
 **verdict** — **ADD** (2 images).
 
 **needs**
-1. **Viewer ↔ exported figure side by side.** The page's central promise is "the exported figure should match the state you are currently looking at". Capture the Pancreas 2D viewer, export a PNG of that view, and place them side by side. Dataset `pancreas`, colour by `clusters`, one filter active so the `(hidden)` legend marking is visible. → `figure_export/wysiwyg-viewer-vs-export.png`, `:width: 900px`. No cursor.
+1. **Viewer ↔ exported figure side by side.** The page's central promise is "the exported figure should match the state you are currently looking at". Capture the Pancreas 2D viewer, export a PNG of that view, and place them side by side. Dataset `pancreas`, color by `clusters`, one filter active so the `(hidden)` legend marking is visible. → `figure_export/wysiwyg-viewer-vs-export.png`, `:width: 900px`. No cursor.
 2. **An `Export blocked` dialog.** The page introduces blocking as a design principle ("Where a layer cannot be reproduced, Cellucid says so instead of quietly dropping it"). Easiest reproduction: enable the velocity overlay on `pancreas` and press `Export` → the `overlay-fidelity.js` blocker fires with *"The velocity vector field is enabled in the viewer, but figure export… Turn the velocity overlay off before exporting."* Crop `.fidelity-warning-dialog` (component at `figure-export/components/fidelity-warning-dialog.js`). Cursor: no. → `figure_export/export-blocked-velocity.png`, `:width: 560px`. **This image serves four pages** (`01`, `04`, `06`, `07`) — capture once, reference from all.
 
 **notes** — §"WYSIWYG" claims interaction chrome "is disclosed in the Annotations block". That disclosure is real (`figure-export-ui.js:582–586`, `Never exported: …`) but is **absent from the one screenshot of that block** — see `k/05`.
@@ -806,14 +806,14 @@ I checked it at full size: it shows the `FIGURE EXPORT` header, the intro senten
 **verdict** — **REPLACE**, plus **SEQUENCE** for the crop workflow.
 
 **Why REPLACE — I read the file at full size and it is the worst image in the audit:**
-1. **It is the 120-point `current-ui-prepared` fixture.** Roughly 95 % of the 1440×900 frame is empty white grid with ~120 scattered single-pixel dots. A wet-lab reader learns nothing about what a figure export looks like.
+1. **It is the 120-point `current-ui-prepared` fixture.** Roughly 95% of the 1440×900 frame is empty white grid with ~120 scattered single-pixel dots. A wet-lab reader learns nothing about what a figure export looks like.
 2. **The sidebar is clipped mid-section.** `FRAMING` runs off the bottom edge; the last legible line is `Preview sample: 120 points • shader-accurate points`. `LABELS & ANNOTATIONS`, `STYLE`, `DOWNLOAD` and the `EXPORT` button are all out of frame.
 3. **Stray chrome.** The same unexplained floating ✕ button at ~(309, 27) as the velocity captures.
 4. **The caption does not describe the image.** Both captions say Preview "exposes the current framing and visual state before any file is written". The large area in the image is the **live viewer canvas**, not the export preview; the actual preview is the ~175 px thumbnail buried inside `FRAMING`. As shipped, the figure invites the reader to mistake the viewer for the preview.
 5. 1×.
 
 **needs**
-- *Replacement for the page's "Interface reference"*: `pancreas`, coloured by `clusters`, 2D Planar, `Figure Export` panel open with `FRAMING` expanded and `SHOW PREVIEW` checked, sidebar scrolled so the preview thumbnail is fully visible, viewport cropped so the canvas shows real data rather than empty grid. Cursor: no. → keep the filename `figure_export/preview.png` (so `08` picks it up too), `:width: 1440px`, captured at 2×.
+- *Replacement for the page's "Interface reference"*: `pancreas`, colored by `clusters`, 2D Planar, `Figure Export` panel open with `FRAMING` expanded and `SHOW PREVIEW` checked, sidebar scrolled so the preview thumbnail is fully visible, viewport cropped so the canvas shows real data rather than empty grid. Cursor: no. → keep the filename `figure_export/preview.png` (so `08` picks it up too), `:width: 1440px`, captured at 2×.
 - *The Frame-export sequence* — §"How to use Frame export (step-by-step)" is six numbered steps and one of the most-asked features; it has no images:
   1. `SHOW PREVIEW` on, `FRAME EXPORT` off. Crop the `FRAMING` section. Cursor on `FRAME EXPORT` (`#figure-export-crop-enabled`). → `figure_export/crop-01-enable.png`
   2. `FRAME EXPORT` on, drag handle mid-drag on `#figure-export-plot-frame`. Crop the preview area. Cursor on a corner handle. → `figure_export/crop-02-drag.png`
@@ -847,18 +847,18 @@ The image shows the hint ending at "…Hybrid embeds the shader-rendered point p
 
 ## {doc}`/user_guide/web_app/k_figure_export/04_quality_knobs_and_best_practices`
 
-**explains** — Vector vs raster decision, sizing recipes, large point clouds without misleading downsampling, colour/contrast/accessibility, and safe vs dangerous post-processing.
+**explains** — Vector vs raster decision, sizing recipes, large point clouds without misleading downsampling, color/contrast/accessibility, and safe vs dangerous post-processing.
 
 **has** — 1 figure, L220 `figure_export/style.png`, `:width: 224px` (file 224×450). Also on `08_screenshots.md` L40.
 
 **verdict** — **OK** (content correct; global 2× re-shoot applies) — **plus ADD**.
 
-The image is a clean crop of the expanded `STYLE` section: `BACKGROUND` = `Match viewer`, `FONT` = `Arial`, `TEXT SIZES` with `AUTO TEXT` checked and Base 15 / Legend 15 / Ticks 15 / Axis 17 / Title 20 / Centroids 11 greyed out. Matches the prose exactly.
+The image is a clean crop of the expanded `STYLE` section: `BACKGROUND` = `Match viewer`, `FONT` = `Arial`, `TEXT SIZES` with `AUTO TEXT` checked and Base 15 / Legend 15 / Ticks 15 / Axis 17 / Title 20 / Centroids 11 grayed out. Matches the prose exactly.
 
 **needs**
-1. **The colourblind simulation.** §"Colorblindness preview (high value, low effort)" calls this out as the cheapest quality win in the section and shows nothing. Enable `SHOW PREVIEW`, set the select (`.figure-export-colorblind-select`, aria-label `Colorblind preview`) to `Normal` then `Deuteranopia`, and capture the preview thumbnail in both states on a `clusters`-coloured Pancreas view where two categories genuinely collide. → `figure_export/colorblind-{normal,deuteranopia}.png`, `:width: 300px` each. Cursor on the select in the first. **This is the highest-value addition in section K** — it is a *quality* feature the reader cannot evaluate from words.
-2. **The `(hidden)` legend entry.** Both this page and `06` insist that hiding a category keeps its legend entry with a hollow grey swatch. Export a figure with two categories hidden and crop the legend. → `figure_export/legend-hidden-entries.png`, `:width: 300px`.
-3. **The `Log10 color scale` colorbar.** Same argument: documented twice in prose, never shown. Colour by a continuous field with `Use log scale` on, export, crop the colorbar. → `figure_export/legend-log-colorbar.png`, `:width: 300px`.
+1. **The colorblind simulation.** §"Colorblindness preview (high value, low effort)" calls this out as the cheapest quality win in the section and shows nothing. Enable `SHOW PREVIEW`, set the select (`.figure-export-colorblind-select`, aria-label `Colorblind preview`) to `Normal` then `Deuteranopia`, and capture the preview thumbnail in both states on a `clusters`-colored Pancreas view where two categories genuinely collide. → `figure_export/colorblind-{normal,deuteranopia}.png`, `:width: 300px` each. Cursor on the select in the first. **This is the highest-value addition in section K** — it is a *quality* feature the reader cannot evaluate from words.
+2. **The `(hidden)` legend entry.** Both this page and `06` insist that hiding a category keeps its legend entry with a hollow gray swatch. Export a figure with two categories hidden and crop the legend. → `figure_export/legend-hidden-entries.png`, `:width: 300px`.
+3. **The `Log10 color scale` colorbar.** Same argument: documented twice in prose, never shown. Color by a continuous field with `Use log scale` on, export, crop the colorbar. → `figure_export/legend-log-colorbar.png`, `:width: 300px`.
 
 **notes** — There is a **visible gap at lines 226–228** (two blank lines between the figure block and the `---`), matching the pattern in `j/02` and `j/03`. Possibly a removed second figure.
 
@@ -896,8 +896,8 @@ The image also has a second, softer problem shared with the whole section: the `
 
 **needs**
 1. **The three blockers.** §"Volumetric smoke cloud render mode not exported", §"Connectivity overlay not exported", §"Velocity vector field not exported" each quote an exact blocker string. Capture the `.fidelity-warning-dialog` once per blocker (velocity is the cheapest — see `k/01`; smoke via `Render mode:` = `Volumetric smoke cloud (beta)`; connectivity via the KNN connectivity overlay). → `figure_export/blocked-{velocity,smoke,connectivity}.png`, `:width: 560px` each. Reuse the velocity one from `01`.
-2. **Reference grid on vs off.** §"Reference grid" explains that the viewer's `Background` control decides both the clear colour and whether the grid box is drawn, and that the checkbox is disabled for `White`/`Black`. Two exported figures — `Grid (light)` with `Reference grid` on, and the same view with it off — plus, ideally, a third crop showing the checkbox **disabled** under `Background: White`. → `figure_export/reference-grid-{on,off,disabled}.png`, `:width: 300px` each.
-3. **Dark-background ink.** §"Dark-background figures" claims titles/ticks/axis labels/frame/badge take their colour from the figure background. Export the same view under `Background: Match viewer` from `Grid (dark)` and from `Grid (light)`, side by side. → `figure_export/dark-vs-light-ink.png`, `:width: 700px`.
+2. **Reference grid on vs off.** §"Reference grid" explains that the viewer's `Background` control decides both the clear color and whether the grid box is drawn, and that the checkbox is disabled for `White`/`Black`. Two exported figures — `Grid (light)` with `Reference grid` on, and the same view with it off — plus, ideally, a third crop showing the checkbox **disabled** under `Background: White`. → `figure_export/reference-grid-{on,off,disabled}.png`, `:width: 300px` each.
+3. **Dark-background ink.** §"Dark-background figures" claims titles/ticks/axis labels/frame/badge take their color from the figure background. Export the same view under `Background: Match viewer` from `Grid (dark)` and from `Grid (light)`, side by side. → `figure_export/dark-vs-light-ink.png`, `:width: 700px`.
 4. **Category explosion.** §"Category explosion (legend overflow)" is about an unreadable figure; showing one is legitimate and instructive. Export a `clusters`-style field with many categories at `Legend: Right` vs `Legend: Bottom`. → `figure_export/legend-overflow-{right,bottom}.png`, `:width: 400px` each.
 
 **NONE (justified)** for NaN/Inf, font substitution, browser download restrictions and the privacy subsection: all four are either invisible, environment-specific, or already covered by the terminal capture proposed on `05`.
@@ -908,7 +908,7 @@ The image also has a second, softer problem shared with the whole section: the `
 
 ## {doc}`/user_guide/web_app/k_figure_export/07_troubleshooting_figure_export`
 
-**explains** — Quick triage, the `Export blocked` catalogue, and eleven symptom → cause → confirm → fix entries.
+**explains** — Quick triage, the `Export blocked` catalog, and eleven symptom → cause → confirm → fix entries.
 
 **has** — `none`.
 
@@ -937,13 +937,13 @@ The image also has a second, softer problem shared with the whole section: the `
 | 40 | `figure_export/style.png` | `224px` | `04` L220 |
 | 47 | `figure_export/download.png` | `224px` | `03` L192 |
 
-**verdict** — **REPLACE** (inherits every problem catalogued above).
+**verdict** — **REPLACE** (inherits every problem cataloged above).
 
 Specifically: it carries both confirmed-stale images (`labels-annotations.png`, `download.png`), the badly-framed `preview.png`, and all six at 1×. Its own captions must be re-checked after each re-shoot — `download.png`'s caption here is more specific than the one on `03` and will need to stay true.
 
 **needs**
 - All six re-shot per the per-page entries above, on `pancreas` rather than the 120-point fixture.
-- `framing.png` — the only file unique to this page. Content is correct (`PLOT SIZE: Screen (half)`, `W 1200 / H 887`, `SHOW PREVIEW` checked, colourblind select, `REFRESH`, `FRAME EXPORT` unchecked, the preview thumbnail, and `Preview sample: 120 points • shader-accurate points`). But **the thumbnail shows the near-empty 120-point fixture and the status line says so in words** — on `pancreas` it would read a real point count and show a real embedding. Re-shoot. Cursor on `FRAME EXPORT`.
+- `framing.png` — the only file unique to this page. Content is correct (`PLOT SIZE: Screen (half)`, `W 1200 / H 887`, `SHOW PREVIEW` checked, colorblind select, `REFRESH`, `FRAME EXPORT` unchecked, the preview thumbnail, and `Preview sample: 120 points • shader-accurate points`). But **the thumbnail shows the near-empty 120-point fixture and the status line says so in words** — on `pancreas` it would read a real point count and show a real embedding. Re-shoot. Cursor on `FRAME EXPORT`.
 - Its caption "Cellucid Figure Export preview for the deterministic 120-cell fixture" is *honest* about the fixture — which is exactly the tell that the wrong dataset was used for user-facing documentation.
 
 **notes** — Compare with `i/08`, which is the same idea done better: three unique images, none reused. `k/08` is a pure index of images owned by other pages. Consider whether the page should survive re-shooting at all, or become a short "how these captures were produced" page (dataset, viewport, DPR, app version) — which is what `r_screenshot_checklist/` was presumably meant to hold.
@@ -958,7 +958,7 @@ Specifically: it carries both confirmed-stale images (`labels-annotations.png`, 
 
 **verdict** — **NONE (justified).**
 
-The page is a file-path map and a constants list for developers reading source (`LAYOUT_CONSTANTS`, `PANEL_LEGEND_MAX_SHARE` 0.5, `PANEL_LEGEND_GAP` 8 px, `PANEL_LEGEND_MIN_WIDTH` 96 px, `PANEL_LEGEND_MIN_HEIGHT` 44 px). There is no UI state on it. A screenshot would be decoration.
+The page is a file-path map and a constants list for developers reading source (`PANEL_LEGEND_SHARE` 0.5, `PANEL_LEGEND_GAP` 8 px, `PANEL_LEGEND_MIN_WIDTH` 96 px, `PANEL_PLOT_MIN_WIDTH` × `PANEL_PLOT_MIN_HEIGHT` 80 × 64 px, `LEGEND_MIN_WIDTH_BESIDE` 240 px). There is no UI state on it. A screenshot would be decoration.
 
 One partial exception: §"What to capture when filing a bug" asks for "screenshot of fidelity warning dialog text if it appeared" — satisfied by cross-referencing the `Export blocked` image from `k/01` rather than adding a new one.
 

@@ -6,7 +6,7 @@
 **What you'll learn:**
 - which session files this release reads;
 - what Cellucid means by "the same dataset";
-- why a load is refused whole rather than partly applied; and
+- why a load onto another dataset is refused whole, while a file from another version of Cellucid is restored part by part; and
 - how to make a session reproducible across machines.
 
 ## The safety rule
@@ -57,8 +57,8 @@ records the package does not know, is refused as newer, never as damaged:
 
 A file with the right signature that breaks the format is refused with a
 sentence that says what is wrong: a missing or extra key, a chunk listed
-twice, or a step referring to a value the file lacks starts *This session file
-is damaged:*; a file cut short or with bytes after its last chunk says that it
+twice, or a step referring to a value the file lacks is said as a damaged file,
+its **Details** starting *This session file is damaged:*; a file cut short or with bytes after its last chunk says that it
 is an invalid session file.
 
 ## Exact fingerprint
@@ -92,7 +92,7 @@ embedding's columns. The digest is specified in
 {doc}`../p_developer_docs/10_sessions_persistence_and_serialization`.
 
 `dataMapping` names the embeddings that are turned on and each dimension's
-default, the vector-field bindings in use, the neighbour graph, the modality (a
+default, the vector-field bindings in use, the neighbor graph, the modality (a
 MuData dataset only), the gene names, the expression matrix and its `log1p`
 transform, the highly variable genes, and the latent space. They start at the
 file's defaults (`uns['cellucid']['defaults']`, or the best guess), however the
@@ -128,8 +128,8 @@ is shown.
 ## Fields the session uses
 
 Beside the fingerprint, the session lists every observation field and gene the
-step it shows uses (`requires`): what its views are coloured by, filter on or
-have changed the colours of, and the fields its highlight groups are bound to,
+step it shows uses (`requires`): what its views are colored by, filter on or
+have changed the colors of, and the fields its highlight groups are bound to,
 by the dataset's own key.
 Under the session's own data mapping, and before any part of the session is
 put back, Cellucid checks that the open dataset has all of them. A dataset that
@@ -158,7 +158,8 @@ field that only another step uses is checked when you show that step.
 | The embedding the session recorded its cell order on does not exist in this dataset | complete refusal; the message names the embedding |
 | Same id and same cell and gene counts, but the dataset stores its cells in a different order | complete refusal; the message says the coordinates differ from the ones the session was saved against, names both causes a digest cannot tell apart (a different order, or the same cells written again from a re-computed embedding), and asks you to load the version the session was saved on, or re-create the selections here |
 | The dataset lacks an observation field or gene the session uses | complete refusal; the message names every missing key |
-| The file holds a part of the state this version of Cellucid does not have | complete refusal: "This history holds state this version of Cellucid does not have (…). Open it in the version of Cellucid it was saved with." |
+| The file holds a part of the state this version of Cellucid does not have | restored part by part: that part is left out of every step and named ("A part of the state this version of Cellucid does not have ("…") is left out: it was saved by a newer version of Cellucid (…)."); everything else is restored |
+| One of the file's histories (trackers) has records this version cannot read | restored part by part: that history is left out and named, the others are restored; when it is the one shown, what it showed is kept as a new history of its name |
 | A session saved by an earlier Cellucid (session format 3 and earlier) or a newer one | complete refusal before anything is read, naming its format, with the messages above |
 | A file that does not start with `CELLUCID_SESSION/4` | complete refusal before anything is read, with the message above |
 | Missing, extra, duplicate or reordered chunk; a value or array that does not match its hash; a step tree that does not hold together | complete refusal: "This session file is damaged: …" |

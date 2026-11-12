@@ -22,7 +22,8 @@ object, or the path of any file the web app opens (an `.h5ad`, a `.zarr` folder
 or `.zarr.zip`, a MuData, a Loom or 10x `.h5`, an `.rds`). In RStudio and
 Positron it opens in the Viewer pane; in a Jupyter notebook in the cell's
 output ({doc}`08_view_in_jupyter_notebooks`); elsewhere in your browser.
-Choose with `pane = "viewer"`, `"browser"`, `"notebook"` or `"none"`.
+Choose with `pane = "viewer"`, `"browser"`, `"notebook"` or `"none"` (the
+address to open is printed instead, as it is when R has no browser to open).
 
 The 80 cells of `pbmc_small` appear on their t-SNE, with the PCA and the
 metadata columns (`groups`, `RNA_snn_res.1`, `active_ident`, …) under
@@ -40,9 +41,10 @@ see {doc}`08_view_in_jupyter_notebooks`):
    address Google accepts for opening Google Drive files; the next free port
    when it is taken).
 3. The first time, the Cellucid web app is downloaded from www.cellucid.com
-   (about 17 MB) into `file.path(tools::R_user_dir("cellucid", "cache"), "web")`, every file
-   checked against the build's SHA-256 inventory. Later viewers reuse it, and
-   download again only when a new build is published.
+   (about 1,200 files, 40 MB: under a minute on a typical connection) into
+   `file.path(tools::R_user_dir("cellucid", "cache"), "web")`, every file
+   checked against the build's SHA-256 inventory. Later viewers reuse it; a
+   new build published downloads only the files it changed.
 4. The viewer reads the store with range requests; each chunk is made when it
    is asked for, uncompressed (the store declares no compressor: the browser
    reads it over loopback, where deflating on R's one thread cost far more than

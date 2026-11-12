@@ -32,9 +32,9 @@ what each control does.
 
 | Control | Current behavior |
 |---|---|
-| Views list | One row per open view: its number, what it shows (`UMAP · 3D`), and under that the field it is coloured by. Select a row to edit that view. |
+| Views list | One row per open view: its number, what it shows (`UMAP · 3D`), and under that the field it is colored by. Select a row to edit that view. |
 | `View 2 shows` | The embedding the selected view shows, chosen from the embeddings turned on under **Session › Data mapping**, grouped by dimension. With a single view it reads `Shows`. |
-| `Keep view` | Adds a view: a copy of the selected one, with its own colours, filters and embedding. The new view is selected. |
+| `Keep view` | Adds a view: a copy of the selected one, with its own colors, filters and embedding. The new view is selected. |
 | `Link cameras` | Views that show the same embedding share one camera and navigation mode. Available only when two open views show the same embedding; see [Linked cameras](#linked-cameras). |
 | `Layout: Grid compare` | Shows the visible views together. |
 | `Layout: Edit selected view` | Shows only the selected view at full canvas size for editing. |
@@ -44,9 +44,13 @@ what each control does.
 only in `Render mode: Points`. Smoke disables it and forces the live,
 single-view layout; see {doc}`03_render_modes_points_vs_volumetric_smoke`.
 
-You can keep any number of views. In a grid, two or three views share one
-row and four or more take a grid of ⌈√n⌉ columns. GPU memory, not a count, is
-the limit: views that are not on screen give up their colours and visibility
+You can keep any number of views. A grid takes the arrangement whose panels
+are largest along their shorter side (a plot is fitted by it) in the area the
+sidebar leaves: on a wide window two or three views share one row; on a
+1440 × 900 screen beside the open sidebar three views take two rows of two; on
+a phone held upright they stack, each the full width. Ties go to the fewest
+empty cells. GPU memory, not a count, is
+the limit: views that are not on screen give up their colors and visibility
 on the GPU when memory runs short and are rebuilt, unchanged, when shown
 again. Only a set of views shown at once that does not fit in the device's
 memory is refused.
@@ -79,7 +83,7 @@ embedding of one view does not change the others. The fields themselves are
 the dataset's: renaming, deleting or restoring a field, or editing the
 categories of a field you made (merging or deleting a category, rebuilding a
 consensus column), changes it in every view, and each view keeps its own
-colours and hidden categories. Highlight pages are a
+colors and hidden categories. Highlight pages are a
 separate feature: they belong to cells, not to views, and every view shows
 them.
 
@@ -101,8 +105,8 @@ the panel under it, picking, hover, every selection tool, projectiles, the
 panel title chips, and the selection bar all use the panel rectangles you see.
 
 A single view (one panel, or `Edit selected view`) still draws across the whole
-window, but the camera centre - the orbit or pan target, or the free-fly look
-direction - sits at the centre of the uncovered part, so the data is centred
+window, but the camera center - the orbit or pan target, or the free-fly look
+direction - sits at the center of the uncovered part, so the data is centered
 where you can see it.
 
 ## Select and edit the intended panel
@@ -153,28 +157,54 @@ Each row contains:
 
 - a number;
 - a `⌖` mark on the view whose camera has focus;
-- what the view shows, `UMAP · 3D`, and under it the field it is coloured by
+- the view's name, when it has one (see below);
+- what the view shows, `UMAP · 3D`, and under it the field it is colored by
   (hover for the exact embedding key);
 - `linked` when the view shares its camera with views of the same embedding;
-- its navigation mode, `Orbit`, `Pan` or `Fly`; press it to switch the mode
-  (Orbit → Planar → Free-fly) for that view;
+- its navigation mode, `Orbit`, `Planar` or `Free-fly`; press it to switch the
+  mode (Orbit → Planar → Free-fly) for that view;
 - `×` when that view can be removed.
 
+### Name a view
+
+Double-click a view's row, or select it and press `F2`, to give the view a
+name of its own: `Early`, `Day 7, treated`. Type it and press `Enter` (or click
+elsewhere); `Escape` leaves the view as it was, and an empty name takes the
+name away. The name shows beside the view's number wherever the view is shown:
+
+- its row (`2 · Early`, then what it shows);
+- its panel's title chip on the plot (`2 · Early · UMAP 3D · cell_type`);
+- the **Applies to** row of **Navigation** and the embedding picker's label
+  (`View 2 "Early" shows`);
+- the history: `Named View 2 "Early"`, and every later step on that view
+  (`Moved the camera of View 2 "Early"`);
+- a figure: each panel of **Export all views** is titled by its view's name
+  (`A. Early`, `B. Mid`, `C. Late`), and a named view exported alone is titled
+  `<dataset> • Early` until you write a title of your own (see
+  {doc}`../k_figure_export/02_export_ui_walkthrough`).
+
+The number stays the view's address: actions, scripts and agents still name
+the view `View 2`, so a name never has to be unique. A name is one line of
+text, and it cannot be of the form `View 3` (that is how views are numbered).
+Naming is one step of the history, so **Undo** takes it back. A view you keep
+starts without a name; removing a view removes its name with it.
+
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: The whole window in Grid compare with the sidebar open: two equal panels to the right of the sidebar show the Pancreas 3D embedding from the same linked camera — view 1 coloured by cell_type, view 2 recoloured by S_score on a Viridis scale — each under a title chip naming its embedding and field. The sidebar shows Compare views with the two view rows, each marked linked and Orbit, View 2 shows UMAP · 3D, Keep view, Link cameras, Layout Grid compare and Clear, and Coloring & filtering with S_score in the Continuous obs select.
+:alt: The whole window in Grid compare with the sidebar open: two equal panels to the right of the sidebar show the Pancreas 3D embedding from the same linked camera — view 1 colored by cell_type, view 2 recolored by S_score on a Viridis scale — each under a title chip naming its embedding and field. The sidebar shows Compare views with the two view rows, each marked linked and Orbit, View 2 shows UMAP · 3D, Keep view, Link cameras, Layout Grid compare and Clear, and Coloring & filtering with S_score in the Continuous obs select.
 :width: 1440px
 
 Grid compare with the sidebar open. Each row under **Views** names the
 embedding the view shows and its field: view 1 (cell_type) and the selected
-view 2, recoloured by S_score, sit in two equal panels to the right of the
+view 2, recolored by S_score, sit in two equal panels to the right of the
 sidebar, framed by one linked camera, and each panel keeps its own coloring.
 ```
 
-Removing `×` from a kept view deletes that view. When at least two kept views
-exist, removing the live row hides the live panel and selects a kept view.
-With only one kept view, removing live instead removes that kept view and
-returns to the live view, so the viewer never reaches an invalid zero-view
-state.
+A row's `×` removes the view that row shows. On a kept view it deletes that
+view (and its name). On the live row it hides the live panel and keeps every
+kept view, however many there are; when the live view had focus, the first
+kept view is selected. The last open view has no `×`: with the live view
+hidden and one kept view left, that view shows alone, and `Clear` brings the
+live view back.
 
 ## Session and export behavior
 
@@ -186,7 +216,8 @@ A matching-dataset `.cellucid-session` saves and restores:
   mode;
 - every view's embedding (as the embedding key and columns, so it is restored
   onto the same array), field and filters;
-- whether each view shows centroid points and centroid labels.
+- whether each view shows centroid points and centroid labels;
+- each view's name, when it has one.
 
 A view's label and filter summary are recomputed from its field and filters.
 Restoration recreates each kept view once rather than storing GPU buffers. The
@@ -196,7 +227,8 @@ dataset itself is never embedded in the session. See
 
 Figure Export can render the current multiview grid (**Export all views**);
 each panel is drawn with the embedding it shows, its own projection and its own
-centroid labels. Verify panel order and legends in
+centroid labels, and is titled by its view's name (or, for a view with no
+name, by its field and filters). Verify panel order and legends in
 {doc}`../k_figure_export/02_export_ui_walkthrough`.
 
 ## Failure and recovery

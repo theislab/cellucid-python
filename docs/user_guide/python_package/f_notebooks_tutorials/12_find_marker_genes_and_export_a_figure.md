@@ -115,7 +115,7 @@ When you search a gene in the Cellucid UI, the viewer uses the **gene IDs** it w
 
 With `show_anndata`, those gene IDs are typically:
 - `adata.var_names` (default)
-- OR a column you choose via `gene_id_column=...`
+- OR a column you choose via `var_gene_id_column=...`
 
 ### Confirm what your gene IDs are
 
@@ -125,7 +125,7 @@ print("var columns:", list(adata.var.columns)[:10])
 ```
 
 Common situations:
-- `adata.var_names` are Ensembl IDs (`ENSG...`) but you want to search by symbols (`GATA3`) → you need `gene_id_column`
+- `adata.var_names` are Ensembl IDs (`ENSG...`) but you want to search by symbols (`GATA3`) → you need `var_gene_id_column`
 - `adata.var_names` are symbols but contain duplicates → some tools accept this; viewers often do not
 
 ### If you have a gene-symbol column, use it
@@ -136,7 +136,7 @@ from cellucid import show_anndata
 viewer = show_anndata(
     adata,
     height=650,
-    gene_id_column="gene_symbols",
+    var_gene_id_column="gene_symbols",
     dataset_name="My study",
     dataset_id="my-study-v1",
 )
@@ -156,15 +156,15 @@ and the change is reported, both when the viewer reads `var` and when
 
 In the viewer:
 
-1) Open the **Field selector**
-2) Switch to **gene expression** (var fields) if the UI distinguishes obs vs genes
-3) Search for a marker gene you picked (e.g. one from `top_markers_by_cluster`)
-4) Select it and confirm the expression pattern is biologically plausible
+1) Open **Coloring & filtering**; under **Color by**, click the
+   **Gene expression** search box (the third selector, below
+   **Categorical obs** and **Continuous obs**)
+2) Type a marker gene you picked (e.g. one from `top_markers_by_cluster`)
+3) Choose it in the list and confirm the expression pattern is biologically
+   plausible
 
-```{note}
-This tutorial does not assume a specific UI layout for the field selector (it evolves). If you get stuck, use the web-app docs for the exact UI walkthrough:
-- {doc}`../../web_app/d_fields_coloring_legends/index`
-```
+Every coloring control is described in
+{doc}`../../web_app/d_fields_coloring_legends/index`.
 
 
 
@@ -174,14 +174,14 @@ This tutorial does not assume a specific UI layout for the field selector (it ev
 
 Exporting figures is a web-app feature. In the viewer:
 
-1) Open the **Figure export** panel
-2) Choose output format:
+1) Open the **Figure export** section of the sidebar
+2) Open its **Download** group and choose the format:
    - **SVG** for vector editing (Illustrator/Inkscape) and publication
    - **PNG** for quick slides/docs
 3) Confirm that:
    - the legend is visible and readable
    - the colormap matches your interpretation (and is colorblind-friendly when needed)
-4) Export
+4) Click **Export**
 
 For a complete figure-export walkthrough (including edge cases), see:
 - {doc}`../../web_app/k_figure_export/index`
@@ -204,7 +204,7 @@ gene in set(map(str, adata.var_names))
 ```
 
 Fix:
-- use `gene_id_column=...` when calling `show_anndata(...)`
+- use `var_gene_id_column=...` when calling `show_anndata(...)`
 - map/standardize gene IDs upstream (Ensembl↔symbol mapping)
 
 ### “Everything is gray / expression looks all-zero”

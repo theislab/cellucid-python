@@ -13,6 +13,7 @@ These pages are the fastest way to get oriented in the Cellucid web app:
 3) {doc}`05_which_workflow_is_for_me_decision_tree`
 4) {doc}`02_system_requirements` (or sooner if anything feels “off”)
 5) {doc}`01_what_is_cellucid` (concept + mental model)
+6) {doc}`08_cite_cellucid` (when you write it up)
 
 ::::{grid} 1 2 2 2
 :gutter: 3

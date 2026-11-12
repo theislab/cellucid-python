@@ -19,7 +19,7 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 
 ### 2) Vector fields exist, but not for the embedding this view shows
 
-- **What you see:** the overlay block exists, but `Show overlay` is disabled and you see a hint like “Vector fields are bound to X_umap, X_umap_3d. Show one of them in this view to enable.”
+- **What you see:** the overlay block exists, but `Show overlay` is disabled and you see a hint like “Vector fields are bound to UMAP · 2D, UMAP · 3D. Show one of them in this view to enable.”
 - **Why:** a vector field is bound to the embedding it was computed on. The view shows another one: another dimension (only 2D vectors, viewing 3D), or another embedding of the same dimension (a t-SNE chosen in **View N shows** under **Compare views**, or with keys `1`, `2` and `3`).
 - **Confirm:** the hint names the embeddings that have a field; show one of them and watch the toggle enable.
 - **What to do:** show a named embedding, or export the vector field for the embedding you want.
@@ -33,7 +33,11 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 
 ### 4) All-zero vectors (nothing draws at all)
 
-- **What you see:** the field loads and the overlay turns on without an error (a build that took over a second ends its card with `Velocity overlay ready`), and the canvas is unchanged. Not a faint flow — no flow.
+- **What you see:** the field loads and the overlay turns on without an error,
+  the canvas is unchanged — not a faint flow, no flow — and a notice says why:
+  `No particle moves in velocity on UMAP · 2D: every vector is zero.` (or
+  `every vector is too short to draw (the longest is 3.2e-6)` when every
+  length is under the floor below).
 - **Why:** a particle whose spawn cell has a magnitude below a floor of `0.00001`
   is discarded in the vertex shader: its point size is forced to zero and its
   position is pushed off-clip. With every magnitude at exactly zero, every

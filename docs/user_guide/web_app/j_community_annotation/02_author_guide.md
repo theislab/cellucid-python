@@ -303,7 +303,7 @@ Copy only its layout files, at the same paths:
 - `.gitattributes`
 
 Leave the template's own `tests/`, `scripts/generate_contract_corpus.py`,
-`.github/workflows/tests.yml`, licence and policy files behind: they test and
+`.github/workflows/tests.yml`, license and policy files behind: they test and
 govern the template, not your annotation repository.
 
 ::::{tab-set}
@@ -1290,8 +1290,12 @@ For non-technical collaborators, a screenshot of the status panel + error messag
 - **“Remote user file changed since your last Pull” / “… changed on GitHub while publishing”**
   - Cause: the contributor's file on GitHub is newer than the one their last
     Pull read (for example after publishing from another device).
-  - Fix: Pull latest, check the result, then Publish again. Cellucid never
-    replaces a remote file it has not read.
+  - An annotator's Publish pulls (merging the two) and publishes again by
+    itself. It stops with this message only for an author whose repository
+    settings or merges are not published yet, since a Pull would bring the
+    repository's over them.
+  - Fix: note the staged settings, Pull latest, check them, then Publish
+    again. Cellucid never replaces a remote file it has not read.
 
 ### Pull is slow / rate-limited
 

@@ -12,7 +12,7 @@ claim that the particle trails validate the underlying velocity model.
 :width: 1440px
 
 The 2D **Planar** capture shows `velocity` with the initial 15K density,
-3.0× flow speed, 8.0s lifetime, size 1.0, 60% opacity, `Viridis`, and
+3.0× flow speed, 8.0 s trail length, size 1.0, 60% opacity, `Viridis`, and
 `Sync with LOD` enabled.
 ```
 
@@ -30,7 +30,7 @@ not the stored per-cell vectors.
 ## Standard Pancreas velocity
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/pancreas-velocity-3d.png
-:alt: The Pancreas sample in its 3D view coloured by clusters with the velocity overlay running, and the Vector field controls open in the sidebar.
+:alt: The Pancreas sample in its 3D view colored by clusters with the velocity overlay running, and the Vector field controls open in the sidebar.
 :width: 1440px
 
 The independent 3D `velocity` payload in its declared **3D** / **Orbit**

@@ -117,7 +117,7 @@ if (links.length === 0) {
 
 const { chromium } = require('playwright');
 // The machine's GPU, as every measuring script of the web repository: a
-// software rasteriser would time itself, not the opening.
+// software rasterizer would time itself, not the opening.
 const { browserLaunchOptions } = await import(pathToFileURL(path.join(WEB_REPO, 'scripts', 'lib', 'browser-launch.mjs')).href);
 const browser = await chromium.launch(browserLaunchOptions('chromium'));
 let failures = 0;

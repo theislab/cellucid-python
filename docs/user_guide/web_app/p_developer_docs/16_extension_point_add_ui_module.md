@@ -201,7 +201,7 @@ Design rules:
 - **A control dispatches the action it stands for and calls no mutating state
   method**: `dispatchFromControl(type, params, {failure, category})`
   (`app/actions/control-dispatch.js`), which says a refusal or a failure once in
-  a notification and resolves `null` for it; for a slider or a colour picker,
+  a notification and resolves `null` for it; for a slider or a color picker,
   `createLatestDispatch(type)`, so a drag dispatches only its latest value and
   the action's `coalesce` makes it one step. Name targets as the action's
   schema does (a field by `{source, key}`, a category by its label, a view
@@ -243,6 +243,16 @@ Rules of the road:
 - no inline styles in `index.html`
 - use utilities + semantic tokens
 - avoid raw hex outside token files
+- build buttons with `createButton` / `createIconButton`
+  (`app/ui/components/controls.js`), and make them quieter the deeper they
+  sit: a panel's, a dialog's or a card's own actions are `secondary` (the one
+  that commits `primary`); an action inside a list item's row or details, a
+  chat turn or a card's row is `quiet` (its one main action `quiet-primary`,
+  accent text, never filled), one line; a well-known action there (delete,
+  rename, close, more) is an icon button with an `ICONS` glyph, never a typed
+  `⋯` or `✕`. A module that draws such rows is listed in
+  `tests/nested-actions-quiet-contract.test.mjs`, which fails on a pill or a
+  filled button in it ("Nested actions are quiet" in `assets/css/README.md`)
 
 Every screen of the site follows the same design principles (the full list is
 "Site Design Principles" in that README), whether it is a panel, a dialog, a

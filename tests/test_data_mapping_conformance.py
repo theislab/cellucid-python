@@ -15,7 +15,7 @@ unique and the note that reports it, the embedding-column check, the
 vector-field key rule (``prepare()``, the launch defaults and the transition
 drift helper name and read vector fields with it), DataMapping validation, the
 modality a multimodal dataset opens with, the check of a mapping's modality
-against the dataset's, and the neighbour graph a dataset opens with
+against the dataset's, and the neighbor graph a dataset opens with
 (``prepare()`` writes the one it chooses).
 The other sections are rules of the web app.
 """
@@ -35,7 +35,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "data_mapping_conformance.json"
 
 #: The same digest is pinned in cellucid-r (tests/testthat/test-data-mapping-
 #: conformance.R) and in the web app. Update all three together.
-FIXTURE_SHA256 = "6f7b7ff0e4392ea00c7e21c7a868ec68d3ec83a63558227f9f7d2c300a666c32"
+FIXTURE_SHA256 = "a3b615e6377f3936ce5701764622ee74ee3c30b95d24303e815eb83476451200"
 
 
 def _fixture() -> dict[str, Any]:
@@ -49,7 +49,7 @@ def _cases(section: str) -> list[dict[str, Any]]:
 def test_the_fixture_is_the_pinned_shared_copy() -> None:
     assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == FIXTURE_SHA256
     fixture = _fixture()
-    assert fixture["version"] == 7
+    assert fixture["version"] == 9
     assert list(fixture) == [
         "_about",
         "version",
@@ -186,6 +186,20 @@ def test_data_mapping_validation(case: dict[str, Any]) -> None:
     assert list(canonical) == list(expected)
 
 
+@pytest.mark.parametrize("case", _cases("embeddingSlots"), ids=lambda case: case["name"])
+def test_embedding_slots(case: dict[str, Any]) -> None:
+    """The slots a store opens with: the default rule, then every empty width guessed alike."""
+    entries = [dm.ObsmEntry(key=entry["key"], width=entry["width"], usable=entry["usable"]) for entry in case["obsm"]]
+    failures = case["loadFailures"]
+    resolved = dm.resolve_embedding_slots(
+        entries,
+        latent_key=case["latentKey"],
+        modality=case.get("modality"),
+        load_check=lambda key, _columns: failures.get(key),
+    )
+    assert resolved == case["expected"]
+
+
 @pytest.mark.parametrize("case", _cases("defaultGraph"), ids=lambda case: case["name"])
 def test_default_graph(case: dict[str, Any]) -> None:
     assert dm.default_graph(case["keys"], modality=case["modality"]) == case["expected"]
@@ -241,3 +255,15 @@ def test_the_embeddings_shown_at_open_follow_the_web_rule_from_metadata() -> Non
         "X_other",
         "X_pca",
     ]
+
+
+@pytest.mark.parametrize("case", _cases("defaultExpression"))
+def test_default_expression(case: dict[str, Any]) -> None:
+    chosen = dm.default_expression(
+        has_x=case["hasX"],
+        has_raw=case["hasRaw"],
+        layers=case["layers"],
+        raw_has_more_genes=case["rawHasMoreGenes"],
+        x_scaled=case["xScaled"],
+    )
+    assert {"expression": chosen.expression, "guessed": chosen.guessed, "reason": chosen.reason} == case["expected"]

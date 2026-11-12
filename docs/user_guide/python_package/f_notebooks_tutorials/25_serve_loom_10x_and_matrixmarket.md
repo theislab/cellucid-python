@@ -123,7 +123,7 @@ AnnData.
   refused in step 1 saying so: serve the `outs/` folder that holds it and
   `analysis/`.
 - A folder with neither a Cell Ranger matrix, a MatrixMarket matrix nor Zarr
-  metadata: `Unable to detect format for: <path>`.
+  metadata: `<path> is not a folder Cellucid reads: …`, naming the folders it reads.
 - A Loom file with no embedding is refused in step 1 with the lines that
   compute one; a MatrixMarket dataset with none, by the viewer ({doc}`../../web_app/b_data_loading/08_troubleshooting_data_loading`).
 

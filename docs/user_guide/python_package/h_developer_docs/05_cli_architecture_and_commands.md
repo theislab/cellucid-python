@@ -65,7 +65,7 @@ Dataset flags:
 - `--dataset-id ID`: exact stable identifier (default: the store's
   `uns['cellucid']['id']`, else the file's name without its extension)
 - `--obs-key KEY` (repeatable), `--embedding-1d/2d/3d KEY[:COLUMNS]`,
-  `--knn KEY`, `--gene-id-column COLUMN`, `--expression X|raw|layer:NAME`,
+  `--knn KEY`, `--var-gene-id-column COLUMN`, `--expression X|raw|layer:NAME`,
   `--vector-field-default FIELD_ID`, `--[no-]normalize-embeddings`,
   `--centroid-min-points N`, `--modality NAME`: launch choices, each checked
   against the store's metadata before the server binds (for an AnnData or
@@ -107,9 +107,10 @@ as the store's `kind` and its health `format`:
    what its files make it (`folder_format_of_paths`, the web app's
    `folderFormatOfPaths`): a Cell Ranger `outs/` (`tenx-outs`) or a
    MatrixMarket folder (`mtx`, also with GEO's `GSM…_` prefixes).
-3) Else → `unknown` (error: `Unable to detect format for: <path>.` followed by
-   the registry's reason, such as which file endings or folder contents it
-   reads).
+3) Else → `unknown`, refused with the registry's reason as it is:
+   `<path> is not a file Cellucid opens (an .h5ad file, …)` (the web app's
+   `openableNamesText`, `openable_files_text()`), or `<path> is not a folder
+   Cellucid reads: …` naming the folders it reads.
 
 Then every format → `cellucid.anndata_server.serve_anndata(...)`.
 
@@ -164,7 +165,7 @@ how an embedding process configured logging.
 
 ## Troubleshooting
 
-### Symptom: “`cellucid serve` says ‘Unable to detect format’”
+### Symptom: “`cellucid serve` says ‘… is not a file Cellucid opens’”
 
 Confirm:
 - your path exists,

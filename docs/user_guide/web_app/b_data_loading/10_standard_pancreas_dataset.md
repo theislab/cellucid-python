@@ -37,6 +37,11 @@ The public dataset exposes:
 - the derived categorical convenience alias `cell_type` (8 categories), whose
   category order and per-cell codes exactly equal source-owned `clusters`;
 - source-owned continuous observations `S_score` and `G2M_score`;
+- the derived continuous `total_counts`, each cell's total count over every
+  one of the source's 27,998 genes, summed before the public selection keeps
+  the highly variable ones (`uns['cellucid']['totalCounts']`, `"over": "all
+  genes"`): the library size **Data mapping › Expression values** normalizes
+  by, read as one column;
 - 3,753 ordered, source-marked, nonconstant genes for on-demand coloring;
 - 33,476 exact weighted connectivity edges;
 - three UMAP embeddings and the 50-component PCA, which is the dataset's
@@ -68,7 +73,7 @@ projected stochastic velocity; it does not replace scVelo's numerical
 diagnostics or uncertainty checks.
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/pancreas-velocity-3d.png
-:alt: The Pancreas sample in its 3D view coloured by clusters with the velocity overlay running, and the Vector field controls open in the sidebar.
+:alt: The Pancreas sample in its 3D view colored by clusters with the velocity overlay running, and the Vector field controls open in the sidebar.
 :width: 1440px
 
 The standard Pancreas sample in its 3D (**Orbit**) view: `clusters` supplies
@@ -88,7 +93,9 @@ observation fields (`clusters_coarse`, `clusters`, `S_score`, and `G2M_score`),
 highly-variable-gene marker, expression values, and weighted connectivity graph
 are retained as source-owned inputs. The public `cell_type` field is a derived
 convenience alias of `clusters`, with exactly the same category order and
-per-cell codes; it is not a fifth source-owned field. The 1D and 3D UMAPs are
+per-cell codes; it is not a fifth source-owned field. `total_counts` is
+derived too, from the source's whole expression matrix, and pinned by its
+digest. The 1D and 3D UMAPs are
 independently optimized deterministic embeddings; neither is sliced, padded,
 or copied from the 2D coordinates. Velocity is computed on a separate
 analysis-only working copy and projected independently onto each exact
@@ -120,7 +127,7 @@ repeated here, because they change whenever the dataset is regenerated. Read the
 that file if you are verifying a build.
 
 The environment — the exact Python and scientific-package set in
-`requirements-build.lock` — and the exact Cellucid 0.9.7 producer-source digest, over
+`requirements-build.lock` — and the exact Cellucid 0.9.8 producer-source digest, over
 the modules the build executes, are pinned once for all five samples in
 `sources/build-environment.json`.
 

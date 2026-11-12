@@ -62,7 +62,7 @@ count, returned WebGL error `0`, and emitted no browser error or warning.
 re-measured since.**
 
 Two of those changes move the numbers in opposite directions depending on the
-scene. Hidden points are now rejected before rasterisation, and synthetic
+scene. Hidden points are now rejected before rasterization, and synthetic
 generation moved off the main thread. A synthetic acceptance run draws every
 point it generates, so the first change should barely touch these particular
 rows; the generation column is the one most likely to have moved.
@@ -85,7 +85,7 @@ grid of ⌈√n⌉ columns (four as 2×2). That difference matters more than the
 the height of the pane a point is drawn in.
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: The whole window in Grid compare with the sidebar open: two equal panels to the right of the sidebar show the Pancreas 3D embedding from the same linked camera — view 1 coloured by cell_type, view 2 recoloured by S_score on a Viridis scale — each under a title chip naming its embedding and field. The sidebar shows Compare views with the two view rows, each marked linked and Orbit, View 2 shows UMAP · 3D, Keep view, Link cameras, Layout Grid compare and Clear, and Coloring & filtering with S_score in the Continuous obs select.
+:alt: The whole window in Grid compare with the sidebar open: two equal panels to the right of the sidebar show the Pancreas 3D embedding from the same linked camera — view 1 colored by cell_type, view 2 recolored by S_score on a Viridis scale — each under a title chip naming its embedding and field. The sidebar shows Compare views with the two view rows, each marked linked and Orbit, View 2 shows UMAP · 3D, Keep view, Link cameras, Layout Grid compare and Clear, and Coloring & filtering with S_score in the Continuous obs select.
 :width: 1440px
 
 Two views share the full canvas height and split the width to the right of the
@@ -95,7 +95,7 @@ expensive layout per unit of insight — tune in one view first, then split.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/dark-theme-multiview.png
-:alt: The whole window in the dark theme on the Grid (dark) background, in Grid compare with the sidebar open: two equal panels show the Pancreas 3D embedding coloured by cell_type from the same linked camera, each under a title chip. The sidebar shows Visualization with Theme Dark and Background Grid (dark), and Compare views below it with the two view rows.
+:alt: The whole window in the dark theme on the Grid (dark) background, in Grid compare with the sidebar open: two equal panels show the Pancreas 3D embedding colored by cell_type from the same linked camera, each under a title chip. The sidebar shows Visualization with Theme Dark and Background Grid (dark), and Compare views below it with the two view rows.
 :width: 1440px
 
 Theme and background apply to every panel of the comparison layout alike, and

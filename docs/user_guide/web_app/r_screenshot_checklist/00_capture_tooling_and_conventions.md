@@ -79,7 +79,7 @@ stores it lists, the folder published at
 and named to the app with ``?sampleCatalog=``. Set ``CELLUCID_DATASETS_REPO``
 when the checkout is elsewhere; a run without the folder stops at once and
 names the path it looked for. That is deliberate: a
-reader has to recognise the picture as the app they are using, and a 120-cell
+reader has to recognize the picture as the app they are using, and a 120-cell
 synthetic fixture does not look like single-cell data. The tree is pinned on
 disk, so it is reproducible in the way that matters.
 
@@ -127,6 +127,7 @@ and the same object is what regenerates the image a year later.
 | ``{ fill: sel, value }`` | type into a field |
 | ``{ openSection: sel }`` / ``{ closeSection: sel }`` | set a sidebar accordion, idempotently |
 | ``{ scrollIntoView: sel }`` | scroll the containing scroller |
+| ``{ reload: true }`` | open the same page again in this browser, through startup as the first opening went: the welcome overlay is waited for and closed again, and what waits for it ("Continue where you left off?") follows |
 | ``{ wait: ms }`` | last resort; recorded in ``captures.json`` as a determinism weakness |
 | ``{ run: async page => {} }`` | raw Playwright escape hatch |
 
@@ -137,9 +138,11 @@ and the same object is what regenerates the image a year later.
 | ``query: urls => ({...})`` | launch parameters; may be ``async`` (a ``?data=`` link to a host the scenario starts) |
 | ``setup: ({ context, page, urls }) => {}`` | routes and init scripts installed before navigation (the annotation mock, provider stubs) |
 | ``servedAs: 'http://127.0.0.1:8765'`` | show the app under that origin, answered by this run's server through a route; Google and Microsoft sign-in exist only on the origins they registered |
-| ``entry: async urls => address`` | open an address a product printed (the Viewer URL of ``cellucid serve``, of ``show_anndata()``, of ``cellucid_view()``) instead of the app with its sample catalog |
+| ``entry: async urls => address`` | open an address a product printed (the Viewer URL of ``cellucid serve``, of a Python ``AnnDataViewer``, of ``cellucid_view()``) instead of the app with its sample catalog |
 | ``awaitStartup: false`` | do not wait for startup or the welcome overlay: the subject is a startup still under way (the opening panel) |
-| ``viewport: { width, height, touch }`` | another screen than the 1440×1000 window: the phone layout is ``{ width: 390, height: 844, touch: true }``; ``touch`` makes the context a touch device (``isMobile``, ``hasTouch``), so the app sees a phone's coarse pointer rather than a narrow desktop window |
+| ``requires: ['format-fixtures', …]`` | what the scenario runs besides the browser: ``format-fixtures`` (``CELLUCID_DOCS_PYTHON`` with anndata, h5py, numpy, pandas and scipy; ``CELLUCID_DOCS_RSCRIPT`` with Matrix and SeuratObject), ``cellucid-serve`` (``CELLUCID_CLI``), ``python-viewer`` (``CELLUCID_DOCS_PYTHON`` with this tree's ``cellucid``), ``r-viewer`` (``CELLUCID_DOCS_RSCRIPT`` with SeuratObject, httpuv and this tree's ``cellucid``). Before the first capture the tool finds each program the selected scenarios declare (the variable, else ``python3``, ``Rscript``, ``cellucid`` on the ``PATH``), loads what it needs, compares its ``cellucid`` version with this tree's, and stops naming whatever is missing; a helper run by a scenario that did not declare it is refused |
+| ``fixedTime: '2026-11-10T12:00:00Z'`` | the time the page's ``Date`` reads throughout (timers keep real time), for an image that prints the time of day: a history step's details, the "Continue where you left off?" offer |
+| ``viewport: { width, height, touch }`` | another screen than the 1440×1000 window: the phone layout is ``{ width: 390, height: 844, touch: true }``, and a subject taller than 1000 px (the seven-group Keyboard shortcuts panel) takes a taller desktop window, ``{ width: 1440, height: 1300 }``; ``touch`` makes the context a touch device (``isMobile``, ``hasTouch``), so the app sees a phone's coarse pointer rather than a narrow desktop window |
 
 ### Files and servers a scenario makes
 
@@ -150,8 +153,10 @@ and the same object is what regenerates the image a year later.
   folder, a Seurat ``.rds`` and an ``.rda`` of two objects. ``formatFixture()``
   builds them once into a cache folder of the system temporary directory,
   named by the scripts' digest. It needs ``CELLUCID_DOCS_PYTHON`` (anndata,
-  mudata, h5py, scipy) and ``CELLUCID_DOCS_RSCRIPT`` (SeuratObject); both
-  default to the names on the ``PATH``. Nothing is committed but the recipe.
+  h5py, numpy, pandas, scipy) and ``CELLUCID_DOCS_RSCRIPT`` (Matrix,
+  SeuratObject); both default to the names on the ``PATH``, and a scenario
+  that uses one declares ``requires: ['format-fixtures']``, so both are
+  checked before the first capture. Nothing is committed but the recipe.
 - Every server a scenario starts listens on a port derived from what it
   serves (``freePort(key)``: ``20000``–``39999``, the next one only when that
   one is busy), never on one the system hands out, so a port printed in an
@@ -162,7 +167,7 @@ and the same object is what regenerates the image a year later.
   answer named paths itself.
 - ``webBuildOrigin()`` serves the web repository as a web build, with an
   inventory computed by the repository's own generator over the served files,
-  so ``cellucid serve``, ``show_anndata()`` and ``cellucid_view()`` (R) show
+  so ``cellucid serve``, ``AnnDataViewer`` (Python) and ``cellucid_view()`` (R) show
   this tree's application. ``CELLUCID_CLI`` names the ``cellucid`` executable.
   The viewer refuses a host package older than itself, so the R scenario runs
   with the ``cellucid-r`` of the same tree: ``CELLUCID_DOCS_RSCRIPT`` is the
@@ -184,6 +189,15 @@ capture time, so a control that moves takes its crop with it. The failure mode
 of a hand-tuned box — silently framing the wrong thing after a layout change —
 cannot happen.
 
+**The crop is read once its layout is final.** A subject not wholly in the
+viewport is first scrolled into it, the least distance that shows it whole.
+The rectangle is then read only when no CSS transition is running and it is
+the same on two reads a two-frame turn apart (a menu placed above the page, a
+panel that draws again after a `ResizeObserver` fires). A subject that still
+runs past the viewport's edge is refused rather than photographed cut off;
+only the padding may be clamped. After the image settles the rectangle is read
+again, and a subject that moved or left in the meantime fails the capture.
+
 ### The pointer
 
 ``cursor: { on, at, dx, dy, state }``. ``at`` is one of ``center``, ``left``,
@@ -192,7 +206,9 @@ cannot happen.
 The tool performs a **real** ``page.hover()`` at that point and *then* draws the
 arrow there. The crop grows, within the viewport, to hold the whole arrow (and
 the ring of a press), so a pointer on a button at the edge of a panel is never
-cut in half; the rest of the crop is still named by its selectors. Both, or neither: an arrow floating over an idle button is worse
+cut in half; the rest of the crop is still named by its selectors. The arrow
+and the rings are drawn in the top layer (a manual popover shown last), so they
+are drawn over a modal dialog too. Both, or neither: an arrow floating over an idle button is worse
 than no arrow, because it shows an interaction state the app never entered.
 ``press`` additionally holds the mouse down, so ``:active`` styling is real, and
 adds a ring at the hotspot — a click is an event, and a still cannot show an
@@ -218,10 +234,17 @@ lifecycle sequences, where the reader is following steps.
 
 Fixed and recorded for every capture: viewport 1440×1000 (or the scenario's
 own ``viewport``), device scale factor 2,
-light colour scheme, ``en-US``, UTC, reduced motion, Playwright's
+light color scheme, ``en-US``, UTC, reduced motion, Playwright's
 ``animations: 'disabled'`` and ``caret: 'hide'``, and a **seeded
-``Math.random``** installed before any application code runs (the particle
-overlay and parts of the analysis layer draw from it).
+``Math.random``** installed before any application code runs (generated
+element ids and window placement draw from it).
+
+Reduced motion is what makes the moving parts of the viewer capturable: under
+it the app holds every mover drawn by script still (see
+[Accessibility](../o_accessibility_privacy_security/01_accessibility.md)) —
+the velocity overlay is a still picture of the flow, traced once from fixed
+seeds; the highlight pulse and the smoke hold. A scene with any of them
+therefore settles like any other.
 
 Two things do the real work:
 
@@ -234,9 +257,11 @@ frames are byte-identical before writing anything. A WebGL canvas is not settled
 because a promise resolved; it is settled when it stops changing. Every capture
 reports ``settled`` or ``NOT SETTLED``, and ``captures.json`` records it.
 
-For a scene that never settles — an animated particle overlay — declare
-``settle: { frames: N }``. The capture is then pinned to N animation frames from
-a seeded start, and is recorded as **not** byte-stable. Do not pretend otherwise.
+An image that prints a measured duration (an analysis "Canceled after 1.5 s")
+holds the page's ``performance.now()`` across it: the steps ``{ clock: 'hold' }``,
+``{ clock: 'advance', ms }`` and ``{ clock: 'release' }``. The duration printed
+is then the scenario's fixed amount, not how fast the host ran the steps, as
+``fixedTime`` pins the time of day a page prints.
 
 ### Number locale
 
@@ -394,7 +419,7 @@ consequences:
 observation manifest arrives later than the geometry, and the rebuild silently
 discards a selection made in that window — ``selectOption`` reports success and
 the control comes back holding a different value, so you get an image captioned
-"coloured by clusters" that shows ``Field: None``. Always:
+"colored by clusters" that shows ``Field: None``. Always:
 
 ```js
 { waitForText: '#filter-count', text: 'Showing all 3,696 cells' },
@@ -445,19 +470,19 @@ correct — do not change the host.
 
 **Never leak.** No local paths, usernames, tokens, or private repository names
 in any committed image. The browser's download shelf and the OS file picker
-render real paths and cannot be sanitised — do not capture them.
+render real paths and cannot be sanitized — do not capture them.
 
 **Never photograph a terminal. Transcribe it.** Terminal output ships as a
 verbatim ```` ```text ```` block, never as an image. This is a rule, not a
-preference, and it is not satisfied by a neutralised prompt:
+preference, and it is not satisfied by a neutralized prompt:
 
 - **The leak is in the output, not the prompt.** ``cellucid serve`` prints the
   **absolute** path of the store it serves — ``anndata_server.py`` calls
   ``print_detail("Path", str(store.path))`` — and AnnData's own ``INFO``
   logging prints the absolute file path beside it. Both
-  are correct behaviour and neither can be configured away, so *every*
+  are correct behavior and neither can be configured away, so *every*
   screenshot of these commands contains a host path by construction. A
-  neutralised ``PS1`` hides the prompt and changes nothing about the transcript.
+  neutralized ``PS1`` hides the prompt and changes nothing about the transcript.
 - **An SSH example leaks twice over.** ``ssh -L 8765:localhost:8765
   user@remote-host`` carries a username and a hostname in the command itself.
 - **Rendered text cannot be audited.** ``strings`` over a PNG finds nothing,
@@ -475,7 +500,7 @@ no page under ``docs/`` names a home, scratch, or pyenv path, and that the
 server transcripts are ``text`` blocks rather than figures.
 
 A screenshot is still the right medium for a **graphical** application window —
-JupyterLab, the app itself — where layout and colour carry the meaning.
+JupyterLab, the app itself — where layout and color carry the meaning.
 
 ---
 

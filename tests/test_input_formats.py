@@ -23,7 +23,7 @@ from cellucid._anndata_files import classify_anndata_path, input_formats
 #: The same digest is pinned in the web app
 #: (tests/input-formats-registry.test.mjs) and in cellucid-r
 #: (tests/testthat/test-input-formats.R). Update all three together.
-INPUT_FORMATS_SHA256 = "bd7fa1e23a3fd24794b647c5969ddb1aaad9a7b613b1457261c3b10dd705e2e5"
+INPUT_FORMATS_SHA256 = "31a4853465dd05ec412f4645f9a9efdfb6a14393f0932b4c26883648ad01f6f9"
 
 HDF5_SIGNATURE = bytes.fromhex("894844460d0a1a0a")
 
@@ -65,7 +65,7 @@ def test_a_file_is_taken_by_its_name_and_is_what_its_bytes_say(tmp_path: Path) -
     # A name no format has is refused before anything is read.
     other = tmp_path / "cells.txt"
     other.write_bytes(HDF5_SIGNATURE)
-    with pytest.raises(ValueError, match=r"must be an \.h5ad, \.zarr\.zip, "):
+    with pytest.raises(ValueError, match=r"is not a file Cellucid opens \(an \.h5ad file, "):
         classify_anndata_path(other)
 
 
@@ -102,7 +102,7 @@ def test_cellucid_serve_refuses_an_h5seurat_file_before_serving(tmp_path: Path, 
     assert main(["serve", str(path), "--quiet"]) == 1
     error = capsys.readouterr().err
     assert "This is an h5Seurat file (SeuratDisk), which Cellucid does not open." in error
-    assert "Unable to detect format" not in error
+    assert "is not a file Cellucid opens" not in error
 
 
 @pytest.mark.parametrize("name", ["annotation.cellucid-session", "LAB.Cellucid-Library"])
@@ -121,5 +121,26 @@ def test_cellucids_own_files_are_said_for_what_they_are(tmp_path: Path, name: st
     assert str(caught.value) == f"{name}: {entry['said']}"
     assert main(["serve", str(path), "--quiet"]) == 1
     error = capsys.readouterr().err
-    assert entry["said"] in error and "Unable to detect format" not in error
+    assert entry["said"] in error and "is not a file Cellucid opens" not in error
     assert cellucid_file_of_name("cells.h5ad") is None
+
+
+def test_a_file_cellucid_does_not_open_is_refused_naming_what_it_opens_as_the_web_app_does(tmp_path: Path) -> None:
+    """One sentence in the three implementations: the web app's
+    ``openableNamesText({layouts: ['file', 'zip']})``, cellucid-r's
+    ``.openable_files_text()`` -- each format's ending that stands alone
+    (``.rds``, never the compressed copy's ``.rds.gz``), the refused h5Seurat
+    left out (R9Y-4)."""
+    from cellucid._anndata_files import openable_files_text
+
+    expected = (
+        "an .h5ad file, a .loom file, an .h5 file, an .h5mu file, an .rds file, an .rda/.rdata file or a .zarr.zip archive"
+    )
+    assert openable_files_text() == expected
+    path = tmp_path / "notes.txt"
+    path.write_text("x", encoding="utf-8")
+    with pytest.raises(ValueError) as caught:
+        classify_anndata_path(path)
+    assert str(caught.value) == f"{path.resolve()} is not a file Cellucid opens ({expected})."
+    with pytest.raises(FileNotFoundError, match="^Nothing exists at .*missing.h5ad\\.$"):
+        classify_anndata_path(tmp_path / "missing.h5ad")

@@ -128,8 +128,7 @@ This is the default 1:1 collaboration workflow.
 
 ### What success looks like
 
-- The load ends as **Loaded** with **Session fully restored.** and no
-  refusal.
+- The load ends with **Session fully restored.** and no refusal.
 - **State › History** shows the sender's steps, with the step they were on
   marked.
 - Camera, active field, filters, and kept views match what the sender

@@ -33,14 +33,16 @@ The three fields above **Run**:
 
 - **Cell types**: the field whose categories are counted. The default is the
   field the cells are colored by, when it is categorical and not named like a
-  sample; otherwise the first
-  categorical field named like a cell type or cluster (`cell_type`,
-  `annotation`, `leiden`, `louvain`, `cluster`, `label`, `LVL1`…); otherwise
-  the first not named like a sample.
+  sample; otherwise the best field named like a cell type, then another
+  annotation, a lineage, then clusters (`cell_type`, `predicted.celltype.l2`,
+  `ann_level_2`, `leiden`, `seurat_clusters`…, the ranks the dataset opens
+  colored by: {doc}`../d_fields_coloring_legends/02_field_selector_ux`);
+  otherwise the first not named like a sample.
 - **Samples**: the field that names each cell’s sample, donor or library — the
-  biological replicate. The default is the first other field whose name
-  contains `sample`, `donor`, `patient`, `individual`, `library` or `batch`;
-  otherwise None.
+  biological replicate. The default is the other field named most like one,
+  in this order: a donor, patient, individual or subject; a sample;
+  `orig.ident`; a library; a batch, plate, lane or other technical unit.
+  Otherwise None.
 - **Condition**: the field whose groups are compared (disease, treatment,
   timepoint). None by default, which shows the composition without a test.
 
@@ -84,7 +86,7 @@ samples of each condition. **More options → Test** chooses how:
 |---|---|---|---|
 | Logit proportions (propeller) — default | `logit((count + 0.5) / (total + 0.5·K))`, K the types with cells | Welch’s t-test | one-way ANOVA |
 | Ranks of proportions | `count / total` | Wilcoxon rank-sum | Kruskal-Wallis |
-| Centred log-ratio | `log(count + 0.5) − mean over types of log(count + 0.5)` | Welch’s t-test | one-way ANOVA |
+| Centered log-ratio | `log(count + 0.5) − mean over types of log(count + 0.5)` | Welch’s t-test | one-way ANOVA |
 
 - The logit test follows propeller (Phipson et al., *Bioinformatics* 2022), on
   its logit-transformed pseudo-proportions exactly (speckle's
@@ -102,7 +104,7 @@ samples of each condition. **More options → Test** chooses how:
 - A cell type with **no cells in scope** (a category the chosen cells, a page
   or a subsample left out) is not tested: its transformed proportions would
   depend only on how many cells each sample has, so it would look changed
-  whenever conditions differ in size. It stays out of the centred log-ratio's
+  whenever conditions differ in size. It stays out of the centered log-ratio's
   mean, the tests and the multiple-testing correction; the table reads
   `No cells in scope` for it, and the result carries a
   `N types without cells` chip.
@@ -110,6 +112,53 @@ samples of each condition. **More options → Test** chooses how:
 These match SciPy (`ttest_ind(equal_var=False)`, `f_oneway`, `mannwhitneyu`,
 `kruskal`, `false_discovery_control`) on the same values; the parity is held by
 the web app’s test suite.
+
+### Paired samples
+
+When the same samples (donors) have cells in both of two conditions — one
+fetus's liver and bone marrow, a patient before and after treatment — each donor
+has its own composition, and the conditions are better compared within donors.
+**Pair samples across conditions** (in **More options → Test**, off by default)
+does that:
+
+| Test | Paired test of the values per sample |
+|---|---|
+| Logit proportions | Student’s t of each donor’s difference, `scipy.stats.ttest_rel` |
+| Centered log-ratio | Student’s t of each donor’s difference, `scipy.stats.ttest_rel` |
+| Ranks of proportions | Wilcoxon signed-rank, as R `wilcox.test(paired = TRUE)`: zero differences dropped; exact below 50 pairs without ties, else normal with tie and continuity corrections |
+
+- A sample with cells in both conditions is a pair; a sample in one condition
+  only is left out of the test. A cell type whose cells are all in samples left
+  out has none in the pairs: it is not tested, for the reason above, and the
+  table reads `No cells in the pairs` for it (its cells show in the samples'
+  own proportion columns). The mean proportions and their log2 ratio are over
+  the pairs too, as the test reads them: over every sample, a donor with two
+  liver cells and no marrow could turn a ratio against what all six pairs
+  showed. For complete pairs the paired t is the
+  condition’s t of the linear model `~ sample + condition`, the design propeller
+  and limma fit when blocking by donor, without their moderation.
+- Each cell type is tested over the **pairs holding any of its cells** (on
+  either side). In a pair with none on both sides, the type's two values are
+  the two samples' sizes alone, so their difference is the size ratio of the
+  donor's two samples: the same sign for every donor whose liver gave more
+  cells than its spleen, which a paired t would read as a change of a type
+  that is not there. The signed-rank test drops such a pair anyway (a zero
+  difference); the t-tests drop it too. A type with cells in fewer than
+  **3 pairs** is not tested: the table reads `Cells in 2 pairs of 7`, the
+  result carries a `N types in too few pairs` chip, and the type stays out of
+  the multiple-testing correction (it still counts in the centered log-ratio's
+  mean and the pseudo-proportions, as a type with cells).
+- Pairing compares exactly two conditions: when the field has more, choose the
+  cells of two (a highlight page holding both: **Cells → Liver + BM**), else the
+  run says so. At least 3 pairs are needed.
+- The mean proportions and log₂ ratio stay over every sample of a condition.
+- Paired or not, the result says how many samples are in both conditions (the
+  expanded view’s **Samples in both conditions**; `about.pairing` for an agent:
+  `unpaired; 6 samples of donor are in both conditions: paired: true tests them
+  paired`).
+
+The paired statistics and p-values match SciPy (`ttest_rel`, `wilcoxon`) on the
+same values (`tests/analysis-paired-composition.test.mjs`).
 
 ---
 
@@ -145,17 +194,21 @@ again):
 ## Results and export
 
 - **Sidebar**: the stacked bars, and chips for what limits the test.
-- **Expanded view** (⤢): the stacked bars or, with samples, **Per sample** — one
+- **Expanded view** (**Expand**): the stacked bars or, with samples, **Per sample** — one
   point per sample and type over a box per condition, with `*` (adj. p ≤ 0.05),
   `**` (≤ 0.01) and `***` (≤ 0.001) above the types. The summary lists the
   cells, types, samples, conditions and test; the table lists per type the mean
   proportion in each condition, the log₂ ratio of the second condition’s mean
   over the first’s (two conditions), the statistic, p and adjusted p.
 - **CSV** (in the expanded view) downloads `composition_results.csv` when
-  there is a condition: `cell_type`, `mean_proportion_<condition>` per
-  condition, `log2_ratio`, `test`, `statistic`, `pvalue`, `pvalue_adjusted`,
-  `n_samples_<condition>` per condition. Without a condition it downloads the
-  counts.
+  there is a condition, one row per cell type, the most significant first: the
+  table an agent reads (`analysis_result`) whole — `cell_type`, `cells`,
+  `proportion` (pooled), `mean_proportion_<condition>` per condition,
+  `log2_ratio`, `test`, `p_value`, `p_adjusted` and `proportion_<sample>` per
+  sample (or condition) — with `statistic`, `n_samples_<condition>` (the
+  samples that condition's mean is over) and, for a paired test, `n_pairs`
+  (the pairs holding the type's cells, which its test took). Without a condition it
+  downloads the counts.
 - **Counts CSV** (under the summary) downloads `composition_counts.csv`:
   `cell_type` and one column of cell counts per sample (or condition), ready
   for propeller, scCODA or any other tool.
@@ -179,12 +232,13 @@ Sessions save the options and the shown result.
 <!-- options:composition -->
 | Label | Default |
 |---|---|
-| Cell types | The coloring field when it is not named like a sample, else the first categorical field named like a cell type or cluster, else the first not named like a sample |
-| Samples | The first other field named like sample, donor, patient, individual, library or batch; else None |
+| Cell types | The coloring field when it is not named like a sample, else the best field named like a cell type, annotation, lineage or cluster, else the first not named like a sample |
+| Samples | The other field named most like a donor, patient, sample, library or batch, in that order; else None |
 | Condition | None |
 | Cells | All cells |
 | Only these cell types | All |
 | Test | Logit proportions (propeller) |
+| Pair samples across conditions | Off |
 | Multiple testing | BH |
 | Bars per | Sample |
 | Cell type order | As in the field |
@@ -204,7 +258,7 @@ Sessions save the options and the shown result.
 
 - Composition compares proportions, which are linked: when one type grows the
   others shrink. A significant change in one type can be the reflection of a
-  change in another. The centred log-ratio test reads every type relative to
+  change in another. The centered log-ratio test reads every type relative to
   the sample’s geometric mean, which is one way to see this.
-- Neighbourhood-level differential abundance (Milo) and Bayesian models
+- Neighborhood-level differential abundance (Milo) and Bayesian models
   (scCODA) are not in the web app; export the counts to run them.

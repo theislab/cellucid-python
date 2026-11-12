@@ -19,6 +19,16 @@ CELLS_DOMAIN = "cells"
 FIELD_OVERLAYS_DOMAIN = "field-overlays"
 HIGHLIGHTS_DOMAIN = "highlights"
 GENE_SETS_DOMAIN = "gene-sets"
+#: Presentation, recorded in the provenance (never applied to the values).
+EXPRESSION_DOMAIN = "expression"
+#: Presentation, read for the colors a user field's column is written with
+#: (:mod:`._colors`): each view's colors, and which view is in focus.
+COLORS_DOMAIN = "colors"
+VIEWS_DOMAIN = "views"
+
+#: ``expression``: ``{normalize, log1p}``, the expression values the genes
+#: were shown in (``app/state/domains/expression.js``); both false: as stored.
+EXPRESSION_KEYS = frozenset({"normalize", "log1p"})
 
 #: ``cells``: ``{open: null | the subsample's specification (without nObs), genes}``.
 CELLS_KEYS = frozenset({"open", "genes"})
@@ -36,6 +46,7 @@ USER_FIELD_KEYS = frozenset({
 #: A categorical user field that is not purged.
 USER_CATEGORY_KEYS = USER_FIELD_KEYS | {
     "categories", "codes", "sourcePages", "overlapStrategy", "overlapLabel", "intersectionLabels", "uncoveredLabel",
+    "palette",
 }
 #: A continuous user field holding its own values (a column a notebook pushed), not purged.
 USER_VALUES_KEYS = USER_FIELD_KEYS | {"values"}

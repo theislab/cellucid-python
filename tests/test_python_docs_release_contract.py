@@ -59,7 +59,7 @@ def test_python_home_and_changelog_publish_exact_active_release_status() -> None
         in home
     )
     assert f"**Active package version: {version}.**" in installation
-    assert "version and the current PyPI release" in home
+    assert "version and the PyPI submission release" in home
     assert "is authoritative for" in home
     assert f"## [{version}]\n" in changelog
     assert "## [Unreleased]" not in changelog

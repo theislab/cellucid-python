@@ -22,7 +22,17 @@
 //               { mode: 'region', selectors: [...], padding }
 //   cursor      { on, at, dx, dy, state } — a real hover plus a drawn pointer.
 //   rings       [{ on, label }] — optional highlight, off unless asked for.
-//   settle      { attempts, gapMs } or { frames } for animated scenes.
+//   settle      { attempts, gapMs }. Captures run under reduced motion, so
+//               the application's movers hold still (the velocity overlay is
+//               a still picture of the flow) and every image settles.
+//   Steps can also hold the page's `performance.now()` across a measured
+//               duration: { clock: 'hold' }, { clock: 'advance', ms },
+//               { clock: 'release' } (`installHoldableClock` in capture.mjs).
+//               { reload: true } opens the same page again in this browser,
+//               through startup as the first opening went (the welcome is
+//               closed again: `settleWelcome` in capture.mjs).
+//   viewport    { width, height, touch } — another window than 1440x1000,
+//               for a subject taller than the default window.
 //   emitWidth   Override the width rule. Never larger than the native capture.
 //   format      'png' (default) or 'webp'. WebP is for images a page places
 //               with its own `<img>` markup (the home page); every `{figure}`
@@ -37,6 +47,12 @@
 //               run's application with its sample catalog.
 //   awaitStartup false: do not wait for startup to finish or for the welcome
 //               overlay; the subject is a startup still under way.
+//   fixedTime   An ISO time the page's `Date` reads throughout, for an image
+//               that prints the time of day; timers keep real time.
+//   requires    What the scenario runs besides the browser, by name (see
+//               `REQUIREMENTS`): 'format-fixtures', 'cellucid-serve',
+//               'python-viewer', 'r-viewer'. Checked before the first
+//               capture; a helper run without its declaration is refused.
 //
 // SIZE RULE (enforced in `capture.mjs`, restated here because this is the file
 // people edit): the emitted width is the captured region's CSS width times two,
@@ -49,7 +65,7 @@
 //   #filter-count      "Showing all 3,696 cells"   — data loaded and counted
 //   html[data-startup-phase="ready"]                — the sample's published
 //                      default session has been applied and the viewer runs
-//   #stats             "Points: … • Field: … • Centroids: …"  — colouring live
+//   #stats             "Points: … • Field: … • Centroids: …"  — coloring live
 //   #legend            present once a field paints a legend
 // `#dataset-cells` is NOT a ready signal: it abbreviates to "4K".
 //
@@ -59,15 +75,274 @@
 // silently discarded and the image shows "Field: None".
 //
 // The sidebar accordions are `<details class="accordion-section">`. On first
-// load these are open — session, coloring-filtering, highlighted-cells,
-// page-analysis — and these are closed: visualization, navigation,
-// compare-views, community-annotation, cinematic-camera, figure-export,
-// shortcuts, benchmark. A control inside a closed section is not visible, so
-// a step that uses one opens its section first. Use `openSection` /
-// `closeSection` (or `onlySections(...)`) rather than clicking a summary, so a
-// scenario is idempotent.
+// load these are open — session, state, coloring-filtering,
+// highlighted-cells, page-analysis — and these are closed: agents,
+// visualization, navigation, compare-views, community-annotation,
+// cinematic-camera, figure-export, shortcuts, benchmark. A control inside a
+// closed section is not visible, so a step that uses one opens its section
+// first. Use `openSection` / `closeSection` (or `onlySections(...)`, which
+// closes every section the page holds but the ones it names) rather than
+// clicking a summary, so a scenario is idempotent. The State section redraws
+// its history after each step a scenario takes, so an element crop below it
+// moves unless it is closed: crop a section with `onlySections`.
 
 import { OVERLAY_ROOT_ID, paintOverlay } from './overlay.mjs';
+
+// ---------------------------------------------------------------------------
+// Programs a scenario runs besides the browser.
+//
+// A scenario names what it needs from outside the browser in `requires`;
+// `capture.mjs` checks every requirement of the scenarios it was asked for
+// before the first capture (`checkRequirements`), and names what is missing.
+// Each helper that starts a program asks for it with `requirement(name)`,
+// which refuses one its scenario did not declare, so a declaration cannot go
+// missing unnoticed. Before this, a missing `Rscript` surfaced as a Python
+// traceback deep inside the first scenario that needed a format fixture, and
+// every later one failed with the same cached error.
+// ---------------------------------------------------------------------------
+
+/** Each program: the variable that names it, else the name on the PATH. */
+const PROGRAMS = Object.freeze({
+  python: Object.freeze({ variable: 'CELLUCID_DOCS_PYTHON', fallback: 'python3' }),
+  rscript: Object.freeze({ variable: 'CELLUCID_DOCS_RSCRIPT', fallback: 'Rscript' }),
+  cellucid: Object.freeze({ variable: 'CELLUCID_CLI', fallback: 'cellucid' }),
+});
+
+/**
+ * What each requirement needs: a program, the Python modules or R packages
+ * it must load, and whether the cellucid package it runs must be this
+ * workspace's own (`sameTree`: the version of `cellucid-python` or
+ * `cellucid-r` beside these docs; the viewer the app connects to must be the
+ * tree's, see `00_capture_tooling_and_conventions.md`).
+ */
+const REQUIREMENTS = Object.freeze({
+  // `fixtures/build-format-fixtures.py` and its R half (`formatFixture`).
+  'format-fixtures': Object.freeze([
+    { program: 'python', modules: ['anndata', 'h5py', 'numpy', 'pandas', 'scipy'] },
+    { program: 'rscript', packages: ['Matrix', 'SeuratObject'] },
+  ]),
+  // `cellucid serve` (`serveSampleStore`, `startPythonServe`).
+  'cellucid-serve': Object.freeze([{ program: 'cellucid', sameTree: true }]),
+  // A Python `AnnDataViewer` driven from Python (`startPythonViewer`).
+  'python-viewer': Object.freeze([
+    { program: 'python', modules: ['anndata', 'numpy', 'cellucid'], sameTree: true },
+  ]),
+  // `cellucid_view()` driven from R (`startRViewer`).
+  'r-viewer': Object.freeze([
+    { program: 'rscript', packages: ['SeuratObject', 'httpuv', 'cellucid'], sameTree: true },
+  ]),
+});
+
+/** The requirements the scenario being captured declared; null outside a capture. */
+let declaredRequirements = null;
+
+/** Paths `checkRequirements` resolved, by program. */
+const resolvedPrograms = new Map();
+
+/**
+ * Mark the start of a scenario's capture: `requirement` checks against its
+ * `requires` from now on.
+ *
+ * @param {Object} scenario
+ */
+export function beginScenarioRequirements(scenario) {
+  declaredRequirements = new Set(scenario.requires ?? []);
+}
+
+/**
+ * The programs of one requirement, by program name, for a helper that is
+ * about to run them. Refused when the scenario being captured did not
+ * declare the requirement.
+ *
+ * @param {string} name - a key of `REQUIREMENTS`
+ * @returns {Record<string, string>} program name -> command
+ */
+function requirement(name) {
+  const needs = REQUIREMENTS[name];
+  if (needs === undefined) throw new Error(`Unknown requirement "${name}".`);
+  if (declaredRequirements !== null && !declaredRequirements.has(name)) {
+    throw new Error(
+      `This scenario runs ${needs.map(need => need.program).join(' and ')} ` +
+        `("${name}") but does not declare it: add requires: ['${name}'] so ` +
+        'capture.mjs checks it before the first capture.'
+    );
+  }
+  return Object.fromEntries(needs.map(({ program }) => [program, programCommand(program)]));
+}
+
+function programCommand(program) {
+  const { variable, fallback } = PROGRAMS[program];
+  return resolvedPrograms.get(program) ?? process.env[variable] ?? fallback;
+}
+
+/**
+ * The executable a command names: itself when it is a path, else the first
+ * match on the PATH; null when there is none.
+ *
+ * @param {string} command
+ * @returns {Promise<string|null>}
+ */
+async function findExecutable(command) {
+  const { access, constants } = await import('node:fs/promises');
+  const { delimiter, isAbsolute, join, resolve, sep } = await import('node:path');
+  const candidates = command.includes(sep) || command.includes('/')
+    ? [isAbsolute(command) ? command : resolve(command)]
+    : (process.env.PATH ?? '').split(delimiter).filter(Boolean).map(dir => join(dir, command));
+  for (const candidate of candidates) {
+    try {
+      await access(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // Not here.
+    }
+  }
+  return null;
+}
+
+/** The version of the workspace's own package for `program`, or null when its tree is absent. */
+async function treeVersionOf(program) {
+  const { readFile } = await import('node:fs/promises');
+  const { dirname, resolve } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const here = dirname(fileURLToPath(import.meta.url));
+  try {
+    if (program === 'rscript') {
+      const description = await readFile(resolve(here, '..', '..', '..', '..', 'cellucid-r', 'DESCRIPTION'), 'utf8');
+      return /^Version:\s*(\S+)/m.exec(description)?.[1] ?? null;
+    }
+    const pyproject = await readFile(resolve(here, '..', '..', '..', 'pyproject.toml'), 'utf8');
+    return /^version\s*=\s*"([^"]+)"/m.exec(pyproject)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Run a program's probe: load what the scenarios need of it, and print the
+ * version of its cellucid package when that is asked for.
+ *
+ * @returns {Promise<{ok: true, version: string|null}|{ok: false, problem: string}>}
+ */
+async function probeProgram(program, executable, { modules, packages, version }) {
+  const { execFile } = await import('node:child_process');
+  let args;
+  if (program === 'python') {
+    args = ['-c', [
+      'import importlib, sys',
+      'missing = []',
+      'for name in sys.argv[1:]:',
+      '    try:',
+      '        importlib.import_module(name)',
+      '    except Exception as error:',
+      '        missing.append(f"{name} ({type(error).__name__}: {error})")',
+      'if missing:',
+      '    sys.exit("cannot import " + "; ".join(missing))',
+      'if "cellucid" in sys.argv[1:]:',
+      '    import cellucid',
+      '    print(cellucid.__version__)',
+    ].join('\n'), ...modules];
+  } else if (program === 'rscript') {
+    const libraries = process.env.CELLUCID_DOCS_R_LIBS ?? '';
+    const wanted = `c(${packages.map(name => JSON.stringify(name)).join(', ')})`;
+    args = ['-e', [
+      `if (nzchar(${JSON.stringify(libraries)})) .libPaths(c(${JSON.stringify(libraries)}, .libPaths()))`,
+      `missing <- Filter(function(name) !requireNamespace(name, quietly = TRUE), ${wanted})`,
+      'if (length(missing) > 0) { cat("cannot load", paste(missing, collapse = ", "), "\\n", file = stderr()); quit(status = 1) }',
+      version ? 'cat(as.character(packageVersion("cellucid")), "\\n")' : 'invisible(NULL)',
+    ].join('\n')];
+  } else {
+    args = ['--version'];
+  }
+  return new Promise(resolve => {
+    execFile(executable, args, { timeout: 120_000, maxBuffer: 1 << 20 }, (error, stdout, stderr) => {
+      if (error) {
+        const said = `${stderr}`.trim().split('\n').slice(-3).join(' ') || error.message;
+        resolve({ ok: false, problem: said });
+        return;
+      }
+      const printed = `${stdout}`.trim().split(/\s+/).at(-1) ?? '';
+      resolve({ ok: true, version: version ? printed : null });
+    });
+  });
+}
+
+/**
+ * Check every requirement the given scenarios declare, before any capture:
+ * each program is found (its variable, else its name on the PATH), loads what
+ * the requirement needs of it, and, where the viewer has to be this tree's,
+ * runs this tree's cellucid version. Throws one error naming every
+ * requirement that is not met, what is missing, and the scenarios it stops.
+ *
+ * @param {Array<Object>} scenarios
+ * @returns {Promise<string[]>} one line per requirement met, for the run's header
+ */
+export async function checkRequirements(scenarios) {
+  /** requirement name -> the scenarios that declare it */
+  const declared = new Map();
+  for (const scenario of scenarios) {
+    for (const name of scenario.requires ?? []) {
+      if (REQUIREMENTS[name] === undefined) {
+        throw new Error(
+          `${scenario.id}: unknown requirement "${name}"; expected one of ` +
+            `${Object.keys(REQUIREMENTS).join(', ')}.`
+        );
+      }
+      declared.set(name, [...(declared.get(name) ?? []), scenario.id]);
+    }
+  }
+  const problems = [];
+  const met = [];
+  const executables = new Map();
+  for (const [name, ids] of declared) {
+    const stops = `stops ${ids.slice(0, 3).join(', ')}` +
+      (ids.length > 3 ? ` and ${ids.length - 3} more` : '');
+    const said = [];
+    for (const need of REQUIREMENTS[name]) {
+      const { program } = need;
+      const { variable, fallback } = PROGRAMS[program];
+      const command = process.env[variable] ?? fallback;
+      if (!executables.has(program)) executables.set(program, await findExecutable(command));
+      const executable = executables.get(program);
+      if (executable === null) {
+        problems.push(
+          `${name}: no ${process.env[variable] === undefined
+            ? `"${fallback}" on the PATH (or set ${variable})`
+            : `program at ${variable}=${command}`}; ${stops}.`
+        );
+        continue;
+      }
+      const probed = await probeProgram(program, executable, {
+        modules: need.modules ?? [], packages: need.packages ?? [], version: need.sameTree === true,
+      });
+      if (!probed.ok) {
+        problems.push(`${name}: ${executable}: ${probed.problem}; ${stops}.`);
+        continue;
+      }
+      if (need.sameTree === true) {
+        const tree = await treeVersionOf(program);
+        if (tree !== null && probed.version !== tree) {
+          problems.push(
+            `${name}: ${executable} runs cellucid ${probed.version}, this tree is ${tree} ` +
+              (program === 'rscript'
+                ? '(install this tree\'s cellucid-r: .environments/bootstrap.sh r-current, or name its library in CELLUCID_DOCS_R_LIBS)'
+                : '(install this tree: pip install -e cellucid-python)') +
+              `; ${stops}.`
+          );
+          continue;
+        }
+      }
+      resolvedPrograms.set(program, executable);
+      said.push(`${executable}${probed.version ? ` (cellucid ${probed.version})` : ''}`);
+    }
+    if (said.length === REQUIREMENTS[name].length) met.push(`${name}: ${said.join(', ')}`);
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `The selected scenarios need programs this machine does not provide:\n  ${problems.join('\n  ')}`
+    );
+  }
+  return met;
+}
 
 // The point count is published before startup has finished: the sample's
 // published default session (`startup.step('session', …)` in the web app's
@@ -88,24 +363,39 @@ const PANCREAS_READY = {
     await page.waitForFunction(
       () => document.documentElement.dataset.startupPhase === 'ready'
     );
-    // The Dataset box counts what is read while the first views are read
-    // ("Reading… 81 KB read in 25 requests") and settles 1.5 s after the last
-    // bytes; a frame taken before that shows a count that depends on timing.
-    // A scenario that holds the page's long timers (`holdLongTimersInPage`)
-    // also holds that 1.5 s window, so its line stays as it was; such a
-    // scenario does not show the Dataset box.
-    await page.waitForFunction(() => {
-      if (window.__captureHoldsLongTimers === true) return true;
-      const line = document.getElementById('dataset-read');
-      return line === null || line.hidden || !/Reading/.test(line.textContent);
-    }, undefined, { timeout: 120_000 });
+    await waitForReadsSettled(page);
   },
 };
+
+/**
+ * Wait until the Dataset box's read line has settled.
+ *
+ * It counts what is read ("Reading… 81 KB read in 25 requests") and settles
+ * 1.5 s after the last bytes; a frame taken before that shows a count that
+ * depends on timing. Every step that reads (the first views, a field
+ * colored) is followed by this: the overview colored by clusters after the
+ * sample was ready, and its image showed a count still growing (F76). A
+ * scenario that holds the page's long timers (`holdLongTimersInPage`) also
+ * holds that 1.5 s window, so its line stays as it was; such a scenario does
+ * not show the Dataset box.
+ *
+ * @param {import('playwright').Page} page
+ */
+function waitForReadsSettled(page) {
+  return page.waitForFunction(() => {
+    if (window.__captureHoldsLongTimers === true) return true;
+    const line = document.getElementById('dataset-read');
+    return line === null || line.hidden || !/Reading/.test(line.textContent);
+  }, undefined, { timeout: 120_000 });
+}
+
+/** `waitForReadsSettled` as a step: after a step that reads. */
+const READS_SETTLED = { run: waitForReadsSettled };
 
 // Every notification raised so far has expired and left the DOM.
 //
 // Loading the sample raises its own — the restored default session, the
-// opening of its AnnData store, every field that gets coloured — and each expires on its
+// opening of its AnnData store, every field that gets colored — and each expires on its
 // own four- or five-second timer. Left alone they do two kinds of damage: in a
 // window capture they appear or not depending on how fast the host ran the
 // steps, so the same scenario produces different bytes; and under a
@@ -118,6 +408,19 @@ const NOTIFICATIONS_DRAINED = {
   run: page => page.waitForFunction(
     () => document.querySelector('#notification-center')
       ?.childElementCount === 0,
+    undefined,
+    { timeout: 60_000 }
+  ),
+};
+
+// The viewer has drawn everything it owes and stopped (its frame loop's own
+// stop condition). After the velocity overlay is turned on this is the still
+// picture drawn: its spawn table built and the flow traced once (captures
+// run under reduced motion), not the frames before the table landed, which
+// look the same twice in a row while it builds.
+const VIEWER_SETTLED = {
+  run: page => page.waitForFunction(
+    () => window._cellucidViewer?.getFrameScheduleState().settled === true,
     undefined,
     { timeout: 60_000 }
   ),
@@ -171,7 +474,7 @@ function holdNotificationTimers(page) {
 }
 
 /**
- * The page-side half of `holdNotificationTimers`. Serialised into the browser,
+ * The page-side half of `holdNotificationTimers`. Serialized into the browser,
  * so it closes over nothing. A scenario whose subject is raised during
  * startup, before any step can run, installs it with `addInitScript` instead.
  */
@@ -198,7 +501,7 @@ export const SCENARIOS = Object.freeze([
     name: 'window-pancreas-overview',
     describes:
       'The Cellucid web app with the Pancreatic endocrinogenesis sample ' +
-      'loaded in its 3D Orbit view, coloured by the clusters field, with the ' +
+      'loaded in its 3D Orbit view, colored by the clusters field, with the ' +
       'sidebar and legend visible.',
     dataset: 'pancreas',
     steps: [
@@ -207,6 +510,7 @@ export const SCENARIOS = Object.freeze([
       { select: '#categorical-field', label: 'clusters' },
       { waitForText: '#stats', text: 'Field: clusters (category)' },
       { waitFor: '#legend' },
+      READS_SETTLED,
     ],
     shot: { mode: 'window' },
   },
@@ -235,7 +539,7 @@ export const SCENARIOS = Object.freeze([
     name: 'panel-coloring-categorical',
     describes:
       'The Coloring and Filtering panel with the clusters field selected as ' +
-      'the categorical colouring source.',
+      'the categorical coloring source.',
     dataset: 'pancreas',
     steps: [
       PANCREAS_READY,
@@ -254,7 +558,7 @@ export const SCENARIOS = Object.freeze([
     name: 'window-annotated-color-by',
     describes:
       'The Cellucid web app with the categorical field selector ringed and ' +
-      'the pointer pressing it, showing where the colouring field is chosen.',
+      'the pointer pressing it, showing where the coloring field is chosen.',
     dataset: 'pancreas',
     steps: [
       PANCREAS_READY,
@@ -314,9 +618,8 @@ export const SCENARIOS = Object.freeze([
   // the scenario hides the readout with a style rule rather than racing it:
   // the image shows every control and no number. The metric names live in a
   // table in `n_benchmarking_performance/05_benchmark_tools.md`. Collapsing
-  // the six sections that are open on first load is what keeps the accordion
-  // inside the 1000 px viewport, so the element crop is never silently
-  // clamped.
+  // every other section (`onlySections`) is what keeps the accordion inside
+  // the 1000 px viewport, so the element crop is never silently clamped.
 
   {
     id: 'benchmark-panel-controls',
@@ -330,13 +633,7 @@ export const SCENARIOS = Object.freeze([
     dataset: 'pancreas',
     steps: [
       PANCREAS_READY,
-      { closeSection: '#session-section' },
-      { closeSection: '#visualization-section' },
-      { closeSection: '#compare-views-section' },
-      { closeSection: '#coloring-filtering-section' },
-      { closeSection: '#highlighted-cells-section' },
-      { closeSection: '#page-analysis-section' },
-      { openSection: '#benchmark-section' },
+      onlySections('#benchmark-section'),
       // `!important` outranks the inline `display: block` the monitor sets.
       {
         run: page => page.addStyleTag({
@@ -485,6 +782,11 @@ function buildFilteringScenarios() {
     { waitForText: '#stats', text: 'Field: clusters (category)' },
     { waitFor: '#legend' },
   ];
+  // The Filters row of the clusters field's hidden categories. Its id ends in
+  // the field's index in the app's field list, which is the app's to order
+  // (`filter-manager.js`), so the row is named by its kind: in these
+  // scenarios clusters is the only field that hides categories.
+  const CLUSTERS_HIDING_ROW = '#active-filters [data-filter-id^="obs-category-"]';
   /**
    * Navigation and Compare Views open, the sidebar scrolled so Navigation's
    * Mode select and the Shows picker below it are both in the window.
@@ -554,6 +856,20 @@ function buildFilteringScenarios() {
   });
 
   const MIN_SLIDER = '#legend .legend-filter input[type="range"]';
+  /**
+   * Move the legend's Minimum slider `percent` of the way along its track.
+   * Its steps are the web app's `SLIDER_STEPS` (`legend/range-bounds.js`),
+   * 1,000 since 2026-11-01, not 100: a raw value of 62 then moved it 6.2%
+   * of the way, so `legend-category-unavailable` emptied no category and
+   * `window-continuous-range-applied` hid 6 cells. The track's own `max` is
+   * read, so the figure does not depend on that count.
+   */
+  const setMinimumAt = percent => ({
+    run: async page => {
+      const max = Number(await page.locator(MIN_SLIDER).first().getAttribute('max'));
+      await setRange(MIN_SLIDER, Math.round((max * percent) / 100)).run(page);
+    },
+  });
   const settle = { attempts: 20, gapMs: 200 };
 
   return [
@@ -617,11 +933,11 @@ function buildFilteringScenarios() {
       topic: 'filtering',
       name: 'window-clusters-all-visible',
       describes:
-        'The whole application window with the Pancreas embedding coloured by '
+        'The whole application window with the Pancreas embedding colored by '
         + 'clusters, every legend row checked, and the Filters block reading '
         + 'Showing all 3,696 cells above No filters active.',
       dataset: 'pancreas',
-      steps: [READY, { closeSection: '#session-section' }, ...clusters, { scrollIntoView: '#active-filters-container' }, NOTIFICATIONS_DRAINED],
+      steps: [READY, { closeSection: '#session-section' }, { closeSection: '#state-section' }, ...clusters, { scrollIntoView: '#active-filters-container' }, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
       settle,
     },
@@ -637,7 +953,7 @@ function buildFilteringScenarios() {
       dataset: 'pancreas',
       steps: [
         READY,
-        { closeSection: '#session-section' },
+        { closeSection: '#session-section' }, { closeSection: '#state-section' },
         ...clusters,
         { scrollIntoView: '#legend' },
         hide('Ductal'),
@@ -654,9 +970,10 @@ function buildFilteringScenarios() {
       topic: 'filtering',
       name: 'active-filters-one-row',
       describes:
-        'The Filters block reading Showing 1,876 of 3,696 cells above one row: '
-        + 'a ticked checkbox, the text clusters: hiding Ductal, cut off with an '
-        + 'ellipsis, and a remove cross at its right.',
+        'The Filters block reading Showing 1,876 of 3,696 cells above one '
+        + 'row: a ticked checkbox, the text clusters: hiding D… cut off with '
+        + 'an ellipsis, the cell count 1,876, and a remove cross at its '
+        + 'right.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -677,7 +994,7 @@ function buildFilteringScenarios() {
       describes:
         'The categorical legend for clusters: Show all and Hide all above eight'
         + ' rows, three of them (Ductal, Ngn3 high EP, Ngn3 low EP) unchecked and'
-        + ' reading 0 of their cell counts, each row carrying a colour swatch, a '
+        + ' reading 0 of their cell counts, each row carrying a color swatch, a '
         + 'label, a cell count, a rename pencil and a delete bin.',
       dataset: 'pancreas',
       steps: [
@@ -719,16 +1036,16 @@ function buildFilteringScenarios() {
       topic: 'filtering',
       name: 'window-continuous-range-applied',
       describes:
-        'The whole window coloured by S_score with the Minimum slider raised: '
+        'The whole window colored by S_score with the Minimum slider raised: '
         + 'only the higher-scoring cells are drawn, and the Filters block reads a'
         + ' reduced count above one S_score range row.',
       dataset: 'pancreas',
       steps: [
         READY,
-        { closeSection: '#session-section' },
+        { closeSection: '#session-section' }, { closeSection: '#state-section' },
         ...sScore,
         { scrollIntoView: '#legend' },
-        setRange(MIN_SLIDER, 20),
+        setMinimumAt(20),
         { scrollIntoView: '#active-filters-container' },
         NOTIFICATIONS_DRAINED,
       ],
@@ -758,11 +1075,11 @@ function buildFilteringScenarios() {
       topic: 'filtering',
       name: 'window-outlier-100-off',
       describes:
-        'The whole window coloured by clusters with the Outlier filter at its '
+        'The whole window colored by clusters with the Outlier filter at its '
         + 'default 100 percent: scattered cells sit between and around the '
         + 'clusters, and the Filters block reads Showing all 3,696 cells.',
       dataset: 'pancreas',
-      steps: [READY, { closeSection: '#session-section' }, ...clusters, { scrollIntoView: '#outlier-filter-container' }, NOTIFICATIONS_DRAINED],
+      steps: [READY, { closeSection: '#session-section' }, { closeSection: '#state-section' }, ...clusters, { scrollIntoView: '#outlier-filter-container' }, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
       settle,
     },
@@ -771,14 +1088,14 @@ function buildFilteringScenarios() {
       topic: 'filtering',
       name: 'window-outlier-95-applied',
       describes:
-        'The same window with the Outlier filter at 95 percent: fewer scattered'
-        + ' cells between the clusters, every legend count reduced, and a '
-        + 'clusters: outlier ≤ 95% row in the Filters block above Showing 3,506 '
-        + 'of 3,696 cells.',
+        'The same window with the Outlier filter at 95 percent: fewer '
+        + 'scattered cells between the clusters, every legend count reduced, '
+        + 'and the Filters block reading Showing 3,506 of 3,696 cells, its '
+        + 'clusters: outlier ≤ 95% row cut off at the bottom edge.',
       dataset: 'pancreas',
       steps: [
         READY,
-        { closeSection: '#session-section' },
+        { closeSection: '#session-section' }, { closeSection: '#state-section' },
         ...clusters,
         { scrollIntoView: '#outlier-filter-container' },
         setRange('#outlier-filter', 95),
@@ -793,16 +1110,16 @@ function buildFilteringScenarios() {
       topic: 'filtering',
       name: 'active-filters-three-rows',
       describes:
-        'The Filters block holding three rows of different kinds at once: an '
-        + 'S_score range row ending in its cell count, cut off with an ellipsis, '
-        + 'a clusters hiding row, and a clusters: outlier ≤ 95% row with no '
-        + 'count.',
+        'The Filters block reading Showing 768 of 3,696 cells above three '
+        + 'rows of different kinds: S_score: -0.146 – 1.… and clusters: '
+        + 'hiding Du…, each cut off with an ellipsis and followed by the cell '
+        + 'count 768, and clusters: outlier ≤ 95% with no count.',
       dataset: 'pancreas',
       steps: [
         READY,
         ...sScore,
         { scrollIntoView: '#legend' },
-        setRange(MIN_SLIDER, 15),
+        setMinimumAt(15),
         ...clusters,
         { scrollIntoView: '#legend' },
         hide('Ductal'),
@@ -820,14 +1137,14 @@ function buildFilteringScenarios() {
       name: 'active-filters-row-disabled',
       describes:
         'The same three-row Filters list with the clusters hiding row unchecked'
-        + ' under the pointer: that row is greyed and struck through while the '
+        + ' under the pointer: that row is grayed and struck through while the '
         + 'other two stay black, and the count line above has risen.',
       dataset: 'pancreas',
       steps: [
         READY,
         ...sScore,
         { scrollIntoView: '#legend' },
-        setRange(MIN_SLIDER, 15),
+        setMinimumAt(15),
         ...clusters,
         { scrollIntoView: '#legend' },
         hide('Ductal'),
@@ -837,15 +1154,13 @@ function buildFilteringScenarios() {
         { scrollIntoView: '#active-filters-container' },
         {
           run: page =>
-            page.uncheck(
-              '#active-filters [data-filter-id="obs-category-3"]  input[type="checkbox"]'
-            ),
+            page.uncheck(`${CLUSTERS_HIDING_ROW} input[type="checkbox"]`),
         },
-        { waitFor: '#active-filters [data-filter-id="obs-category-3"][data-disabled="true"]' },
+        { waitFor: `${CLUSTERS_HIDING_ROW}[data-disabled="true"]` },
       ],
       shot: { mode: 'element', selector: '#active-filters-container', padding: 8 },
       cursor: {
-        on: '#active-filters [data-filter-id="obs-category-3"] input[type="checkbox"]',
+        on: `${CLUSTERS_HIDING_ROW} input[type="checkbox"]`,
         at: 'center',
         state: 'hover',
       },
@@ -869,7 +1184,7 @@ function buildFilteringScenarios() {
       ],
       shot: { mode: 'element', selector: '#active-filters-container', padding: 8 },
       cursor: {
-        on: '#active-filters [data-filter-id="obs-category-3"] .list-item-remove',
+        on: `${CLUSTERS_HIDING_ROW} .list-item-remove`,
         at: 'center',
         state: 'hover',
       },
@@ -887,7 +1202,7 @@ function buildFilteringScenarios() {
       dataset: 'pancreas',
       steps: [
         READY,
-        { closeSection: '#session-section' },
+        { closeSection: '#session-section' }, { closeSection: '#state-section' },
         ...clusters,
         { scrollIntoView: '#legend' },
         { run: page => page.locator('#legend button', { hasText: 'Hide All' }).click() },
@@ -905,14 +1220,14 @@ function buildFilteringScenarios() {
       describes:
         'The clusters legend under a narrow S_score range filter: Alpha, '
         + 'Ductal, Ngn3 high EP and Ngn3 low EP stay ticked with small counts, '
-        + 'while Beta, Delta, Epsilon and Pre-endocrine are greyed out with '
+        + 'while Beta, Delta, Epsilon and Pre-endocrine are grayed out with '
         + 'disabled checkboxes and read 0 cells.',
       dataset: 'pancreas',
       steps: [
         READY,
         ...sScore,
         { scrollIntoView: '#legend' },
-        setRange(MIN_SLIDER, 62),
+        setMinimumAt(62),
         ...clusters,
         { scrollIntoView: '#legend' },
       ],
@@ -924,16 +1239,17 @@ function buildFilteringScenarios() {
       topic: 'filtering',
       name: 'window-gene-range-active',
       describes:
-        'The whole window coloured by the gene Ins1 with the Minimum slider '
-        + 'raised, so only the cells expressing it are drawn and an Ins1 range '
-        + 'row is listed in the Filters block.',
+        'The whole window colored by the gene Ins1 with the Minimum raised '
+        + 'to 37.6, so only the cells at or above it are drawn, and the '
+        + 'Filters block reading Showing 179 of 3,696 cells above an Ins1: '
+        + '37.6 – 1255 row.',
       dataset: 'pancreas',
       steps: [
         READY,
-        { closeSection: '#session-section' },
+        { closeSection: '#session-section' }, { closeSection: '#state-section' },
         ...ins1,
         { scrollIntoView: '#legend' },
-        setRange(MIN_SLIDER, 3),
+        setMinimumAt(3),
         { scrollIntoView: '#active-filters-container' },
         NOTIFICATIONS_DRAINED,
       ],
@@ -948,9 +1264,11 @@ function buildFilteringScenarios() {
       name: 'field-selectors-three-routes',
       describes:
         'The Color by heading with its (i), above the three field selectors '
-        + 'stacked in order — Categorical obs holding clusters, Continuous obs '
-        + 'holding None, and an empty Gene expression search box — each followed '
-        + 'by four small icon buttons, with the pointer pressing the first.',
+        + 'stacked in order — Categorical obs holding clusters, Continuous '
+        + 'obs holding None, and an empty Gene expression search box — the '
+        + 'Categorical obs row followed by six small icon buttons, the '
+        + 'Continuous obs row by five and the gene row by four, with the '
+        + 'pointer pressing the first selector.',
       dataset: 'pancreas',
       steps: [READY, ...clusters, { scrollIntoView: '#color-by-controls' }],
       shot: {
@@ -967,7 +1285,7 @@ function buildFilteringScenarios() {
       name: 'legend-categorical-clusters',
       describes:
         'The categorical legend for clusters: the Show all and Hide all buttons'
-        + ' above eight rows, each holding a checkbox, a colour swatch, a label, '
+        + ' above eight rows, each holding a checkbox, a color swatch, a label, '
         + 'a cell count, a rename pencil and a delete bin.',
       dataset: 'pancreas',
       steps: [READY, ...clusters, { scrollIntoView: '#legend' }],
@@ -979,10 +1297,11 @@ function buildFilteringScenarios() {
       topic: 'web_app',
       name: 'legend-continuous-sscore',
       describes:
-        'The continuous legend for S_score: the Color scale (Viridis) bar with '
-        + 'its two end values, Log color scale off and Rescale to range on, each '
-        + 'with its (i), and below a rule the Visible range block with Live '
-        + 'filtering on, Minimum and Maximum sliders, and Filter and Reset.',
+        'The continuous legend for S_score: the Color scale (Viridis) bar '
+        + 'with its two end values, Log color scale off and Rescale to range '
+        + 'on, each with its (i), and below a rule the Visible range block '
+        + 'with Live filtering on, Minimum and Maximum sliders, and Reset '
+        + '(Filter appears only with Live filtering off).',
       dataset: 'pancreas',
       steps: [READY, ...sScore, { scrollIntoView: '#legend' }],
       shot: { mode: 'element', selector: '#legend', padding: 6 },
@@ -993,7 +1312,7 @@ function buildFilteringScenarios() {
       topic: 'web_app',
       name: 'legend-colormap-menu-open',
       describes:
-        'The colormap list open under the S_score colour bar: seven named '
+        'The colormap list open under the S_score color bar: seven named '
         + 'gradients, Viridis, Plasma, Inferno, Magma, Cividis, Turbo and '
         + 'Twilight, with Viridis marked as the active one.',
       dataset: 'pancreas',
@@ -1035,9 +1354,11 @@ function buildFilteringScenarios() {
       topic: 'web_app',
       name: 'gene-search-no-match',
       describes:
-        'The Gene expression list after typing a symbol this sample does not '
-        + 'publish: No gene matches "CD19", a sentence giving the 3,753 gene '
-        + 'names the dataset publishes, and a link Why a gene may be missing.',
+        'The Gene expression list after typing a symbol this sample does '
+        + 'not publish: No gene matches "CD19", a sentence saying it searched '
+        + 'the 3,753 genes of this dataset named by its var index and that '
+        + 'another var column (symbols) can name them instead, a Choose gene '
+        + 'names… button, and a link Why a gene may be missing.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -1058,11 +1379,12 @@ function buildFilteringScenarios() {
       topic: 'web_app',
       name: 'window-color-by-gene-ins1',
       describes:
-        'The whole window coloured by expression of the gene Ins1 on a Viridis '
-        + 'scale, dark where the gene is absent and bright in one lobe of the '
-        + 'embedding, with the continuous legend in the sidebar.',
+        'The whole window colored by expression of the gene Ins1 on a '
+        + 'Viridis scale from 0 to 1260, almost every cell dark and a small '
+        + 'patch at the foot of the lower-right arm bright, with the '
+        + 'continuous legend in the sidebar.',
       dataset: 'pancreas',
-      steps: [READY, { closeSection: '#session-section' }, ...ins1, { scrollIntoView: '#legend' }, NOTIFICATIONS_DRAINED],
+      steps: [READY, { closeSection: '#session-section' }, { closeSection: '#state-section' }, ...ins1, { scrollIntoView: '#legend' }, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
       settle,
     },
@@ -1071,13 +1393,13 @@ function buildFilteringScenarios() {
       topic: 'web_app',
       name: 'window-centroids-and-labels',
       describes:
-        'The Pancreas embedding coloured by clusters with Show centroids and '
+        'The Pancreas embedding colored by clusters with Show centroids and '
         + 'Show labels both ticked, so each cluster carries a marker at its '
-        + 'centre with its category name printed on it.',
+        + 'center with its category name printed on it.',
       dataset: 'pancreas',
       steps: [
         READY,
-        { closeSection: '#session-section' },
+        { closeSection: '#session-section' }, { closeSection: '#state-section' },
         ...clusters,
         { scrollIntoView: '#centroid-controls' },
         { run: page => page.check('#toggle-centroid-points') },
@@ -1231,12 +1553,19 @@ function buildFilteringScenarios() {
       // same bytes, which is what the settle loop waits for. The ray-start
       // jitter is a fixed blue-noise tile, not a per-frame offset, so nothing
       // else moves.
+      //
+      // "Not redrawn" is also true *before* the noise exists: nothing is
+      // drawn while it is generated (seconds at 128³), so two blank frames
+      // agreed and the image shipped with an empty canvas. The renderer logs
+      // each generation it starts and each it finishes ("Generating cloud
+      // noise textures..." / "Cloud noise textures ready"); the capture waits
+      // until every one it started has finished.
       id: 'core-window-smoke-cloud',
       topic: 'web_app',
       name: 'window-smoke-cloud',
       describes:
         'The whole window in Volumetric smoke cloud mode: the Pancreas cells '
-        + 'drawn as a soft cloud tinted with the colours of their clusters, and '
+        + 'drawn as a soft cloud tinted with the colors of their clusters, and '
         + 'the sidebar showing Render mode set to Volumetric smoke cloud (beta) '
         + 'with its Beta tag above the Smoke quality, Smoke shape, Smoke lighting'
         + ' and Performance controls, Animation speed at Still.',
@@ -1245,6 +1574,15 @@ function buildFilteringScenarios() {
         READY,
         ...clusters,
         { openSection: '#visualization-section' },
+        { run: page => {
+          smokeNoise.started = 0;
+          smokeNoise.ready = 0;
+          page.on('console', message => {
+            const text = message.text();
+            if (text.includes('[SmokeRenderer] Generating cloud noise textures')) smokeNoise.started += 1;
+            if (text.includes('[SmokeRenderer] Cloud noise textures ready')) smokeNoise.ready += 1;
+          });
+        } },
         { select: '#render-mode', value: 'smoke' },
         { waitFor: '#smoke-speed' },
         {
@@ -1256,6 +1594,15 @@ function buildFilteringScenarios() {
           },
         },
         { waitForText: '#smoke-speed-display', text: 'Still' },
+        { run: async page => {
+          const deadline = Date.now() + 120_000;
+          while (smokeNoise.started === 0 || smokeNoise.ready < smokeNoise.started) {
+            if (Date.now() > deadline) {
+              throw new Error(`smoke noise: ${smokeNoise.ready} of ${smokeNoise.started} generations finished in 120 s`);
+            }
+            await page.waitForEvent('console', { timeout: 120_000 }).catch(() => {});
+          }
+        } },
         { scrollIntoView: '#smoke-controls' },
         NOTIFICATIONS_DRAINED,
       ],
@@ -1270,21 +1617,23 @@ function buildFilteringScenarios() {
       name: 'window-orientation-map',
       describes:
         'The whole application window with the Pancreas sample loaded, the '
-        + 'sidebar showing Coloring & filtering with the embedding coloured by '
-        + 'clusters, and the eight-row legend beside the matching colours on the '
+        + 'sidebar showing Coloring & filtering with the embedding colored by '
+        + 'clusters, and the eight-row legend beside the matching colors on the '
         + 'canvas.',
       dataset: 'pancreas',
-      steps: [READY, { closeSection: '#session-section' }, ...clusters, { scrollIntoView: '#legend' }, NOTIFICATIONS_DRAINED],
+      steps: [READY, { closeSection: '#session-section' }, { closeSection: '#state-section' }, ...clusters, { scrollIntoView: '#legend' }, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
       settle,
     },
 
     // ------------------------------------------------------------ accessibility
     // The Keyboard Shortcuts accordion is the app's own authoritative shortcut
-    // list, and the accessibility page restates it row for row. Capturing the
-    // whole `<details>` keeps its summary in frame, so the reader can see which
-    // panel to open, and the six sections that are open on first load are
-    // collapsed because an element crop is clamped to the 1000 px viewport.
+    // list (drawn from `ui/onboarding/shortcut-table.js`, as the generated
+    // keyboard-shortcuts page is). Capturing the whole `<details>` keeps its
+    // summary in frame, so the reader can see which panel to open, and the
+    // sections that are open on first load are collapsed. Its seven groups
+    // stand 1,242 px tall, so the window is a taller desktop one: an element
+    // crop has to fit the viewport whole.
     //
     // `#shortcuts-section` carries no `data-state-serializer-skip`, so its
     // open/closed state is part of the session UI inventory
@@ -1298,22 +1647,17 @@ function buildFilteringScenarios() {
       name: 'keyboard-shortcuts',
       describes:
         'The Keyboard shortcuts panel open in the Cellucid sidebar, listing '
-        + 'five groups, each with its (i): General (R, F, H, 1 2 3, O P G and ?),'
-        + ' Navigation (W A S D and Shift), Zoom (= ] and - [), Free-fly (E Q and'
-        + ' Esc) and Selection (Alt+click, Alt+drag, Shift+Alt+click, '
-        + 'Ctrl+Alt+click, Esc to cancel a selection, Esc to leave Select mode, '
-        + 'and X to clear highlights).',
+        + 'its groups, each with its (i): General (R, F, H, 1 2 3, O P G, ?, '
+        + '/, Ctrl+Z to undo the last step, Shift+Ctrl+Z or Ctrl+Y to redo), '
+        + 'Navigation (W A S D and Shift), Zoom (= ] and - [), Free-fly (E Q '
+        + 'and Esc), Selection (Alt+click, Alt+drag, Shift+Alt+click, '
+        + 'Ctrl+Alt+click, Esc to cancel a selection, Esc to leave Select '
+        + 'mode, and X to clear highlights), History list and Moving by keys.',
       dataset: 'pancreas',
+      viewport: { width: 1440, height: 1300 },
       steps: [
         READY,
-        { closeSection: '#session-section' },
-        { closeSection: '#visualization-section' },
-        { closeSection: '#navigation-section' },
-        { closeSection: '#compare-views-section' },
-        { closeSection: '#coloring-filtering-section' },
-        { closeSection: '#highlighted-cells-section' },
-        { closeSection: '#page-analysis-section' },
-        { openSection: '#shortcuts-section' },
+        onlySections('#shortcuts-section'),
         { scrollIntoView: '#shortcuts-section' },
         { run: async page => {
           const open = await page.evaluate(
@@ -1371,12 +1715,24 @@ function buildAnnotationAndSessionScenarios() {
     }, move),
   });
   // The branch graph's step rows (`ui/modules/state/graph.js`), the opening
-  // included: it is virtualised, but a short history draws every row.
+  // included: it is virtualised, but a short history draws every row. The
+  // history is waited for first (`history.idle()`: no step being dispatched
+  // or recorded), then for the panel to have drawn it: the rows, and the
+  // status line under the recording switch, drawn in the same frame, counting
+  // the steps after the opening ("3 steps"). Counting the rows alone let a
+  // crop of the State section be measured before the panel had finished
+  // drawing (`sessions-save-restore-01-session-controls` failed with
+  // "#state-section moved while the image settled", 277 px tall, then 259).
   const STEP_ROWS = count => ({
-    run: page => page.waitForFunction(
-      n => document.querySelectorAll('#history-graph .hg-row[data-kind="step"]').length === n,
-      count
-    ),
+    run: async page => {
+      await page.evaluate(() => window._cellucidHistories.current().idle());
+      await page.waitForFunction(
+        n => document.querySelectorAll('#history-graph .hg-row[data-kind="step"]').length === n
+          && document.getElementById('history-status')?.textContent
+            === `${n - 1} ${n - 1 === 1 ? 'step' : 'steps'}`,
+        count
+      );
+    },
   });
   // The State panel's way to a session file, as a person takes it (the web
   // repository's `tests/browser/helpers/session-buttons.mjs`): Share… › Save
@@ -1415,7 +1771,7 @@ function buildAnnotationAndSessionScenarios() {
   ]);
   const CA = '#community-annotation-section';
   const PANEL = '#community-annotation-controls';
-  const MODAL = '.community-annotation-modal-overlay [role="document"]';
+  const MODAL = '.community-annotation-dialog:not(.community-annotation-details-dialog) .community-annotation-modal';
   const DETAIL = '.community-annotation-voting-detail';
 
   // Collapsing the sections that are open on first load is what keeps the
@@ -1423,13 +1779,7 @@ function buildAnnotationAndSessionScenarios() {
   // clamped to the viewport, so a panel scrolled out of it crops to nothing.
   const openPanel = [
     READY,
-    { closeSection: '#session-section' },
-    { closeSection: '#visualization-section' },
-    { closeSection: '#compare-views-section' },
-    { closeSection: '#coloring-filtering-section' },
-    { closeSection: '#highlighted-cells-section' },
-    { closeSection: '#page-analysis-section' },
-    { openSection: CA },
+    onlySections(CA),
     { scrollIntoView: PANEL },
   ];
 
@@ -1452,12 +1802,12 @@ function buildAnnotationAndSessionScenarios() {
   const pull = [
     { click: `${PANEL} button:has-text("GitHub sync")` },
     { waitFor: MODAL },
-    { click: '.community-annotation-modal-overlay button:has-text("Pull latest")' },
-    { waitForText: '.community-annotation-modal-overlay', text: 'Pulled latest annotations.' },
+    { click: '.community-annotation-dialog:not(.community-annotation-details-dialog) button:has-text("Pull latest")' },
+    { waitForText: '.community-annotation-dialog:not(.community-annotation-details-dialog)', text: 'Pulled latest annotations.' },
   ];
 
   const closeModal = [
-    { click: '.community-annotation-modal-overlay button:has-text("Close")' },
+    { click: '.community-annotation-dialog:not(.community-annotation-details-dialog) button:has-text("Close")' },
     { waitForHidden: MODAL },
   ];
 
@@ -1523,31 +1873,46 @@ function buildAnnotationAndSessionScenarios() {
       await page.keyboard.press('Escape');
       await welcome.waitFor({ state: 'hidden' });
       await PANCREAS_READY.run(page);
-      // Every step before the reload was kept in this browser, so the dataset
-      // opened again offers to continue it (a notification with no timer).
-      // A person loading a file declines it; the scenario does the same, so
-      // the center drains.
+      // What was kept in this browser before the reload may make the dataset
+      // opened again offer to continue it (a notification with no timer, so
+      // the center never drains while it stands). A person loading a file
+      // declines it; the scenario does the same. Whether it is offered is the
+      // page's own rule (`offerContinue` in `history/autosave.js`: steps,
+      // conversations, notes or a paused draft kept, and not declined
+      // before), which the saved-state listing does not expose whole; a guess
+      // from the listing's step count is not that rule. Two scenarios timed
+      // out in `NOTIFICATIONS_DRAINED` here, a notification with no timer
+      // standing. So the offer itself is waited for: it is made as the
+      // history starts (`begin` in `history/dataset-history.js`, before
+      // startup is ready), while the startup's own notifications are still
+      // up, so the center empties only once the offer is declined or when
+      // none was made.
       await HISTORY_READY.run(page);
-      const offered = await page.evaluate(async () => {
-        const list = await window._cellucidHistories.savedStates.list();
-        return list.some(entry => entry.kind === 'autosave' && !entry.current && entry.steps > 0);
-      });
-      if (offered) {
-        const startFresh = page.locator('#notification-center button', { hasText: 'Start fresh' });
-        await startFresh.waitFor({ state: 'visible', timeout: 30_000 });
+      const startFresh = page.locator('#notification-center button', { hasText: 'Start fresh' });
+      await page.waitForFunction(() => {
+        const center = document.querySelector('#notification-center');
+        return center?.childElementCount === 0
+          || [...(center?.querySelectorAll('button') ?? [])].some(button => button.textContent.trim() === 'Start fresh');
+      }, undefined, { timeout: 60_000 });
+      if (await startFresh.count() > 0) {
         await startFresh.click();
+        // The pointer is left over the stack by that click, and while it is
+        // there the stack keeps the declined card's place as an empty spacer
+        // (`_retire` in `notification-center.js`), so the center never
+        // empties until the pointer leaves it, as a person's does.
+        await page.mouse.move(0, 0);
       }
       await NOTIFICATIONS_DRAINED.run(page);
       if (holdNotifications) await holdNotificationTimers(page);
       const chooser = page.waitForEvent('filechooser');
       await clickLoadSession(page);
       await (await chooser).setFiles(saved);
-      // A completed restore publishes two notifications: the loaded
-      // tracker's ("Loaded … beside yours.", with Undo) and the restore's own
-      // progress entry ("Session fully restored.").
+      // A completed restore that added trackers beside the person's ends in
+      // one notice (`SessionSerializer._restore`): titled `Loaded "…" beside
+      // yours`, reading "Session fully restored.", with Undo.
       await page.waitForFunction(() => {
         const text = document.querySelector('#notification-center')?.textContent ?? '';
-        return text.includes('Session fully restored.') && text.includes('beside yours.');
+        return text.includes('Session fully restored.') && text.includes('beside yours');
       });
     },
   });
@@ -1595,7 +1960,7 @@ function buildAnnotationAndSessionScenarios() {
       ],
       shot: { mode: 'element', selector: MODAL, padding: 0 },
       cursor: {
-        on: '.community-annotation-modal-overlay button:has-text("Continue with GitHub")',
+        on: '.community-annotation-dialog:not(.community-annotation-details-dialog) button:has-text("Continue with GitHub")',
         at: 'center', state: 'hover',
       },
     },
@@ -1622,7 +1987,7 @@ function buildAnnotationAndSessionScenarios() {
       ],
       shot: { mode: 'element', selector: MODAL, padding: 0 },
       cursor: {
-        on: '.community-annotation-modal-overlay button:has-text("Add repo")',
+        on: '.community-annotation-dialog:not(.community-annotation-details-dialog) button:has-text("Add repo")',
         at: 'center', state: 'hover',
       },
     },
@@ -1742,10 +2107,11 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'community_annotation',
       name: 'lifecycle-08-votable-badge',
       describes:
-        'The Categorical obs select holding clusters, prefixed by a ballot-box '
-        + 'badge marking it open for voting, and the legend beneath it: each '
-        + 'category with its consensus label (Beta cell under Beta) and its up '
-        + 'and down vote counts.',
+        'The Categorical obs select holding clusters, prefixed by a '
+        + 'ballot-box badge marking it open for voting, and the legend '
+        + 'beneath it: each category with its consensus label (Beta cell '
+        + 'under Beta, a dash under the others) and its up and down vote '
+        + 'counts.',
       dataset: 'pancreas',
       setup: async ({ page }) => {
         const module = await import('./community-annotation-mock.mjs');
@@ -1883,7 +2249,7 @@ function buildAnnotationAndSessionScenarios() {
       name: 'lifecycle-13-new-suggestion',
       describes:
         'The New suggestion form filled in with a label, an ontology id and '
-        + 'marker genes, with Search CAP, Search Ontology and Search Markers '
+        + 'marker genes, with Search CAP, Search ontology and Search markers '
         + 'buttons beside the fields and Add and Clear buttons below, and the '
         + 'pointer on Add.',
       dataset: 'pancreas',
@@ -1901,19 +2267,21 @@ function buildAnnotationAndSessionScenarios() {
         ...votingOnBeta,
         // The form sits at the foot of the modal's own scroller, below the
         // suggestion list, so it has to be scrolled to before it is fillable.
-        { scrollIntoView: '.community-annotation-modal-overlay [placeholder="Label (required)"] >> nth=-1' },
-        { fill: '.community-annotation-modal-overlay [placeholder="Label (required)"] >> nth=-1', value: 'Delta cell' },
-        { fill: '.community-annotation-modal-overlay [placeholder="Ontology id (optional)"] >> nth=-1', value: 'CL:0000173' },
-        { fill: '.community-annotation-modal-overlay [placeholder="Marker genes (optional)"] >> nth=-1', value: 'Sst, Rbp4' },
+        { scrollIntoView: '.community-annotation-dialog:not(.community-annotation-details-dialog) [placeholder="Label (required)"] >> nth=-1' },
+        { fill: '.community-annotation-dialog:not(.community-annotation-details-dialog) [placeholder="Label (required)"] >> nth=-1', value: 'Delta cell' },
+        { fill: '.community-annotation-dialog:not(.community-annotation-details-dialog) [placeholder="Ontology id (optional)"] >> nth=-1', value: 'CL:0000173' },
+        { fill: '.community-annotation-dialog:not(.community-annotation-details-dialog) [placeholder="Marker genes (optional)"] >> nth=-1', value: 'Sst, Rbp4' },
         // The whole form, heading included, inside the modal's scroller.
         { run: page => page.locator('.community-annotation-new').last()
           .evaluate(element => element.scrollIntoView({ block: 'center' })) },
       ],
       shot: {
         mode: 'element',
-        selector: '.community-annotation-new >> nth=-1',
-        // The form's heading sits above its box.
-        padding: 22,
+        // The form's box, its heading "New suggestion" included: the heading
+        // sits above the form, and a padding that reached it was trimmed back
+        // at it as a neighbor's text.
+        selector: '.community-annotation-dialog:not(.community-annotation-details-dialog) .control-box:has(> .community-annotation-new) >> nth=-1',
+        padding: 8,
       },
       cursor: {
         on: '.community-annotation-new >> nth=-1 >> button:has-text("Add")',
@@ -1948,8 +2316,8 @@ function buildAnnotationAndSessionScenarios() {
             });
           });
         } },
-        { click: '.community-annotation-modal-overlay button:has-text("Publish")' },
-        { waitForText: '.community-annotation-modal-overlay', text: 'Published.' },
+        { click: '.community-annotation-dialog:not(.community-annotation-details-dialog) button:has-text("Publish")' },
+        { waitForText: '.community-annotation-dialog:not(.community-annotation-details-dialog)', text: 'Published.' },
       ],
       shot: { mode: 'element', selector: MODAL, padding: 0 },
     },
@@ -1995,14 +2363,16 @@ function buildAnnotationAndSessionScenarios() {
       id: 'state-history-step-details',
       topic: 'state_history',
       name: 'history-step-details',
+      fixedTime: '2026-11-10T12:00:00Z',
       describes:
         'The History block of the State section after three steps, with the '
         + 'second step shown by a double-click: the line under the recording '
-        + 'switch and the branch Main reads 3 steps · 1 undone, the step shown '
-        + 'is marked in the graph, and its details, opened with ›, say who '
-        + 'took it, when and on which branch, its code (keep_cells with the '
-        + 'field, category, count and seed), what it changed with What '
-        + 'changed ›, + Note, and Shown, Branch here, Compare… and ⋯.',
+        + 'switch and the branch Main reads 3 steps · 1 undone, the step '
+        + 'shown is marked in the graph, and its details, opened with ›, say '
+        + 'who took it, when and on which branch, its code (keep_cells with '
+        + 'the field, category, count and seed), what it changed (Filters) '
+        + 'with What changed ›, Show this step’s view, Add note, and Shown, '
+        + 'Branch here, Compare… and More….',
       dataset: 'pancreas',
       steps: [
         ...STATE_OPEN, FIRST_STEPS, STEP_ROWS(4),
@@ -2087,12 +2457,14 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'state_history',
       name: 'saved-states-dialog',
       describes:
-        'The Load dialog: under Saved in this browser, a state saved under the '
-        + 'name "Without Ductal" and the autosave of the Pancreas history, each '
-        + 'with its kind, size, dataset, steps and when, Open (or Shown), Replay '
-        + 'here, rename and delete; the name field, the History / Current state '
-        + 'only / Steps only choice and Save; and under From a file, Open a '
-        + 'session file… and Replay a session file here….',
+        'The Load dialog: under Saved in this browser, a state saved under '
+        + 'the name "Without Ductal" and the autosave of the Pancreas '
+        + 'history, named by its latest step "Colored by clusters_coarse", '
+        + 'each with its kind (Named, Auto), size, dataset, steps and when; '
+        + 'Open and Replay here on the named state, Shown on the autosave, '
+        + 'and rename and delete on both; the name field, the History / '
+        + 'Current state only / Steps only choice and Save; and under From a '
+        + 'file, Open a session file… and Replay a session file here….',
       dataset: 'pancreas',
       steps: [
         ...STATE_OPEN, FIRST_STEPS, STEP_ROWS(4),
@@ -2140,6 +2512,7 @@ function buildAnnotationAndSessionScenarios() {
       id: 'state-continue-offer',
       topic: 'state_history',
       name: 'continue-offer',
+      fixedTime: '2026-11-10T12:00:00Z',
       describes:
         'The notification Cellucid shows when a dataset whose history this '
         + 'browser kept is opened again: "Continue where you left off? Kept in '
@@ -2159,10 +2532,10 @@ function buildAnnotationAndSessionScenarios() {
               await new Promise(resolve => setTimeout(resolve, 100));
             }
           });
-          // The same dataset opened again in this browser: its kept history
-          // is offered, never put back by itself.
-          await page.reload();
         } },
+        // The same dataset opened again in this browser: its kept history
+        // is offered, never put back by itself, once the welcome is closed.
+        { reload: true },
         READY,
         { run: page => page.waitForFunction(() => (
           document.querySelector('#notification-center')?.textContent
@@ -2295,11 +2668,9 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'save-restore-04-restore-confirmation',
       describes:
-        'The two notifications a completed restore publishes: "Loaded '
-        + '"Tracker 1 (shared)" from Pancreatic endocrinogenesis '
-        + '(scVelo).cellucid-session beside yours." with Undo, and the '
-        + 'restore\'s progress entry, now titled "Loaded" and reading "Session '
-        + 'fully restored.".',
+        'The one notification a completed load leaves, titled "Loaded '
+        + '"Tracker 1 (shared)" beside yours" and reading "Session fully '
+        + 'restored.", with an Undo button.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -2309,8 +2680,8 @@ function buildAnnotationAndSessionScenarios() {
         // three otherwise identical runs it landed above or below the
         // restore's entry, so the stack — and the bytes — changed from run to
         // run, and its N is a timing of the capture host besides.
-        // `saveThenRestore` already waits for both notifications a completed
-        // restore publishes (the loaded tracker's and "Session fully
+        // `saveThenRestore` already waits for the one notice a completed
+        // restore publishes (`Loaded "…" beside yours`, "Session fully
         // restored.").
         { openSection: '#session-section' },
         saveThenRestore({ holdNotifications: true }),
@@ -2355,7 +2726,7 @@ function buildAnnotationAndSessionScenarios() {
       name: 'official-01-sample-state-applied',
       describes:
         'The whole application window shortly after the Pancreas built-in '
-        + 'sample was chosen, showing the embedding coloured by cell type in a '
+        + 'sample was chosen, showing the embedding colored by cell type in a '
         + '3-D orbit view on the Studio (light) background, with the sidebar '
         + 'beside it.',
       dataset: 'pancreas',
@@ -2446,6 +2817,7 @@ function buildAnnotationAndSessionScenarios() {
       id: 'sessions-refusal-different-dataset',
       topic: 'sessions_sharing',
       name: 'refusal-01-different-dataset',
+      requires: ['format-fixtures'],
       describes:
         'A notification titled "Loading failed" reading "Session file: This '
         + 'session was saved on a different dataset than the one that is open '
@@ -2498,10 +2870,10 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'community_annotation',
       name: 'state-repository-unreadable',
       describes:
-        'The whole application window with the Community Annotation panel back '
-        + 'in its disconnected state and a notification explaining that the '
-        + "user's role for the repository could not be determined and that the "
-        + 'annotation repo was disconnected.',
+        'The whole application window with the Community annotation section '
+        + 'back in its disconnected state and a notification explaining that '
+        + 'the user\'s role for the repository could not be determined and '
+        + 'that the annotation repo was disconnected.',
       dataset: 'pancreas',
       // The refusal is raised during startup — the mock pre-binds the
       // repository, so the role lookup runs before any step can — and it is
@@ -2558,15 +2930,6 @@ function buildAnnotationAndSessionScenarios() {
 // wrong cell type the first time the default camera moves; the scan asserts
 // the group it found instead, and fails loudly when no click reaches it.
 // ---------------------------------------------------------------------------
-
-/** Sidebar sections that are open on first load and are not analysis. */
-const NON_ANALYSIS_SECTIONS = Object.freeze([
-  '#session-section',
-  '#visualization-section',
-  '#compare-views-section',
-  '#coloring-filtering-section',
-  '#highlighted-cells-section',
-]);
 
 /**
  * Make `Page 1` out of the 262 `Ngn3 low EP` cells, exactly as a reader would.
@@ -2627,21 +2990,6 @@ async function stageNgn3LowEndocrineProgenitorStep(page) {
     'No Alt+click in the scan reached the 262-cell Ngn3 low EP group; the '
       + 'default camera or the sample changed.'
   );
-}
-
-/**
- * Leave the analysis section as the only open one, so a panel crop starts at
- * the top of the sidebar's scroller rather than halfway down it.
- *
- * @param {import('@playwright/test').Page} page
- */
-async function showOnlyAnalysisSection(page) {
-  await page.evaluate(sections => {
-    for (const selector of sections) {
-      document.querySelector(selector).open = false;
-    }
-    document.querySelector('#page-analysis-section').open = true;
-  }, NON_ANALYSIS_SECTIONS);
 }
 
 /**
@@ -2745,7 +3093,7 @@ function buildAnalysisScenarios() {
     { select: '#categorical-field', label: 'cell_type' },
     { waitForText: '#stats', text: 'Field: cell_type (category)' },
     { run: confirmNgn3LowEndocrineProgenitorPage },
-    { run: showOnlyAnalysisSection },
+    onlySections('#page-analysis-section'),
   ];
 
   // `cell_type` across both pages as a bar plot, auto-run, left with its
@@ -2844,7 +3192,7 @@ function buildAnalysisScenarios() {
     { run: page => openAnalysisMode(page, 'correlation') },
     chooseVariable('correlation', 'variableX', 'continuous', 'S_score'),
     chooseVariable('correlation', 'variableY', 'continuous', 'G2M_score'),
-    // Both pages, coloured by cell type: Colour by sits under More options.
+    // Both pages, colored by cell type: Color by sits under More options.
     { click: '#analysis-panel-correlation .chip[data-page-id="restof__page_1"]' },
     { run: async page => {
       const more = page.locator('#analysis-panel-correlation .disclosure-header', { hasText: 'More options' });
@@ -2904,7 +3252,7 @@ function buildAnalysisScenarios() {
       undefined,
       { timeout: 180_000 }
     ) },
-    { run: showOnlyAnalysisSection },
+    onlySections('#page-analysis-section'),
     { run: page => openAnalysisMode(page, 'composition') },
     { waitForStable: '#analysis-panel-composition select[name="cellTypes"]' },
     { select: '#analysis-panel-composition select[name="cellTypes"]', value: 'LVL1' },
@@ -2923,10 +3271,10 @@ function buildAnalysisScenarios() {
       describes:
         'The Detailed panel with Variable set to Categorical obs then '
         + 'cell_type, a Compare pages block with Page 1 and Rest of Page 1 '
-        + 'both selected, a Plot Type select reading Bar Plot under a pointer, '
-        + 'and a grouped bar plot of cell-type counts beneath it whose '
-        + 'horizontal axis carries two category names, Ductal and Delta, at '
-        + 'its two ends.',
+        + 'both selected, a Plot type select reading Bar plot under a '
+        + 'pointer, and a grouped bar plot of cell-type counts beneath it '
+        + 'whose horizontal axis carries two category names, Ductal and '
+        + 'Delta, at its two ends.',
       dataset: 'pancreas',
       steps: DETAILED_CATEGORICAL_RESULT,
       shot: { mode: 'region', selectors: ['#analysis-header-detailed', '#analysis-panel-detailed'], padding: 6 },
@@ -2941,7 +3289,7 @@ function buildAnalysisScenarios() {
       describes:
         'The sidebar result of a differential expression run: a small volcano '
         + 'plot with the genes up in Page 1 in red on the right, those down in '
-        + 'blue on the left and the rest grey, one of its gene labels shown, and '
+        + 'blue on the left and the rest gray, one of its gene labels shown, and '
         + 'the Expand button below it under the pointer.',
       dataset: 'pancreas',
       steps: DIFFERENTIAL_RESULT,
@@ -2966,12 +3314,13 @@ function buildAnalysisScenarios() {
       topic: 'analysis',
       name: 'de-volcano-expanded',
       describes:
-        'A large modal headed Differential expression: Page 1 vs Rest of Page '
-        + '1: a volcano plot with seven labelled genes top-left over a legend '
-        + 'reading Up (395), Down (698) and Not significant (2660), an Export row'
-        + ' of PNG, SVG and CSV buttons above the Plot options on the right, a '
-        + 'Summary statistics table bottom-left, and a Statistical analysis table'
-        + ' of the top genes bottom-right.',
+        'A large modal headed Differential expression: Page 1 vs Rest of '
+        + 'Page 1: a volcano plot with seven labeled genes stacked above the '
+        + 'up-regulated points ("7 of 15 gene labels shown") over a legend '
+        + 'reading Up (395), Down (698) and Not significant (2660), an Export '
+        + 'row of PNG, SVG and CSV buttons above the Plot options on the '
+        + 'right, a Summary statistics table bottom-left, and a Statistical '
+        + 'analysis table of the top genes bottom-right.',
       dataset: 'pancreas',
       steps: [
         ...DIFFERENTIAL_RESULT,
@@ -2987,9 +3336,9 @@ function buildAnalysisScenarios() {
       name: 'marker-genes-ranked',
       describes:
         'The Marker genes panel grouped by cell_type, with its Run button, '
-        + 'and beneath it the result header, the Show choice (List, Heatmap, '
-        + 'Clustered) on Heatmap, and a heatmap of eight cell-type rows '
-        + 'against their top marker genes with a Z-score colour bar.',
+        + 'and beneath it the result line, the List, Heatmap and Clustered '
+        + 'choice on Heatmap, and a heatmap of eight cell-type rows against '
+        + 'their top marker genes with a z-score color bar.',
       dataset: 'pancreas',
       steps: markerGenes('heatmap'),
       shot: { mode: 'region', selectors: ['#analysis-header-genesPanel', '#analysis-panel-genesPanel'], padding: 6 },
@@ -3002,7 +3351,7 @@ function buildAnalysisScenarios() {
       name: 'marker-genes-clustered',
       describes:
         'A heatmap with cell-type groups down one axis and gene names across '
-        + 'the other, dendrograms attached to both axes, and a colour bar for '
+        + 'the other, dendrograms attached to both axes, and a color bar for '
         + 'the Z-scored expression.',
       dataset: 'pancreas',
       steps: [
@@ -3060,12 +3409,12 @@ function buildAnalysisScenarios() {
       topic: 'analysis',
       name: 'detailed-expanded',
       describes:
-        'The expanded Detailed modal headed COMPARING: CELL_TYPE with a '
+        'The expanded Detailed modal headed Comparing: cell_type with a '
         + 'grouped bar plot top-left whose horizontal axis prints five of the '
-        + 'eight category names, an Export row and PLOT OPTIONS column on the '
-        + 'right, a SUMMARY STATISTICS table bottom-left, and a STATISTICAL '
-        + 'ANALYSIS panel bottom-right holding a chi-squared card reading N/A, '
-        + 'with a pointer on the CSV button.',
+        + 'eight category names, an Export row and Plot options column on the '
+        + 'right, a Summary statistics table bottom-left, and a Statistical '
+        + 'analysis panel bottom-right holding a chi-squared card reading '
+        + 'N/A, with a pointer on the CSV button.',
       dataset: 'pancreas',
       steps: [
         ...DETAILED_CATEGORICAL_RESULT,
@@ -3086,9 +3435,9 @@ function buildAnalysisScenarios() {
       name: 'autorun-vs-run-a',
       describes:
         'The Detailed panel holding a finished result — Variable set to '
-        + 'Categorical obs then cell_type, two pages selected, Bar Plot chosen '
-        + 'and a grouped bar plot drawn beneath — with no Run button anywhere '
-        + 'in the panel.',
+        + 'Categorical obs then cell_type, two pages selected, Bar plot '
+        + 'chosen and a grouped bar plot drawn beneath — with no Run button '
+        + 'anywhere in the panel.',
       dataset: 'pancreas',
       steps: DETAILED_CATEGORICAL_RESULT,
       shot: { mode: 'region', selectors: ['#analysis-header-detailed', '#analysis-panel-detailed'], padding: 6 },
@@ -3101,8 +3450,8 @@ function buildAnalysisScenarios() {
       name: 'volcano-threshold-a',
       describes:
         'A volcano plot at a log2 fold-change threshold of 0.5, with broad red '
-        + 'and blue clouds of coloured points either side of a narrow grey '
-        + 'band, and a legend below the axis title counting each colour.',
+        + 'and blue clouds of colored points either side of a narrow gray '
+        + 'band, and a legend below the axis title counting each color.',
       dataset: 'pancreas',
       steps: [
         ...DIFFERENTIAL_RESULT,
@@ -3117,8 +3466,8 @@ function buildAnalysisScenarios() {
       name: 'volcano-threshold-b',
       describes:
         'The same volcano plot at a log2 fold-change threshold of 3, with the '
-        + 'threshold lines pushed far apart and almost every point now grey, '
-        + 'and a legend below the axis title counting each colour.',
+        + 'threshold lines pushed far apart and almost every point now gray, '
+        + 'and a legend below the axis title counting each color.',
       dataset: 'pancreas',
       steps: [
         ...DIFFERENTIAL_RESULT,
@@ -3166,7 +3515,7 @@ function buildAnalysisScenarios() {
       topic: 'analysis',
       name: 'rest-of-page-selector',
       describes:
-        'The page chips of the Detailed panel: Page 1 with its colour swatch '
+        'The page chips of the Detailed panel: Page 1 with its color swatch '
         + 'and the count 262, and Rest of Page 1 with its own swatch and count, '
         + 'both selected, with the pointer on Rest of Page 1.',
       dataset: 'pancreas',
@@ -3202,11 +3551,10 @@ function buildAnalysisScenarios() {
       id: 'analysis-floating-window',
       topic: 'analysis',
       name: 'floating-analysis-window',
-      setup: pinHighlightGlow,
       describes:
         'The whole Cellucid window with the Correlation analysis copied into a '
         + 'floating window over the point cloud: its own header with copy, '
-        + 'maximise, close and collapse buttons, and its own copy of the '
+        + 'maximize, close and collapse buttons, and its own copy of the '
         + 'Correlation form.',
       dataset: 'pancreas',
       steps: [
@@ -3254,7 +3602,7 @@ function buildAnalysisScenarios() {
         { waitForStable: '#categorical-field' },
         { select: '#categorical-field', label: 'cell_type' },
         { waitForText: '#stats', text: 'Field: cell_type (category)' },
-        { run: showOnlyAnalysisSection },
+        onlySections('#page-analysis-section'),
         { run: page => openAnalysisMode(page, 'simple') },
         { wait: 1500 },
         { run: page => scrollAnalysisModeToTop(page, 'simple') },
@@ -3270,7 +3618,7 @@ function buildAnalysisScenarios() {
       describes:
         'The Correlation form with Page 1 and Rest of Page 1 selected, X axis '
         + 'S_score and Y axis G2M_score (Continuous obs), More options open on '
-        + 'Display with Colour by cell_type, and the Run button.',
+        + 'Display with Color by cell_type, and the Run button.',
       dataset: 'pancreas',
       steps: CORRELATION_RESULT,
       shot: {
@@ -3325,10 +3673,11 @@ function buildAnalysisScenarios() {
       name: 'dotplot-result',
       describes:
         'The Dot plot form with Group by clusters and one gene set, Set 1, '
-        + 'holding eight pancreatic markers as chips (Krt19, Sox9, Neurog3, Fev, '
-        + 'Ins1, Gcg, Sst, Ghrl), the box to add or paste more, Clear, Add set '
-        + 'and Import, More options, the Run button, and under it the line the '
-        + 'result opens with: 8 genes, 8 groups of clusters and the cell count.',
+        + 'holding eight pancreatic markers as chips (Krt19, Sox9, Neurog3, '
+        + 'Fev, Ins1, Gcg, Sst, Ghrl), the box to add or paste more, Clear, '
+        + 'Add set, Import and Export, More options, the Run button, and '
+        + 'under it the line the result opens with: 8 genes, 8 groups of '
+        + 'clusters and the cell count.',
       dataset: 'pancreas',
       steps: DOTPLOT_RESULT,
       shot: {
@@ -3343,8 +3692,8 @@ function buildAnalysisScenarios() {
       name: 'dotplot-expanded',
       describes:
         'The expanded Dot plot of the eight pancreatic markers across the '
-        + 'eight clusters: one row per cluster, dot colour the mean expression '
-        + 'and dot size the fraction of cells expressing it, with its colour '
+        + 'eight clusters: one row per cluster, dot color the mean expression '
+        + 'and dot size the fraction of cells expressing it, with its color '
         + 'bar and size legend, Export, and a summary table below.',
       dataset: 'pancreas',
       steps: [...DOTPLOT_RESULT, { run: page => expandAnalysisResult(page, 'dotplot') }],
@@ -3408,22 +3757,28 @@ function buildAnalysisScenarios() {
       settle: { attempts: 6, gapMs: 300 },
     },
     {
-      id: 'analysis-de-cancelled',
+      id: 'analysis-de-canceled',
       topic: 'analysis',
-      name: 'de-cancelled',
+      name: 'de-canceled',
       describes:
         'The Differential expression panel after Cancel: the Run button '
-        + 'enabled again, and under it a box saying the run was cancelled, '
+        + 'enabled again, and under it a box saying the run was canceled, '
         + 'after how long, that nothing was kept, and a Run again button.',
       dataset: 'pancreas',
       query: async () => ({ sampleCatalog: `${await gatedSampleCatalog()}/` }),
       steps: [
         ...DIFFERENTIAL_FORM,
         { run: () => { SAMPLE_CATALOG_GATE.hold = true; } },
+        // "Canceled after 1.5 s": the page's clock is held from Run to Cancel
+        // and moved on by exactly that, so the image prints the same duration
+        // however fast the host ran the steps.
+        { clock: 'hold' },
         { run: page => page.evaluate(() => document.querySelector('#analysis-panel-differential .analysis-run-btn').click()) },
         { waitForText: '#analysis-panel-differential .job-status', text: 'genes' },
         { wait: 1500 },
+        { clock: 'advance', ms: 1500 },
         { click: '#analysis-panel-differential .job-status-action' },
+        { clock: 'release' },
         { waitForText: '#analysis-panel-differential .job-status', text: 'Run again' },
         { run: page => scrollAnalysisModeToTop(page, 'differential') },
       ],
@@ -3456,9 +3811,10 @@ function buildAnalysisScenarios() {
       topic: 'analysis',
       name: 'life-02-two-pages-ready',
       describes:
-        'The same Highlighting panel after Confirm: Page 1 holds 262 cells, and'
-        + ' the list below it reads 262 cells highlighted with Clear, above the '
-        + 'confirmed group with its checkbox and remove button.',
+        'The same Highlighting panel after Confirm: Page 1 holds 262 cells, '
+        + 'and the list below it reads 262 cells highlighted with CSV, .h5ad '
+        + 'and Clear, above the confirmed group, Ngn3 low EP with its count '
+        + '262, its checkbox and remove button.',
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
@@ -3541,10 +3897,13 @@ function buildAnalysisScenarios() {
  * Set the expanded volcano's **Min |log2FC|** filter (the Differential
  * expression display option `minLog2FC`, shown in the expanded view's options).
  *
- * The field commits on `change`, so both `input` and `change` are sent. The
- * wait is on the counts the legend prints rather than on the field's own
- * value, because the field holds the number that was asked for whether or not
- * the plot ever redrew.
+ * The field is a decimal box (`createDecimalInput` in the web app's
+ * `ui/components/controls.js`): a text field that reads a point or a comma
+ * the same in every locale, so it is typed into as a person types, and it
+ * commits on `change`, which a person's leaving the field sends. The wait is
+ * on the counts the legend prints rather than on the field's own value,
+ * because the field holds the number that was asked for whether or not the
+ * plot ever redrew.
  *
  * @param {import('@playwright/test').Page} page
  * @param {number} threshold
@@ -3554,15 +3913,12 @@ async function setVolcanoFoldChangeThreshold(page, threshold) {
     [...document.querySelectorAll('.analysis-modal-plot .legend text')]
       .map(node => node.textContent).join('|')
   ));
-  await page.evaluate(value => {
-    const field = document.querySelector('.analysis-modal-options input[name="minLog2FC"]');
-    if (field === null) {
-      throw new Error('The expanded volcano has no Min |log2FC| field.');
-    }
-    field.valueAsNumber = value;
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-    field.dispatchEvent(new Event('change', { bubbles: true }));
-  }, threshold);
+  const field = page.locator('.analysis-modal-options input[name="minLog2FC"]');
+  if (await field.count() !== 1) {
+    throw new Error('The expanded volcano has no Min |log2FC| field.');
+  }
+  await field.fill(String(threshold));
+  await field.dispatchEvent('change');
   await page.waitForFunction(previous => (
     [...document.querySelectorAll('.analysis-modal-plot .legend text')]
       .map(node => node.textContent).join('|') !== previous
@@ -3737,9 +4093,9 @@ function buildDataLoadingRefusalScenarios() {
       name: 'best-guess-show-checklist',
       describes:
         'The Data mapping group after Show on the best-guess notification: '
-        + 'Embeddings open and summarised as 1 on · PCA 2D · guessed, its one '
+        + 'Embeddings open and summarized as 1 on · PCA 2D · guessed, its one '
         + 'row, PCA in 2D, on and marked Default and guessed, above the collapsed'
-        + ' Genes, Neighbour graph, Latent space and Vector fields groups and the'
+        + ' Genes, Neighbor graph, Latent space and Vector fields groups and the'
         + ' Revert and Apply buttons.',
       dataset: 'pancreas',
       steps: [
@@ -3921,6 +4277,7 @@ function buildDataLinkScenarios() {
       id: 'loading-dataset-box-details',
       topic: 'data_loading',
       name: 'dataset-box-details',
+      requires: ['format-fixtures'],
       describes:
         'The Dataset box after an .h5ad file was opened from a web address: its '
         + 'name, the cells and genes line, "h5ad file" and the host, how much '
@@ -3965,10 +4322,10 @@ function buildDataLinkScenarios() {
       name: 'connect-data-link',
       describes:
         'The Open data group connected to a dataset catalog folder: the '
-        + 'dropdown labelled "Dataset from" the catalog\'s host and holding its '
-        + 'datasets, Open…, and the Link or server bar holding the address, '
-        + 'with one line under it reading Link, the address and a compact '
-        + 'Disconnect button.',
+        + 'dropdown labeled "Dataset from" the catalog\'s host and naming the '
+        + 'open dataset, My datasets, Open…, and the Link or server bar '
+        + 'holding the address, with one line under it reading Link, the host '
+        + 'and a compact Disconnect button.',
       dataset: 'pancreas',
       query: urls => ({ data: `${urls.catalogOrigin}/` }),
       steps: [
@@ -3988,6 +4345,7 @@ function buildDataLinkScenarios() {
       id: 'loading-address-server-connected',
       topic: 'data_loading',
       name: 'connect-remote-server',
+      requires: ['cellucid-serve'],
       describes:
         'The Link or server bar holding the address of a cellucid serve '
         + 'server on this computer, with one line under it reading Server, the '
@@ -4013,7 +4371,7 @@ function buildDataLinkScenarios() {
       topic: 'data_loading',
       name: 'fail-data-link-unrecognised',
       describes:
-        'A Cellucid notification reading "Cellucid does not recognise "not a '
+        'A Cellucid notification reading "Cellucid does not recognize "not a '
         + 'link"", followed by the kinds of link it opens.',
       dataset: 'pancreas',
       steps: [
@@ -4022,7 +4380,7 @@ function buildDataLinkScenarios() {
         NOTIFICATIONS_DRAINED,
         { fill: '#data-address', value: 'not a link' },
         { click: '#data-address-open-btn' },
-        { waitForText: '#notification-center', text: 'does not recognise' },
+        { waitForText: '#notification-center', text: 'does not recognize' },
       ],
       shot: { mode: 'element', selector: '#notification-center', padding: 10 },
       settle: SETTLE,
@@ -4048,8 +4406,9 @@ async function serveSampleStore(storeName) {
   const here = dirname(fileURLToPath(import.meta.url));
   const datasets = process.env.CELLUCID_DATASETS_REPO
     ?? resolve(here, '..', '..', '..', '..', 'cellucid-datasets');
+  const { cellucid } = requirement('cellucid-serve');
   const port = await freePort(`cellucid serve ${storeName}`);
-  const child = spawn(process.env.CELLUCID_CLI ?? 'cellucid', [
+  const child = spawn(cellucid, [
     'serve', join(datasets, 'anndata', storeName),
     '--host', '127.0.0.1', '--port', String(port),
     '--no-browser', '--no-web-ui', '--quiet',
@@ -4194,63 +4553,8 @@ async function paintGesturePointer(page, point, rings = []) {
   });
 }
 
-/**
- * Pin the highlight glow, the one animation a highlight figure cannot settle.
- *
- * Highlighted and preview cells are drawn with a glow that pulses on the
- * shader uniform `u_time` (`0.5 + 0.5 * sin(u_time * 4.0)` in the web app's
- * `high-perf-shaders.js`), fed from `performance.now()` minus the moment the
- * highlight renderer was built. No two frames agree, so the settle loop never
- * converges, and a frame-pinned capture is no better: the phase depends on
- * how long startup took on the capture host. So the two uniforms the pulse
- * is drawn from are held at time zero: `u_time` at 0 and `u_glow` at its value
- * there, `0.5 + 0.5 · sin(0)` = 0.5 (`highlightGlowAt` in the web app's
- * `high-perf-shaders.js`) — the picture the renderer itself draws for a still
- * highlight style. It is the same kind of intervention as the seeded
- * `Math.random`: the clock the app reads for everything else, its timers, and
- * every other uniform are untouched.
- *
- * @param {{context: import('@playwright/test').BrowserContext}} options
- */
-function pinHighlightGlow({ context }) {
-  return context.addInitScript(pinShaderTimeInPage);
-}
-
-/** The page-side half of `pinHighlightGlow`; serialised, closes over nothing. */
-function pinShaderTimeInPage() {
-  const timeLocations = new WeakSet();
-  const glowLocations = new WeakSet();
-  for (const Context of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
-    if (Context === undefined) continue;
-    const getUniformLocation = Context.prototype.getUniformLocation;
-    const uniform1f = Context.prototype.uniform1f;
-    Context.prototype.getUniformLocation = function (program, name) {
-      const location = getUniformLocation.call(this, program, name);
-      if (location !== null && name === 'u_time') timeLocations.add(location);
-      if (location !== null && name === 'u_glow') glowLocations.add(location);
-      return location;
-    };
-    Context.prototype.uniform1f = function (location, value) {
-      if (timeLocations.has(location)) return uniform1f.call(this, location, 0);
-      if (glowLocations.has(location)) return uniform1f.call(this, location, 0.5);
-      return uniform1f.call(this, location, value);
-    };
-  }
-}
-
 /** @returns {Array<Object>} */
 function buildHighlightingScenarios() {
-  // Open on first load and not the subject; collapsed so the panel fits.
-  // Declared here, not beside the helpers: `SCENARIOS` calls this builder
-  // while the module is still initialising, before a later top-level
-  // `const` exists.
-  const NON_HIGHLIGHT_SECTIONS = [
-    '#session-section',
-    '#visualization-section',
-    '#compare-views-section',
-    '#coloring-filtering-section',
-    '#page-analysis-section',
-  ];
   const PANEL = { mode: 'element', selector: '#highlighted-cells-section', padding: 6 };
   const WINDOW = { mode: 'window' };
   const settle = { attempts: 20, gapMs: 220 };
@@ -4259,14 +4563,17 @@ function buildHighlightingScenarios() {
   const LASSO_END = highlightLassoPath(0.8).at(-1);
   const BETA_CELL = { x: 1060, y: 400 };
   const EMPTY_SPACE = { x: 860, y: 250 };
-  const SEED = { x: 535, y: 440 };
+  // A point on a drawn cell of the left lobe: a press between cells picks
+  // nothing (the lobe is sparse at the size cells are drawn), and the press
+  // then starts no selection gesture at all.
+  const SEED = { x: 545, y: 440 };
   // Proximity drags outward and KNN drags up, by the same 112 px, from the
   // same seed cell, so the two figures compare like with like.
-  const PROXIMITY_END = { x: 635, y: 490 };
-  const KNN_END = { x: 535, y: 328 };
+  const PROXIMITY_END = { x: 645, y: 490 };
+  const KNN_END = { x: 545, y: 328 };
 
   /**
-   * Pancreas, flat 2D view in Planar navigation, the given colouring, and
+   * Pancreas, flat 2D view in Planar navigation, the given coloring, and
    * every other open section collapsed so Highlighting sits whole in the
    * window. Showing UMAP · 2D moves the view to Planar; waiting for that
    * and then for the notification center to drain is what makes the view
@@ -4286,7 +4593,8 @@ function buildHighlightingScenarios() {
     { run: page => page.waitForFunction(
       () => document.querySelector('#navigation-mode')?.value === 'planar'
     ) },
-    ...NON_HIGHLIGHT_SECTIONS.map(selector => ({ closeSection: selector })),
+    // Every other section collapsed, so the panel fits.
+    onlySections('#highlighted-cells-section'),
     NOTIFICATIONS_DRAINED,
   ];
   const READY = ready2d('cell_type');
@@ -4323,7 +4631,6 @@ function buildHighlightingScenarios() {
         + 'empty list reading No cells highlighted; and the collapsed Create '
         + 'categorical.',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [...READY, { scrollIntoView: '#highlighted-cells-section' }],
       shot: PANEL,
       cursor: { on: '#highlight-mode-lasso', at: 'center', state: 'hover' },
@@ -4338,9 +4645,8 @@ function buildHighlightingScenarios() {
         'The 2D planar Pancreas embedding mid-lasso: Alt is held, the pointer '
         + 'is pressed at the end of a dotted path drawn most of the way round the'
         + ' upper part of the left lobe, and the cells the path already encloses '
-        + 'are drawn in the highlight colour while the panel shows no step yet.',
+        + 'are drawn in the highlight color while the panel shows no step yet.',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [
         ...READY,
         { click: '#highlight-mode-lasso' },
@@ -4363,7 +4669,6 @@ function buildHighlightingScenarios() {
         + 'tab still reads Page 1 (0) and the list still reads "No cells '
         + 'highlighted".',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [...LASSO_RELEASED, { scrollIntoView: '#highlighted-cells-section' }],
       shot: PANEL,
       cursor: { on: '#lasso-confirm-btn', at: 'right', dx: -12, state: 'hover' },
@@ -4375,12 +4680,12 @@ function buildHighlightingScenarios() {
       topic: 'highlighting_selection',
       name: '03-confirm-lasso-group',
       describes:
-        'The Highlighting panel after Confirm: the page tab reads Page 1 826, '
-        + 'and the ringed group list shows the summary "826 cells highlighted", a '
-        + 'Clear button, and one group row labelled "Lasso (826 cells) (826)" '
-        + 'with a checkbox and a remove control.',
+        'The Highlighting panel after Confirm: the page tab reads Page 1 '
+        + '826, and the ringed group list shows the summary "826 cells '
+        + 'highlighted", CSV, .h5ad and Clear buttons, and one group row '
+        + 'labeled "Lasso" with a checkbox, its count 826 and a remove '
+        + 'control.',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [...LASSO_CONFIRMED, { scrollIntoView: '#highlighted-cells-section' }],
       shot: PANEL,
       rings: [{ on: '#highlighted-groups', label: '3' }],
@@ -4393,10 +4698,9 @@ function buildHighlightingScenarios() {
       describes:
         'The whole window after confirming the lasso group: the 826 enclosed '
         + 'cells in the upper part of the left lobe are drawn in the highlight '
-        + 'colour, and the Highlighting panel reports 826 cells highlighted with '
+        + 'color, and the Highlighting panel reports 826 cells highlighted with '
         + 'one Lasso group.',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: LASSO_CONFIRMED,
       shot: WINDOW,
       settle,
@@ -4407,13 +4711,12 @@ function buildHighlightingScenarios() {
       name: 'select-category-by-click',
       describes:
         'Annotation selection after Alt+click on a cell of the green Beta arm: '
-        + 'all 591 Beta cells are drawn in the highlight colour, a tooltip by the'
+        + 'all 591 Beta cells are drawn in the highlight color, a tooltip by the'
         + ' pointer names Beta, 591 cells and cell_type, and the panel reads Step'
         + ' 1: 591 cells with the help line "Alt to replace, Shift+Alt to add, '
         + 'Ctrl+Alt to subtract" above the Confirm, undo, redo and Cancel '
         + 'controls.',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [
         ...ANNOTATION_CLICKED,
         { run: page => paintGesturePointer(page, BETA_CELL) },
@@ -4427,11 +4730,10 @@ function buildHighlightingScenarios() {
       name: 'drag-proximity-radius',
       describes:
         'Proximity drag mid-gesture on the 2D embedding: a dashed circle '
-        + 'centred on a dot at the seed cell in the left lobe, the cells inside '
-        + 'it drawn in the highlight colour, and the pointer pressed on the '
-        + 'circle\'s edge.',
+        + 'centered on a dot at the seed cell in the left lobe, the cells '
+        + 'inside it drawn in the highlight color, and the pointer pressed '
+        + 'inside the circle, below and to the right of the seed.',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [
         ...READY,
         { click: '#highlight-mode-proximity' },
@@ -4452,16 +4754,15 @@ function buildHighlightingScenarios() {
       name: 'drag-knn-degree',
       describes:
         'KNN drag mid-gesture from the same seed cell, dragged upward by the '
-        + 'same distance: a small dashed circle labelled 3° around the seed, and '
+        + 'same distance: a small dashed circle labeled 3° around the seed, and '
         + 'the highlighted cells spreading through the left lobe along the '
-        + 'neighbour graph rather than filling a disc, with the pointer pressed '
+        + 'neighbor graph rather than filling a disc, with the pointer pressed '
         + 'above the seed.',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [
         ...READY,
         { click: '#highlight-mode-knn' },
-        // Entering KNN mode loads the neighbour graph if it is not loaded yet,
+        // Entering KNN mode loads the neighbor graph if it is not loaded yet,
         // under a "Loading neighbor graph" notification, and a press made
         // before it lands only starts that load. Draining the notification
         // center waits for the load (and its completion notice) to finish.
@@ -4482,14 +4783,13 @@ function buildHighlightingScenarios() {
       topic: 'highlighting_selection',
       name: 'compare-highlight-pages',
       describes:
-        'The Highlighting panel with two page tabs ringed, their names '
-        + 'shortened — Page 1 with a blue swatch carrying 826, and the active '
-        + 'Page 2 with a red swatch carrying 267, each with a combine (⋈) and a '
-        + 'delete (×) control — the list reading 267 cells highlighted with one '
-        + 'Proximity (267 cells) (267) group, and the pointer on the button that '
-        + 'adds another page.',
+        'The Highlighting panel with two page tabs ringed — Page 1 with a '
+        + 'blue swatch carrying 826, and the active Page 2 with a red swatch '
+        + 'carrying 267, each with a combine (⋈) and a delete (×) control — '
+        + 'the list reading 267 cells highlighted above CSV, .h5ad and Clear '
+        + 'buttons and one group row, Proximity, with its count 267, and the '
+        + 'pointer on the button that adds another page.',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [
         ...LASSO_CONFIRMED,
         { click: '#add-highlight-page' },
@@ -4519,11 +4819,10 @@ function buildHighlightingScenarios() {
       describes:
         'Two 3D panels of the same dataset side by side with the sidebar '
         + 'closed, each under a title chip (1 · UMAP 3D · cell_type, 2 · UMAP 3D '
-        + '· cell_type): the left panel at the default close-up camera, the right'
+        + '· cell_type): the left panel at its default camera, the right'
         + ' panel zoomed out and rotated; the cells confirmed by one lasso drawn '
-        + 'in the left panel are drawn in the highlight colour in both.',
+        + 'in the left panel are drawn in the highlight color in both.',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [
         PANCREAS_READY,
         { waitForStable: '#categorical-field' },
@@ -4571,11 +4870,11 @@ function buildHighlightingScenarios() {
             { x: 180, y: 515 }, { x: 60, y: 430 }, { x: 50, y: 370 },
           ], { release: true }),
         },
-        readout('Step 1: 1,204 cells'),
+        readout('Step 1: 1,265 cells'),
         { click: '#sidebar-toggle' },
         { waitForText: '#sidebar-toggle', text: '✕' },
         { click: '#lasso-confirm-btn' },
-        { waitForText: '#highlight-count', text: '1,204 cells highlighted' },
+        { waitForText: '#highlight-count', text: '1,265 cells highlighted' },
         { click: '#sidebar-toggle' },
         { waitForText: '#sidebar-toggle', text: '☰' },
         { run: page => page.mouse.move(720, 990) },
@@ -4596,7 +4895,6 @@ function buildHighlightingScenarios() {
         + 'size to make cells easier to hit: only the cells the viewer is '
         + 'currently drawing can be clicked."',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [
         ...READY,
         { click: '#highlight-mode-proximity' },
@@ -4617,11 +4915,10 @@ function buildHighlightingScenarios() {
       name: 'read-no-active-field-notice',
       describes:
         'The Highlighting panel with the Annotation tool chosen and no field '
-        + 'coloured, and the Selection (i) tip open, its first line ringed: '
+        + 'colored, and the Selection (i) tip open, its first line ringed: '
         + '"Color by a field first (Coloring & filtering), then Alt+click a '
         + 'cell."',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [
         ...ready2d('None'),
         { scrollIntoView: '#highlighted-cells-section' },
@@ -4642,7 +4939,6 @@ function buildHighlightingScenarios() {
         + '"Alt to replace, Shift+Alt to add, Ctrl+Alt to subtract" above '
         + 'Confirm, undo, redo and Cancel.',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [...ANNOTATION_CLICKED, { scrollIntoView: '#highlighted-cells-section' }],
       shot: PANEL,
       rings: [{ on: '#highlight-mode-description', label: '1' }],
@@ -4653,11 +4949,11 @@ function buildHighlightingScenarios() {
       topic: 'highlighting_selection',
       name: 'highlighting-selected-page',
       describes:
-        'The Highlighting panel with one page renamed "Left lobe" carrying 826 '
-        + 'cells, the summary "826 cells highlighted", and one group row labelled '
-        + '"Lasso (826 cells) (826)".',
+        'The Highlighting panel with one page renamed "Left lobe" carrying '
+        + '826 cells, the summary "826 cells highlighted" above CSV, .h5ad '
+        + 'and Clear buttons, and one group row labeled "Lasso" with its '
+        + 'count 826.',
       dataset: 'pancreas',
-      setup: pinHighlightGlow,
       steps: [
         ...LASSO_CONFIRMED,
         // Rename by double-clicking the tab name, as the UI page documents.
@@ -4685,19 +4981,20 @@ function buildHighlightingScenarios() {
 // canvas the sidebar does not cover — as equal cells (`resolvePresentedLayout`
 // in the web app's `rendering/viewer/presented-view-layout.js`). These figures
 // exist to show that layout, so each one asserts it before the shutter rather
-// than trusting it: every panel's title chip is centred on the panel it
-// labels, so the chips' centres pin down where the panels are.
+// than trusting it: every panel's title chip is centered on the panel it
+// labels, so the chips' centers pin down where the panels are.
 // ---------------------------------------------------------------------------
 
 /** @returns {Array<Object>} */
 function buildMultiviewScenarios() {
   const settle = { attempts: 20, gapMs: 220 };
 
-  /** Colour the selected view and wait for the stats line to say so. */
-  const colourBy = (select, field, kind) => [
+  /** Color the selected view and wait for the stats line to say so. */
+  const colorBy = (select, field, kind) => [
     { waitForStable: select },
     { select, label: field },
     { waitForText: '#stats', text: `Field: ${field} (${kind})` },
+    READS_SETTLED,
   ];
 
   /**
@@ -4772,8 +5069,8 @@ function buildMultiviewScenarios() {
       describes:
         'The whole window in Grid compare with the sidebar open: two equal '
         + 'panels to the right of the sidebar show the Pancreas 3D embedding from'
-        + ' the same linked camera — view 1 coloured by cell_type, view 2 '
-        + 'recoloured by S_score on a Viridis scale — each under a title chip '
+        + ' the same linked camera — view 1 colored by cell_type, view 2 '
+        + 'recolored by S_score on a Viridis scale — each under a title chip '
         + 'naming its embedding and field. The sidebar shows Compare views with '
         + 'the two view rows, each marked linked and Orbit, View 2 shows UMAP · '
         + '3D, Keep view, Link cameras, Layout Grid compare and Clear, and '
@@ -4781,10 +5078,10 @@ function buildMultiviewScenarios() {
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
-        ...colourBy('#categorical-field', 'cell_type', 'category'),
+        ...colorBy('#categorical-field', 'cell_type', 'category'),
         ...KEEP_VIEW,
-        // The snapshot is the selected view, so this recolours it alone.
-        ...colourBy('#continuous-field', 'S_score', 'continuous'),
+        // The snapshot is the selected view, so this recolors it alone.
+        ...colorBy('#continuous-field', 'S_score', 'continuous'),
         { waitForText: '#view-title-layer .view-title-chip.active', text: 'S_score' },
         ZOOM_OUT,
         TWO_EQUAL_PANELS_IN_PRESENTED_AREA,
@@ -4801,7 +5098,7 @@ function buildMultiviewScenarios() {
       describes:
         'The whole window in the dark theme on the Grid (dark) background, in '
         + 'Grid compare with the sidebar open: two equal panels show the Pancreas'
-        + ' 3D embedding coloured by cell_type from the same linked camera, each '
+        + ' 3D embedding colored by cell_type from the same linked camera, each '
         + 'under a title chip. The sidebar shows Visualization with Theme Dark '
         + 'and Background Grid (dark), and Compare views below it with the two '
         + 'view rows.',
@@ -4813,7 +5110,7 @@ function buildMultiviewScenarios() {
         { select: '#theme-select', value: 'dark' },
         { run: page => page.waitForFunction(() => document.documentElement.dataset.theme === 'dark') },
         { select: '#background-select', value: 'grid-dark' },
-        ...colourBy('#categorical-field', 'cell_type', 'category'),
+        ...colorBy('#categorical-field', 'cell_type', 'category'),
         ...KEEP_VIEW,
         ZOOM_OUT,
         TWO_EQUAL_PANELS_IN_PRESENTED_AREA,
@@ -4830,19 +5127,19 @@ function buildMultiviewScenarios() {
       describes:
         'Two equal panels filling the whole window with the sidebar closed (the'
         + ' ☰ button at the top left), both showing the Pancreas 3D embedding '
-        + 'coloured by cell_type from the same linked camera, each under a title '
-        + 'chip, and in both the neighbour-graph edges, drawn at line width 2.0, '
-        + 'form a grey web between the cells.',
+        + 'colored by cell_type from the same linked camera, each under a title '
+        + 'chip, and in both the neighbor-graph edges, drawn at line width 2.0, '
+        + 'form a gray web between the cells.',
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
-        ...colourBy('#categorical-field', 'cell_type', 'category'),
+        ...colorBy('#categorical-field', 'cell_type', 'category'),
         ...KEEP_VIEW,
         // Turned on after the snapshot exists and while it is the selected
         // view, so edges in the live panel show the setting reaching it too.
         { openSection: '#visualization-section' },
         { run: page => page.check('#toggle-connectivity') },
-        { waitForText: '#connectivity-info', text: '33k total · 33k visible · 33k shown' },
+        { waitForText: '#connectivity-info', text: '33.5K total · 33.5K visible · 33.5K shown' },
         // Thicker than the 1.0 default so the edges survive the page's
         // downscale; the alt text names the width.
         {
@@ -4919,10 +5216,11 @@ function buildHomeScenarios() {
     { select: '#background-select', value: background },
   ];
 
-  const colourBy = (select, field, kind) => [
+  const colorBy = (select, field, kind) => [
     { waitForStable: select },
     { select, label: field },
     { waitForText: '#stats', text: `Field: ${field} (${kind})` },
+    READS_SETTLED,
   ];
 
   /** Only these accordion sections open, the first at the top of the sidebar. */
@@ -4997,7 +5295,7 @@ function buildHomeScenarios() {
     describes:
       `Cellucid in the ${variant.theme} theme on the ${variant.backdropName} `
       + 'backdrop: a 3D UMAP of the developing human immune system atlas '
-      + '(Suo), all 561,947 cells coloured by cell type, beside the Coloring '
+      + '(Suo), all 561,947 cells colored by cell type, beside the Coloring '
       + 'and filtering panel, whose legend lists each cell type with its '
       + 'number of cells.',
     dataset: 'suo',
@@ -5005,7 +5303,7 @@ function buildHomeScenarios() {
     steps: [
       SUO_READY,
       ...look(variant),
-      ...colourBy('#categorical-field', 'cell_type', 'category'),
+      ...colorBy('#categorical-field', 'cell_type', 'category'),
       onlySections('#coloring-filtering-section', '#highlighted-cells-section'),
       TURN_AND_CLOSER,
       NOTIFICATIONS_DRAINED,
@@ -5035,11 +5333,11 @@ function buildHomeScenarios() {
       key: 'genes',
       dataset: 'pancreas',
       describes: variant =>
-        `The Pancreas 2D UMAP in the ${variant.theme} theme, coloured by `
-        + 'expression of the gene Ttr on a log colour scale (Viridis): '
+        `The Pancreas 2D UMAP in the ${variant.theme} theme, colored by `
+        + 'expression of the gene Ttr on a log color scale (Viridis): '
         + 'brightest in the endocrine cells on the right, a darker gradient '
-        + 'along the trajectory, and pale grey for the few cells with none; '
-        + 'the colour bar is open in the sidebar.',
+        + 'along the trajectory, and pale gray for the few cells with none; '
+        + 'the color bar is open in the sidebar.',
       steps: variant => [
         PANCREAS_READY,
         ...look(variant),
@@ -5076,8 +5374,8 @@ function buildHomeScenarios() {
       steps: variant => [
         PANCREAS_READY,
         ...look(variant),
-        ...colourBy('#categorical-field', 'cell_type', 'category'),
-        { run: showOnlyAnalysisSection },
+        ...colorBy('#categorical-field', 'cell_type', 'category'),
+        onlySections('#page-analysis-section'),
         { run: page => openAnalysisMode(page, 'genesPanel') },
         { waitForStable: '#analysis-panel-genesPanel select[name="groupBy"]' },
         { select: '#analysis-panel-genesPanel select[name="groupBy"]', value: 'cell_type' },
@@ -5093,16 +5391,13 @@ function buildHomeScenarios() {
       dataset: 'pancreas',
       describes: variant =>
         `The Pancreas 2D UMAP in the ${variant.theme} theme with the sidebar `
-        + 'closed, coloured by cell type, and the RNA velocity overlay on: '
+        + 'closed, colored by cell type, and the RNA velocity overlay on: '
         + 'streaks of particles flowing along the embedding, brightest where '
         + 'the velocity is largest.',
-      // The overlay is a particle animation that never stops changing, so the
-      // frame is pinned rather than settled; `captures.json` records that.
-      settle: { frames: 120 },
       steps: variant => [
         PANCREAS_READY,
         ...look(variant),
-        ...colourBy('#categorical-field', 'cell_type', 'category'),
+        ...colorBy('#categorical-field', 'cell_type', 'category'),
         ...TO_2D,
         { openSection: '#visualization-section' },
         { scrollIntoView: '#velocity-overlay-enabled' },
@@ -5110,6 +5405,7 @@ function buildHomeScenarios() {
         { waitFor: '#velocity-overlay-settings' },
         ...CLOSE_SIDEBAR,
         CLOSER_2D,
+        VIEWER_SETTLED,
         NOTIFICATIONS_DRAINED,
       ],
     },
@@ -5119,14 +5415,14 @@ function buildHomeScenarios() {
       describes: variant =>
         `Two equal panels in the ${variant.theme} theme with the sidebar `
         + 'closed, both showing the Pancreas 3D embedding from one linked '
-        + 'camera: on the left coloured by cell type, on the right by the '
+        + 'camera: on the left colored by cell type, on the right by the '
         + 'S-phase score on a Viridis scale, each under a title chip naming '
         + 'its field.',
       steps: variant => [
         PANCREAS_READY,
         ...look(variant),
         { openSection: '#coloring-filtering-section' },
-        ...colourBy('#categorical-field', 'cell_type', 'category'),
+        ...colorBy('#categorical-field', 'cell_type', 'category'),
         { openSection: '#compare-views-section' },
         { openSection: '#compare-views-section' },
         { click: '#split-keep-view-btn' },
@@ -5135,7 +5431,7 @@ function buildHomeScenarios() {
             document.querySelectorAll('#view-title-layer .view-title-chip').length === 2
           )),
         },
-        ...colourBy('#continuous-field', 'S_score', 'continuous'),
+        ...colorBy('#continuous-field', 'S_score', 'continuous'),
         { waitForText: '#view-title-layer .view-title-chip.active', text: 'S_score' },
         ...CLOSE_SIDEBAR,
         {
@@ -5179,14 +5475,16 @@ let formatFixturesReady = null;
  *
  * The cache folder is named by the digest of the two generator scripts, so an
  * edited recipe is rebuilt and an unchanged one is reused across runs.
- * `$CELLUCID_DOCS_PYTHON` (anndata, mudata, h5py, scipy) and
- * `$CELLUCID_DOCS_RSCRIPT` (SeuratObject) run them; both default to the
- * names on the PATH.
+ * `$CELLUCID_DOCS_PYTHON` (anndata, h5py, numpy, pandas, scipy) and
+ * `$CELLUCID_DOCS_RSCRIPT` (Matrix, SeuratObject) run them; both default to
+ * the names on the PATH. A scenario that uses one declares
+ * `requires: ['format-fixtures']`, so both are checked before any capture.
  *
  * @param {string} name - a file or folder the generator writes
  * @returns {Promise<string>}
  */
 async function formatFixture(name) {
+  const { python, rscript } = requirement('format-fixtures');
   formatFixturesReady ??= (async () => {
     const { createHash } = await import('node:crypto');
     const { access, readFile, writeFile } = await import('node:fs/promises');
@@ -5208,9 +5506,9 @@ async function formatFixture(name) {
       // Not built yet.
     }
     await new Promise((resolve, reject) => execFile(
-      process.env.CELLUCID_DOCS_PYTHON ?? 'python3',
+      python,
       [join(here, 'build-format-fixtures.py'), out],
-      { maxBuffer: 1 << 24 },
+      { maxBuffer: 1 << 24, env: { ...process.env, CELLUCID_DOCS_RSCRIPT: rscript } },
       (error, _stdout, stderr) => (error
         ? reject(new Error(`build-format-fixtures.py failed: ${stderr || error.message}`))
         : resolve())
@@ -5467,6 +5765,7 @@ function buildFormatAndViewerScenarios() {
     id,
     topic: 'data_loading',
     name,
+    requires: ['format-fixtures'],
     describes,
     dataset: 'pancreas',
     steps: [PANCREAS_READY, NOTIFICATIONS_DRAINED, openFixture(kind, file), ...DATASET_BOX_WITH_DETAILS],
@@ -5480,11 +5779,13 @@ function buildFormatAndViewerScenarios() {
       id: 'loading-open-h5ad-window',
       topic: 'data_loading',
       name: 'h5ad-current-loaded',
+      requires: ['format-fixtures'],
       describes:
-        'The whole Cellucid window after the Pancreas sample was opened as an '
-        + '.h5ad file with Open… › File…: the Session panel\'s Dataset box names '
-        + 'the file, its cells and genes and "h5ad file · this computer", and '
-        + 'the canvas shows its UMAP.',
+        'The whole Cellucid window after the Pancreas sample was opened as '
+        + 'an .h5ad file with Open… › File…: the Session panel\'s Dataset box '
+        + 'names the dataset, Pancreatic endocrinogenesis, its cells and '
+        + 'genes and "h5ad file · this computer", and the canvas shows its '
+        + 'UMAP.',
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
@@ -5547,11 +5848,12 @@ function buildFormatAndViewerScenarios() {
       id: 'loading-open-tenx-outs-window',
       topic: 'data_loading',
       name: 'tenx-outs-window',
+      requires: ['format-fixtures'],
       describes:
-        'The whole Cellucid window after a Cell Ranger outs/ folder was opened '
-        + 'with Open… › Folder…: the Dataset box reads "10x Cell Ranger outs '
-        + 'folder · this computer", and the canvas shows Cell Ranger\'s UMAP '
-        + 'coloured by its clustering, gene_expression_clusters.',
+        'The whole Cellucid window after a Cell Ranger outs/ folder was '
+        + 'opened with Open… › Folder…: the Dataset box reads "Cell Ranger '
+        + 'outs/ folder · this computer", and the canvas shows Cell Ranger\'s '
+        + 'UMAP colored by its clustering, gene_expression_clusters.',
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
@@ -5571,6 +5873,7 @@ function buildFormatAndViewerScenarios() {
       id: 'loading-open-rda-choose-object',
       topic: 'data_loading',
       name: 'rda-choose-object',
+      requires: ['format-fixtures'],
       describes:
         'The opening panel over the viewer reading "Opening '
         + 'pancreas-objects.rda" and "pancreas-objects.rda holds 2 single-cell '
@@ -5595,6 +5898,7 @@ function buildFormatAndViewerScenarios() {
       id: 'loading-h5mu-modality-select',
       topic: 'data_loading',
       name: 'data-mapping-modality',
+      requires: ['format-fixtures'],
       describes:
         'The Data mapping group of a CITE-seq .h5mu with Genes open: a Modality '
         + 'select reading "rna · 28 features" above Expression, Gene names, '
@@ -5630,8 +5934,9 @@ function buildFormatAndViewerScenarios() {
       id: 'loading-opening-progress',
       topic: 'data_loading',
       name: 'opening-progress',
+      requires: ['format-fixtures'],
       describes:
-        'The opening panel centred over the empty viewer while a linked Seurat '
+        'The opening panel centered over the empty viewer while a linked Seurat '
         + '.rds is downloaded: "Opening" and the file\'s address, the step '
         + '"Downloading the whole file (9.4 MB): … does not serve parts of '
         + 'files", a progress bar part-way, how much has arrived with the speed '
@@ -5662,6 +5967,7 @@ function buildFormatAndViewerScenarios() {
       id: 'loading-opening-failed',
       topic: 'data_loading',
       name: 'opening-failed',
+      requires: ['format-fixtures'],
       describes:
         'The panel over the empty viewer after a linked file could not be '
         + 'opened: "The data could not be opened", one sentence saying why (the '
@@ -5738,7 +6044,7 @@ function buildFormatAndViewerScenarios() {
       name: 'onedrive-sign-in',
       describes:
         'The Link or server bar holding a OneDrive share link, with one line '
-        + 'under it reading "OneDrive file: sign in with Microsoft to open it.", '
+        + 'under it reading "OneDrive files open after a sign-in.", '
         + 'a Sign in with Microsoft button and an (i).',
       dataset: 'pancreas',
       servedAs: 'http://127.0.0.1:8765',
@@ -5754,7 +6060,8 @@ function buildFormatAndViewerScenarios() {
         { fill: '#data-address', value: 'https://1drv.ms/u/c/0a1b2c3d4e5f6a7b/EaBcDeFgHiJkLmNoPqRsTuVw' },
         { click: '#data-address-open-btn' },
         { waitFor: '#data-sign-in-step' },
-        { waitForText: '#data-sign-in-step', text: 'sign in with Microsoft' },
+        { waitForText: '#data-sign-in-text', text: 'OneDrive files open after a sign-in.' },
+        { waitForText: '#data-sign-in-btn', text: 'Sign in with Microsoft' },
         { run: page => page.waitForFunction(() => !document.getElementById('data-sign-in-btn')?.disabled) },
       ],
       shot: { mode: 'element', selector: '#data-address-block', padding: 8 },
@@ -5873,12 +6180,14 @@ function buildFormatAndViewerScenarios() {
       id: 'server-cellucid-serve-window',
       topic: 'server',
       name: 'open-served-dataset',
+      requires: ['cellucid-serve'],
       describes:
-        'Cellucid opened at the Viewer URL of cellucid serve, coloured by '
-        + 'clusters: the Dataset box names the Pancreas sample with its cells '
-        + 'and genes, "Zarr v2 folder" and the server\'s loopback address, and '
-        + 'how much was read; the Link or server bar holds that address with '
-        + 'one line under it reading Server, the address and Disconnect.',
+        'Cellucid opened at the Viewer URL of cellucid serve, the Pancreas '
+        + 'sample colored by clusters: the Dataset box names Pancreatic '
+        + 'endocrinogenesis (scVelo) with 3.7K cells and 3.8K genes, "Zarr v2 '
+        + 'folder · cellucid serve" and "98 KB read in 11 requests"; Sample '
+        + 'dataset reads "—", the Link or server bar is empty, and the State '
+        + 'section\'s history shows Opened and Colored by clusters.',
       entry: async urls => startPythonServe(urls),
       steps: [
         { run: page => page.waitForFunction(
@@ -5886,7 +6195,16 @@ function buildFormatAndViewerScenarios() {
           undefined,
           { timeout: 180_000 }
         ) },
-        { waitFor: '#remote-disconnect-container' },
+        // The Viewer URL carries the server's viewer channel
+        // (`?viewer=true&viewerId=…&viewerToken=…&anndata=true`, since
+        // `cellucid serve` holds one), so the page opens as that viewer's
+        // host (`viewer-host-source.js`), not as a server typed into the
+        // Link or server bar: no "Server … Disconnect" line is shown under
+        // the bar (that line is `loading-address-server-connected`'s). The
+        // dataset it serves being shown is the signal.
+        { run: page => page.waitForFunction(
+          () => document.getElementById('dataset-info')?.dataset.state === 'ready'
+        ) },
         { waitForStable: '#categorical-field' },
         { select: '#categorical-field', label: 'clusters' },
         { waitForText: '#stats', text: 'Field: clusters (category)' },
@@ -5900,17 +6218,17 @@ function buildFormatAndViewerScenarios() {
       shot: { mode: 'window' },
     },
 
-    // --------------------------------- show_anndata() from a Python process
+    // ------------------------------- AnnDataViewer from a Python process
     {
       id: 'python-viewer-driven-from-python',
       topic: 'jupyter',
       name: 'show-anndata-driven-from-python',
+      requires: ['python-viewer'],
       describes:
-        'The viewer cellucid.show_anndata() serves, opened at its viewer URL, '
-        + 'after Python called viewer.color_by(...) and '
+        'The viewer a Python cellucid.AnnDataViewer serves, opened at its '
+        + 'viewer URL, after Python called viewer.color_by(...) and '
         + 'viewer.highlight_cells(...) on the Ductal cells: the Pancreas sample '
-        + 'coloured by clusters with the Ductal cells highlighted.',
-      setup: pinHighlightGlow,
+        + 'colored by clusters with the Ductal cells highlighted.',
       entry: async urls => startPythonViewer(urls),
       steps: [
         { run: page => page.waitForFunction(
@@ -5931,13 +6249,13 @@ function buildFormatAndViewerScenarios() {
       id: 'r-viewer-driven-from-r',
       topic: 'r_package',
       name: 'cellucid-view-driven-from-r',
+      requires: ['format-fixtures', 'r-viewer'],
       describes:
         'Cellucid opened by cellucid_view() on a Seurat object in an R session, '
         + 'after R called cellucid_color_by(viewer, ...) and '
-        + 'cellucid_highlight_cells(viewer, ...) on the Ductal cells: the points are coloured by '
+        + 'cellucid_highlight_cells(viewer, ...) on the Ductal cells: the points are colored by '
         + 'clusters with the Ductal cells highlighted, and the Dataset box names '
         + 'the object.',
-      setup: pinHighlightGlow,
       entry: async urls => startRViewer(urls),
       steps: [
         { run: page => page.waitForFunction(
@@ -5972,10 +6290,11 @@ async function startPythonServe(urls) {
   const here = dirname(fileURLToPath(import.meta.url));
   const datasets = process.env.CELLUCID_DATASETS_REPO
     ?? resolve(here, '..', '..', '..', '..', 'cellucid-datasets');
+  const { cellucid } = requirement('cellucid-serve');
   const port = await freePort('cellucid serve (Viewer URL)');
   const cache = await mkdtemp(join(tmpdir(), 'cellucid-docs-web-'));
   const output = [];
-  const child = spawn(process.env.CELLUCID_CLI ?? 'cellucid', [
+  const child = spawn(cellucid, [
     'serve', join(datasets, 'anndata', 'pancreas.zarr'),
     '--host', '127.0.0.1', '--port', String(port), '--no-browser',
     '--web-source-url', await webBuildOrigin(), '--web-cache-dir', cache,
@@ -6003,14 +6322,17 @@ async function startPythonServe(urls) {
   }
 }
 
-/** Settles once the R session has coloured and highlighted the viewer. */
+/** The smoke scenario's count of noise generations started and finished. */
+const smokeNoise = { started: 0, ready: 0 };
+
+/** Settles once the R session has colored and highlighted the viewer. */
 let rViewerDriven = null;
 
 /**
  * An R session (`$CELLUCID_DOCS_RSCRIPT`, else `Rscript`; the cellucid package
  * from `$CELLUCID_DOCS_R_LIBS` when set) that reads the
  * Pancreas Seurat object, shows it with `cellucid_view(pane = "none")`, and,
- * once the browser connects, colours it and highlights the Ductal cells from
+ * once the browser connects, colors it and highlights the Ductal cells from
  * R. Returns the viewer URL R printed; `rViewerDriven` settles when R has sent
  * both commands. Stopped when this process exits.
  *
@@ -6022,6 +6344,7 @@ async function startRViewer(urls) {
   const { mkdtemp } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
+  const { rscript } = requirement('r-viewer');
   const rds = await formatFixture('pancreas.rds');
   const cache = await mkdtemp(join(tmpdir(), 'cellucid-docs-web-'));
   const port = await freePort('cellucid_view() (R viewer)');
@@ -6044,7 +6367,7 @@ async function startRViewer(urls) {
     'repeat httpuv::service(100)',
   ].join('\n');
   const output = [];
-  const child = spawn(process.env.CELLUCID_DOCS_RSCRIPT ?? 'Rscript', ['-e', script], {
+  const child = spawn(rscript, ['-e', script], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.on('data', chunk => output.push(String(chunk)));
@@ -6109,38 +6432,43 @@ async function gatedSampleCatalog() {
 // n_benchmarking_performance that earlier sweeps captured by hand.
 // ---------------------------------------------------------------------------
 
-const ALL_SECTIONS = Object.freeze([
-  '#session-section',
-  '#visualization-section',
-  '#navigation-section',
-  '#compare-views-section',
-  '#coloring-filtering-section',
-  '#community-annotation-section',
-  '#highlighted-cells-section',
-  '#page-analysis-section',
-  '#cinematic-camera-section',
-  '#figure-export-section',
-  '#shortcuts-section',
-  '#benchmark-section',
-]);
-
-/** Leave only these sidebar sections open, so a crop starts at the top. */
+/**
+ * Leave only these sidebar sections open, so a crop starts at the top.
+ *
+ * Every other `details.accordion-section` the page holds is closed, read from
+ * the page rather than listed here. A hand-written list went stale when the
+ * State and Agents sections were added: State, open on first load, stayed
+ * open above every subject, and its history (status line and step graph)
+ * redraws in a later frame as the steps a scenario takes are recorded, so
+ * the section below it moved by 8 to 20 px while its image settled and
+ * `assertCropStillFramed` failed the capture (`analysis-panel-modes`,
+ * `core-camera-path-unconfigured`, `export-panel-overview`,
+ * `analysis-life-*`, `highlighting-lasso-confirmed`).
+ *
+ * @param {...string} open - selectors of the sections left open
+ */
 function onlySections(...open) {
   return {
-    run: page => page.evaluate(([all, keep]) => {
-      for (const selector of all) {
-        document.querySelector(selector).open = keep.includes(selector);
+    run: page => page.evaluate(keep => {
+      for (const selector of keep) {
+        if (!(document.querySelector(selector) instanceof HTMLDetailsElement)) {
+          throw new Error(`Accordion section not found: ${selector}`);
+        }
       }
-    }, [ALL_SECTIONS, open]),
+      for (const section of document.querySelectorAll('details.accordion-section')) {
+        section.open = keep.some(selector => section.matches(selector));
+      }
+    }, open),
   };
 }
 
 function buildViewAndExportScenarios() {
   const settle = { attempts: 20, gapMs: 200 };
-  const colourBy = label => [
+  const colorBy = label => [
     { waitForStable: '#categorical-field' },
     { select: '#categorical-field', label },
     { waitForText: '#stats', text: `Field: ${label} (category)` },
+    READS_SETTLED,
   ];
   /** Show one representation in the selected view and wait for it to land. */
   const show = (label, mode) => [
@@ -6195,7 +6523,7 @@ function buildViewAndExportScenarios() {
   ];
   const EXPORT_PANEL = [
     PANCREAS_READY,
-    ...colourBy('clusters'),
+    ...colorBy('clusters'),
     onlySections('#figure-export-section'),
     { waitFor: '#figure-export-btn' },
   ];
@@ -6203,7 +6531,12 @@ function buildViewAndExportScenarios() {
     run: async page => {
       const header = page.locator('#figure-export-section .figure-export-accordion .disclosure-header', { hasText: title });
       if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
-      await page.waitForTimeout(400);
+      // Open once the header says so; the crop waits for the layout under it
+      // to settle (`settledClip` in capture.mjs).
+      await page.waitForFunction(
+        element => element.getAttribute('aria-expanded') === 'true',
+        await header.elementHandle()
+      );
     },
   });
 
@@ -6214,14 +6547,14 @@ function buildViewAndExportScenarios() {
       topic: 'web_app',
       name: 'app-overview-cell-type',
       describes:
-        'The whole Cellucid window with the Pancreas sample coloured by '
+        'The whole Cellucid window with the Pancreas sample colored by '
         + 'cell_type: the sidebar shows Coloring and filtering with the '
         + 'categorical field selected and its eight-row legend, and the 3D '
-        + 'embedding fills the canvas in the matching colours.',
+        + 'embedding fills the canvas in the matching colors.',
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
-        ...colourBy('cell_type'),
+        ...colorBy('cell_type'),
         onlySections('#coloring-filtering-section'),
         NOTIFICATIONS_DRAINED,
       ],
@@ -6280,14 +6613,14 @@ function buildViewAndExportScenarios() {
       topic: 'web_app',
       name: 'connectivity-edges-controls',
       describes:
-        'The whole window with Show connectivity edges on: the neighbour graph '
+        'The whole window with Show connectivity edges on: the neighbor graph '
         + 'drawn as thin lines between the Pancreas cells, and the sidebar '
         + 'showing the Connectivity block with Edge color, Edge opacity, Line '
         + 'width and Max edges.',
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
-        ...colourBy('clusters'),
+        ...colorBy('clusters'),
         onlySections('#visualization-section'),
         { waitFor: '#connectivity-controls:not([hidden])' },
         { openSection: '#visualization-section' },
@@ -6338,7 +6671,7 @@ function buildViewAndExportScenarios() {
         + 'bar across the top of the canvas with its Play button and timeline '
         + 'markers, and the Camera path panel in the sidebar.',
       dataset: 'pancreas',
-      steps: [PANCREAS_READY, ...colourBy('clusters'), ...TWO_KEYFRAMES, NOTIFICATIONS_DRAINED],
+      steps: [PANCREAS_READY, ...colorBy('clusters'), ...TWO_KEYFRAMES, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
       settle,
     },
@@ -6376,12 +6709,12 @@ function buildViewAndExportScenarios() {
       topic: 'vector_field_velocity',
       name: '01-embedding-without-overlay',
       describes:
-        'The Pancreas 2D embedding coloured by cell_type, with the Vector field '
+        'The Pancreas 2D embedding colored by cell_type, with the Vector field '
         + 'block ringed in the sidebar and its Show overlay box unchecked.',
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
-        ...colourBy('cell_type'),
+        ...colorBy('cell_type'),
         ...show('UMAP · 2D', 'planar'),
         onlySections('#visualization-section'),
         { scrollIntoView: '#velocity-overlay-controls' },
@@ -6392,8 +6725,6 @@ function buildViewAndExportScenarios() {
       settle,
     },
     {
-      // The particles move for as long as the overlay is on, so the image is
-      // pinned to a number of frames from a seeded start, not settled.
       id: 'velocity-window-with-overlay',
       topic: 'vector_field_velocity',
       name: '02-embedding-with-overlay',
@@ -6405,15 +6736,15 @@ function buildViewAndExportScenarios() {
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
-        ...colourBy('cell_type'),
+        ...colorBy('cell_type'),
         ...show('UMAP · 2D', 'planar'),
         onlySections('#visualization-section'),
         ...VELOCITY_ON,
         { scrollIntoView: '#velocity-overlay-controls' },
+        VIEWER_SETTLED,
         NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
-      settle: { frames: 180 },
     },
     {
       id: 'velocity-core-controls',
@@ -6444,35 +6775,35 @@ function buildViewAndExportScenarios() {
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
-        ...colourBy('clusters'),
+        ...colorBy('clusters'),
         ...show('UMAP · 2D', 'planar'),
         onlySections('#visualization-section'),
         ...VELOCITY_ON,
         { scrollIntoView: '#velocity-overlay-settings' },
+        VIEWER_SETTLED,
         NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
-      settle: { frames: 180 },
     },
     {
       id: 'velocity-window-overlay-3d',
       topic: 'vector_field_velocity',
       name: 'pancreas-velocity-3d',
       describes:
-        'The Pancreas sample in its 3D view coloured by clusters with the '
+        'The Pancreas sample in its 3D view colored by clusters with the '
         + 'velocity overlay running, and the Vector field controls open in the '
         + 'sidebar.',
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
-        ...colourBy('clusters'),
+        ...colorBy('clusters'),
         onlySections('#visualization-section'),
         ...VELOCITY_ON,
         { scrollIntoView: '#velocity-overlay-controls' },
+        VIEWER_SETTLED,
         NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
-      settle: { frames: 180 },
     },
     {
       id: 'velocity-window-advanced',
@@ -6485,17 +6816,17 @@ function buildViewAndExportScenarios() {
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
-        ...colourBy('clusters'),
+        ...colorBy('clusters'),
         ...show('UMAP · 2D', 'planar'),
         onlySections('#visualization-section'),
         ...VELOCITY_ON,
         { click: '[aria-controls="velocity-advanced-settings"]' },
         { waitFor: '#velocity-advanced-settings:not([hidden])' },
         { scrollIntoView: '#velocity-advanced-settings' },
+        VIEWER_SETTLED,
         NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
-      settle: { frames: 180 },
     },
 
     // ----------------------------------------------------------- figure export
@@ -6518,9 +6849,10 @@ function buildViewAndExportScenarios() {
       topic: 'figure_export',
       name: 'framing',
       describes:
-        'The Framing group open: Plot size on Screen (half) with its W and H '
-        + 'boxes, and Preview with its Show preview checkbox, above the Export '
-        + 'button.',
+        'The Framing group open: Figure width on its default, Double column '
+        + '· 183 mm, with its W box at 183 mm and the printed size under it '
+        + '(183 mm wide · height from its plot), and Preview with its Show preview checkbox, '
+        + 'above the Export button.',
       dataset: 'pancreas',
       steps: [...EXPORT_PANEL, openExportGroup('Framing')],
       shot: { mode: 'element', selector: '#figure-export-section', padding: 6 },
@@ -6531,10 +6863,12 @@ function buildViewAndExportScenarios() {
       topic: 'figure_export',
       name: 'labels-annotations',
       describes:
-        'The Labels and annotations group open: the Title box pre-filled, '
-        + 'starting with the dataset name; the Annotations checkboxes Axes, '
-        + 'Legend, Reference grid, 3D orientation and Depth sort; the X and Y '
-        + 'axis labels; Legend: Right; and Emphasize selection.',
+        'The Figure export section with its Labels and annotations group '
+        + 'open and Framing, Style and Download folded: the Title box '
+        + 'pre-filled, starting with the dataset name; the Annotations '
+        + 'checkboxes Axes, Legend, Reference grid, 3D orientation and Depth '
+        + 'sort; the X and Y axis labels; Legend: Right; Emphasize selection, '
+        + 'unchecked; and the Export button at the bottom.',
       dataset: 'pancreas',
       steps: [...EXPORT_PANEL, openExportGroup('Labels and annotations')],
       shot: { mode: 'element', selector: '#figure-export-section', padding: 6 },
@@ -6565,7 +6899,7 @@ function buildViewAndExportScenarios() {
       name: 'download',
       describes:
         'The Download group open with the format set to SVG: the SVG point '
-        + 'strategy select on its placeholder, shortened to "Choose S…", and '
+        + 'strategy select on Full vector, and '
         + 'Export all views (split-view) with the pointer on its checkbox, above '
         + 'the Export button.',
       dataset: 'pancreas',
@@ -6605,19 +6939,23 @@ function buildViewAndExportScenarios() {
       name: 'read-export-blocked-dialog',
       describes:
         'The Export blocked dialog over the app: "Cellucid will not create an '
-        + 'export that differs from the active view", Velocity overlay not '
-        + 'exported with its reason, and a single Back button.',
+        + 'export that differs from the active view", Connectivity overlay not '
+        + 'exported with its reason, and the buttons Back and Turn off edges and export.',
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
         onlySections('#visualization-section'),
-        ...VELOCITY_ON,
+        { waitFor: '#connectivity-controls:not([hidden])' },
+        { openSection: '#visualization-section' },
+        { run: page => page.check('#toggle-connectivity') },
+        { waitFor: '#connectivity-sliders:not([hidden])' },
+        VIEWER_SETTLED,
+        NOTIFICATIONS_DRAINED,
         onlySections('#figure-export-section'),
         { click: '#figure-export-btn' },
         { waitFor: '.figure-export-warning' },
       ],
       shot: { mode: 'window' },
-      settle: { frames: 120 },
     },
 
     // -------------------------------------------------------------- benchmark
@@ -6653,16 +6991,19 @@ function buildViewAndExportScenarios() {
   ];
 }
 
-/** Settles once the Python process has coloured and highlighted the viewer. */
+/** Settles once the Python process has colored and highlighted the viewer. */
 let pythonViewerDriven = null;
 
 /**
  * A Python process (`$CELLUCID_DOCS_PYTHON`, else `python3`) that shows the
- * Pancreas sample's store with `cellucid.show_anndata()` — outside a notebook
- * it prints the viewer URL instead of an iframe — and, once the browser
- * connects, colours it and highlights the Ductal cells from Python. Returns
- * the viewer URL; `pythonViewerDriven` settles when both commands were sent.
- * Stopped when this process exits.
+ * Pancreas sample's store with `cellucid.AnnDataViewer` on a free loopback
+ * port and, once the browser connects, colors it and highlights the Ductal
+ * cells from Python. Returns the viewer URL; `pythonViewerDriven` settles
+ * when both commands were sent. Stopped when this process exits.
+ *
+ * `show_anndata()` is the notebook widget: it has no address and refuses to
+ * run outside a notebook, so a browser tab is driven through
+ * `AnnDataViewer`, the same viewer API with its own server and viewer URL.
  *
  * @param {{appOrigin: string}} urls
  * @returns {Promise<string>}
@@ -6676,25 +7017,30 @@ async function startPythonViewer(urls) {
   const here = dirname(fileURLToPath(import.meta.url));
   const datasets = process.env.CELLUCID_DATASETS_REPO
     ?? resolve(here, '..', '..', '..', '..', 'cellucid-datasets');
+  const { python } = requirement('python-viewer');
   const store = join(datasets, 'anndata', 'pancreas.zarr');
   const cache = await mkdtemp(join(tmpdir(), 'cellucid-docs-web-'));
+  const port = await freePort('AnnDataViewer (Python viewer)');
   const script = [
     'import time',
     'import anndata as ad',
     'import numpy as np',
     'import cellucid',
-    `viewer = cellucid.show_anndata(${JSON.stringify(store)}, web_source_url=${JSON.stringify(await webBuildOrigin())}, web_cache_dir=${JSON.stringify(cache)})`,
+    `viewer = cellucid.AnnDataViewer(${JSON.stringify(store)}, port=${port}, auto_open=False, web_source_url=${JSON.stringify(await webBuildOrigin())}, web_cache_dir=${JSON.stringify(cache)})`,
     'print("VIEWER_URL", viewer.viewer_url, flush=True)',
     'viewer.wait_for_ready(timeout=300)',
     'viewer.color_by(field={"source": "obs", "key": "clusters"})',
+    // By obs name: the store is a Cellucid-ready AnnData, whose rows are in
+    // priority order, and `cells` by position means the original position
+    // (`obs['cellucid_original_position']`), not the row of this read.
     `clusters = ad.read_zarr(${JSON.stringify(store)}).obs["clusters"]`,
-    'viewer.highlight_cells(cells=np.flatnonzero(clusters == "Ductal"), color="#e41a1c")',
+    'viewer.highlight_cells(cells=list(clusters.index[clusters == "Ductal"]), color="#e41a1c")',
     'print("DRIVEN", flush=True)',
     'while True:',
     '    time.sleep(1)',
   ].join('\n');
   const output = [];
-  const child = spawn(process.env.CELLUCID_DOCS_PYTHON ?? 'python3', ['-c', script], {
+  const child = spawn(python, ['-c', script], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.on('data', chunk => output.push(String(chunk)));
@@ -6730,7 +7076,7 @@ let webBuildHost = null;
 /**
  * This run's web repository as a web build host (`cellucid-web-assets.json`
  * and the files it lists), for the servers that download the app they serve:
- * `cellucid serve`, `show_anndata()` and `cellucid_view()` then show this
+ * `cellucid serve`, `AnnDataViewer` and `cellucid_view()` then show this
  * tree's application.
  *
  * @returns {Promise<string>}

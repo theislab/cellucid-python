@@ -53,9 +53,10 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 
 ### Likely causes
 
-1) Focus is in an `input`, `select`, or `textarea` (shortcuts are disabled while typing).
-2) The canvas never received focus (page scroll consumes keys).
-3) A modal is open (some shortcuts are intentionally ignored).
+1) Focus is in a text field or a dropdown: it keeps the keys typed in it (a
+   dropdown's letters choose its options). A slider, a checkbox or a button
+   never holds them.
+2) A dialog, a menu or a list is open and focused: it keeps its keys.
 
 ### How to confirm
 
@@ -64,9 +65,11 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 
 ### Fix
 
-1) Click the canvas.
-2) Press `Esc` to dismiss pointer lock or close modals (if relevant).
-3) Avoid leaving a dropdown focused (after changing nav mode, the UI attempts to blur it, but not all browsers behave identically).
+1) Click the plot.
+2) Press `Esc` to close a dialog or a menu, or to release a captured pointer.
+3) After choosing a mode from the Mode dropdown with the keyboard, focus stays
+   on it: use {kbd}`O` / {kbd}`P` / {kbd}`G` instead. Every key is listed in
+   {doc}`../o_accessibility_privacy_security/03_keyboard_shortcuts`.
 
 ---
 
@@ -126,7 +129,7 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 
 ---
 
-## Symptom: “Link cameras is greyed out”
+## Symptom: “Link cameras is grayed out”
 
 ### Likely causes
 
@@ -220,7 +223,7 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 
 - Lower render resolution, then ray quality. If frame rate improves, the
   steady-state ray-marching cost was dominant. If entering smoke, changing a
-  filter, or recolouring is the slow part, lower grid density instead.
+  filter, or recoloring is the slow part, lower grid density instead.
 
 ### Fix (fastest wins)
 
@@ -233,16 +236,21 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 
 ---
 
-## Symptom: “WebGL context lost”
+## Symptom: “Graphics reset by the browser”
 
-This is almost always GPU memory pressure.
+This is almost always GPU memory pressure (or a driver reset).
 
 ### Fix
 
-- Reload (Cellucid requires a reload to safely reinitialize GPU resources).
-- After reload, reduce GPU load (fewer views, points mode, lower quality settings).
+- Usually nothing: the viewer restores the graphics as soon as the browser
+  gives the context back, with your filters, selections, kept views and
+  analyses.
+- If the dialog says *The graphics could not be restored*, the session
+  captured at the loss has already been downloaded: press **Reload**, then
+  open that session.
+- If it repeats, reduce GPU load (fewer views, points mode, lower quality settings).
 
-Full details and prevention: {doc}`../a_orientation/02_system_requirements` → “WebGL context lost”.
+Full details and prevention: {doc}`../a_orientation/02_system_requirements` → “Graphics reset by the browser”.
 
 ---
 

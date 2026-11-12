@@ -75,7 +75,7 @@ list(adata.obsm.keys())
 Cellucid reads it at the dimension its own column count states — two columns as
 2D, three as 3D — with nothing to rename. With no `X_umap` at all, Cellucid
 picks another `obsm` array by a deterministic best guess (t-SNE before PCA, for
-example) and says which one; pass `embedding_keys={"2d": "X_tsne"}` to choose
+example) and says which one; pass `embedding_defaults={"2d": "X_tsne"}` to choose
 it yourself.
 
 ### Step 3: Show the viewer
@@ -129,18 +129,18 @@ viewer.highlight_cells(cells=[0, 2], color="#00cc66")
 - **Not in a notebook**: `show_anndata(...)` raises and names the browser-tab
   alternatives (`AnnDataViewer`, `serve_anndata`, `cellucid serve`).
 - **Nothing to plot**: the error lists every `obsm` entry and why it was not
-  used; compute an embedding or name one with `embedding_keys`.
+  used; compute an embedding or name one with `embedding_defaults`.
 - **The viewer appears only after the cell ends**: the kernel handles the
   widget's messages between cells, so put commands and hooks in later cells
   (commands sent earlier are delivered once it connects).
 - **Which notebooks**: see {doc}`03_compatibility_matrix_must_be_explicit`.
 - **Viewer source unavailable**: viewer-serving startup stops; see
   {doc}`../installation`.
-- **A gene that will not colour**: `show_anndata(...)` starts fine on an object
+- **A gene that will not color**: `show_anndata(...)` starts fine on an object
   whose `adata.X` holds infinities, because nothing reads a gene column until
   you select one. Selecting it shows a notification titled
   `Gene cannot be shown` that names the gene, counts the offending values, and
-  lists the first offending cells (`NaN` is drawn, as the neutral grey for "no
+  lists the first offending cells (`NaN` is drawn, as the neutral gray for "no
   value here"). Everything else in the session keeps working. Repair the
   matrix and reload — see
   {doc}`../d_viewing_apis/15_troubleshooting_viewing`.
@@ -163,8 +163,8 @@ one, starting with `embeddings={...}`. An argument given explicitly replaces
 that one component of `data`. The identity may be omitted when `data` declares
 it in `uns['cellucid']`. Everything else is optional:
 - `obs` (cell metadata)
-- `var` + `gene_expression` (gene colouring and search)
-- `connectivities` (the neighbour graph)
+- `var` + `gene_expression` (gene coloring and search)
+- `connectivities` (the neighbor graph)
 - `vector_fields` (velocity / drift overlays)
 - a latent space for outlier measurement: pass it as one of the `embeddings`
   and name it with `latent_key`
@@ -176,6 +176,11 @@ connectivities, and vector fields. Take them all from one AnnData.
 ```
 
 ### Step 1: Prepare
+
+This step takes a real `adata` with a UMAP and a PCA in `obsm` (Scanpy's
+`sc.pp.pca` and `sc.tl.umap` write `X_pca` and `X_umap`). For the toy of
+Level 1, which has no `X_pca`, pass `embeddings={"X_umap": adata.obsm["X_umap"]}`
+and leave out `latent_key`.
 
 ```python
 from cellucid import prepare
@@ -374,8 +379,8 @@ cleanup_all()
   values itself and refuses one field at a time instead: a gene or continuous
   column holding an infinity is refused with a counted diagnosis, and the rest
   of the session keeps working. In the viewer `NaN` and infinity are not alike
-  — `NaN` is drawable and renders as the neutral grey meaning "not measured
-  here", an infinity has no position on a colour scale.
+  — `NaN` is drawable and renders as the neutral gray meaning "not measured
+  here", an infinity has no position on a color scale.
 - **Category explosions**: categorical fields with very high cardinality can become unusable in the UI; consider grouping or filtering.
 - **Remote kernels**: nothing to forward for a notebook widget; a browser-tab
   viewer needs an SSH tunnel or proxy (see

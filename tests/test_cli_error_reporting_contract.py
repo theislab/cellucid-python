@@ -140,7 +140,7 @@ def test_a_missing_path_is_reported_without_a_traceback(
 
     assert status == 1
     message = _assert_operator_report(capsys.readouterr().err)
-    assert "Path not found" in message
+    assert "Nothing exists at " in message
 
 
 def test_an_unrecognized_input_is_reported_without_a_traceback(
@@ -155,7 +155,11 @@ def test_an_unrecognized_input_is_reported_without_a_traceback(
 
     assert status == 1
     message = _assert_operator_report(capsys.readouterr().err)
-    assert "Unable to detect format" in message
+    assert message.count(str(unrecognized)) == 1
+    assert (
+        f"{unrecognized} is not a file Cellucid opens (an .h5ad file, a .loom file, an .h5 file, an .h5mu file, "
+        "an .rds file, an .rda/.rdata file or a .zarr.zip archive)."
+    ) in message
 
 
 def test_a_missing_optional_dependency_names_the_package_to_install(
@@ -165,7 +169,7 @@ def test_a_missing_optional_dependency_names_the_package_to_install(
     from cellucid.cli import main
 
     with mock.patch(
-        "cellucid.anndata_server.serve_anndata",
+        "cellucid.anndata_server._serve_viewer",
         side_effect=ModuleNotFoundError("No module named 'zarr'", name="zarr"),
     ):
         status = main(
@@ -198,7 +202,7 @@ def test_a_standard_library_module_is_never_reported_as_a_pip_install(
     from cellucid.cli import main
 
     with mock.patch(
-        "cellucid.anndata_server.serve_anndata",
+        "cellucid.anndata_server._serve_viewer",
         side_effect=ImportError(
             "cannot import name 'UTC' from 'datetime'",
             name="datetime",
@@ -234,7 +238,7 @@ def test_an_installed_package_missing_a_name_is_told_to_upgrade_not_install(
     from cellucid.cli import main
 
     with mock.patch(
-        "cellucid.anndata_server.serve_anndata",
+        "cellucid.anndata_server._serve_viewer",
         side_effect=ImportError(
             "cannot import name 'read_elem' from 'anndata'",
             name="anndata",
@@ -266,7 +270,7 @@ def test_a_headless_machine_without_a_browser_is_told_to_use_no_browser(
     from cellucid.cli import main
 
     with mock.patch(
-        "cellucid.anndata_server.serve_anndata",
+        "cellucid.anndata_server._serve_viewer",
         side_effect=RuntimeError("Could not open the browser for http://127.0.0.1:8765/"),
     ):
         status = main(["serve", str(_prepared_export(tmp_path / "export")), "--quiet"])
@@ -283,7 +287,7 @@ def test_an_internal_defect_keeps_its_traceback_and_asks_for_a_bug_report(
     from cellucid.cli import main
 
     with mock.patch(
-        "cellucid.anndata_server.serve_anndata",
+        "cellucid.anndata_server._serve_viewer",
         side_effect=AttributeError("'NoneType' object has no attribute 'shape'"),
     ):
         status = main(["serve", str(_prepared_export(tmp_path / "export")), "--quiet"])
@@ -322,7 +326,7 @@ def test_interrupting_the_server_is_not_reported_as_an_error(
 ) -> None:
     from cellucid.cli import main
 
-    with mock.patch("cellucid.anndata_server.serve_anndata", side_effect=KeyboardInterrupt):
+    with mock.patch("cellucid.anndata_server._serve_viewer", side_effect=KeyboardInterrupt):
         status = main(["serve", str(_prepared_export(tmp_path / "export")), "--quiet"])
 
     assert status == 130
@@ -349,7 +353,7 @@ def test_every_defect_signature_keeps_its_traceback(
 ) -> None:
     from cellucid.cli import main
 
-    with mock.patch("cellucid.anndata_server.serve_anndata", side_effect=error):
+    with mock.patch("cellucid.anndata_server._serve_viewer", side_effect=error):
         status = main(["serve", str(_prepared_export(tmp_path / "export")), "--quiet"])
 
     assert status == 1
@@ -398,7 +402,7 @@ def test_the_tutorial_quotes_the_line_the_cli_actually_prints(
     )
     assert unbindable_host.split(".")[0] in " ".join(tutorial.split())
 
-    # The page must not teach the behaviour that was removed.
+    # The page must not teach the behavior that was removed.
     assert "ignore the traceback above it" not in tutorial
     assert "Errno 48" not in tutorial
 
@@ -407,7 +411,7 @@ def test_the_tutorial_quotes_the_line_the_cli_actually_prints(
     "error",
     [
         ValueError("knn_key names obsp['connectivities'], which this store does not have."),
-        TypeError("embedding_keys must map '1d', '2d', or '3d' to an obsm key."),
+        TypeError("embedding_defaults must map '1d', '2d', or '3d' to an obsm key."),
         KeyError("obs field 'cell_type' not found. Available fields: ['leiden']"),
         OSError("cli-export.h5ad changed while it was opened."),
     ],
@@ -419,7 +423,7 @@ def test_every_reported_condition_stays_a_single_actionable_line(
 ) -> None:
     from cellucid.cli import main
 
-    with mock.patch("cellucid.anndata_server.serve_anndata", side_effect=error):
+    with mock.patch("cellucid.anndata_server._serve_viewer", side_effect=error):
         status = main(["serve", str(_prepared_export(tmp_path / "export")), "--quiet"])
 
     assert status == 1

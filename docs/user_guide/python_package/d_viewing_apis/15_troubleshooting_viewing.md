@@ -35,7 +35,7 @@ If this doesn’t load, the viewer can’t load either.
 Open the exact **Viewer URL** printed by the server:
 
 ```text
-http://127.0.0.1:<port>/?anndata=true
+http://127.0.0.1:<port>/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 ```
 
 A wildcard bind prints the loopback origin plus the machine's own name; see
@@ -114,8 +114,9 @@ cellucid serve /path/to/data --web-cache-dir /path/to/cache
 
 ### Prevention
 - verify source access and destination permissions before a workshop or job
-- do not plan on a previous local generation being substituted when the source
-  is unavailable
+- start once where the source is reachable (or copy a verified cache folder
+  and pass it as the web cache directory): a later start with no network serves
+  that build
 
 ---
 
@@ -133,15 +134,33 @@ cellucid serve /path/to/data --web-cache-dir /path/to/cache
 
 ### Fix
 - confirm which `obsm` array each slot shows (**Session › Data mapping** names
-  it), or name one with `embedding_keys` (see
+  it), or name one with `embedding_defaults` (see
   {doc}`08_anndata_mode_show_anndata_and_serve_anndata`)
 
 ---
 
+## Symptom: “… changed on disk since the server opened it”
+
+### Cause
+The file a server shows (an `.h5ad`, `.h5mu`, `.loom`, 10x `.h5` or `.zip`
+served in priority order) was written again or replaced while it was served,
+for example by `adata.write_h5ad(path)` to the same path from a notebook. The
+server made the viewer's store from the version it opened, so it refuses to
+serve anything more of it (HTTP 409) rather than mix two versions; the viewer
+says so and reads nothing more.
+
+### Fix
+Serve it again: restart `cellucid serve`, or call `show_anndata(...)` /
+`serve_anndata(...)` again. Writing a new version to another path and opening
+that keeps the shown one readable meanwhile. HDF5 itself refuses to write a
+file another program holds open: a write to the served path from another
+process can fail with "unable to lock file" after HDF5 has emptied the file,
+so write to a new path and move it over the old one instead.
+
 ## Symptom: the viewer shows a different embedding than I expected
 
 ### What decides it
-- a slot you name with `embedding_keys` (Python) or `--embedding-<n>d` (CLI)
+- a slot you name with `embedding_defaults` (Python) or `--embedding-<n>d` (CLI)
   shows that array, at the 0-based columns you give
 - every other slot follows the default rule: `X_umap_1d` / `X_umap_2d` /
   `X_umap_3d` fill their own slots, and with none of them present a bare
@@ -159,8 +178,8 @@ cellucid serve /path/to/data --web-cache-dir /path/to/cache
   `embedding1d`/`embedding2d`/`embedding3d` it opens on
 
 ### Fix
-- name the array you want: `embedding_keys={"2d": "X_umap_harmony"}` or
-  `--embedding-2d X_umap_harmony`; `embedding_keys={"2d": ("X_pca", [0, 1])}` or
+- name the array you want: `embedding_defaults={"2d": "X_umap_harmony"}` or
+  `--embedding-2d X_umap_harmony`; `embedding_defaults={"2d": ("X_pca", [0, 1])}` or
   `--embedding-2d X_pca:0,1` for chosen columns of a wide array
 - or write the choice into the file once: `prepare(..., embedding_defaults=...)`
 
@@ -189,7 +208,7 @@ Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,
 ### Fix
 - compute an embedding (`sc.tl.umap(adata)`), or repair the array the message
   names (the first cell past float32 is given)
-- or name a usable array explicitly with `embedding_keys` / `--embedding-<n>d`
+- or name a usable array explicitly with `embedding_defaults` / `--embedding-<n>d`
 - a dimensional key whose array does not have exactly its own column count is an
   error, not a reinterpretation: `X_umap_3d` holding `(n_obs, 2)` is refused
   rather than shown as 2D
@@ -230,7 +249,7 @@ show_anndata(
 
 ### Likely causes (ordered)
 - your gene IDs are not in `var.index` (default)
-- wrong `gene_id_column`
+- wrong `var_gene_id_column`
 - the name is repeated in the chosen gene axis and is shown as `NAME-1`
 
 ### How to confirm
@@ -241,7 +260,7 @@ print(adata.var.columns)
 ```
 
 ### Fix
-- pass `gene_id_column="..."` to `show_anndata(...)` / `serve_anndata(...)`
+- pass `var_gene_id_column="..."` to `show_anndata(...)` / `serve_anndata(...)`
 - ensure the chosen gene ID field is unique
 
 This symptom is about a gene the viewer never found. A gene it *did* find and
@@ -257,9 +276,9 @@ working.
 
 ### What happened
 
-A colour scale needs a finite minimum and maximum. `NaN` is drawn as the
-neutral grey meaning “no value here”, but one `+Inf` makes a field's range
-infinite and collapses every other cell onto one colour, so the viewer refuses a
+A color scale needs a finite minimum and maximum. `NaN` is drawn as the
+neutral gray meaning “no value here”, but one `+Inf` makes a field's range
+infinite and collapses every other cell onto one color, so the viewer refuses a
 gene or continuous `obs` column holding an infinity. It checks each column as it
 reads it, one column at a time, as you select it.
 
@@ -270,7 +289,7 @@ offending values by kind out of all cells, lists the first affected cell
 indices, and gives a repair one-liner:
 
 ```text
-Gene "A2ML1" contains 12 infinite values, so it has no colour scale.
+Gene "A2ML1" contains 12 infinite values, so it has no color scale.
 Of 18,142,044 cells: 12 +Infinity.
 First affected cells: 4,127, 88,301, 250,994, 1,004,112, 7,730,015, ….
 NaN is drawn as missing; an infinity is not a value on any scale.

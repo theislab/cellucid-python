@@ -27,7 +27,7 @@ whole store.
 Each embedding is stored **whole**, as `obsm[<name>]`:
 
 - every column, not only the first two or three;
-- as float32, at its own coordinates (nothing is centred or scaled);
+- as float32, at its own coordinates (nothing is centered or scaled);
 - in chunks of whole rows, every column in each chunk
   ({doc}`09_cellucid_ready_anndata_specification`).
 
@@ -82,7 +82,7 @@ These are stored in `uns['cellucid']['defaults']` as `embedding1d`,
 - `latent_key = "X_pca"`: the latent space the viewer's outlier filter
   measures in (`defaults['latentKey']`), such as PCA or scVI, never a 2D/3D
   layout. It must be one of the `embeddings`. The outlier quantiles of every
-  categorical obs column (each cell's distance to its category's centre, as
+  categorical obs column (each cell's distance to its category's center, as
   the share of its category at that distance or closer) are computed here and
   stored in `uns['cellucid']['outlierQuantiles']`
   ({doc}`09_cellucid_ready_anndata_specification`), so the viewer filters outliers at

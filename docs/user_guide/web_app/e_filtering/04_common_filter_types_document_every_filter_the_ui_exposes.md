@@ -25,9 +25,9 @@ Cellucid’s current “visibility stack” is built from these filter types:
 | Outlier filter | Legend → **Outlier filter** slider | categorical obs fields of the file, once a latent space is chosen | Hide fringe/outlier-like cells within categories |
 
 :::{important}
-Every filter applies until it is removed, whatever the view is coloured by:
+Every filter applies until it is removed, whatever the view is colored by:
 a gene's range filter and a categorical field's outlier filter keep hiding
-cells after you colour by another field, and **Filters** lists each of them.
+cells after you color by another field, and **Filters** lists each of them.
 :::
 
 ---
@@ -50,10 +50,12 @@ For a categorical obs field (clusters, sample, batch, etc.):
 
 - Category filtering is **inclusive**: “visible categories are kept”.
 - The filter stack is an **AND** across all enabled filters.
-- Missing/invalid category codes are typically **not removed** by hiding categories (they behave like “None/unknown”).
+- Cells without a category are a row of their own, **Missing**, which the legend
+  lists only when some open cell has no category: unticking it hides them,
+  **Hide all** hides them with every category and **Show all** shows them again.
 
 ```{figure} ../../../_static/screenshots/filtering/type-category-visibility.png
-:alt: The categorical legend for clusters: Show all and Hide all above eight rows, three of them (Ductal, Ngn3 high EP, Ngn3 low EP) unchecked and reading 0 of their cell counts, each row carrying a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:alt: The categorical legend for clusters: Show all and Hide all above eight rows, three of them (Ductal, Ngn3 high EP, Ngn3 low EP) unchecked and reading 0 of their cell counts, each row carrying a color swatch, a label, a cell count, a rename pencil and a delete bin.
 :width: 488px
 
 Three categories hidden. Note what a hidden row keeps: its swatch position, its
@@ -71,13 +73,17 @@ Practical implication:
 
 Shows up in **Filters** when **at least one category is hidden**, even if you later disable the filter:
 
-- `Field: hiding A, B, C +N more`
+- `Field: hiding A, B, C +N more` when fewer categories are hidden than shown,
+  `Field: showing only A, B` when fewer are shown (after **Hide all** and a few
+  ticked again), `Field: hiding every category` when none is; at most four names, then
+  ` +N more`. **Missing** is counted like a category, and only when some open
+  cell has no category, as the legend lists it.
 
 ### Enable/disable vs remove
 
 - **Disable** the category filter in Filters:
   - cells from hidden categories can reappear,
-  - but they may appear visually “de-emphasized” (e.g., greyed) because the legend still considers them hidden.
+  - but they may appear visually “de-emphasized” (e.g., grayed) because the legend still considers them hidden.
 - **Remove** the category filter:
   - resets the field to “show all categories”
   - and restores default visibility state.
@@ -146,13 +152,9 @@ the exact bound applied:
 - `Live filtering = Off`: changing sliders updates the displayed values only;
   `Filter` appears beside `Reset`, and you click it to apply.
 
-:::{warning}
-**The toggle does not stay off.** It is rebuilt with the legend, so it returns
-to `On` whenever the legend re-renders: a different active field, a different
-colormap, a different kept view, or a loaded session. It is also not stored in
-a `.cellucid-session`. Check it again after any of those before you drag on a
-large dataset — see {doc}`05_performance_considerations`.
-:::
+The toggle holds for the page: turned off, it stays off for every continuous
+field, view and palette until you turn it on again or reload the page. It is
+not stored in a `.cellucid-session` (see {doc}`05_performance_considerations`).
 
 ### Reset
 
@@ -170,16 +172,16 @@ Shows up in **Filters** when the range is not the full range:
 
 (with `(disabled)` appended if you turned the filter off via Filters —
 though on a narrow sidebar that suffix is usually past the ellipsis, so read
-the greyed, struck-through row instead).
+the grayed, struck-through row instead).
 
 ```{figure} ../../../_static/screenshots/filtering/window-continuous-range-applied.png
-:alt: The whole window coloured by S_score with the Minimum slider raised: only the higher-scoring cells are drawn, and the Filters block reads a reduced count above one S_score range row.
+:alt: The whole window colored by S_score with the Minimum slider raised: only the higher-scoring cells are drawn, and the Filters block reads a reduced count above one S_score range row.
 :width: 1440px
 
 An `S_score` range filter in effect. Coloring and filtering are driven by the
 same field here, which is the common case — but they are separate: with
-**Rescale to range** on (the default) the colour scale follows the slider
-range; turn it off to keep the colours spanning the full data range.
+**Rescale to range** on (the default) the color scale follows the slider
+range; turn it off to keep the colors spanning the full data range.
 ```
 
 ---
@@ -188,17 +190,27 @@ range; turn it off to keep the colours spanning the full data range.
 
 Gene expression filters behave like numeric range filters — same block, same
 `Live filtering` / `Filter` / `Reset` controls — and like them they keep
-applying when you colour by another field: "filter by gene, colour by
+applying when you color by another field: "filter by gene, color by
 cluster" works. The filter is listed under **Filters** as
-`<gene>: <min> – <max>`; remove or disable it there, or colour by the gene
+`<gene>: <min> – <max>`; remove or disable it there, or color by the gene
 again to change its range.
 
+The range is in the values the gene is shown in (**Session › Data mapping ›
+Expression values**: as stored, normalized, `log1p` or both), and when they
+are not as stored the row names them: `Ins1 · log1p(norm.): 0.5 – 2.1`.
+Changing them drops the gene's range filter and color range — a range of
+counts says nothing of log-normalized values — and the view stays colored by
+the gene, read again in the new values. A highlight made from a range keeps
+the cells it took, and its name keeps the units it was made in
+(`Ins1 · log1p(norm.): 0.5 – 2.1`; an annotation group drawn on a gene,
+`Ins1 · log1p(norm.) 0.5 – 2.1`).
+
 ```{figure} ../../../_static/screenshots/filtering/window-gene-range-active.png
-:alt: The whole window coloured by the gene Ins1 with the Minimum slider raised, so only the cells expressing it are drawn and an Ins1 range row is listed in the Filters block.
+:alt: The whole window colored by the gene Ins1 with the Minimum raised to 37.6, so only the cells at or above it are drawn, and the Filters block reading Showing 179 of 3,696 cells above an Ins1: 37.6 – 1255 row.
 :width: 1440px
 
-Coloured by `Ins1`, its range filter is listed and hides every cell outside
-the range; coloured by another field afterwards, it is still listed and still
+Colored by `Ins1`, its range filter is listed and hides every cell outside
+the range; colored by another field afterwards, it is still listed and still
 hides them until you remove or disable it.
 ```
 
@@ -257,7 +269,7 @@ When active and set below 100%, Filters shows a line like:
 
 - `Field: outlier ≤ 95%`
 
-It keeps applying when you colour by another field, as every filter does, and
+It keeps applying when you color by another field, as every filter does, and
 stays listed under **Filters** until you remove or disable it.
 
 ### Enable/disable vs remove
@@ -283,9 +295,9 @@ rest of that category. Use it when one large category crowds out the others,
 or to compare categories at the same size.
 
 1. Click the category's count. A small box takes its place, reading `all`.
-2. Type a number, for example `200`, and press {kbd}`Enter` ({kbd}`Escape`, or
-   clicking elsewhere, cancels).
-3. The count now reads `200 / 1,200 cells` in the link colour; its tooltip
+2. Type a number, for example `200`, and press {kbd}`Enter` (clicking elsewhere
+   applies it too; {kbd}`Escape` cancels).
+3. The count now reads `200 / 1,200 cells` in the link color; its tooltip
    says *Keeps a random 200 cells of Beta (seed 0); click to change, or type
    all*.
 

@@ -31,7 +31,7 @@ Filtering is **not deletion**.
 This is the single most useful thing to know before you touch a control.
 
 ```{figure} ../../../_static/screenshots/filtering/window-clusters-all-visible.png
-:alt: The whole application window with the Pancreas embedding coloured by clusters, every legend row checked, and the Filters block reading Showing all 3,696 cells above No filters active.
+:alt: The whole application window with the Pancreas embedding colored by clusters, every legend row checked, and the Filters block reading Showing all 3,696 cells above No filters active.
 :width: 1440px
 
 **Before.** All 3,696 cells drawn, every category ticked.
@@ -56,7 +56,7 @@ Cellucid creates filters through three UI surfaces, all of them inside
 ### 1) Categorical legend — checkboxes
 
 ```{figure} ../../../_static/screenshots/filtering/type-category-visibility.png
-:alt: The categorical legend for clusters: Show all and Hide all above eight rows, three of them (Ductal, Ngn3 high EP, Ngn3 low EP) unchecked and reading 0 of their cell counts, each row carrying a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:alt: The categorical legend for clusters: Show all and Hide all above eight rows, three of them (Ductal, Ngn3 high EP, Ngn3 low EP) unchecked and reading 0 of their cell counts, each row carrying a color swatch, a label, a cell count, a rename pencil and a delete bin.
 :width: 488px
 
 Unchecking a row creates a **category visibility** filter. `Show all` and
@@ -85,17 +85,17 @@ for a continuous obs field and for a gene.
 :width: 496px
 
 Lowering the percentage creates an **outlier** filter that hides the cells
-furthest from their own category's centre in a latent space (scVI, PCA), never
+furthest from their own category's center in a latent space (scVI, PCA), never
 in the 2D/3D layout. The control is present for every categorical field of the
 file; until a latent space is chosen it is a **Choose latent space** button
 instead of the slider ({doc}`02_outlier_filtering_per_active_field`).
 ```
 
-Every filter applies until you remove it, whatever the view is coloured by:
+Every filter applies until you remove it, whatever the view is colored by:
 
-- a **gene expression range filter** set while the gene was coloured keeps
-  hiding cells after you colour by a cluster or another gene;
-- an **outlier filter** keeps applying after you colour by another field.
+- a **gene expression range filter** set while the gene was colored keeps
+  hiding cells after you color by a cluster or another gene;
+- an **outlier filter** keeps applying after you color by another field.
 
 Each is listed under **Filters** with its field (`CD3E: 1.00 – 4.00`,
 `cell_type: outlier ≤ 90%`, `cell_type: keeping 200 of Beta`), where it can
@@ -171,7 +171,7 @@ These are easy-to-miss gotchas:
   affected cells.
   :::
 - **Categorical visibility filters**: a cell without a category (the
-  missing-value code) is drawn in the neutral “None” grey and has a legend row
+  missing-value code) is drawn in the neutral “None” gray and has a legend row
   of its own, **Missing**, under the categories, with its count (`visible /
   available`, like a category's) and a checkbox: untick it to hide those
   cells, a filter like a hidden category (listed as `<field>: hiding
@@ -193,11 +193,11 @@ Cellucid supports both:
   - and re-enables it, so a removed filter usually disappears from the list entirely.
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-row-disabled.png
-:alt: The same three-row Filters list with the clusters hiding row unchecked under the pointer: that row is greyed and struck through while the other two stay black, and the count line above has risen.
+:alt: The same three-row Filters list with the clusters hiding row unchecked under the pointer: that row is grayed and struck through while the other two stay black, and the count line above has risen.
 :width: 496px
 
 **Disabled**, not removed. The row keeps its configuration and its `×`, and it
-is drawn greyed and struck through so it is obvious at a glance which rows are
+is drawn grayed and struck through so it is obvious at a glance which rows are
 still doing work. Ticking the box puts the filter back exactly as it was.
 ```
 
@@ -240,7 +240,7 @@ High-level performance model:
 
 :::{note}
 **Filtering now makes drawing cheaper, not more expensive.** Hidden points are
-rejected before rasterisation, so a heavily filtered view draws faster than an
+rejected before rasterization, so a heavily filtered view draws faster than an
 unfiltered one. This has not always been true; see
 {doc}`05_performance_considerations` for what changed and why it also fixed a
 correctness bug.
@@ -260,10 +260,10 @@ No—filters are reversible visibility rules. Remove or disable them to bring ce
 
 Clearing the active field affects **coloring** (points become neutral gray), but it does **not** clear filters.
 
-### “My gene filter still hides cells after I coloured by clusters.”
+### “My gene filter still hides cells after I colored by clusters.”
 
 That is intended: a gene-range filter keeps applying until it is removed,
-whatever is coloured. Remove or disable it under **Filters** (see
+whatever is colored. Remove or disable it under **Filters** (see
 {doc}`04_common_filter_types_document_every_filter_the_ui_exposes`).
 
 ---

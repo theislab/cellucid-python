@@ -46,9 +46,9 @@ count what you changed from the defaults (see {doc}`02_analysis_ui_overview`).
 | --- | --- |
 | Essentials | **Compare** (Pages / Categories), **Group A**, **Group B**, **Swap A and B** |
 | More options → Cells | **Within**, **Min cells per group** |
-| More options → Test | **Replicates**, **Min cells per sample**, **Method**, **Wilcoxon p-values**, **Multiple testing**, **Expression matrix**, **Fold change from** |
+| More options → Test | **Replicates**, **Min cells per sample**, **Pair samples across groups**, **Method**, **Wilcoxon p-values**, **Multiple testing**, **Expression matrix**, **Fold change from** |
 | More options → Filters | **Max adjusted p**, **Min \|log2FC\|**, **Min % expressing in either group**, the gene filters |
-| More options → Labels | **Labelled genes** |
+| More options → Labels | **Labeled genes** |
 
 Nothing runs until you press **Run**. When the groups cannot be compared, Run is
 disabled and the line above it says why (see
@@ -64,7 +64,7 @@ after a run redraws the volcano at once; changing anything else marks the result
 | Compare | Pages |
 | Group A | The first page |
 | Group B | The second page |
-| Field | The first categorical field with two or more categories |
+| Field | The coloring field when it is not named like a sample, else the best field named like a cell type, annotation, lineage or cluster, else the first not named like a sample |
 | Group A | None |
 | Group B | None |
 | Within | All cells |
@@ -73,6 +73,7 @@ after a run redraws the volcano at once; changing anything else marks the result
 | Min cells per group | 10 |
 | Replicates | None (cells) |
 | Min cells per sample | 10 |
+| Pair samples across groups | Off |
 | Method | Wilcoxon rank-sum |
 | Wilcoxon p-values | Exact or continuity-corrected (R) |
 | Multiple testing | Benjamini–Hochberg |
@@ -85,7 +86,7 @@ after a run redraws the volcano at once; changing anything else marks the result
 | Exclude pattern | None |
 | Only genes in | All genes |
 | Gene list | None |
-| Labelled genes | 15 |
+| Labeled genes | 15 |
 <!-- /options:differential -->
 
 ---
@@ -142,6 +143,8 @@ tested (see
 | `The groups share N cells` | The pages overlap; a cell can be on one side only. |
 | `Each group needs at least 2 cells` | No test says anything about one cell. |
 | `Reading the categories…` | The field is still being read. |
+| `Each group needs at least 2 samples of … with N cells or more` | With **Replicates**, too few samples on a side. |
+| `A paired test needs at least 2 samples of … in both groups; N have` | **Pair samples across groups** is on and fewer than 2 samples have cells in both groups ([Paired samples](#paired-samples)). |
 
 ---
 
@@ -168,34 +171,100 @@ Cellucid result can be compared with one computed in Python column for column.
 scanpy’s `rank_genes_groups` does. Cells of one donor or sample are not
 independent, so with many cells a cell-level test calls even small differences
 significant. Choose a **sample field** instead and the run is a **pseudobulk**
-test:
+fit — the limma-trend pipeline of the limma user’s guide, as pseudobulk
+benchmarks recommend (Law et al. 2014, *Genome Biol* 15:R29; Crowell et al.
+2020, *Nat Commun* 11:6077; Squair et al. 2021, *Nat Commun* 12:5692):
 
 - each sample’s cells of Group A form one observation, and its cells of Group B
   another (a sample with cells on both sides gives one to each); cells with no
   sample are left out;
 - a sample with fewer of a group’s cells than **Min cells per sample** (10 by
   default) is left out of that side: every observation weighs the same in the
-  test, and the mean of a handful of cells is mostly noise. The result says how
-  many were (a `small samples left out` chip, and **Samples left out** in the
-  expanded view);
-- a gene’s value for an observation is its mean over those cells, read in one pass
-  over the gene’s non-zero entries; a cell with no value of the gene (`NaN`: a
-  modality that did not measure it) is left out of that mean, and **Min cells
-  per sample** counts the cells with a value, so a sample short of them is left
-  out of that gene’s test only — never silently: each gene’s samples tested are
-  `n_a` and `n_b` in the CSV, and a `genes with fewer samples` chip (and
-  **Genes with samples left out** in the expanded view) counts the genes;
-- the test is **Welch’s t** between the two groups’ per-sample means, as
-  `scipy.stats.ttest_ind(..., equal_var=False)` on those means; the score is t,
-  `log2FC` follows **Fold change from** on the mean of the per-sample means, and
+  fit, and a handful of cells is mostly noise. The result says how many were (a
+  `small samples left out` chip, and **Samples left out** in the expanded view);
+- **every gene of the matrix** is summed per sample, in one pass over each gene’s
+  non-zero entries, from the **raw stored values** — whatever the expression
+  transform of the Data mapping: normalizing cells before summing them would be
+  wrong. The normalization and the variance moderation below take every gene,
+  so a run asked for a few genes still reads them all, and reports the ones
+  asked for;
+- **a matrix of counts** (the Data mapping’s counts flag): each sample’s summed
+  counts are normalized as edgeR normalizes bulk samples. Library sizes are the
+  sum of the sample’s cells’ stored totals (the obs column
+  `uns['cellucid']['totalCounts']` names, `obs['total_counts']` as `prepare()`
+  writes it, else a column named like a total: `n_counts`, `nCount_RNA`), read
+  as one column and never by a pass over the genes; else the sample’s summed
+  counts over every gene (edgeR’s default, `colSums`). **TMM** factors as
+  `edgeR::calcNormFactors(y, method = "TMM")` (`normLibSizes`): genes no sample
+  counts left out, the reference sample the one whose upper quartile over its
+  library size is closest to their mean, 30% of log-ratios and 5% of
+  abundances trimmed, precision weights, factors scaled to a geometric mean of
+  1. Then **log-CPM** as `edgeR::cpm(y, log = TRUE, prior.count = 2)` on library
+  × factor, `log2((S + p) / (L + 2p) · 10⁶)` with `p = 2 · L / mean(L)`: the
+  prior grows with each library, so a gene no sample counts has the same value
+  in every sample. **Any other matrix**: each sample’s mean of the values as
+  stored;
+- a cell with no value of the gene (`NaN`: a modality that did not measure it)
+  is left out of the sample’s sum, and **Min cells per sample** counts the cells
+  with a value: a sample short of them is **missing** (NA) for that gene only —
+  never silently: each gene’s samples fit are `n_a` and `n_b` in the CSV, and a
+  `genes with fewer samples` chip (and **Genes with samples left out** in the
+  expanded view) counts the genes. TMM takes the samples’ complete sums;
+- a gene no cell of the compared samples expresses (no value above 0) has
+  nothing to fit: it is left out of the fit and of the prior below — the minimal
+  expression filter of an edgeR/limma pipeline — and reported untested;
+- each gene is fit with **limma**: `lmFit` of `~ group` (paired: `~ donor +
+  group`, below) on its observed samples, then **empirical-Bayes moderation**,
+  `eBayes(fit, trend = TRUE)`: the prior degrees of freedom `d0` and the prior
+  variance `s0²` (a natural-spline trend of each gene’s mean log-CPM) are
+  estimated from every expressed gene, each gene’s variance is shrunk to
+  `(d·s² + d0·s0²) / (d + d0)`, and the score is the moderated t of the group
+  coefficient on `d + d0` degrees of freedom (p two-sided). limma’s own edge
+  cases hold: a gene with no residual degrees of freedom (one sample a side)
+  takes the prior variance alone; variances that spread no more than chance give
+  an infinite `d0` (every gene’s variance the prior’s); fewer than three genes
+  are not moderated. When some genes have fewer observed samples than others,
+  limma ≥ 3.61 would estimate the prior with `fitFDistUnequalDF1` and a loess
+  trend; Cellucid keeps limma’s `fitFDist` for every fit (which takes unequal
+  degrees of freedom as they are) — identical to limma whenever every sample is
+  measured for every gene;
+- `log2FC` is the group coefficient: of log2-CPM for counts (A − B; paired,
+  within donors), else **Fold change from** on the mean of the per-sample means;
   `% A` / `% B` are the share of the group’s cells with a value that are above 0.
 
 Each group needs at least 2 samples with **Min cells per sample** of its cells or
-more, else Run says so. **Method** and
-**Wilcoxon p-values** do not apply and are hidden. No variance moderation (limma,
-edgeR, DESeq2) and no pairing is applied; a gene with fewer than 2 samples with a
-value on a side is not tested. The result line reads `Pseudobulk t-test`, and the
-expanded view states the field and the samples on each side.
+more, else Run says so. **Method** and **Wilcoxon p-values** do not apply and are
+hidden. The result line reads `Pseudobulk limma`, and the expanded view states
+the field, the samples on each side, how many samples have cells in both groups,
+the values (the raw counts summed, where the library sizes came from, the range
+of the TMM factors) and the model (design, `d0`, the range of `s0²`); an agent
+reads the same as `about.values` and `about.model`. Every number — TMM factors,
+log-CPM, coefficients, residual and posterior variances, `d0`, `s0²`, moderated
+t and p — is held to R’s edgeR 4.10.7 and limma 3.68.5 at 1e-6
+(`cellucid/tests/analysis-pseudobulk-limma.test.mjs`, the reference written by
+`cellucid/scripts/generate-pseudobulk-limma-reference.R`).
+
+### Paired samples
+
+When the same donors gave cells to both groups — the liver and the bone marrow
+of one fetus, a tumor and the normal tissue of one patient — a donor’s two
+observations are not independent: each donor has its own level. **Pair samples
+across groups** (shown with **Replicates**; off by default) blocks by donor:
+
+- a sample of **Replicates** with an observation in both groups is fit; a sample
+  in one group only is left out (counted in the result), and so are its units’
+  library sizes and TMM factors;
+- the model is `~ donor + group`: the donor a blocking factor, so each donor’s
+  own level is taken out before the groups are compared, then limma’s
+  moderation as above; a gene missing one of a donor’s samples is fit on the
+  rest;
+- `n_a` and `n_b` are the samples of each group the gene was fit on.
+
+**Replicates** must name the field the groups share — the donor, not a sample id
+that differs between the two organs. At least 2 donors in both groups are
+needed, else Run says so. Whether paired or not, the result says how many
+samples are in both groups (`about.pairing` for an agent: `unpaired; 6 samples of
+donor are in both groups: paired: true tests them paired`).
 
 ### Wilcoxon p-values
 
@@ -225,11 +294,23 @@ chosen matrix is tested (after the gene filters). See
 [Expression matrix](08_analysis_mode_genes_panel.md#expression-matrix) in Marker
 genes for how each matrix names its genes and when only **Mapped** is offered.
 
+The values tested follow **Data mapping › Expression values** (as stored by
+default; normalized to 10,000 counts per cell and/or `log1p`), described in
+[Values tested](08_analysis_mode_genes_panel.md#values-tested). Cells as
+observations, every gene is tested in those values (with both switches on, the
+Wilcoxon and t-test on log-normalized values, as scanpy's `rank_genes_groups`
+and Seurat's `FindMarkers` expect them); with **Replicates**, each sample's
+**Replicates** (pseudobulk) never normalize cells: they sum each sample's raw
+counts and normalize the samples ([Replicates](#replicates-pseudobulk)),
+whatever Expression values says; the form says so on its values line, the
+result records the raw counts it read (`computed_on.values`: raw values), and
+changing Expression values leaves it current.
+
 ### Fold change from
 
 | Choice | `log2FC` |
 | --- | --- |
-| **Automatic** (default) | **Undo log1p** when the data mapping says the expression matrix read holds `log1p` values, otherwise **As stored** |
+| **Automatic** (default) | **Undo log1p** when the values are `log1p` — the expression values' log1p (natural log), or a matrix the data mapping says holds `log1p` values — otherwise **As stored** (values normalized without the log: the ratio of means); pseudobulk of counts: the group coefficient of log2-CPM (limma) |
 | **Undo log1p (scanpy)** | `log2((expm1(meanA) + 1e-9) / (expm1(meanB) + 1e-9))`, `expm1` in the base the matrix was logged with — scanpy’s `logfoldchanges` |
 | **As stored** | `log2((meanA + 0.01) / (meanB + 0.01))` on the values as stored |
 
@@ -256,7 +337,7 @@ cells of the group and the rest, or of the group and its reference group.
 
 The pseudocount 0.01 is in the data's own units, as published. On data stored
 at a small scale (fractions, values around 1e-5) it outweighs the means and
-every **As stored** fold change shrinks towards 0; rescale such data, or read
+every **As stored** fold change shrinks toward 0; rescale such data, or read
 its scores and p-values instead.
 
 Interpretation:
@@ -295,8 +376,8 @@ For analysis-wide scope and assumptions, see {doc}`01_analysis_mental_model`.
 
 ## Filters and labels
 
-The filters decide which tested genes are called significant, coloured and
-listed; **Labelled genes** decides how many of them carry a name on the volcano.
+The filters decide which tested genes are called significant, colored and
+listed; **Labeled genes** decides how many of them carry a name on the volcano.
 
 | Option | A gene passes when |
 | --- | --- |
@@ -333,22 +414,23 @@ Run reads `Running…`. A box under it says what the run covers
 done, how much has been read and how long is left, and offers **Cancel**. See
 {doc}`02_analysis_ui_overview`.
 
-```{figure} ../../../_static/screenshots/analysis/de-cancelled.png
-:alt: The Differential expression panel after Cancel: the Run button enabled again, and under it a box saying the run was cancelled, after how long, that nothing was kept, and a Run again button.
+```{figure} ../../../_static/screenshots/analysis/de-canceled.png
+:alt: The Differential expression panel after Cancel: the Run button enabled again, and under it a box saying the run was canceled, after how long, that nothing was kept, and a Run again button.
 :width: 488px
 
-A cancelled run keeps nothing and is not an error. **Run again** runs the form
+A canceled run keeps nothing and is not an error. **Run again** runs the form
 as it stands.
 ```
 
 ### Volcano plot
 
 ```{figure} ../../../_static/screenshots/analysis/de-sidebar-result.png
-:alt: The sidebar result of a differential expression run: a small volcano plot with the genes up in Page 1 in red on the right, those down in blue on the left and the rest grey, one of its gene labels shown, and the Expand button below it under the pointer.
+:alt: The sidebar result of a differential expression run: a small volcano plot with the genes up in Page 1 in red on the right, those down in blue on the left and the rest gray, one of its gene labels shown, and the Expand button below it under the pointer.
 :width: 440px
 
-The sidebar shows the volcano and its result line. The summary, the gene table
-and the export live behind `⤢ Expand`.
+The sidebar shows the volcano, headed by how many of its gene labels are shown
+("1 of 15 gene labels shown"). The summary, the gene table and the export live
+behind **Expand**.
 ```
 
 Axes:
@@ -363,7 +445,7 @@ the filters), not significant.
 
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/volcano-threshold-a.png
-:alt: A volcano plot at a log2 fold-change threshold of 0.5, with broad red and blue clouds of coloured points either side of a narrow grey band, and a legend below the axis title counting each colour.
+:alt: A volcano plot at a log2 fold-change threshold of 0.5, with broad red and blue clouds of colored points either side of a narrow gray band, and a legend below the axis title counting each color.
 :width: 1192px
 
 **Min |log₂FC| 0.5** — 1,588 genes significant, 750 up and 838 down.
@@ -372,7 +454,7 @@ the filters), not significant.
 
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/volcano-threshold-b.png
-:alt: The same volcano plot at a log2 fold-change threshold of 3, with the threshold lines pushed far apart and almost every point now grey, and a legend below the axis title counting each colour.
+:alt: The same volcano plot at a log2 fold-change threshold of 3, with the threshold lines pushed far apart and almost every point now gray, and a legend below the axis title counting each color.
 :width: 1192px
 
 **Min |log₂FC| 3** — the same run, now 190 significant genes, all down.
@@ -382,10 +464,10 @@ the filters), not significant.
 
 ### The expanded view
 
-`⤢ Expand` opens the four-region view (see {doc}`02_analysis_ui_overview`):
+**Expand** opens the four-region view (see {doc}`02_analysis_ui_overview`):
 
-- **Options:** the filters and **Labelled genes** at the top (the same values as
-  the form), then the volcano’s look: point size, threshold lines, colour scheme.
+- **Options:** the filters and **Labeled genes** at the top (the same values as
+  the form), then the volcano’s look: point size, threshold lines, color scheme.
 - **Summary statistics:**
 
   | Row | What it counts |
@@ -395,13 +477,13 @@ the filters), not significant.
   | **Replicates** | With a sample field: the field and the samples on each side. |
   | **Samples left out** | With a sample field: the samples of each side with fewer cells than **Min cells per sample**, and their cells. |
   | **Genes with samples left out** | With a sample field: the genes whose test left out a sample for having fewer than **Min cells per sample** cells with a value of the gene. |
-  | **Significant (adj p ≤ …, \|log2FC\| ≥ …)** | Tested genes passing the two filters; the label states the values in force. |
+  | **Significant (adj p ≤ …, \|log2FC\| ≥ …)** | Tested genes passing the filters (with **Min % expressing in either group** above 0, that one too), the same count the result's status line gives; the label states the values in force. |
   | **Up in A** / **Down in A** | Significant genes with log2FC > 0 / < 0. |
   | **p-values** (Wilcoxon), **Multiple testing**, **Expression matrix**, **Fold change** | What the run used. |
 
 - **Statistical analysis:** every significant gene with its score, log2FC,
   adjusted p, `% A` and `% B`, highest score first (so the genes up in A lead and
-  those up in B close the table). Click a gene to colour the cells by it, as
+  those up in B close the table). Click a gene to color the cells by it, as
   choosing it under **Coloring & filtering → Gene expression** does; the sidebar's
   gene search then names it.
 

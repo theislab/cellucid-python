@@ -33,31 +33,32 @@ For a categorical obs field, each cell has a category code:
 - If the code is missing/invalid, the cell uses a neutral gray “None” color.
 
 Category colors come from the file when it stores them, else from a fixed
-categorical palette, and can be overridden per category. A file colours a field
-the way Scanpy keeps a plot's colours: `uns['<field>_colors']`, one hex colour
+categorical palette, and can be overridden per category. A file colors a field
+the way Scanpy keeps a plot's colors: `uns['<field>_colors']`, one hex color
 (`#rrggbb`) per category, in category order, as `sc.pl.umap(adata,
-color="leiden")` leaves it. Cellucid reads it as Scanpy does: a list shorter
-than the categories is not used, and a longer one gives its first colours. A
-list holding anything but hex colours is not used, nor is it for a text column
+color="leiden")` leaves it; `prepare()` and `cellucid_prepare()` keep them for
+every column they write. Cellucid reads it as Scanpy does: a list shorter
+than the categories is not used, and a longer one gives its first colors. A
+list holding anything but hex colors is not used, nor is it for a text column
 whose categories are found when it is loaded. Once categories are merged, the
-merged field is coloured by Cellucid's palette.
+merged field is colored by Cellucid's palette.
 
 A text or true/false column (no stored categories) lists its labels in
-code-point order and gives each the colour its label names (a hash of the
-label picks it; of two labels naming one colour, the one first in that order
+code-point order and gives each the color its label names (a hash of the
+label picks it; of two labels naming one color, the one first in that order
 keeps it and the other takes the next free one), so the legend does not depend
 on which cells are open: opening more cells adds the labels they hold, and
-every label shown keeps its place in that order and its colour.
+every label shown keeps its place in that order and its color.
 
 A categorical with more categories than there are open cells, and too many
 for one request of the connection to read (barcodes or clone ids kept as a
 categorical: one category per cell, a million or more on a web host), lists
-only the categories its open cells hold, in the file's order, each in the colour it has
-with every category listed (the file's colour at its place, else the palette's
-colour at its place), and the legend says how many of the file's categories
+only the categories its open cells hold, in the file's order, each in the color it has
+with every category listed (the file's color at its place, else the palette's
+color at its place), and the legend says how many of the file's categories
 those are ("12,034 of its 1,203,456 categories are among them"). Only those
-categories' names and colours are read. Opening more cells adds the ones they
-hold, in the file's order, every one shown keeping its colour and whether it
+categories' names and colors are read. Opening more cells adds the ones they
+hold, in the file's order, every one shown keeping its color and whether it
 is hidden; a session or starting view that names a category no open cell holds
 keeps what it set for it until cells holding it open. Any other categorical
 lists every category it stores, the unused ones too.
@@ -65,12 +66,12 @@ lists every category it stores, the unused ones too.
 A missing code is not a quiet variant of a category — it is outside the
 category system entirely, and that has two visible consequences:
 
-- Those cells are drawn in the neutral grey at **full opacity**, they get no
+- Those cells are drawn in the neutral gray at **full opacity**, they get no
   legend row, and they are counted in no per-category count. They still count
   toward `Showing X of Y cells`.
 - **No categorical filter can hide them.** Unchecking every row, or clicking
   `Hide all`, leaves them on screen. This is the usual explanation for “I hid
-  every category and grey points are still there”. See
+  every category and gray points are still there”. See
   {doc}`../e_filtering/01_filtering_mental_model` for how that fits the rest of
   the filter stack.
 
@@ -86,19 +87,25 @@ This means you can:
 
 ### Category order (important for interpretation)
 
-The legend list is sorted alphabetically (human-friendly), but:
+The legend lists the categories in the field's own order: the order the file
+stores them in (`adata.obs[key].cat.categories`, the order Scanpy plots them
+in), the order Group categories made them in, the same order the figure
+export's legend and the analysis plots use. A trajectory stays in its order
+(Ductal → Ngn3 low EP → … on the Pancreas sample), a renamed category keeps
+its place, and a merged one goes where the merge put it. Also:
 - colors are attached to category **identity** (the category index), not the legend row order.
 
-So “the first visible row” is not a special color; it’s just the first in alphabetical sort order.
+To change the order, set it in the file (`adata.obs[key] = adata.obs[key].cat.reorder_categories([...])`)
+or make a field in the order you want with Group categories.
 
 ```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
-:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a color swatch, a label, a cell count, a rename pencil and a delete bin.
 :width: 488px
 
-The `clusters` legend on the Pancreas sample. The rows run in alphabetical
-order — `Alpha`, `Beta`, `Delta`, `Ductal`, … — which is *not* the order the
-categories were defined in, and the palette is attached to the category, not to
-the row position.
+The `clusters` legend on the Pancreas sample. The rows run in the field's own
+order — `Ductal`, `Ngn3 low EP`, `Ngn3 high EP`, `Pre-endocrine`, … — the
+order the file defines them in, and the palette is attached to the category,
+not to the row position.
 ```
 
 ---
@@ -116,43 +123,43 @@ Continuous values use the neutral gray “None” color when:
 - log scale is enabled and the value is ≤ 0 (log is undefined there).
 
 `NaN` is a drawable value. Cellucid reads it as “not measured here” and gives it
-the neutral grey, which makes missing measurements obvious without forcing you
-to filter them out. The grey is drawn beneath the measured cells (a missing
-category's grey too), so a missing value never covers a measured one.
+the neutral gray, which makes missing measurements obvious without forcing you
+to filter them out. The gray is drawn beneath the measured cells (a missing
+category's gray too), so a missing value never covers a measured one.
 
-The grey **follows the background**. It is a neutral grey one fixed step of
+The gray **follows the background**. It is a neutral gray one fixed step of
 lightness (CIE L* 15.4) from the background, toward the middle: on white it is
-the light grey Cellucid always drew (RGB 211), on the light grid a shade darker
-(202), and on dark backgrounds a mid-dark grey (55 on the dark grid, 39 on
-black). A light grey on a dark background outshone the expressing cells; at
-this step most of every colour map stands out from the background more than
-the grey does, on every theme. The same grey is used for a gene's zeros (when
+the light gray Cellucid always drew (RGB 211), on the light grid a shade darker
+(202), and on dark backgrounds a mid-dark gray (55 on the dark grid, 39 on
+black). A light gray on a dark background outshone the expressing cells; at
+this step most of every color map stands out from the background more than
+the gray does, on every theme. The same gray is used for a gene's zeros (when
 **Gray for zero** is on), for missing values of every field kind, in kept views and multiview, in smoke
 mode, in the cell info card's swatch, in the legend's dot beside **Gray**, and
 in exported figures (made from the figure's own paper, in every export
 strategy).
 
-An **infinity is not drawable, and it is not greyed**: it has no position on a
-colour scale, and it would stretch the field’s range so far that every other
-cell collapses onto one colour. A field or gene containing one is refused
+An **infinity is not drawable, and it is not grayed**: it has no position on a
+color scale, and it would stretch the field’s range so far that every other
+cell collapses onto one color. A field or gene containing one is refused
 instead — the active field does not change, the picture stays as it was, and you
 get a counted message naming what is wrong.
 
 :::{important}
-**Two continuous payloads are refused rather than coloured.**
+**Two continuous payloads are refused rather than colored.**
 
 - **Any `+Infinity` or `-Infinity`.** The message reads
-  `Field "X" contains 12 infinite values, so it has no colour scale.`, then the
+  `Field "X" contains 12 infinite values, so it has no color scale.`, then the
   count of each kind out of the total cells, then the first few affected cell
   indices, then the one line of Python that repairs the values.
 - **Every value `NaN`.** There is no range to scale, so the field is refused
   too, with `Field "X" has no value in any of 18,142,044 cells, so it has no
-  colour scale.` This is usually a column that was never computed, or an empty
+  color scale.` This is usually a column that was never computed, or an empty
   expression layer.
 
 For a gene these arrive as a multi-line notification titled
 `Gene cannot be shown`. For a continuous obs field the same text arrives after
-the prefix `Failed to load field:`. Both are walked through in
+the prefix `Could not load the field:`. Both are walked through in
 {doc}`05_troubleshooting_fields_legends`.
 :::
 
@@ -162,9 +169,9 @@ In practice the log-scale case is the one you will meet. A file written by
 continuous obs field, or any non-finite value in gene expression: both
 writers refuse one, with counts rather than a bare complaint. A `NaN` in a
 continuous obs column is kept: it is stored as a missing value and drawn in
-the neutral grey.
+the neutral gray.
 
-Every file is read as it is, however it is opened, so a `NaN` grey appears
+Every file is read as it is, however it is opened, so a `NaN` gray appears
 wherever the file holds one. An infinity is refused when the gene or column is
 read, with the same counted reason.
 :::
@@ -201,10 +208,10 @@ logarithm and take the None color.
   stays off. No substitute `0–1` range is invented for it.
 - A field that *does* have positive values but whose **currently selected
   range holds none** (with **Rescale to range** on) is not refused: every cell
-  in that range is zero or negative and draws in the None grey, and the range
+  in that range is zero or negative and draws in the None gray, and the range
   filter still applies. Widen the range, or turn off **Rescale to range**.
 
-So “I turned log scale on and everything went grey” is never a field with no
+So “I turned log scale on and everything went gray” is never a field with no
 positives — that case cannot turn the toggle on — but it can be a slider range
 that holds no positive value.
 :::
@@ -242,18 +249,15 @@ When you might turn Live filtering off:
 - remote desktop / low-power machines where UI responsiveness matters.
 
 The **Reset** button is clickable in both states and restores the full numeric
-range for that field, snapping both sliders back to `0` and `100`.
+range for that field: both bounds go back to the field's minimum and maximum.
 
-:::{warning}
-**`Live filtering` is not sticky.** It returns to `On` every time the legend is
-rebuilt — which includes changing the active field, changing the colormap,
-switching between kept views, and loading a session — and it is not stored in a
-`.cellucid-session`. On a large dataset, check the toggle again after any of
-those before you start dragging.
-:::
+**`Live filtering` holds for the page.** Turned off, it stays off for every
+continuous field and gene, every view and every palette, until you turn it on
+again or reload the page. It is not stored in a `.cellucid-session` (it is how
+you work, not what is shown). A bound moved but not yet filtered is dropped
+when you choose another field.
 
-The screenshot of the disabled `Filter` button, and the rest of the filter
-inventory, are in
+The rest of the filter inventory is in
 {doc}`../e_filtering/04_common_filter_types_document_every_filter_the_ui_exposes`.
 
 ---
@@ -285,16 +289,25 @@ single value rather than being refused.
 Gene expression fields behave like continuous fields with a few practical differences:
 
 - Genes are selected via search and **loaded on demand** (first selection can be slower).
+- A gene is colored in the values **Session › Data mapping › Expression
+  values** sets: as stored by default, or normalized to 10,000 counts per cell
+  and/or `log1p` (`ln(1 + x · 10,000 / cell total)` with both on, scanpy's
+  `normalize_total(target_sum=1e4)` + `log1p`). The legend names the units
+  (`Values: log1p(norm.)`) and a figure's legend titles the gene with them
+  (`Ins1 · log1p(norm.)`). Changing them reads the gene again and drops its
+  color range and filter, which were in the old units; see
+  {doc}`../b_data_loading/13_data_mapping` (Expression values). Obs fields are
+  never transformed.
 - Many genes are sparse: a large fraction of cells can be exactly zero. By
-  default a gene's 0 is a value like any other and takes the colour scale's
-  lowest colour. The legend's **Gray for zero** switch (off by default; see
+  default a gene's 0 is a value like any other and takes the color scale's
+  lowest color. The legend's **Gray for zero** switch (off by default; see
   {ref}`gray-for-zero`) draws the cells where the gene is 0 (the cells that do
   not express it, for a gene with no negative value) in the neutral gray of a
-  missing value instead, so the colours show only where the gene is
-  expressed. The gray is the gene's zero, never the colour range's minimum:
+  missing value instead, so the colors show only where the gene is
+  expressed. The gray is the gene's zero, never the color range's minimum:
   with **Rescale to range** following a filter of "≥ 1" on counts, the cells
-  at 1 keep the lowest colour, and any cell below a moved-up minimum takes the
-  lowest colour, as scanpy's `vmin` clamps it.
+  at 1 keep the lowest color, and any cell below a moved-up minimum takes the
+  lowest color, as scanpy's `vmin` clamps it.
   The gray cells are drawn **beneath** the expressing ones: in 2D every
   expressing cell lies on top of the gray around it, and in 3D it shows
   through gray on the same surface (a gray cell clearly in front still hides
@@ -317,17 +330,17 @@ Gene expression fields behave like continuous fields with a few practical differ
   pick a cell (a read cell is found at its drawn size), and in exported
   figures, whose note says the same. The fade and the gray follow the
   background: light or dark, and a figure's own paper; the legend shows a
-  dot of each colour beside its words.
+  dot of each color beside its words.
 
-A gene's range filter keeps applying after you colour by another field, so
-"filter by gene, colour by clusters" works; **Filters** lists it.
+A gene's range filter keeps applying after you color by another field, so
+"filter by gene, color by clusters" works; **Filters** lists it.
 
 ---
 
 ## Outlier filter
 
 For a categorical field, each cell has a **latent outlier quantile**: its
-distance to its category's centre in a latent space (an `obsm` array such as
+distance to its category's center in a latent space (an `obsm` array such as
 `X_scVI` or `X_pca`, never the 2D/3D layout), as the share of its category at
 that distance or closer. The **Legend** box shows:
 
@@ -340,7 +353,7 @@ Semantics:
   - `95%` hides the farthest ~5% of every category.
 
 Important details:
-- An outlier filter keeps applying after you colour by another field, and
+- An outlier filter keeps applying after you color by another field, and
   **Filters** lists it (`cell_type: outlier ≤ 90%`).
 - It needs a latent space, which Cellucid never picks for you: the file's
   (`prepare(latent_key=...)`), the launch's (`--latent-key`), or yours under
@@ -392,8 +405,8 @@ Before assuming something is broken:
    - Did you narrow a continuous range earlier?
 4) Look for the neutral “None” gray:
    - It usually means missing values, invalid codes, or log-scale-incompatible values.
-5) Look at the notification centre:
-   - If the colours did not change **at all** after you picked a gene or field,
+5) Look at the notification center:
+   - If the colors did not change **at all** after you picked a gene or field,
      the payload was refused rather than drawn. Read the message: it names the
      field, counts the offending values and gives the first affected cells.
 

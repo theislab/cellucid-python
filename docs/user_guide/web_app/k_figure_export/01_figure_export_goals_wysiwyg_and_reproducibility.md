@@ -42,8 +42,10 @@ It helps to separate two promises that people often mix:
   when you press **Export**, the exported figure should match the state you are currently looking at (camera, visibility, colors, legends, highlights, the reference grid your background draws, and the atmospheric fog that carries depth).
 
   Where a layer cannot be reproduced, Cellucid says so instead of quietly
-  dropping it. Data layers the export cannot draw — connectivity edges, the
-  velocity vector field, volumetric smoke — **block** the export. Interaction
+  dropping it. Data layers the export cannot draw — connectivity edges,
+  volumetric smoke — **block** the export. The velocity vector field is drawn
+  as a still picture of its flow, arrows on a grid (see
+  {doc}`06_edge_cases`). Interaction
   chrome — the orbit compass, lasso and selection indicators, multiview panel
   title chips — is never exported and is disclosed in the Annotations block, so
   it is stated before you press Export rather than discovered afterwards.
@@ -79,23 +81,34 @@ When you export a figure, you should expect the following to be captured (subjec
   If you enable **Export all views (split-view)** while in grid mode, the export includes a multi-panel grid of views.
 
 **Geometry**
-- Camera framing and projection (rotation/zoom/pan; orbit vs planar mode).
+- Camera framing and projection (rotation/zoom/pan; orbit vs planar mode),
+  exactly as framed on screen: the plot takes the view's shape (or the
+  crop's) and the view fills it edge to edge, with no blank band and no cells
+  cut off, and every point keeps its on-screen size relative to the view.
 - Active **dimension** (1D/2D/3D).
 - Cropping via **Frame export** (if enabled and confirmed).
 
 **Visibility and appearance**
 - Visibility after filters and hide/show logic (invisible points are not drawn).
 - Color-by field + legend mapping (categorical palettes or continuous colormaps).
-- The *fact* of filtering: hidden categories stay in the legend, marked
+- The *fact* of filtering: categories you hid stay in the legend, marked
   `(hidden)` with a hollow swatch, so a filtered figure cannot be mistaken for
-  a complete one.
-- Current point size and (for PNG/Hybrid) shader-accurate point appearance.
+  a complete one. A category a filter on another field left without cells is
+  not listed: the figure has none of its cells, and that filter is named in
+  the title (a grid panel's label).
+- Current point size: every format draws each cell at the size the screen
+  draws it at its depth (size attenuation), and PNG/Hybrid with the
+  shader-accurate point appearance.
 
 **Annotations and overlays**
 - Title (if set).
-- Axes and axis labels (if enabled).
+- Axes and axis labels (if enabled, on a 1-D or 2-D view seen flat): rulers
+  of exactly what the plot shows, their ends the coordinates at the plot's
+  edges. A 3-D view has none (see {doc}`06_edge_cases`).
 - Legend (if enabled; position right/bottom) — one shared legend when every
-  panel of a multi-panel export matches, otherwise one legend per panel.
+  panel of a multi-panel export matches, otherwise one legend per panel. Where
+  the figure draws highlighted cells, the legend has an entry for them: the
+  highlight's color, the page's name and its cell count.
 - 3D orientation indicator (if enabled in 3D orbit mode).
 - Highlights and selection emphasis (if enabled; non-selected points can be
   muted), with an `n = N selected` badge counted per panel.
@@ -138,9 +151,9 @@ Use this workflow when you want to be able to recreate a figure weeks later (or 
      See: {doc}`../l_sessions_sharing/index`
 
 3) **Record export settings**
-   - Plot size (W×H)
+   - Figure width (millimetres, or the journal column) and text sizes (points)
    - Format (SVG/PNG) and DPI (for PNG)
-   - Explicit SVG point strategy (Full vector, Optimized vector, or Hybrid)
+   - SVG point strategy (Full vector until you choose Optimized vector or Hybrid)
    - Legend/axes/title/background choices
    - Frame export crop settings (if used)
 

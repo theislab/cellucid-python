@@ -24,14 +24,17 @@ cellucid.prepare("pbmc_cellucid.h5ad", format="h5ad", data=adata,
 | The AnnData holds | `prepare()` takes it as |
 |---|---|
 | `obs` | `obs` |
-| `X` and `var` | `gene_expression` and `var` (neither when `X` is absent) |
+| `uns['<column>_colors']` of each `obs` column written (Scanpy's colors) | `obs_colors`: the viewer opens the column in them |
+| the matrix the viewer opens the AnnData with: `raw.X` and `raw.var` when `raw` holds more genes than `X` or `X` is scaled (Scanpy's `adata.raw = adata`, then the highly variable genes kept and `sc.pp.scale`), else `X` and `var`; without `X`, `raw`, else a layer | `gene_expression` and `var`, a message saying which and why |
 | every numeric `obsm` array | `embeddings`, each under its own key |
 | `obsm['<field>_<basis>']` as wide as `obsm['X_<basis>']` | `vector_fields` (`velocity_umap` is `velocity` over `X_umap`) |
 | `obsp['connectivities']` | `connectivities` |
 | `uns['cellucid']` | `dataset_id`, `dataset_name`, `dataset_description`, the citation and source, and the launch defaults (`embedding_defaults`, `latent_key`, `obs_keys`, `var_gene_id_column`, `vector_field_default`, `normalize_embeddings`, `centroid_min_points`) |
 
-Layers, `raw`, other `obsp` matrices, `obsm` tables and the rest of `uns` are
-not written: a Cellucid-ready AnnData holds `X` alone
+Colors that cannot color the column written (not a list of text, fewer
+colors than its categories, a column not written as a categorical) are left
+out, and a message says why. The other matrices (layers, `raw` or `X`), other
+`obsp` matrices, `obsm` tables and the rest of `uns` are not written: a Cellucid-ready AnnData holds `X` alone
 ({doc}`09_cellucid_ready_anndata_specification`). A file `prepare()` wrote
 before carries its own `uns['cellucid']`, so preparing it again needs no
 identity:
@@ -42,7 +45,16 @@ cellucid.prepare("pbmc_v2.zarr", format="zarr", data=ad.read_h5ad("pbmc_cellucid
 
 To choose a component, pass it: `embeddings={"X_umap": adata.obsm["X_umap"]}`
 writes that embedding alone, `gene_expression=adata.layers["log1p"]` writes
-that layer as `X` (with `adata.var` as its genes). To leave out something the
+that layer as `X` (with `adata.var` as its genes), and
+`gene_expression=adata.X, var=adata.var` writes `X` where the object's genes
+are read from `raw`.
+
+A Scanpy object is read as Scanpy and the viewer read it: after
+`adata.raw = adata`, `sc.pp.highly_variable_genes(..., subset=True)` and
+`sc.pp.scale`, its genes are the log-normalized `raw` of every gene, not the
+scaled `X` of the highly variable ones, so `prepare(data=adata)` writes
+`raw.X` (with `raw.var`) and the file opens on the values the object itself
+opens on. To leave out something the
 object holds, remove it from a copy first (`adata.obsp.pop("connectivities")`).
 
 ## From a MuData
@@ -67,7 +79,8 @@ cellucid.prepare("citeseq_cellucid.h5mu", format="h5mu", data=mdata,
 | The MuData holds | Written as |
 |---|---|
 | `mdata.obs`, `mdata.obsm`, `mdata.obsp['connectivities']`, `mdata.uns['cellucid']` | the root: the cells, the shared embeddings and vector fields, the shared graph, the identity and launch defaults (as for an AnnData) |
-| each modality's `X`, `var`, `obs`, numeric `obsm` arrays, `obsp['connectivities']` | `mod/<name>`, a Cellucid-ready AnnData: gene-major `X`, every array laid out for the browser |
+| `mdata.uns['<column>_colors']`, a modality's `uns['<column>_colors']` | the colors of the root's columns at the root, of a modality's own columns in its `mod/<name>/uns` (`obs_colors` names them `<name>:<column>`) |
+| each modality's matrix the viewer opens it with (as for an AnnData: `raw.X` with `raw.var` when `raw` holds more genes than `X` or `X` is scaled, else `X`; without `X`, `raw` or a layer), `obs`, numeric `obsm` arrays, `obsp['connectivities']` | `mod/<name>`, a Cellucid-ready AnnData: gene-major `X`, every array laid out for the browser; a modality written from `raw` makes the root `var` and its `varmap` follow `raw`'s genes |
 | `mdata.obsmap`, `mdata.varmap`, the per-modality masks in `mdata.obsm` | as mudata keeps them: which cells and features each modality has |
 | `mdata.mod` order | `mod-order` |
 

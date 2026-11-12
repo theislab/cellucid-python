@@ -61,7 +61,7 @@ class LoadSessionRequest:
         """
         waiter = self._waiter
         if waiter is None:
-            raise RuntimeError("This session load was cancelled.")
+            raise RuntimeError("This session load was canceled.")
         if waiter.payload is None:
             self._viewer._await(waiter, timeout, f"Timed out waiting for the viewer to load {self.name}")
         assert waiter.payload is not None
@@ -80,7 +80,7 @@ class LoadSessionRequest:
         self._waiter = None
 
     def __repr__(self) -> str:
-        state = "cancelled" if self._waiter is None else "answered" if self.done else "waiting"
+        state = "canceled" if self._waiter is None else "answered" if self.done else "waiting"
         return f"LoadSessionRequest({self.name!r}, {state})"
 
 

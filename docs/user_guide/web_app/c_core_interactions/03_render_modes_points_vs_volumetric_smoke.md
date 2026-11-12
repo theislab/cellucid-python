@@ -66,6 +66,11 @@ Its relevant controls are:
   logarithmic slider, not a percentage, and a dataset opens at the size its cell
   count implies rather than at a fixed default — which is why the same slider
   position looks different on a 3,696-cell trajectory and on an atlas.
+  With `Perspective size scaling` a cell is a ball of one size in the
+  embedding's space, so a cell near the camera is drawn larger, up to
+  160 pixels across (or the GPU's own largest point, where that is smaller).
+  However near the camera comes, every cell is drawn whole and opaque and can
+  be picked, on screen and in a figure alike.
 - **Shader quality** `Full (lighting + fog)`, `Sculpted (soft 3D light)`,
   `Light (circular, no lighting)`, or `Ultra-light (square points)` — a
   **look** choice: in 3D views `Full`, `Light` and `Ultra-light` measured the
@@ -81,9 +86,9 @@ Its relevant controls are:
   light, a sky-and-ground ambient, a broad gloss in place of a hard white
   highlight (no glitter on dense clouds, and none at all on dots too small to
   show it), and darkening toward each ball's edge, so touching cells stay
-  separate. The lighting is computed in linear light and normalised so that
-  the **centre of every ball is exactly its legend colour**. Its points are
-  opaque: fog fades their colour toward the fog colour instead of thinning
+  separate. The lighting is computed in linear light and normalized so that
+  the **center of every ball is exactly its legend color**. Its points are
+  opaque: fog fades their color toward the fog color instead of thinning
   them, and with antialiasing on in a 3D view their edges are smoothed per
   sample against the depth of what is behind, so a soft rim never shows the
   background through a nearer cell. Highlighted cells get the same 3D ring as
@@ -102,7 +107,7 @@ Its relevant controls are:
   at all. Turning either
   off yourself is a choice that stands for the page. Ticking
   `Level of detail (LOD)` makes the `Force LOD level` slider directly beneath
-  it usable; while the checkbox is clear the row stays where it is, greyed out
+  it usable; while the checkbox is clear the row stays where it is, grayed out
   (it does not appear and disappear, so nothing under it moves when the page
   turns level of detail on or off by itself). The slider sits at its lowest position,
   reading `Auto`, until you move it. `Auto` follows the camera at every dataset
@@ -132,19 +137,19 @@ For large datasets, begin here and use
 ## What the smoke cloud shows
 
 Smoke draws the **currently visible** cells as a lit, semi-transparent cloud,
-coloured by the active field: each region of the cloud takes the mean display
-colour of the cells there, so a categorical field tints each cluster in its
-legend colour and a continuous field blends its colormap. Density sets how
-opaque a region is; the colour says which cells produced it.
+colored by the active field: each region of the cloud takes the mean display
+color of the cells there, so a categorical field tints each cluster in its
+legend color and a continuous field blends its colormap. Density sets how
+opaque a region is; the color says which cells produced it.
 
 ```{figure} ../../../_static/screenshots/web_app/window-smoke-cloud.png
-:alt: The whole window in Volumetric smoke cloud mode: the Pancreas cells drawn as a soft cloud tinted with the colours of their clusters, and the sidebar showing Render mode set to Volumetric smoke cloud (beta) with its Beta tag above the Smoke quality, Smoke shape, Smoke lighting and Performance controls, Animation speed at Still.
+:alt: The whole window in Volumetric smoke cloud mode: the Pancreas cells drawn as a soft cloud tinted with the colors of their clusters, and the sidebar showing Render mode set to Volumetric smoke cloud (beta) with its Beta tag above the Smoke quality, Smoke shape, Smoke lighting and Performance controls, Animation speed at Still.
 :width: 1440px
 
-The Pancreas sample coloured by `clusters` and switched to smoke, with every
+The Pancreas sample colored by `clusters` and switched to smoke, with every
 control at its initial value except `Animation speed`, which is at 0
-(`Still`). The cloud keeps each cluster's legend colour; where two clusters
-overlap, their colours mix.
+(`Still`). The cloud keeps each cluster's legend color; where two clusters
+overlap, their colors mix.
 ```
 
 A 2D or 1D embedding, or a 3D one that happens to be flat, has no thickness
@@ -183,7 +188,7 @@ noise resolution, and a recorded readout reproduces an appearance.
 | UI label | Initial position/readout | Meaning |
 |---|---|---|
 | `Light absorption` | 50 / `1.0` | Shadow depth, 0 (no shadows) to 2. |
-| `Light scattering` | 50 / `1.0` | Forward-scattering glow towards the light, 0 to 2. |
+| `Light scattering` | 50 / `1.0` | Forward-scattering glow toward the light, 0 to 2. |
 | `Direct lighting` | 50 / `1.00×` | Key-light intensity, 0× to 2×. |
 
 Only `Grid density` rebuilds the volume and `Noise detail` regenerates the
@@ -193,12 +198,12 @@ noise; every other control applies on the next frame.
 
 Smoke is lazy: no density volume is built during ordinary Points startup. The
 first switch to smoke builds a GPU volume from the **currently visible** cells
-and their current colours. The volume is a function of three things — which
-cells are visible, where they are, and what colour they are drawn in — so each
+and their current colors. The volume is a function of three things — which
+cells are visible, where they are, and what color they are drawn in — so each
 of these marks it dirty:
 
 - a visibility change: filtering, outlier thresholds, view-scoped visibility;
-- a colour change: switching the active field, a colormap, a category colour,
+- a color change: switching the active field, a colormap, a category color,
   or the log scale;
 - a position change: switching dimension (3D, 2D, 1D), or a new dataset.
 
@@ -209,15 +214,15 @@ and the next switch to smoke rebuilds it. Only direct `Grid density` slider
 movement uses the approximately 300 ms debounce, so dragging the slider does
 not rebuild on every input event.
 
-The build stays on the GPU. Cellucid scans the existing position, colour, and
+The build stays on the GPU. Cellucid scans the existing position, color, and
 visibility arrays without making a full-size copy, streams visible cells
-through one bounded staging batch (positions plus 8-bit colours, at most
+through one bounded staging batch (positions plus 8-bit colors, at most
 262,144 cells), and splats each batch twice: density into a 32-bit float atlas
-and colour into a four-channel float atlas. It reduces the density maximum on
+and color into a four-channel float atlas. It reduces the density maximum on
 the GPU and normalizes both into one 8-bit RGBA volume — red is density, the
-other three channels the mean colour premultiplied by that density — and
+other three channels the mean color premultiplied by that density — and
 publishes the native 3D texture as one ordered transaction. From that volume it
-then derives a half-resolution lighting volume (the depth of cloud towards the
+then derives a half-resolution lighting volume (the depth of cloud toward the
 light, and the sky occlusion) and a small occupancy volume that lets each ray
 leap over empty space. No pixel data or normalization crosses into JavaScript.
 The previous volume remains published until the replacement commands,
@@ -238,15 +243,16 @@ This has three practical consequences:
 Smoke and kept views are mutually exclusive:
 
 - **Keep view** is disabled in smoke.
-- If kept views already exist, selecting smoke is rolled back and Cellucid
-  reports `Volumetric smoke requires a single view. Clear snapshots first.`
+- While views are kept, the `Volumetric smoke cloud (beta)` choice is
+  dimmed; its tooltip, and an agent asking for smoke, say why:
+  `volumetric smoke draws one view; remove the kept views first (Clear, beside Layout)`.
 - Smoke forces the live, single-view layout.
 
 A `.cellucid-session` saves `Render mode` and the smoke slider/select values.
 It stores slider positions, and because every scale is fixed, the same
 positions restore the same readouts. The session does not contain the dataset
 or a frozen GPU volume; loading it with the matching dataset rebuilds smoke from
-that dataset's restored visible cells and colours. The built-in samples' saved
+that dataset's restored visible cells and colors. The built-in samples' saved
 views carry the initial values in the tables above. A session saved in smoke and
 opened on a device that cannot run smoke restores everything else and opens in
 `Points`, with the message below. See
@@ -261,7 +267,7 @@ buffers on the GPU, which needs float blending. Safari on iPhone and iPad, and
 many Android browsers, do not offer it. Cellucid checks this before building
 anything: choosing smoke there shows a notification titled **Volumetric smoke
 unavailable** — “Volumetric smoke isn't available on this device: its graphics
-driver can't blend high-precision colour, which the smoke cloud needs to add up
+driver can't blend high-precision color, which the smoke cloud needs to add up
 the cells. Points rendering works as usual.” — and `Render mode` stays on
 `Points`. Other missing capabilities get the same headline with their own
 reason. Use a desktop browser for smoke.
@@ -290,7 +296,7 @@ Recover in this order:
 2. Lower `Ray quality`.
 3. Lower `Noise detail`.
 4. Lower `Grid density` if entering smoke, or rebuilding it after a filter or
-   recolour, is the slow part; it also cuts the samples every ray takes.
+   recolor, is the slow part; it also cuts the samples every ray takes.
 5. Return to `Points`; after a context loss, reload the page before retrying.
 
 If nothing needs to move, set `Animation speed` to 0 (`Still`): a settled

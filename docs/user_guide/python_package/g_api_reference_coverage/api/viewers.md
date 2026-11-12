@@ -65,7 +65,7 @@ def on_ready(event):
 ### 2) Drive the UI from Python (Python → viewer)
 
 Every action of the viewer -- everything a person can do, and everything an
-agent reads -- is a method, generated from the action catalogue
+agent reads -- is a method, generated from the action catalog
 ({ref}`the full list <generated-action-methods>`):
 
 ```python
@@ -79,8 +79,10 @@ Each returns an {class}`~cellucid.jupyter.ActionRequest` without waiting for
 the viewer; `request.result()` (in a notebook, in a later cell) is the
 viewer's answer -- a read's result, or a change's outcome -- and raises
 {class}`~cellucid.jupyter.ActionError` with the viewer's reason when it did
-not apply the action. A refusal nobody collects is printed to `sys.stderr`
-unless you take it over:
+not apply the action. A change that made no history step (it was so already,
+recording is paused, ...) is answered with why: `request.unrecorded`, and
+`result()` warns {class}`~cellucid.jupyter.ActionNotRecordedWarning`. A
+refusal nobody collects is printed to `sys.stderr` unless you take it over:
 
 ```python
 @viewer.on_command_error
@@ -153,7 +155,7 @@ viewer.mapping_set(
 ```
 
 Nothing waits. `mapping_set()` (the `mapping.set` action) changes the groups
-it names and leaves the others as they are (`knn=None` is "no neighbour
+it names and leaves the others as they are (`knn=None` is "no neighbor
 graph"; leaving `knn` out keeps the one shown). The viewer reports its
 mapping once the dataset loads and again whenever it changes: the applied
 mapping is `viewer.data_mapping` from a later cell; a mapping the viewer
@@ -200,8 +202,8 @@ server and web build (`viewer_url`, `server_url`, `clear_web_cache`,
 (generated-action-methods)=
 ### Action methods (generated)
 
-Every action of the catalogue, as a method of both classes. They are
-generated from the catalogue the package ships (`scripts/generate_actions.py`,
+Every action of the catalog, as a method of both classes. They are
+generated from the catalog the package ships (`scripts/generate_actions.py`,
 never written by hand), so this list is exactly the viewer's actions.
 
 ```{eval-rst}
@@ -209,13 +211,15 @@ never written by hand), so this list is exactly the viewer's actions.
    :members:
 ```
 
-### `ActionRequest`, `ActionError` and `OMIT`
+### `ActionRequest`, `ActionError`, `ActionNotRecordedWarning` and `OMIT`
 
 ```{eval-rst}
 .. autoclass:: cellucid.jupyter.ActionRequest
    :members:
 
 .. autoexception:: cellucid.jupyter.ActionError
+
+.. autoexception:: cellucid.jupyter.ActionNotRecordedWarning
 
 .. autodata:: cellucid.jupyter.OMIT
    :annotation:

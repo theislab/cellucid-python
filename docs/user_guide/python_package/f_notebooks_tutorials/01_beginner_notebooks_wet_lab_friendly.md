@@ -40,7 +40,7 @@ viewer
 
 Then in the viewer:
 - choose a field to color by (clusters/cell type)
-- select some cells (lasso)
+- select some cells (**Highlighting**, **Lasso**: hold {kbd}`Alt`, drag around them, **Confirm**)
 - export a figure (SVG/PNG) if you want to share
 
 For the complete, step-by-step version, start with {doc}`11_open_a_dataset_and_color_by_clusters`.

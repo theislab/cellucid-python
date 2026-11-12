@@ -32,7 +32,7 @@ import json
 import os
 import re
 import zipfile
-from collections.abc import Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cache
@@ -50,7 +50,7 @@ INPUT_FORMATS_SCHEMA = 1
 
 
 class RefusedFormatError(ValueError):
-    """A file of a format the registry recognises but Cellucid never opens.
+    """A file of a format the registry recognizes but Cellucid never opens.
 
     Its message is the registry's ``refusal`` (the route that converts the
     file), or, for one of Cellucid's own files (a ``.cellucid-session`` or
@@ -131,15 +131,38 @@ def _format_of_container(container: str, layout: str) -> dict[str, Any]:
     raise ValueError(f"No input format is a {container} container in a {layout} layout.")
 
 
-def _file_endings() -> str:
-    endings = [
-        names[0]
-        for entry in input_formats()["formats"]
-        for layout, names in entry["names"].items()
-        # A format known by its content alone (MuData Zarr) has no ending.
-        if layout != "folder" and names
-    ]
-    return endings[0] if len(endings) == 1 else f"{', '.join(endings[:-1])} or {endings[-1]}"
+_LAYOUT_NOUNS = {"file": "file", "zip": "archive"}
+
+
+def openable_files_text() -> str:
+    """The single files Cellucid opens, as a message names them: "an .h5ad
+    file, a .loom file, ... or a .zarr.zip archive" -- the web app's
+    ``openableNamesText({layouts: ['file', 'zip']})`` (``data/input-formats.js``),
+    one phrase per format and layout by its usual name endings (each that
+    stands alone, shortest first, joined by ``/``: ``.rda/.rdata``; ``.rds``,
+    never the compressed copy's ``.rds.gz``; ``.zip`` left out beside
+    ``.zarr.zip``, which ends with it), a format recognized only to be
+    refused (h5Seurat) left out. cellucid-r's
+    ``.openable_files_text()`` says the same."""
+    formats = input_formats()["formats"]
+    single = [ending for entry in formats for layout in ("file", "zip") for ending in entry["names"].get(layout, [])]
+
+    def stands_alone(ending: str) -> bool:
+        last = ending[ending.rindex("."):]
+        return last == ending or last in single
+
+    phrases = []
+    for layout in ("file", "zip"):
+        for entry in formats:
+            names = entry["names"].get(layout)
+            if "refusal" in entry or not names:
+                continue
+            alone = [name for name in names if stands_alone(name)]
+            kept = [name for name in alone if not any(other != name and other.endswith(name) for other in alone)]
+            ending = "/".join(sorted(kept, key=lambda name: (len(name), name))) if kept else names[0]
+            article = "an" if re.match(r"^\.(h5|r|[aeiou])", ending, re.IGNORECASE) else "a"
+            phrases.append(f"{article} {ending} {_LAYOUT_NOUNS[layout]}")
+    return phrases[0] if len(phrases) == 1 else f"{', '.join(phrases[:-1])} or {phrases[-1]}"
 
 _ZARR_V2_ROOT_KEYS = (".zgroup", ".zattrs", ".zmetadata")
 _ZARR_V2_METADATA_FILES = frozenset({".zgroup", ".zattrs", ".zarray"})
@@ -352,7 +375,7 @@ def classify_anndata_path(path: str | Path) -> AnnDataStore:
     FileNotFoundError
         When nothing exists at ``path``.
     RefusedFormatError
-        When ``path`` is a format Cellucid recognises but never opens (an
+        When ``path`` is a format Cellucid recognizes but never opens (an
         h5Seurat file): the message says how to convert it; or one of
         Cellucid's own files (a ``.cellucid-session`` or ``.cellucid-library``
         file): the message says what it is and where it goes.
@@ -361,7 +384,7 @@ def classify_anndata_path(path: str | Path) -> AnnDataStore:
     """
     resolved = Path(path).expanduser().resolve()
     if not resolved.exists():
-        raise FileNotFoundError(f"Path not found: {resolved}")
+        raise FileNotFoundError(f"Nothing exists at {resolved}.")
     own = cellucid_file_of_name(resolved.name)
     if own is not None:
         raise RefusedFormatError(f"{resolved.name}: {own['said']}")
@@ -416,9 +439,7 @@ def _classify_file(resolved: Path) -> AnnDataStore:
             "link or from this computer, reading it whole once."
         )
     if named is None:
-        raise ValueError(
-            f"A file Cellucid opens must be an {_file_endings()} file: {resolved}"
-        )
+        raise ValueError(f"{resolved} is not a file Cellucid opens ({openable_files_text()}).")
     entry, layout = named
     ending = _name_ending(resolved.name, entry, layout)
     width = max(
@@ -451,7 +472,7 @@ def _classify_file(resolved: Path) -> AnnDataStore:
     kind = _hdf5_kind(resolved, entry) if entry["container"] == "hdf5" else str(entry["id"])
     refusal = _format_entry(kind).get("refusal")
     if refusal is not None:
-        # A format the registry recognises but Cellucid never opens (h5Seurat):
+        # A format the registry recognizes but Cellucid never opens (h5Seurat):
         # refused here, in the registry's words, rather than served for the
         # browser to refuse.
         raise RefusedFormatError(f"{resolved.name}: {refusal}")
@@ -701,13 +722,22 @@ def _scalar_text(node: Any) -> str | None:
     return value.decode() if isinstance(value, bytes) else value if isinstance(value, str) else None
 
 
-def read_cellucid_identity(store: AnnDataStore) -> tuple[str | None, str | None]:
+def read_cellucid_identity(
+    store: AnnDataStore, *, named: Collection[str] = ()
+) -> tuple[str | None, str | None]:
     """The dataset id and name a store declares in ``uns['cellucid']``, if any.
 
     ``uns['cellucid']`` is the dataset's own description (``schema``, ``id``,
     ``name``, ``description``, ``citation``, ``source`` and launch
     ``defaults``), which the viewer reads from the store itself. Only the id
     and name are read here: they name the route and key sessions.
+
+    An absent field declares nothing. A present one that cannot be read is a
+    damaged store, refused with a ``ValueError`` rather than passed over for
+    the file's name, unless the caller names that field itself: ``named``
+    holds ``"id"`` when ``dataset_id`` is given and ``"name"`` when
+    ``dataset_name`` is, and such a field is ``None`` when it cannot be read
+    (cellucid-r's ``.zarr_store_identity(named =)``).
     """
     if store.kind not in ANNDATA_KINDS | MUDATA_KINDS:
         return None, None
@@ -716,7 +746,21 @@ def read_cellucid_identity(store: AnnDataStore) -> tuple[str | None, str | None]
         cellucid = _child(uns, "cellucid") if uns is not None and _is_group(uns) else None
         if cellucid is None or not _is_group(cellucid):
             return None, None
-        return _scalar_text(_child(cellucid, "id")), _scalar_text(_child(cellucid, "name"))
+
+        def field(name: str) -> str | None:
+            try:
+                return _scalar_text(_child(cellucid, name))
+            # What a damaged array raises depends on the library and the
+            # damage (JSON, codec, HDF5): every failure to read it is one.
+            except Exception as error:
+                if name in named:
+                    return None
+                raise ValueError(
+                    f"The store {store.path.name} holds uns/cellucid/{name} and it cannot be "
+                    f"read ({error}). Write the store again, or give dataset_{name}= yourself."
+                ) from error
+
+        return field("id"), field("name")
 
 
 # =============================================================================

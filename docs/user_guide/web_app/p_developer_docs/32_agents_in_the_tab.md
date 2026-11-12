@@ -42,7 +42,7 @@ beside the modules.
 ```
 
 Every way in runs a call with `runToolCall`: one tool list
-(`bridge/mcp-tools.js` `mcpToolsOf`, from the catalogue), one result
+(`bridge/mcp-tools.js` `mcpToolsOf`, from the catalog), one result
 encoding, one data guard. An agent acts only through the action dispatcher:
 its changes are history steps with `origin: 'agent'`, its name, its
 connection (`meta.connection: {id, kind, client, host}`) and its turn, so the
@@ -59,7 +59,7 @@ other working and says in one line what to do.
 |---|---|
 | `agent/index.js` | `initAgents` (from `ui/core/ui-coordinator.js`): the dock at the foot of the plot, the presence, the chat bar and the share choice |
 | `agent/instructions.js` | One instruction text, `instructionsFor('connector' \| 'chat' \| 'local')`; a tool it names in backticks must exist (`tests/agent-bridge.test.mjs`) |
-| `agent/bridge/` | One tool call (`tool-call.js`), the catalogue as MCP tools (`mcp-tools.js`), outcomes as MCP content (`mcp-content.js`), what a result may carry (`data-guard.js`), the calls from outside the tab (`agent-calls.js`, for the relay and local connections), the relay's WebSocket and wire (`relay-client.js`, `relay-protocol.js`), the pairing (`tab-secret.js`), connect codes and the approval link (`connect-code.js`, `connect-fragment.js`) |
+| `agent/bridge/` | One tool call (`tool-call.js`), the catalog as MCP tools (`mcp-tools.js`), outcomes as MCP content (`mcp-content.js`), what a result may carry (`data-guard.js`), the calls from outside the tab (`agent-calls.js`, for the relay and local connections), the relay's WebSocket and wire (`relay-client.js`, `relay-protocol.js`), the pairing (`tab-secret.js`), connect codes and the approval link (`connect-code.js`, `connect-fragment.js`) |
 | `agent/presence/` | The dispatcher's confirmer: the person's permissions, the confirm card, the activity line, the notice of what agents send |
 | `agent/chat/` | The chat bar: conversation, agent turn, context rule, keys, transcript, export, suggestions, the attached selection, the question with choices |
 | `agent/providers/` | One module per model provider behind one contract (`contract.js`): `anthropic.js`, `openai.js`, `scripted.js` (browser specs only) |
@@ -82,7 +82,12 @@ params, meta, signal, estimate, confirm, detail, stage, asking}`:
   null) and `confirm` when the definition asks before it runs;
 - `stage` `'handler'`: from the implementation of a `confirmAt: 'handler'`
   action (`ctx.confirm(detail)`), once it knows the cost, with `detail` one
-  sentence (a download's size);
+  sentence (a download's size); or, with `confirm` null, from any change's
+  implementation that finds heavy work only while it runs (`ctx.heavy(estimate)`:
+  the cells' totals of normalized values a mapping, a growth or a restore
+  needs), with that `estimate` and `started` (the estimate the start was asked
+  with): it is asked of `heavy` when its estimate is heavy and the start's was
+  not, and allowed at once otherwise; any origin but an agent is not asked;
 - `asking()`: called when the person is shown the card; subscribers hear
   `asking`, then `answered` (`allowed`), so the chat says it waits and the
   relay tells a waiting agent;
@@ -119,16 +124,19 @@ while it acts, what it runs and Stop (the dispatcher's `stop` of that turn,
 also while one of its questions waits: Stop withdraws the card); once done
 with steps, Undo turn and dismiss. Two agents at once are two lines.
 
-**Tool lists.** A connector's or local connection's list says per tool what
-the person's settings make of it ("asks", "runs without asking",
-"refused"), asked anew for each list (`mcp-tools.js` `permissionOf`, from
-the presence's `permissionFor({kind, connection})`); `onPermissionsChanged`
-lets a host announce a changed list. The chat's list says none and never
-changes within a chat: a model's reasoning is bound to the exact tools it
-was given (Anthropic refuses reasoning sent back with other tools, measured
-2026-11-04), so its model is told the permissions, the dataset's switch and
-the person's instructions with the person's message after any of them
-changed (`chat/index.js` `contextFor`).
+**Tool lists.** Every way in gets the same list (`mcp-tools.js`
+`mcpToolsOf`, which takes no settings), and it never changes with the
+person's settings: a model's reasoning is bound to the exact tools it was
+given (Anthropic refuses reasoning sent back with other tools, measured
+2026-11-04), and for Claude 5.5 models a changed list rewrites the client's
+cached prompt (a connector's next turn after a permission change cost $0.41
+against about $0.10 cached on Opus 5.5). The settings are told instead, in
+one set of words (`settings-told.js` `settingsTold`: the permissions, the
+dataset's switch, what the History settings leave out): to the chat's model
+with the person's message after any of them changed (`chat/index.js`
+`contextFor`), to a connector or local agent after its connection's first
+tool result and after any result once they changed (`agent-calls.js`
+`withSettingsTold`).
 
 ## The chat bar (`agent/chat/`)
 
@@ -144,15 +152,17 @@ conversation too long.
 - **Conversation** (`conversation.js`, pure, append only): `{id, createdAt,
   updatedAt, epoch, summary, messages}`; messages are `user` (`text, turn,
   at, context?, attached?`), `assistant` (`turn, provider, agent, model,
-  parts, at, epoch, stop, detail?, usage?, otherCalls?`), `tool` (`turn,
-  results: [{id, name, title, content, isError, step}]`) and `note`
-  (`stopped`, `error`, `refusal`, `limit`, `summary`; never sent to a model).
+  parts, at, epoch, stop, detail?, usage?, otherCalls?`; parts `text`,
+  `tool-call`, `opaque`, `progress`), `tool` (`turn, results: [{id, name,
+  title, content, isError, step, summariesOnly?, code?}]`; `code`: why an
+  action refused, `ActionRefused`'s code, kept and never sent) and `note`
+  (`stopped`, `error`, `refusal`, `limit`, `empty`, `summary`, `saved`; never sent to a model).
   Nothing sent to a model is edited afterwards (reasoning and the prompt
   cache are bound to the prefix).
 - **Context rule** (`context.js`): the budget is the model's own window. A
-  conversation that would not fit is summarised once, at the start of a
+  conversation that would not fit is summarized once, at the start of a
   turn, by the same model; a new epoch starts. Every call counts: a failed
-  or stopped try and the summariser's calls are carried by the next message
+  or stopped try and the summarizer's calls are carried by the next message
   (`otherCalls`), so the tokens shown and the budget count them.
 - **Keys** (`keys.js`): this tab (`sessionStorage`) unless Remember
   (`localStorage`), `cellucid:agent-key:<provider>`; a key goes only to its
@@ -165,7 +175,62 @@ conversation too long.
   (no model list in the code), failures mapped to the contract's kinds
   (`auth`, `permission`, `quota`, `rate`, `busy`, `network`, `unreadable`,
   `model`, `too-long`, `request`); `rate`, `busy` and `network` are waited
-  out, an unreadable answer asked for once more.
+  out, an unreadable answer asked for once more. **Progress notes**: the
+  models Anthropic's Thinking page lists as writing notes between tool calls
+  (`anthropic.js` `PROGRESS_MODELS`: Opus 5.5, Sonnet 5.5, the Fable and
+  Mythos 5.x models) return them as `thinking` blocks, empty under the
+  default display; the provider asks those models for
+  `thinking: {type: "adaptive", display: "updates"}` with the beta header
+  `thinking-display-updates-2026-08-18` and streams each note's text as
+  `progress` events (`contract.js`), kept as `progress` parts the chat shows
+  before the call they introduce (`transcript-view.js`, folded with its row,
+  `work.js`) and that no provider sends (the `opaque` block carries the note
+  back to the model that wrote it). No other model is asked: the Models API
+  does not say which models write notes, and the setting comes with adaptive
+  thinking, which would turn thinking on for a model that runs without it
+  by default (Opus 4.8, 4.7, 4.6, Sonnet 4.6). A request refused for the
+  setting is sent again without it and that model is not asked again in the
+  tab. The notes are billed in `output_tokens` at full length whatever the
+  display, so showing them changes no cost: measured 2026-11-11 on the same
+  live 10-call annotation turn with the setting off, then on (the order
+  reversed too, since the first run of a prefix pays its cache write), Sonnet
+  5.5 728k → 725k prompt and 1,333 → 1,187 output tokens, Opus 5.5 803k →
+  802k and 1,555 → 1,555. In those turns (and a 4-call one) neither model
+  wrote a note longer than its plain text remarks, so no note showed: the
+  models write them on longer, quieter stretches of work, and the chat now
+  shows them when they come. **Progress updates asked for** (F169): the chat's
+  instructions (`instructionsFor('chat')` only; a connector's or a
+  notebook's client shows its own) carry Anthropic's suggested line for a
+  person in the loop: say in a line what you are about to do, brief updates
+  while you work, a closing recap that stands on its own. Measured
+  2026-11-11 on the four showcase tasks (live-agents fixture, Opus 5.5, two
+  passes each way, the order reversed): the turn opened with a line 8 of 8
+  times (6 of 8 without), the longest run of model calls with nothing to
+  read fell from 4 and 6 to 2 on the longest task (annotation), words
+  between calls 29 parts against 23, and the cost did not move (output
+  8,329 against 8,321 tokens a pass, $0.99 against $1.02 a pass of four
+  tasks).
+- **What a call carries** (measured 2026-11-11 with Anthropic's
+  `count_tokens` on the exact request the chat builds): about 62,000 prompt
+  tokens before the conversation, 96% of it the tool list (178 tools, ~59,600
+  tokens) and 2,300 the instructions; tool results and pictures are small
+  beside it (a 640-pixel picture, results of a few hundred characters). The
+  tools and the instructions are one cached prefix (the breakpoint on the
+  instructions; nothing in them changes during a chat: permissions, the
+  person's instructions and the selection go with the message), so a call
+  pays it as a cache read; a new chat after five minutes, or a changed
+  instruction text, writes it again. Rules that keep it lean: a sentence true
+  of most tools is said once in the instructions, and a description says
+  only its exception (a change that is one undoable step says nothing; a
+  read, a move of the history, opening a dataset, an act outside the state,
+  a detail left out of the history say so), which saved ~1,800 tokens a
+  call. Measured and kept: `examples`, `additionalProperties: false`,
+  `minLength` (each ≤ 4%, and each is what lets a model call exactly).
+  Measured and not adopted: sending the 128 rarely used tools with
+  `defer_loading` beside Anthropic's tool search cuts a call to ~21,000
+  tokens and ~0.4 s, but Claude Haiku 5.5 then missed 4 of 12 tasks that the
+  full list got right, and a task needing a deferred tool took two or three
+  searches (slower, not cheaper).
 - **Above the message field** (`#agent-chat-tray`): a question's choices as
   buttons while it waits, and the selection chip. **Choices**
   (`ask.js`): the chat's own tool `ask_person` (2–5 choices, strict for both
@@ -258,9 +323,9 @@ classified is refused while the switch is on, so an action added later is
 guarded before anyone classifies it, and `tests/agent-data-guard.test.mjs`
 fails until it is classified. Adding a read means adding it to
 `CELL_LEVEL_READS` or `SUMMARY_READS` (and to `SHAPED_INPUTS` when it
-summarises values over groups).
+summarizes values over groups).
 
-**Not anonymisation.** A summary of a very small group the data or the person
+**Not anonymization.** A summary of a very small group the data or the person
 defines (a narrow range, a filter, a rare category) can still reveal its
 cells' values. The notice, the settings, the agent instructions and these
 docs say so (`SUMMARIES_ONLY_CAVEAT`); no minimum group size is made up. The
@@ -289,7 +354,7 @@ read like instructions. So:
 - the relay's own status result and the names the selection chip attaches
   are marked the same way;
 - the instructions say early that text from others is data, never
-  instructions (`instructions.js`), and the summariser carries no request out
+  instructions (`instructions.js`), and the summarizer carries no request out
   of it (`chat/context.js`).
 
 A result's text is cut to `RESULT_TEXT_CHARS` (150,000, Claude's limit) with
@@ -313,8 +378,26 @@ holds every route, the connection flow and the security model.
   `subscriptions/listen`; GET and DELETE answer 405), `/health`, the OAuth
   metadata (`/.well-known/oauth-protected-resource`, whose `resource` is the
   bare origin, and `/.well-known/oauth-authorization-server`), registration, authorize (the
-  waiting page with the connect code) and token routes, and `/tab` (the
-  tab's WebSocket, proven by its tab secret).
+  waiting page with the connect code) and token routes, `/oauth/claim` and
+  `/tab` (the tab's WebSocket, proven by its tab secret).
+- **One browser approves.** The waiting page sets the approver cookie
+  (`__Host-cellucid-approver`, `HttpOnly`, `Secure`, `SameSite=Strict`, ten
+  minutes) whose digest the request keeps; the tab claims a code with
+  `POST /oauth/claim` (`credentials: 'include'`, its tab secret in the body,
+  credentialed CORS for `ALLOWED_ORIGINS`), and the relay answers only the
+  browser whose cookie it is (`{ok: false, error: {code: 'other-browser'}}`
+  otherwise), so a link or code someone started in their own browser cannot
+  attach their agent (RFC 8628 §5.4). Only the pairing that claimed a code
+  decides it, on the socket. A local relay sets the same cookie (Chromium
+  and Firefox keep it on loopback http; page and relay on one loopback host).
+- **Who asks** is named by the host that vouches for it: Claude and ChatGPT
+  for `claude.ai` and `chatgpt.com`, any other app by its client document's
+  or https redirect's host (else "An app on this computer"), its self-chosen
+  name only quoted (`clients.js` `clientDisplay`, `connect/model.js`
+  `appName`); a call carries the app's own name with `known`, and the relay
+  client names an unvouched app's agent with `appName` too, so its steps,
+  activity line and confirm cards read as Manage… does and two such apps
+  are told apart.
 - **Tool calls** go to the pairing's Durable Object (one per browser), which
   sends them to that browser's tab focused last; `bridge/agent-calls.js`
   runs them as connection kind `connector`. Calls of one connection share a
@@ -332,7 +415,7 @@ holds every route, the connection flow and the security model.
   under a new deployment) answers a tool call with a sentence saying so and
   to read the history, a tool list with the bundled one; tabs reconnect by
   themselves with growing waits (`relay-client.js`).
-- **The bundle** (`relay/generated/bundle.js`): the catalogue, the
+- **The bundle** (`relay/generated/bundle.js`): the catalog, the
   instructions and the wire protocol, generated from the web sources by
   `node scripts/generate-relay-bundle.mjs` (`--check`;
   `tests/relay-bundle-contract.test.mjs` fails until it is regenerated after
@@ -353,7 +436,7 @@ holds every route, the connection flow and the security model.
 
 | Test | Covers |
 |---|---|
-| `tests/agent-bridge.test.mjs` | The MCP tools are the catalogue's; instructions name only existing tools; content encoding, data tags, refusal marking |
+| `tests/agent-bridge.test.mjs` | The MCP tools are the catalog's; instructions name only existing tools; content encoding, data tags, refusal marking |
 | `tests/agent-data-guard.test.mjs` | Every action that answers with data is classified; cell-level reads, shaped summaries and single-cell statistics refused or left out under the switch |
 | `tests/agent-presence.test.mjs` | Permissions (`decide`, modes, grants), the confirmer contract, cards made moot, the activity line, Stop while a card waits |
 | `tests/agent-chat.test.mjs`, `tests/agent-providers.test.mjs` | Conversations, the context rule, budgets, keys, export; providers on recorded API shapes (no network) |
@@ -363,6 +446,6 @@ holds every route, the connection flow and the security model.
 | `tests/browser/agent-data-guard.spec.mjs` | Every read walked with the switch on (three engines); the notice, the selection chip, a question's choices |
 | `tests/browser/agent-matrix.spec.mjs` | Either way in alone, both at once, one failing (the scripted model, a played Anthropic API, a played relay) |
 | `tests/browser-specs-hold-tests-contract.test.mjs` | Every browser spec file declares tests (a spec cut to its imports once lost thirteen tests while the run stayed green) |
-| `tests/browser/live-agents/` (`npm run test:live-agents`) | Real providers, local only, with the developer's keys (the environment's `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`, else `CELLUCID_AGENT_ENV` or the checkout's `.env`); never in CI. `byok.spec.mjs` in every engine, `every-action.spec.mjs`, `showcase.spec.mjs`, `robustness.spec.mjs`, `undo-own.spec.mjs`, and `injection.spec.mjs` (a category named like an instruction, read as data by a real model) |
+| `tests/browser/live-agents/` (`npm run test:live-agents`) | Real providers, local only, with the developer's keys (the environment's `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`, else `CELLUCID_AGENT_ENV` or the checkout's `.env`); never in CI. `byok.spec.mjs` in every engine, `every-action.spec.mjs` (each action asked of Claude Haiku 5.5: it must run, or be refused only with the exact code of a fact of the fixture, `FIXTURE_FACTS`; the turn undone restores the state; `CELLUCID_SWEEP_ACTIONS` runs named actions only), `showcase.spec.mjs`, `robustness.spec.mjs`, `undo-own.spec.mjs`, and `injection.spec.mjs` (a category named like an instruction, read as data by a real model) |
 
 Next: {doc}`31_local_agent_connection` (the local way in).

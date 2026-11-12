@@ -24,12 +24,12 @@ dataset lives somewhere they can reach:
 | A file or folder opened from disk | No: it never leaves your browser |
 | A Jupyter notebook session | No |
 
-For a shareable dataset, a **Share** button appears beside the **Dataset**
+For a shareable dataset, a **Share…** button appears beside the **Dataset**
 heading in the **Session** panel. It opens **Share this dataset** with three
 snippets, each with a **Copy** button.
 
 The snippets reopen the *dataset*, not your work on it. To share your camera,
-colouring, filters, highlights and the steps that led to them as well, save a
+coloring, filters, highlights and the steps that led to them as well, save a
 session file (**State › Session › Share…**) and send it with the link; a
 session saved on a shareable dataset opens that dataset by itself. See
 {doc}`05_share_workflows_links_sessions_data_files`.

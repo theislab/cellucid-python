@@ -39,8 +39,9 @@ a talk or a class:
   tour.
 
 After the last step the bar says *End of the tour*, and Cellucid returns to the
-step you were on. If you act during the tour, it stays where you acted, so the
-new step is yours to keep. While recording is paused with changes, the tour
+step you were on. If you (or an agent) act during the tour, by a change, an
+undo or a jump, the tour ends there and stays where you acted, so the new step
+is yours to keep; a note or a bookmark added meanwhile lets it play on. While recording is paused with changes, the tour
 first asks whether to keep them ({ref}`history-recording-paused`). A tracker
 loaded from a file or made by a replay also offers **▶ Tour** in the line
 above the graph.
@@ -52,7 +53,7 @@ An agent can play and stop the tour too (`history.tour.start`,
 `history.tour.stop`; {doc}`../g_agents/index`).
 
 For a scripted camera flight of your own, use the camera path
-({doc}`../c_core_interactions/02_camera_controls_advanced`).
+({doc}`../c_core_interactions/08_camera_path`).
 
 ---
 
@@ -104,7 +105,7 @@ Python or R ({doc}`../../python_package/e_jupyter_hooks/06_python_to_frontend_co
 is: past tense, in order, with the software, its version and the dataset. For
 example:
 
-> Single-cell data were explored interactively in Cellucid (version 0.9.7) [citation]. The dataset “Pancreatic endocrinogenesis” (… cells and … genes; its citation) was opened in full. The following 4 steps were applied, in this order: (1) coloured by cell_type; (2) hid Ductal and Ngn3 low EP of cell_type; (3) kept 500 cells of Beta in cell_type; (4) coloured by gene Ins1. Step 4 was taken by an AI assistant (Claude, claude-sonnet-4-6) at the user's request. 1 further step only changed the camera, the panel layout, colors or display settings and is not listed. The complete history, with every parameter, can be reopened from the accompanying Cellucid session file.
+> Single-cell data were explored interactively in Cellucid (version 0.9.7) [citation]. The dataset “Pancreatic endocrinogenesis” (… cells and … genes; its citation) was opened in full. The following 4 steps were applied, in this order: (1) colored by cell_type; (2) hid Ductal and Ngn3 low EP of cell_type; (3) kept 500 cells of Beta in cell_type; (4) colored by gene Ins1. Step 4 was taken by an AI assistant (Claude, claude-sonnet-4-6) at the user's request. 1 further step only changed the camera, the panel layout, colors or display settings and is not listed. The complete history, with every parameter, can be reopened from the accompanying Cellucid session file.
 
 What it holds:
 
@@ -124,7 +125,7 @@ What it holds:
   reached before the history was cleared (…)" or "a shared state, received
   without its history (…)". A sentence says that only the state it reached
   was kept, not the operations;
-- how many steps only changed the presentation (camera, panels, colours,
+- how many steps only changed the presentation (camera, panels, colors,
   display settings): counted, not listed;
 - how many steps no longer applied after a step was deleted: counted, left
   out.
@@ -138,13 +139,13 @@ no group under **Before *group*** or **After *group***:
 Single-cell data were explored interactively in Cellucid (version 0.9.7). The dataset … was opened in full. The 4 steps applied are listed below, in order. 1 further step only changed the camera, … The complete history, with every parameter, can be reopened from the accompanying Cellucid session file.
 
 Before QC
-The following 1 step was applied: (1) coloured by cell_type.
+The following 1 step was applied: (1) colored by cell_type.
 
 QC
 The following 2 steps were applied, in this order: (2) hid Ductal and Ngn3 low EP of cell_type; (3) kept 500 cells of Beta in cell_type.
 
 After QC
-The following 1 step was applied: (4) coloured by gene Ins1. Step 4 was taken by an AI assistant (Claude, claude-sonnet-4-6) at the user's request.
+The following 1 step was applied: (4) colored by gene Ins1. Step 4 was taken by an AI assistant (Claude, claude-sonnet-4-6) at the user's request.
 ```
 
 Notes on single steps are not part of it; they are in the report. Read it

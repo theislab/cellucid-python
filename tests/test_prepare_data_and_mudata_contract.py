@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 import subprocess
 import warnings
 from pathlib import Path
@@ -35,7 +34,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import zarr
-from _web_root import web_file
+from _web_root import node_executable, sibling_dir, sibling_file, web_file
 from scipy import sparse
 
 from cellucid import prepare, restore_original_order
@@ -43,7 +42,6 @@ from cellucid._anndata_files import AnnDataContents
 from cellucid._launch_defaults import launch_defaults
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-R_CROSS_WRITER = REPOSITORY.parent / "cellucid-r" / "tests" / "testthat" / "fixtures" / "cross_writer_mudata"
 
 
 # =============================================================================
@@ -75,6 +73,8 @@ def _adata() -> ad.AnnData:
     adata.obsp["connectivities"] = graph
     adata.obsp["distances"] = graph
     adata.layers["counts"] = counts
+    # Scanpy's colors of cell_type (its categories B, T).
+    adata.uns["cell_type_colors"] = np.asarray(["#1f77b4", "#ff7f0e"], dtype=object)
     adata.uns["cellucid"] = {
         "id": "toy-anndata",
         "name": "Toy AnnData",
@@ -109,6 +109,7 @@ def test_data_writes_what_the_same_components_write_byte_for_byte(tmp_path: Path
         citation_text="Doe 2026",
         citation_url="https://example.org/doe",
         obs=adata.obs,
+        obs_colors={"cell_type": ["#1f77b4", "#ff7f0e"]},
         var=adata.var,
         gene_expression=adata.X,
         connectivities=adata.obsp["connectivities"],
@@ -178,6 +179,59 @@ def test_an_explicit_argument_replaces_one_component(tmp_path: Path) -> None:
     assert written.uns["title"] == "Renamed"
     assert written.uns["cellucid"]["id"] == "toy-anndata"
     assert dict(written.uns["cellucid"]["defaults"]["embedding2d"])["key"] == "X_pca"
+
+
+def _colors(uns: Any) -> dict[str, list[str]]:
+    return {key: list(value) for key, value in uns.items() if key.endswith("_colors")}
+
+
+@pytest.mark.parametrize("output", ["data.h5ad", "data.zarr"])
+def test_a_written_column_keeps_its_scanpy_colors(tmp_path: Path, output: str, capsys: Any) -> None:
+    """F148: ``uns['<column>_colors']`` of every obs column written goes with
+    it (the viewer opens the column in them); colors that cannot color the
+    written column are left out, saying why, and so are a column's not written."""
+    adata = _adata()
+    adata.obs["donor"] = pd.Categorical(["d1", "d2", "d3"] * 10)
+    adata.obs["when"] = pd.Timestamp("2026-01-01")
+    adata.uns["donor_colors"] = ["#000001"]  # fewer than its three categories
+    adata.uns["score_colors"] = ["#000002"]  # a continuous column
+    adata.uns["when_colors"] = ["#000003"]  # a column not written
+    adata.obs["sample"] = pd.Categorical(["s1", "s2"] * 15)
+    adata.uns["sample_colors"] = ["#000005", "blue"]  # a color the viewer does not read
+    adata.uns["gone_colors"] = ["#000004"]  # no such column
+    path = prepare(tmp_path / output, format=output.split(".", 1)[1], data=adata)
+    written = ad.read_h5ad(path) if output.endswith(".h5ad") else ad.read_zarr(path)
+    assert _colors(written.uns) == {"cell_type_colors": ["#1f77b4", "#ff7f0e"]}
+    assert list(written.obs["cell_type"].cat.categories) == ["B", "T"]
+    said = capsys.readouterr().out
+    assert "uns['donor_colors'] not written: 1 color for the 3 categories of 'donor'" in said
+    assert "uns['score_colors'] not written: 'score' is not written as a categorical" in said
+    assert "when_colors" not in said and "gone_colors" not in said
+    assert "uns['sample_colors'] not written: 'blue' is not a hex color (#rrggbb, #rgb or #rrggbbaa)" in said
+
+
+def test_obs_colors_replaces_the_colors_data_holds_and_is_checked(tmp_path: Path) -> None:
+    adata = _adata()
+    given = ad.read_h5ad(prepare(tmp_path / "given.h5ad", format="h5ad", data=adata, obs_colors={"cell_type": ["#f00", "#0000FF", "#00ff0080"]}))
+    assert _colors(given.uns) == {"cell_type_colors": ["#f00", "#0000FF", "#00ff0080"]}
+    none = ad.read_h5ad(prepare(tmp_path / "none.h5ad", format="h5ad", data=adata, obs_colors={}))
+    assert _colors(none.uns) == {}
+    # An explicit obs keeps the colors data holds for the columns it writes.
+    kept = ad.read_h5ad(prepare(tmp_path / "kept.h5ad", format="h5ad", data=adata, obs=adata.obs[["cell_type"]]))
+    assert _colors(kept.uns) == {"cell_type_colors": ["#1f77b4", "#ff7f0e"]}
+    for colors, error, message in [
+        ({"cell_type": ["#000000"]}, ValueError, r"obs_colors\['cell_type'\]: 1 color for the 2 categories"),
+        ({"score": ["#000000"]}, TypeError, r"'score' is not written as a categorical"),
+        ({"nope": ["#000000"]}, ValueError, r"obs_colors names 'nope', which is no obs column written"),
+        ({"cell_type": "#000000"}, TypeError, r"must be a list of text colors"),
+        ({"cell_type": [1, 2]}, TypeError, r"must be a list of text colors"),
+        # The viewer opens no palette holding a color that is not hex (R9Y-3).
+        ({"cell_type": ["red", "#00ff00"]}, ValueError, r"obs_colors\['cell_type'\]: 'red' is not a hex color"),
+        (["cell_type"], TypeError, r"obs_colors must be a mapping"),
+    ]:
+        with pytest.raises(error, match=message):
+            prepare(tmp_path / "refused.h5ad", format="h5ad", data=adata, obs_colors=colors)
+        assert not (tmp_path / "refused.h5ad").exists()
 
 
 def test_a_prepared_file_prepares_again_with_no_identity(tmp_path: Path) -> None:
@@ -257,11 +311,11 @@ def _contents(modalities: list[str] | None = None) -> AnnDataContents:
 def _defaults(contents: AnnDataContents | None = None, **changes: Any) -> dict[str, Any]:
     arguments: dict[str, Any] = {
         "latent_key": None,
-        "gene_id_column": None,
+        "var_gene_id_column": None,
         "normalize_embeddings": None,
         "centroid_min_points": None,
         "obs_keys": None,
-        "embedding_keys": None,
+        "embedding_defaults": None,
         "knn_key": None,
         "expression_source": None,
         "vector_field_default": None,
@@ -285,11 +339,11 @@ def test_the_modality_default_names_one_of_the_modalities() -> None:
 def test_a_store_python_does_not_read_has_its_choices_checked_as_written() -> None:
     choices: dict[str, Any] = {
         "latent_key": "X_pca",
-        "gene_id_column": "symbol",
+        "var_gene_id_column": "symbol",
         "normalize_embeddings": False,
         "centroid_min_points": 4,
         "obs_keys": ["cell_type"],
-        "embedding_keys": {"2d": ("X_pca", [3, 1])},
+        "embedding_defaults": {"2d": ("X_pca", [3, 1])},
         "knn_key": "connectivities",
         "expression_source": "layer:counts",
         "vector_field_default": "velocity",
@@ -308,8 +362,8 @@ def test_a_store_python_does_not_read_has_its_choices_checked_as_written() -> No
         "centroidMinPoints": 4,
     }
     for change, message in (
-        ({"embedding_keys": {"2d": ("X_pca", [1, 1])}}, "embedding_keys['2d'] (obsm['X_pca'])"),
-        ({"embedding_keys": {"2d": ("X_pca", [0])}}, "embedding_keys['2d'] (obsm['X_pca'])"),
+        ({"embedding_defaults": {"2d": ("X_pca", [1, 1])}}, "embedding_defaults['2d'] (obsm['X_pca'])"),
+        ({"embedding_defaults": {"2d": ("X_pca", [0])}}, "embedding_defaults['2d'] (obsm['X_pca'])"),
         ({"expression_source": "counts"}, "expression_source must be 'X', 'raw', or 'layer:<name>'"),
         ({"obs_keys": ["a", "a"]}, "obs_keys names a column more than once."),
         ({"centroid_min_points": 0}, "centroid_min_points"),
@@ -355,6 +409,9 @@ def _mudata(*, prot_cells: int = 40, order: tuple[str, ...] = ("prot", "rna")) -
         mdata = md.MuData({name: modalities[name] for name in order})
     mdata.obsm["X_wnn_umap"] = rng.normal(size=(n, 2))
     mdata.obs["sample"] = pd.Categorical(rng.choice(["s1", "s2"], n))
+    # Scanpy's colors: the root's column in mdata.uns, a modality's in its own uns.
+    mdata.uns["sample_colors"] = ["#aa0000", "#00aa00"]
+    mdata.mod["rna"].uns["leiden_colors"] = ["#0000aa", "#00aaaa", "#aa00aa"]
     mdata.uns["cellucid"] = {"id": "toy-citeseq", "name": "Toy CITE-seq"}
     return mdata
 
@@ -444,7 +501,8 @@ def test_each_modality_is_a_cellucid_ready_anndata_under_a_mudata_root(
     for modality in ("prot", "rna"):
         group = root["mod"][modality]
         assert group.attrs["encoding-type"] == "anndata"
-        assert sorted(group["uns"].keys()) == []
+        # A modality's uns holds Scanpy's colors of its own columns, nothing else.
+        assert sorted(group["uns"].keys()) == ([] if modality == "prot" else ["leiden_colors"])
         assert root["obsmap"][modality].dtype == np.uint32
     assert root["mod"]["rna"]["X"].attrs["encoding-type"] == "csc_matrix"
     assert root["mod"]["prot"]["X"].dtype == np.float32
@@ -455,6 +513,21 @@ def test_each_modality_is_a_cellucid_ready_anndata_under_a_mudata_root(
         assert path.read_bytes()[:6] == b"MuData"
         assert path.read_bytes()[512:520] == b"\x89HDF\r\n\x1a\n"
         root.close()
+    # F148: Scanpy's colors go with the columns they color, as mudata reads them.
+    written = _stored_mudata(path)
+    assert _colors(written.uns) == {"sample_colors": ["#aa0000", "#00aa00"]}
+    assert _colors(written.mod["rna"].uns) == {"leiden_colors": ["#0000aa", "#00aaaa", "#aa00aa"]}
+    assert _colors(written.mod["prot"].uns) == {}
+
+
+def test_obs_colors_names_a_modality_column_by_its_viewer_name(tmp_path: Path) -> None:
+    path = _write_mudata(tmp_path, "m.zarr", "zarr", 2, obs_colors={"rna:leiden": ["#111", "#222", "#333"]})
+    written = _stored_mudata(path)
+    assert _colors(written.uns) == {}
+    assert _colors(written.mod["rna"].uns) == {"leiden_colors": ["#111", "#222", "#333"]}
+    # One modality written as an AnnData: the root's columns and their colors.
+    one = ad.read_h5ad(_write_mudata(tmp_path, "one.h5ad", "h5ad", None, modalities=["rna"]))
+    assert _colors(one.uns) == {"sample_colors": ["#aa0000", "#00aa00"]}
 
 
 def test_columns_mudata_copied_to_the_root_are_not_written_twice(tmp_path: Path) -> None:
@@ -580,7 +653,7 @@ def _no_embedding(mdata: Any) -> Any:
         pytest.param(_axis_one, "h5mu", "This MuData shares features, not cells (axis=1); Cellucid shows cells", id="axis-1"),
         pytest.param(_empty_modality, "h5mu", "Modality 'atac' has no features (50 x 0). Remove it before prepare: del mdata.mod['atac']; mdata.update().", id="empty-modality"),
         pytest.param(_repeated_cells, "h5mu", "repeat ('same'). MuData places each modality's cells among the global ones by name", id="repeated-cell-names"),
-        pytest.param(_no_x, "h5mu", "Modality 'prot' has no X. Give it the matrix the viewer reads", id="no-x"),
+        pytest.param(_no_x, "h5mu", "Modality 'prot' has no expression matrix (no X, raw or layer). Give it the matrix the viewer reads", id="no-x"),
         pytest.param(_no_embedding, "h5mu", "This MuData holds no embedding: neither mdata.obsm nor any modality's obsm", id="no-embedding"),
         pytest.param(lambda m: m, "h5ad", 'A MuData is written as format="h5mu", "zarr" or "zarr.zip"; an .h5ad holds one AnnData.', id="h5ad"),
     ],
@@ -665,9 +738,7 @@ process.stdout.write(JSON.stringify(out));
 
 
 def _web_reader() -> tuple[str, Path]:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("Node is not installed: the web reader cannot run")
+    node = node_executable("the web reader")
     return node, web_file("assets/js/data/anndata/open.js").parents[4]
 
 
@@ -938,10 +1009,9 @@ def test_the_r_writer_writes_the_same_mudata_zarr() -> None:
     """
     import cross_writer_mudata as harness
 
-    if not (REPOSITORY.parent / "cellucid-r").is_dir():
-        pytest.skip("cellucid-r is not checked out beside this repository")
-    cases = sorted(R_CROSS_WRITER.glob("*.json"))
-    assert cases, f"cellucid-r holds no MuData cross-writer case ({R_CROSS_WRITER}/<case>.zarr + <case>.json)"
+    fixtures = sibling_dir("cellucid-r", "tests/testthat/fixtures/cross_writer_mudata")
+    cases = sorted(fixtures.glob("*.json"))
+    assert cases, f"cellucid-r holds no MuData cross-writer case ({fixtures}/<case>.zarr + <case>.json)"
     for described in cases:
         store = described.with_suffix(".zarr")
         assert store.is_dir(), f"{described.name} has no {store.name} beside it"
@@ -997,9 +1067,7 @@ def test_modalities_is_refused_where_it_cannot_apply(tmp_path: Path) -> None:
 
 def test_both_repositories_hold_the_same_mudata_cross_writer_harness() -> None:
     """cellucid-r runs the same harness, byte for byte, against this writer."""
-    copy = REPOSITORY.parent / "cellucid-r" / "tests" / "testthat" / "python" / "cross_writer_mudata.py"
-    if not copy.is_file():
-        pytest.skip("cellucid-r is not checked out beside this repository")
+    copy = sibling_file("cellucid-r", "tests/testthat/python/cross_writer_mudata.py")
     assert copy.read_bytes() == (Path(__file__).parent / "cross_writer_mudata.py").read_bytes()
 
 
@@ -1007,3 +1075,46 @@ def test_an_obs_of_the_wrong_length_names_the_mudatas_cells(tmp_path: Path) -> N
     mdata = _mudata()
     with pytest.raises(ValueError, match=r"obs has 3 rows, and the MuData has 50 cells \(mdata.n_obs\)"):
         prepare(tmp_path / "m.zarr", format="zarr", data=mdata, obs=mdata.obs.iloc[:3])
+
+
+def _mudata_with_scanpy_rna(n_cells: int = 30) -> Any:
+    """A MuData whose 'rna' is Scanpy-processed (raw of every gene, X the
+    highly variable genes, scaled) beside a 'prot' modality of counts."""
+    import mudata as md
+
+    rng = np.random.default_rng(11)
+    counts = rng.poisson(2.0, size=(n_cells, 12)).astype(np.float32)
+    rna = ad.AnnData(X=np.log1p(counts), obs=pd.DataFrame(index=[f"c{i}" for i in range(n_cells)]),
+                     var=pd.DataFrame(index=[f"g{i}" for i in range(12)]))
+    rna.raw = rna
+    rna = rna[:, :8].copy()
+    rna.X = ((rna.X - rna.X.mean(axis=0)) / (rna.X.std(axis=0) + 1e-6)).astype(np.float32)
+    prot = ad.AnnData(X=rng.poisson(5.0, size=(n_cells, 3)).astype(np.float32),
+                      obs=pd.DataFrame(index=[f"c{i}" for i in range(n_cells)]),
+                      var=pd.DataFrame(index=[f"p{i}" for i in range(3)]))
+    mdata = md.MuData({"rna": rna, "prot": prot})
+    mdata.obsm["X_umap"] = rng.normal(size=(n_cells, 2)).astype(np.float32)
+    return mdata
+
+
+def test_a_mudata_modality_is_written_from_the_matrix_the_viewer_opens_it_with(tmp_path: Path, capsys: Any) -> None:
+    """R9Y-9 (d): a modality follows the AnnData rule (raw when it holds more
+    genes than X or X is scaled), and the root var and varmap follow raw's
+    genes."""
+    import mudata as md
+
+    mdata = _mudata_with_scanpy_rna()
+    raw = mdata.mod["rna"].raw
+    path = prepare(tmp_path / "m.zarr", format="zarr", data=mdata, dataset_id="m", dataset_name="M", priority_seed=None)
+    assert "mdata.mod['rna']: raw.X written as X, with raw.var as its genes: raw holds more genes than X (12 against 8)" in capsys.readouterr().out
+    back = md.read_zarr(str(path))
+    rna = back.mod["rna"]
+    assert list(rna.var_names) == list(raw.var_names)
+    np.testing.assert_allclose(rna.X.toarray() if sparse.issparse(rna.X) else rna.X, raw.X, rtol=1e-6)
+    assert list(back.var_names) == [*raw.var_names, "p0", "p1", "p2"]
+    np.testing.assert_array_equal(np.asarray(back.varmap["rna"]).ravel(), [*range(1, 13), 0, 0, 0])
+    np.testing.assert_array_equal(np.asarray(back.varmap["prot"]).ravel(), [0] * 12 + [1, 2, 3])
+    # One modality written as an AnnData follows the same rule.
+    one = prepare(tmp_path / "one.zarr", format="zarr", data=mdata, modalities=["rna"], dataset_id="m",
+                  dataset_name="M", priority_seed=None)
+    assert list(ad.read_zarr(one).var_names) == list(raw.var_names)

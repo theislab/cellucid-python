@@ -4,14 +4,14 @@ This page documents how your notebook Python code **controls and reads** the
 embedded Cellucid viewer.
 
 Everything a person can do in the viewer, and everything an agent reads from
-it, is an **action** of one catalogue: colour by a field, highlight cells,
+it, is an **action** of one catalog: color by a field, highlight cells,
 filter, rename a category, push a column, move the camera, read the history,
-read a field's categories. The catalogue is defined once in the web app, and
+read a field's categories. The catalog is defined once in the web app, and
 the Python package is generated from it: the viewer has **one method per
 action** (`viewer.color_by(...)`, `viewer.highlight_cells(...)`,
 `viewer.history_get()`, …) and one generic call, `viewer.act(type, **params)`.
 A notebook's action is applied exactly as a person's click is: one step of the
-viewer's history, labelled as the notebook's, undone like any other.
+viewer's history, labeled as the notebook's, undone like any other.
 
 Under the hood:
 - the viewer opens one authenticated channel to Python (the viewer channel,
@@ -35,7 +35,7 @@ If you’re new, start with the quickstart: {doc}`02_quickstart_minimal_roundtri
 
 ## Fast path recipes (copy/paste)
 
-### Colour by an obs field (or a gene)
+### Color by an obs field (or a gene)
 
 ```python
 viewer.color_by(field={"source": "obs", "key": "cell_type"})
@@ -101,7 +101,7 @@ def _ready(event):
 
 ## Every action is a method
 
-The methods are generated from the catalogue the package ships
+The methods are generated from the catalog the package ships
 (`cellucid/action_catalog.json`, byte for byte the web app's), so the Python
 API names every action the viewer has and nothing it lacks:
 
@@ -145,8 +145,8 @@ viewer, which answers with the reason when it refuses one.
 - **Optional parameters** default to the action's own default where it is a
   single value (`tool="annotation"`, `all_branches=False`), else to `OMIT`:
   left out, the viewer decides. `None` is sent as JSON `null` (for
-  `mapping_set(knn=None)`, "no neighbour graph", unlike leaving `knn` out).
-- A parameter the catalogue calls `in` (the analysis actions: which window)
+  `mapping_set(knn=None)`, "no neighbor graph", unlike leaving `knn` out).
+- A parameter the catalog calls `in` (the analysis actions: which window)
   is written `in_`.
 
 ## Knowing whether an action applied
@@ -159,7 +159,8 @@ request = viewer.color_by(field={"source": "obs", "key": "cell_type"})
 # next cell
 request.done          # True once the viewer answered
 request.result()      # the outcome (None for most changes; a read's result)
-request.step          # {"id": "s4", "label": "Coloured by cell_type"}: the history step
+request.step          # {"id": "s4", "label": "Colored by cell_type"}: the history step
+request.unrecorded    # None: a step was made (or why a change made none)
 ```
 
 `request.result(timeout=60.0)` waits for the answer (in a browser-tab viewer,
@@ -173,6 +174,30 @@ viewer's reason (`error.reason`), for example:
 ```text
 ActionError: The viewer did not apply color.by: There is no field "CD8A"; fields like it: CD8, CD8B.
 ```
+
+A change the viewer applied but recorded no history step for is answered with
+why, in `request.unrecorded` (`None` when it made a step, and for a read, which
+records none by nature):
+
+| `unrecorded` | Why no step |
+| --- | --- |
+| `"unchanged"` | It changed nothing: it was so already (coloring by the field the cells are colored by). |
+| `"retracted"` | It put back what the step just before it changed, so that step was taken out. |
+| `"off"` | The viewer's History settings do not record this kind of change; Undo does not take it back. |
+| `"paused"` | The history's recording is paused; Undo does not take it back. |
+| `"elsewhere"` | Another tracker of the history was shown meanwhile. |
+| `"no-history"` | The dataset's history has not started yet. |
+
+`result()` then returns the outcome all the same and warns
+`cellucid.jupyter.ActionNotRecordedWarning` (a `UserWarning`; `.unrecorded`
+names the reason):
+
+```text
+ActionNotRecordedWarning: viewer.color_by(...): it changed nothing (it was so already), so no step was recorded.
+```
+
+Silence it with
+`warnings.filterwarnings("ignore", category=cellucid.jupyter.ActionNotRecordedWarning)`.
 
 Nothing has to collect a request: an action applies whether or not anyone
 waits for it. A refusal nobody collects is still reported -- Cellucid prints
@@ -221,7 +246,7 @@ Diagnostics / utilities:
 
 ## The history
 
-Each action a notebook applies is a step of the viewer's history, labelled as
+Each action a notebook applies is a step of the viewer's history, labeled as
 the notebook's (Python or R), beside the person's own steps and an agent's.
 `viewer.history_get()` reads it: the trackers, the branches, every step with
 who took it and what it did, and the step shown now
@@ -275,8 +300,9 @@ belongs to that one viewer, so a command is only its own fields below.
 
 `action` is the action's dotted type; `params` its parameters; `turn` and
 `turnLabel` the notebook turn it belongs to (both text inside
-`viewer.turn(...)`, both null outside one). The viewer answers with one `action_result` (binary: its outcome as UTF-8 JSON, and the
-history step `{id, label}` or `null`) or one `command_error` carrying the same
+`viewer.turn(...)`, both null outside one). The viewer answers with one `action_result` (binary: its outcome as UTF-8 JSON, the
+history step `{id, label}` or `null`, and why a change made no step,
+`unrecorded`, or `null`) or one `command_error` carrying the same
 `requestId`.
 
 ### An `action` with arrays is one binary frame

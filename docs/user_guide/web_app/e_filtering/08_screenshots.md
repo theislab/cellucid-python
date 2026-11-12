@@ -15,7 +15,7 @@ with each figure so you can reproduce the state yourself in about a minute.
 :width: 532px
 
 The whole control surface filtering is built from, in its resting state.
-Everything above the **Legend** heading chooses *what colours the points*;
+Everything above the **Legend** heading chooses *what colors the points*;
 the **Legend** group, the category rows and **Filters** below it control
 *which points are drawn*.
 Scenario `filtering-panel-unfiltered`.
@@ -26,10 +26,11 @@ Scenario `filtering-panel-unfiltered`.
 ## The four filter surfaces
 
 ```{figure} ../../../_static/screenshots/filtering/type-category-visibility.png
-:alt: The categorical legend for clusters: Show all and Hide all above eight rows, three of them (Ductal, Ngn3 high EP, Ngn3 low EP) unchecked and reading 0 of their cell counts, each row carrying a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:alt: The categorical legend for clusters: Show all and Hide all above eight rows, three of them (Ductal, Ngn3 high EP, Ngn3 low EP) unchecked and reading 0 of their cell counts, each row carrying a color swatch, a label, a cell count, a rename pencil and a delete bin.
 :width: 488px
 
-**Category visibility.** Unchecking a row hides its cells and greys the row.
+**Category visibility.** Unchecking a row hides its cells; its count then reads
+`0 / total`.
 Scenario `filtering-type-category-visibility`.
 ```
 
@@ -62,23 +63,23 @@ Nothing filtered. Scenario `filtering-active-filters-empty`.
 ```
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-one-row.png
-:alt: The Filters block reading Showing 1,876 of 3,696 cells above one row: a ticked checkbox, the text clusters: hiding Ductal, cut off with an ellipsis, and a remove cross at its right.
+:alt: The Filters block reading Showing 1,876 of 3,696 cells above one row: a ticked checkbox, the text clusters: hiding D… cut off with an ellipsis, the cell count 1,876, and a remove cross at its right.
 :width: 496px
 
 One category filter. Scenario `filtering-active-filters-one-row`.
 ```
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-three-rows.png
-:alt: The Filters block holding three rows of different kinds at once: an S_score range row ending in its cell count, cut off with an ellipsis, a clusters hiding row, and a clusters: outlier ≤ 95% row with no count.
+:alt: The Filters block reading Showing 768 of 3,696 cells above three rows of different kinds: S_score: -0.146 – 1.… and clusters: hiding Du…, each cut off with an ellipsis and followed by the cell count 768, and clusters: outlier ≤ 95% with no count.
 :width: 496px
 
 Three filters of three different kinds, stacked. Only the first two carry a
-`visible / available` cell count. Scenario
+cell count. Scenario
 `filtering-active-filters-three-rows`.
 ```
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-row-disabled.png
-:alt: The same three-row Filters list with the clusters hiding row unchecked under the pointer: that row is greyed and struck through while the other two stay black, and the count line above has risen.
+:alt: The same three-row Filters list with the clusters hiding row unchecked under the pointer: that row is grayed and struck through while the other two stay black, and the count line above has risen.
 :width: 496px
 
 The middle filter disabled rather than removed. Scenario
@@ -105,7 +106,7 @@ view they were set in. Scenario `filtering-scope-tooltip`.
 ## What the filters do to the picture
 
 ```{figure} ../../../_static/screenshots/filtering/window-clusters-all-visible.png
-:alt: The whole application window with the Pancreas embedding coloured by clusters, every legend row checked, and the Filters block reading Showing all 3,696 cells above No filters active.
+:alt: The whole application window with the Pancreas embedding colored by clusters, every legend row checked, and the Filters block reading Showing all 3,696 cells above No filters active.
 :width: 1440px
 
 Before. Scenario `filtering-window-all-visible`.
@@ -120,21 +121,21 @@ Scenario `filtering-window-categories-hidden`.
 ```
 
 ```{figure} ../../../_static/screenshots/filtering/window-outlier-100-off.png
-:alt: The whole window coloured by clusters with the Outlier filter at its default 100 percent: scattered cells sit between and around the clusters, and the Filters block reads Showing all 3,696 cells.
+:alt: The whole window colored by clusters with the Outlier filter at its default 100 percent: scattered cells sit between and around the clusters, and the Filters block reads Showing all 3,696 cells.
 :width: 1440px
 
 Outlier filter off. Scenario `filtering-window-outlier-100`.
 ```
 
 ```{figure} ../../../_static/screenshots/filtering/window-outlier-95-applied.png
-:alt: The same window with the Outlier filter at 95 percent: fewer scattered cells between the clusters, every legend count reduced, and a clusters: outlier ≤ 95% row in the Filters block above Showing 3,506 of 3,696 cells.
+:alt: The same window with the Outlier filter at 95 percent: fewer scattered cells between the clusters, every legend count reduced, and the Filters block reading Showing 3,506 of 3,696 cells, its clusters: outlier ≤ 95% row cut off at the bottom edge.
 :width: 1440px
 
 Outlier filter at 95%. Scenario `filtering-window-outlier-95`.
 ```
 
 ```{figure} ../../../_static/screenshots/filtering/window-continuous-range-applied.png
-:alt: The whole window coloured by S_score with the Minimum slider raised: only the higher-scoring cells are drawn, and the Filters block reads a reduced count above one S_score range row.
+:alt: The whole window colored by S_score with the Minimum slider raised: only the higher-scoring cells are drawn, and the Filters block reads a reduced count above one S_score range row.
 :width: 1440px
 
 A numeric range on a continuous field. Scenario
@@ -154,7 +155,7 @@ Everything filtered out. This is a filter state, not a crash. Scenario
 ## States that surprise people
 
 ```{figure} ../../../_static/screenshots/filtering/legend-category-unavailable.png
-:alt: The clusters legend under a narrow S_score range filter: Alpha, Ductal, Ngn3 high EP and Ngn3 low EP stay ticked with small counts, while Beta, Delta, Epsilon and Pre-endocrine are greyed out with disabled checkboxes and read 0 cells.
+:alt: The clusters legend under a narrow S_score range filter: Alpha, Ductal, Ngn3 high EP and Ngn3 low EP stay ticked with small counts, while Beta, Delta, Epsilon and Pre-endocrine are grayed out with disabled checkboxes and read 0 cells.
 :width: 488px
 
 Rows with nothing left to show are disabled, not merely empty. Scenario
@@ -162,9 +163,9 @@ Rows with nothing left to show are disabled, not merely empty. Scenario
 ```
 
 ```{figure} ../../../_static/screenshots/filtering/window-gene-range-active.png
-:alt: The whole window coloured by the gene Ins1 with the Minimum slider raised, so only the cells expressing it are drawn and an Ins1 range row is listed in the Filters block.
+:alt: The whole window colored by the gene Ins1 with the Minimum raised to 37.6, so only the cells at or above it are drawn, and the Filters block reading Showing 179 of 3,696 cells above an Ins1: 37.6 – 1255 row.
 :width: 1440px
 
 A gene range filter, listed under Filters; it keeps applying when the view is
-coloured by another field. Scenario `filtering-window-gene-range-active`.
+colored by another field. Scenario `filtering-window-gene-range-active`.
 ```

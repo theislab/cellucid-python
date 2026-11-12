@@ -89,7 +89,7 @@ Related UI docs:
 ## The latent space: `latent_key=`
 
 The viewer's outlier filter measures, for each categorical field, how far
-each cell lies from its category's centre in a latent space (for example scVI
+each cell lies from its category's center in a latent space (for example scVI
 or PCA), never in the 2D/3D layout. Pass the latent space as one of the
 `embeddings` and name it:
 
@@ -118,7 +118,7 @@ uns['cellucid']['outlierQuantiles'] = {
 ```
 
 A cell's quantile is the share of its category at its distance from the
-category's centre or closer. A category with fewer than `centroid_min_points`
+category's center or closer. A category with fewer than `centroid_min_points`
 cells (10 when None) gets none, so its cells are never filtered; a column none
 of whose categories reaches it gets no entry. Each field costs 4 bytes per
 cell before compression, and the viewer reads one field's array

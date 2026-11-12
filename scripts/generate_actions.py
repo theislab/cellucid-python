@@ -1,6 +1,6 @@
-"""Write ``src/cellucid/jupyter/_actions_generated.py`` from the action catalogue.
+"""Write ``src/cellucid/jupyter/_actions_generated.py`` from the action catalog.
 
-The catalogue (``src/cellucid/action_catalog.json``) is the web app's
+The catalog (``src/cellucid/action_catalog.json``) is the web app's
 ``catalogDocument`` of every action, byte for byte (written by the web
 repository's ``scripts/generate-action-catalog.mjs``; its digest is pinned in
 ``tests/test_action_catalog.py``). Every action becomes one method of the
@@ -8,7 +8,7 @@ viewer (:class:`cellucid.jupyter.AnnDataViewer`, and so of the notebook
 widget): its tool name (``color.by`` -> ``color_by``), its parameters as
 typed keyword arguments, and a docstring made of its title, summary and the
 description of each parameter. Each method calls ``self.act(type, ...)``,
-which checks and converts the parameters by the catalogue and sends one
+which checks and converts the parameters by the catalog and sends one
 ``action`` command: nothing is written by hand per action.
 
     python scripts/generate_actions.py           # write the module
@@ -108,7 +108,7 @@ _RST_UNDERSCORE = re.compile(r"(\w)_(?=\W|$)")
 
 
 def rst(text: str) -> str:
-    """Catalogue text as reStructuredText that reads as written."""
+    """Catalog text as reStructuredText that reads as written."""
     return _RST_UNDERSCORE.sub(r"\1\\_", _RST_SPECIAL.sub(r"\\\1", text))
 
 
@@ -195,6 +195,12 @@ def method_source(action: dict[str, Any]) -> str:
             f"Action ``{action['type']}``. It reads only and changes nothing; "
             "``request.result()`` is what it reads."
         )
+    elif action["effect"] == "control":
+        effect = (
+            f"Action ``{action['type']}``. It stops work under way in the viewer at once, also while "
+            "the request that started it is still waiting; that work's own step records what it "
+            "changed, so this records no step; ``request.result()`` is its outcome."
+        )
     elif action["effect"] == "history":
         effect = (
             f"Action ``{action['type']}``. It moves the viewer's history, as the person's Undo, Redo "
@@ -269,12 +275,12 @@ def method_source(action: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-HEADER = '''"""The viewer's methods, one per action of the catalogue: generated, do not edit.
+HEADER = '''"""The viewer's methods, one per action of the catalog: generated, do not edit.
 
 Written by ``scripts/generate_actions.py`` from ``cellucid/action_catalog.json``
-(the web app's action catalogue, digest {digest}). Each method sends one
+(the web app's action catalog, digest {digest}). Each method sends one
 ``action`` command through :meth:`AnnDataViewer.act`, which checks and converts
-its parameters by the catalogue, and returns its :class:`ActionRequest`.
+its parameters by the catalog, and returns its :class:`ActionRequest`.
 """
 
 from __future__ import annotations
@@ -286,7 +292,7 @@ if TYPE_CHECKING:
 
 
 class ViewerActions:
-    """Every action of the catalogue as a method (mixed into the viewer)."""
+    """Every action of the catalog as a method (mixed into the viewer)."""
 
     __slots__ = ()
 
@@ -297,12 +303,12 @@ class ViewerActions:
 
 
 def render(catalog_text: str) -> str:
-    """The module's text for a catalogue document."""
+    """The module's text for a catalog document."""
     import hashlib
 
     document = json.loads(catalog_text)
     if document.get("schema") != 1:
-        raise ValueError("The action catalogue must be schema 1")
+        raise ValueError("The action catalog must be schema 1")
     digest = hashlib.sha256(catalog_text.encode("utf-8")).hexdigest()
     methods = [method_source(action) for action in sorted(document["actions"], key=lambda entry: entry["tool"])]
     body = "\n\n".join(methods)

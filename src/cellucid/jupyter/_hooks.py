@@ -13,8 +13,28 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from ._wire import _AGENT_EVENT_TYPES, _INBOUND_EVENT_FIELDS
+
 # Type alias for hook callbacks
 HookCallback = Callable[[dict[str, Any]], None]
+
+#: Every event a hook can be registered for: each event the viewer sends a
+#: notebook (the protocol's events, ``_wire._INBOUND_EVENT_FIELDS``) other than
+#: an agent app's own (``_AGENT_EVENT_TYPES``, delivered to the agent port), and
+#: ``message``, which catches them all. cellucid-r's ``cellucid_on()`` takes the
+#: same names (``.hook_events``); both are pinned to the shared protocol fixture.
+HOOK_EVENTS: tuple[str, ...] = (
+    *sorted(set(_INBOUND_EVENT_FIELDS) - _AGENT_EVENT_TYPES),
+    "message",
+)
+
+
+def require_hook_event(event: object) -> str:
+    """``event`` when it is an event a hook can be registered for, else a
+    ``ValueError`` naming them (a misspelt event would otherwise never fire)."""
+    if not isinstance(event, str) or event not in HOOK_EVENTS:
+        raise ValueError(f"event must be one of {', '.join(map(repr, HOOK_EVENTS))}; got {event!r}.")
+    return event
 
 
 @dataclass
@@ -34,7 +54,12 @@ class HookRegistry:
         - data_mapping: The viewer's data mapping was resolved or changed
         - history_changed: The viewer's history changed (a step, a move, an
           edit, a tracker, a loaded session)
+        - every other event of the viewer channel (:data:`HOOK_EVENTS`:
+          ``action_result``, ``color_by``, ``results``, ``session_loaded``, ...)
         - message: Raw message (catches all events)
+
+    Any other event name is refused (``ValueError``): a misspelt one would
+    never fire.
 
     Example:
         hooks = HookRegistry()
@@ -57,13 +82,16 @@ class HookRegistry:
         Register a callback for an event.
 
         Args:
-            event: Event name ('selection', 'hover', 'click', 'ready',
-                'command_error', 'data_mapping', 'history_changed', 'message')
+            event: Event name, one of :data:`HOOK_EVENTS` ('selection',
+                'hover', 'click', 'ready', 'command_error', 'data_mapping',
+                'history_changed', ..., and 'message'); any other name is
+                refused.
             callback: Function to call when event fires. Receives event dict.
 
         Returns:
             The callback (for decorator usage)
         """
+        require_hook_event(event)
         if event not in self._callbacks:
             self._callbacks[event] = []
         self._callbacks[event].append(callback)
@@ -80,6 +108,7 @@ class HookRegistry:
         Returns:
             True if callback was found and removed, False otherwise
         """
+        require_hook_event(event)
         if event in self._callbacks:
             try:
                 self._callbacks[event].remove(callback)
@@ -113,7 +142,9 @@ class HookRegistry:
         """
         if event is None:
             self._callbacks.clear()
-        elif event in self._callbacks:
+            return
+        require_hook_event(event)
+        if event in self._callbacks:
             self._callbacks[event].clear()
 
     def trigger(self, event: str, data: dict[str, Any]):
@@ -155,6 +186,7 @@ class HookRegistry:
             def handle_selection(event):
                 print(event['cells'])
         """
+        require_hook_event(event)
 
         def decorator(callback: HookCallback) -> HookCallback:
             self.register(event, callback)

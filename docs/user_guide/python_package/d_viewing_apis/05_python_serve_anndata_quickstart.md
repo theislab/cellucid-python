@@ -163,12 +163,12 @@ the store's own `uns['cellucid']['defaults']`, else the viewer's default rule
   show, such as a `datetime64` collection date
 - `vector_field_default`: the vector field the overlay opens on, by its field
   id (`velocity` for `obsm['velocity_umap']`)
-- `embedding_keys`: the `obsm` array of a dimension slot, such as
+- `embedding_defaults`: the `obsm` array of a dimension slot, such as
   `{"2d": "X_tsne"}` or `{"2d": ("X_pca", [0, 1])}` with 0-based columns; see
   below
 - `knn_key`: the `obsp` matrix the viewer draws as the neighbor graph, such as
   `"connectivities"`; read only when a view draws it
-- `gene_id_column`: the column of the gene axis that names genes (default: its
+- `var_gene_id_column`: the column of the gene axis that names genes (default: its
   index); empty values take the index name and repeated names are made unique
   (`MATR3`, `MATR3-1`)
 - `expression_source`: `"X"`, `"raw"`, or `"layer:<name>"` (default: `X`, or
@@ -180,7 +180,7 @@ the store's own `uns['cellucid']['defaults']`, else the viewer's default rule
 
 ### Which `obsm` key becomes the embedding
 
-A slot named in `embedding_keys` shows that array. Every other slot follows the
+A slot named in `embedding_defaults` shows that array. Every other slot follows the
 default rule: `X_umap_1d` / `X_umap_2d` / `X_umap_3d` each fill their own
 dimension, and with none of them present, a plain `X_umap` of 1, 2, or 3 columns
 fills the slot of its own column count, so a Scanpy object is shown as written.
@@ -192,7 +192,7 @@ server = cellucid.serve_anndata(
     "data.h5ad",
     dataset_name="My study",
     dataset_id="my-study-v1",
-    embedding_keys={"2d": ("X_pca", [0, 1])},
+    embedding_defaults={"2d": ("X_pca", [0, 1])},
 )
 ```
 
@@ -225,7 +225,7 @@ Both rules in full:
   stored values), read-only until they are, so later edits to the object do not
   show; open a subsample in the viewer (Session › Subsampling) to read only some
   of the cells.
-- **Gene IDs not found**: set `gene_id_column` if `var.index` is not what you search by.
+- **Gene IDs not found**: set `var_gene_id_column` if `var.index` is not what you search by.
 
 ## Troubleshooting
 

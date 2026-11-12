@@ -33,7 +33,7 @@ workflows.
 - Share it: one R call, `cellucid::cellucid_prepare("pbmc.zarr", "zarr", data = seu, ...)`,
   writes one **`.zarr` folder** (or, with `format = "zarr.zip"`, one **`.zarr.zip` file**).
 - Anyone opens that folder or file in the Cellucid web app and explores it:
-  embeddings, metadata colouring, gene expression, and more.
+  embeddings, metadata coloring, gene expression, and more.
 
 ### Practical path (computational users)
 `cellucid_prepare()` writes a standard AnnData store (AnnData Zarr, format 2,
@@ -53,7 +53,7 @@ object; any argument you pass replaces that component:
 
 Its dependencies are light:
 - Hard dependencies: `jsonlite`, and for the viewer `httpuv`, `later` and `curl`
-- Optional: `Matrix` (sparse expression matrices and neighbour graphs;
+- Optional: `Matrix` (sparse expression matrices and neighbor graphs;
   recommended), `SeuratObject`, `SingleCellExperiment` /
   `SummarizedExperiment` (each only to read its own objects)
 - A few small C routines (checksums, the outlier quantiles, one-pass matrix
@@ -106,7 +106,7 @@ Its dependencies are light:
 - “Can I write from Seurat/SCE directly?”  
   Yes: `cellucid_prepare(out_path, format, data = seu)`. See {doc}`../e_integrations_recipes/index`.
 - “Do I need gene expression to use Cellucid?”  
-  No. Embeddings alone are enough; expression enables gene colouring and search.
+  No. Embeddings alone are enough; expression enables gene coloring and search.
 - “Is this a Cellucid-only format?”  
   No. It is plain AnnData: `anndata.read_zarr("my_dataset.zarr")` reads it in
   Python (`mudata.read_zarr()` for several assays).

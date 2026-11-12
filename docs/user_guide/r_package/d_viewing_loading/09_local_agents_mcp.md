@@ -65,6 +65,11 @@ stops when the app ends the server.
   chat bar and the connector's included: your permissions, the confirm card,
   **Stop** and **Undo turn**, and a dataset's "Agents see names and summaries
   only" switch ({doc}`../../web_app/g_agents/03_permissions_and_what_agents_see`).
+- The agent's tool list is the same whatever your settings and never
+  changes while the server runs: the viewer tells the agent your settings
+  after its first tool result, and again after a result once you changed
+  them. (A changed list would make the app rewrite its cached prompt, costing
+  several times as much and dropping the agent's earlier reasoning.)
 
 - stdout carries only the MCP messages; everything else goes to stderr.
 - R has no official MCP SDK; `cellucid_mcp()` implements the stdio protocol

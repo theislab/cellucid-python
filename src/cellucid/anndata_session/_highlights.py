@@ -129,7 +129,7 @@ def _plan_highlights(
         page_name = _require_text(page["name"], label=f"{page_label}.name")
         color = _require_text(page["color"], label=f"{page_label}.color")
         if _COLOR_RE.match(color) is None:
-            raise ValueError(f"This session's {page_label}.color must be a six-digit hex colour.")
+            raise ValueError(f"This session's {page_label}.color must be a six-digit hex color.")
         for group_index, raw_group in enumerate(_require_list(page["groups"], label=f"{page_label}.groups")):
             group_label = f"{page_label}.groups[{group_index}]"
             group = _require_record(raw_group, label=group_label)

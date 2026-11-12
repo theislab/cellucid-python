@@ -68,7 +68,7 @@ that most surprises people, so here it is in full.
 
 ### When it is active
 
-Analytics initialises **only** when the page is served from one of three
+Analytics initializes **only** when the page is served from one of three
 hostnames:
 
 - `cellucid.com`
@@ -94,8 +94,8 @@ URL, or an error message — and an event that does not fit is dropped whole.
 
 Before Google's tag loads, the page fixes what Google may do with it, so a
 change in the Google Analytics property cannot widen it: consent defaults deny
-advertising storage, advertising use of user data and ad personalisation
-(only analytics storage is granted), Google signals and ad-personalisation
+advertising storage, advertising use of user data and ad personalization
+(only analytics storage is granted), Google signals and ad-personalization
 signals are off, and every hit's page location and referrer are origin and
 path only. Google's tag has two features of its own that the property turns on
 or off, outside this code: **enhanced measurement** (automatic page views on
@@ -116,7 +116,7 @@ against this page.
   from reduced to origin and path (`https://www.cellucid.com/`): the query
   string — dataset ids, `remote=` addresses, `data=` links, `sampleCatalog`, a
   subsample — is never part of it.
-- **Google's enhanced-measurement events** — page changes, scrolls past 90 %
+- **Google's enhanced-measurement events** — page changes, scrolls past 90%
   of the page, clicks on links to other sites, site searches, embedded video
   plays, file downloads from links, and form starts and submissions, each with
   the address involved (the clicked link, the downloaded file's link) and every
@@ -175,7 +175,7 @@ its `obsm` keys and the text of any error stay in the browser.
 Pick any one of these; each is sufficient:
 
 - **Self-host the app.** Serve `index.html` from your own origin. Analytics
-  never initialises.
+  never initializes.
 - **Use the local server or a Python/R viewer.** `cellucid serve` serves the
   app from your own machine; a notebook widget (`show_anndata()`,
   `cellucid_view()` in Jupyter or Colab) frames the hosted app as a viewer page,
@@ -189,7 +189,13 @@ Pick any one of these; each is sufficient:
 
 Google Analytics keeps two first-party cookies of its own on the production
 hostnames, `_ga` and `_ga_K4774ZWGEQ`, to tell a returning browser from a new
-one. Cellucid itself sets no cookie, and no other origin gets either.
+one. Cellucid's pages set no cookie. The Cellucid relay sets one, only when
+Claude or ChatGPT asks to connect: its waiting page leaves
+`__Host-cellucid-approver` (random, for `mcp.cellucid.com` alone, unreadable
+by scripts, sent only from Cellucid's own site, gone after ten minutes) in
+the browser that shows it, so that only that browser can approve the
+connection ({doc}`../g_agents/02_connect_claude_and_chatgpt`). No other
+origin gets any of them.
 
 Naming datasets neutrally (`cohort_a` rather than the study name) is a sensible
 habit regardless, since the same string also lands in figure metadata and
@@ -236,7 +242,7 @@ Examples:
 - what was read of a file, within the tab's memory budget
 
 This data disappears when you reload/close the tab. What you *do* with a
-dataset (filters, highlights, colours, analyses: every step of its history)
+dataset (filters, highlights, colors, analyses: every step of its history)
 is not only in memory: while **Autosave in this browser** is on (the
 default, in **State › History › History settings**), each step is also
 written to this browser's IndexedDB
@@ -288,7 +294,7 @@ What matters for privacy:
 
 Contents:
 - theme preference (light/dark) (`cellucid_theme`)
-- viewer background preference (`cellucid_viewer_background`)
+- viewer background preference (`cellucid_viewer_background`, written only when you pick one)
 - the antialiasing choice (`cellucid_antialias`)
 - whether the Session panel's **Subsampling** and **Data mapping** sections
   are open (`cellucid_session_sections`)
@@ -301,7 +307,11 @@ Contents:
   author of your steps); nothing about a dataset
 - the chat bar's choices (`cellucid:agent-chat`): the provider, the model of
   each provider, the effort of each model, your instructions for agents, the
-  token budget and whether the chat was open; never a key
+  token budget, the prompt cache length and whether the chat was open; never
+  a key
+- the width of the chat's side panel, once you drag it from the default
+  (`cellucid:agent-panel-width`; a double click on its edge restores the
+  default and removes the key)
 - an API key you chose to **Remember on this browser**
   (`cellucid:agent-key:<provider>`, also in `sessionStorage`, below), until
   **Forget**
@@ -366,7 +376,11 @@ per-tab state:
   Cellucid service that holds the app's credentials) and forgets it. It
   arrives in the page address's fragment, which a script in the page's head
   takes out of the address before anything else runs, so even a startup that
-  fails leaves it in neither the address bar nor the history;
+  fails leaves it in neither the address bar nor the history. A token is
+  taken only for a sign-in this tab started: **Sign in** keeps a random state
+  (`cellucid:github-app-auth:pending`, until GitHub answers) that the answer
+  must name, so a link carrying someone else's token cannot sign you in as
+  them;
 - the Google sign-in for Google Drive (`cellucid:google-auth:session`): an
   access token that **expires after about an hour**; **Sign out** revokes it at
   Google (`oauth2.googleapis.com/revoke`);
@@ -431,7 +445,7 @@ IndexedDB holds larger records that would be unreasonable to store in
   providers' reasoning or pictures); `values` and `parts`, the state after
   each step, kept once however many steps share it; and `arrays`, the typed
   arrays those hold. It is the content a session file holds: field and
-  category names, names you typed, highlighted cells, filters, colours,
+  category names, names you typed, highlighted cells, filters, colors,
   views, and the results of the analyses you ran (marker statistics, a gene
   signature's scores per cell, a dot plot's means per group). It holds none
   of the dataset's own expression matrix, coordinates or obs columns. Written
@@ -492,7 +506,7 @@ IndexedDB holds larger records that would be unreasonable to store in
   downloaded from GitHub holds for the dataset open (its suggestions, votes,
   comments and the contributor's profile), by Git blob id, with the reason
   for any file a Pull left out, and the commit and tree ids of the last
-  completed Pull, for speed and offline-ish behaviour.
+  completed Pull, for speed and offline-ish behavior.
 
 No analysis result is cached apart from the history: a result is kept with
 the step that ran it, so in `cellucid-history` while **Autosave in this
@@ -742,8 +756,11 @@ If you self-host the app, the “app host” changes, but the model is the same.
   result (they exist in its memory only while in flight, and are not
   logged), no account and no chat; it keeps the connections you allowed (the
   app, the agent's name, the app's host, times) and, for at most fifteen
-  minutes, a connection request waiting for your answer. No dataset file
-  passes through it ({doc}`../g_agents/02_connect_claude_and_chatgpt`).
+  minutes, a connection request waiting for your answer. Approving a
+  connection is a request this tab sends to the relay with the relay's
+  cookie of this browser (above), so a link someone else started cannot
+  connect their agent here. No dataset file passes through it
+  ({doc}`../g_agents/02_connect_claude_and_chatgpt`).
 - **A local agent app** (`cellucid mcp`, `cellucid_mcp()`) talks to a viewer
   on your computer over the viewer's own channel, with no relay; the app
   sends what it reads to the provider it uses
@@ -913,7 +930,7 @@ short:
   kept for the page only, never saved in a session); a read Cellucid has not
   classified is refused; and results read earlier in a chat that could hold
   values are withheld when the conversation is sent again.
-- **It is not anonymisation.** A summary of a very small group the data or
+- **It is not anonymization.** A summary of a very small group the data or
   you define (a narrow range, a filter, a rare category) can still reveal its
   cells' values. No minimum group size is set.
 - **Other people's names in community annotation.** When an agent reads the
@@ -925,6 +942,11 @@ short:
 - **Text written by others is data.** Every result's data reaches an agent
   between `<cellucid-data>` marks (every `<` inside escaped), and agents are
   told never to take it as instructions.
+- **No request to an address only an agent named.** An agent opening a
+  dataset by a link, an accession or a server you have not seen in this tab
+  (typed or pasted, open now, in **My datasets**) is asked about first, before
+  anything is requested: an address can carry what an agent read to any
+  host, the switch on or off ({ref}`agents-unseen-links`).
 - **Kept in this browser:** the conversations of the chat bar, with the
   history (`cellucid-history`); the chat's choices, permissions, the switch
   and the relay pairing in `localStorage`; API keys in `sessionStorage`
@@ -966,7 +988,18 @@ postures:
   how long the rejection takes; an unknown viewer is compared against a
   same-length dummy so the failure path does not reveal the token length
   either. A socket that fails the check is closed before any event reaches
-  your callbacks.
+  your callbacks, and one that says nothing for 60 seconds is closed too.
+- **Agents on this computer have a second key.** Unless `CELLUCID_AGENTS=off`
+  is set, each viewer is also published to local agent apps (`cellucid mcp`,
+  `cellucid_mcp()`): a loopback endpoint that refuses any request from a
+  browser, from another computer or naming another host, and a per-viewer
+  secret written to a record in your user cache that only you can read (on
+  macOS and Linux the folder must be yours and writable by no one else, or
+  nothing is published). Whoever holds that secret drives the viewer as an
+  agent — under the permissions you set in the viewer, and able to answer
+  its confirmation card, as the agent app does — so it is as safe as the files
+  of your account: the administrators of a shared machine can read it
+  ({doc}`../../python_package/d_viewing_apis/18_local_agents_mcp`).
 
 The practical reading: a stranger who reaches an exposed port can **read** your
 dataset, but cannot **drive** your notebook.
@@ -1097,7 +1130,7 @@ Use this as a starting point for approvals and internal documentation.
      provider behind a local agent app), and under which terms; whether each
      dataset is set to **Agents see names and summaries only**, knowing that
      this keeps values of single cells, extremes and pictures out but is not
-     anonymisation ({ref}`privacy-agents`).
+     anonymization ({ref}`privacy-agents`).
 
 ---
 

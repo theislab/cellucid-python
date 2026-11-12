@@ -54,7 +54,8 @@ In notebooks, it’s very common to:
   its own server).
 
 Calling `viewer.stop()`:
-- freezes the view on its last frame and stops answering it,
+- freezes the view on its last frame, stops answering it, and the page says
+  so (a **Viewer stopped** notice, as when the server goes away),
 - for a browser-tab viewer, stops the server and closes its port,
 - and releases what it served: the store of an in-memory `AnnData` or
   `MuData` (or of a file not in priority order) with the files its expression

@@ -137,7 +137,8 @@ first:
   encoding (`cell%20atlas.h5ad`), without `.`, `..`, a query or a fragment.
 
 The dataset list shows each dataset's name and cell count, read from its
-file: names, descriptions and citations are never written in the catalog.
+file (closed, the picker names the open dataset alone: the Dataset box above
+says its cells): names, descriptions and citations are never written in the catalog.
 While the dataset Cellucid opens first is still loading, the list already
 offers every entry under the name its path gives it (`suo` for `suo.zarr/`),
 the one being opened marked *· opening…*; the names and counts follow once
@@ -150,18 +151,20 @@ The full contract, including the optional default session, is in
 - **One file:** open it with **Open…** under **File or folder** (**File…**
   for an `.h5ad`, a `.zarr.zip` or another file, **Folder…** for a store folder). If it
   opens there, it will open from a link.
-- **The whole catalog:** serve the folder with any static server that sends
-  CORS headers, then open `?data=http://127.0.0.1:8000/` in Cellucid:
-
-  ```bash
-  cd catalog
-  python -m http.server 8000   # add CORS headers if Cellucid runs on another origin
-  ```
+- **The whole catalog:** serve the folder with a static server that sends CORS
+  headers (`Access-Control-Allow-Origin`) **and** answers range requests, then
+  open `?data=http://127.0.0.1:8000/` in Cellucid. Both are needed: Cellucid
+  always runs on another origin than such a server, so without CORS it can
+  read nothing, and a catalog lists a single-file dataset (an `.h5ad`, an
+  `.rds`) by reading parts of it, so a server that only sends whole files
+  cannot list it. `python -m http.server` does neither; a static web server
+  (nginx, Caddy) configured for both, or the host you will publish on (GitHub
+  Pages, Zenodo, Hugging Face), does both.
 
 This avoids debugging “hosting problems” that are actually file problems.
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
-:alt: The whole Cellucid window with the Pancreas sample coloured by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colours.
+:alt: The whole Cellucid window with the Pancreas sample colored by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colors.
 :width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
@@ -207,7 +210,7 @@ Press **Open** beside it.
 
 Cellucid then reads `datasets.json`, describes every listed file from its
 metadata (name, cell and gene counts), lists them in the dataset dropdown
-(labelled "Dataset from <host>" while the catalog is connected), and opens the
+(labeled "Dataset from <host>" while the catalog is connected), and opens the
 catalog's default dataset; each other dataset is opened when you choose it. A
 line under the bar reads **Link** with the address and **Disconnect**, which
 brings the samples back.

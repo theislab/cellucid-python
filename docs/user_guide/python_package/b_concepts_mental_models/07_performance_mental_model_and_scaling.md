@@ -67,7 +67,7 @@ about 40 ms each; the one-time gene index builds in the background from the
 moment the dataset opens (about 2 s), after which a gene takes a few ms and 100
 genes about 20 ms (a gene asked for at once waits for the index, 1.3 s); the
 neighbor graph 0.65 s when drawn. An in-memory object is served in priority
-order, made as the viewer reads it, so a 1 % subsample of a 1,000,000-cell
+order, made as the viewer reads it, so a 1% subsample of a 1,000,000-cell
 object transfers 0.18 MB where it took 2.1–10.6 MB before
 ({doc}`../d_viewing_apis/14_performance_scaling_and_lazy_loading`).
 
@@ -94,7 +94,7 @@ Symptoms:
 
 - decompression in the browser (deflate natively; Blosc/LZ4/Zstandard in JavaScript)
 - the one-time gene index of a row-major (CSR) matrix
-- centroid computations when a field is coloured, and outlier quantiles on the
+- centroid computations when a field is colored, and outlier quantiles on the
   outlier slider's first move when the file does not store them
 
 Symptoms:
@@ -106,7 +106,7 @@ Symptoms:
 The viewer loads data via HTTP requests.
 
 For large datasets, the number of requests matters as much as their size: a
-single file (`.h5ad`, `.zarr.zip`) lets the reader merge neighbouring chunk
+single file (`.h5ad`, `.zarr.zip`) lets the reader merge neighboring chunk
 reads, while a `.zarr` folder costs one request per chunk.
 
 ### 4) GPU / WebGL

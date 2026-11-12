@@ -4,7 +4,7 @@ The data mapping: which stored arrays Cellucid plots and reads.
 A *data mapping* names, for one dataset, the embeddings it can be shown with
 (any number, of any mix of 1D, 2D and 3D: the *enabled* representations), the
 default representation of each dimension, the vector fields bound to those
-embeddings, the neighbour graph, the gene-name set, the expression matrix and
+embeddings, the neighbor graph, the gene-name set, the expression matrix and
 the latent space, each named by its key in one AnnData object. The same JSON
 shape is written into session fingerprints and sent over the Jupyter wire, so
 it is validated once, here, and mirrored by the web app's
@@ -30,7 +30,7 @@ from __future__ import annotations
 import copy
 import math
 import numbers
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -79,7 +79,7 @@ DIMENSIONAL_UMAP_KEYS: tuple[str, ...] = ("X_umap_1d", "X_umap_2d", "X_umap_3d")
 #: them: Scanpy's (``sc.tl.umap()`` writes ``X_umap``, as does a Seurat
 #: object's ``umap`` reduction), a SingleCellExperiment's (scater's
 #: ``runUMAP()`` names its reducedDim ``UMAP``), then a Seurat object's
-#: weighted-nearest-neighbour and Azimuth reference UMAPs (``wnn.umap``,
+#: weighted-nearest-neighbor and Azimuth reference UMAPs (``wnn.umap``,
 #: ``ref.umap``). An R object's reductions and reducedDims are
 #: ``obsm['X_<name>']`` with the name's case kept.
 UMAP_KEYS: tuple[str, ...] = ("X_umap", "X_UMAP", "X_wnn.umap", "X_ref.umap")
@@ -799,21 +799,25 @@ def default_modality(names: Sequence[str]) -> str | None:
     return names[0] if names else None
 
 
-#: The neighbour graph AnnData's ``sc.pp.neighbors`` writes, the default first.
+#: The neighbor graph AnnData's ``sc.pp.neighbors`` writes, the default first.
 DEFAULT_GRAPH_KEY = "connectivities"
 
 _SNN_GRAPH_SUFFIX = "_snn"
 
 
 def default_graph(keys: Iterable[str], *, modality: str | None = None) -> str | None:
-    """The neighbour graph a dataset opens with, of its ``obsp`` keys.
+    """The neighbor graph a dataset opens with, of its ``obsp`` keys.
 
-    Scanpy's ``connectivities``; else Seurat's shared-nearest-neighbour graph
-    of the modality (assay) it opens with (``<modality>_snn``), else the first
-    other shared-nearest-neighbour graph (``<assay>_snn``, or ``SNN``, in any
+    Scanpy's ``connectivities``; else the connectivities of the MuData
+    modality it opens with (``<modality>:connectivities``, the key a reader
+    presents that modality's ``obsp['connectivities']`` under: the graph
+    scanpy and ``prepare()`` write into it); else Seurat's
+    shared-nearest-neighbor graph of the modality (assay) it opens with
+    (``<modality>_snn``), else the first
+    other shared-nearest-neighbor graph (``<assay>_snn``, or ``SNN``, in any
     case) in code-point order; else None. Seurat's other graph
     (``<assay>_nn``, directed) and Scanpy's ``distances`` are no undirected
-    neighbour graph and are never the default. ``prepare()`` writes the graph
+    neighbor graph and are never the default. ``prepare()`` writes the graph
     this rule chooses as ``obsp['connectivities']``; the web app's
     ``defaultGraph`` and cellucid-r apply the same rule, pinned by the shared
     conformance fixture.
@@ -821,6 +825,8 @@ def default_graph(keys: Iterable[str], *, modality: str | None = None) -> str | 
     listed = list(keys)
     if DEFAULT_GRAPH_KEY in listed:
         return DEFAULT_GRAPH_KEY
+    if modality is not None and f"{modality}:{DEFAULT_GRAPH_KEY}" in listed:
+        return f"{modality}:{DEFAULT_GRAPH_KEY}"
     if modality is not None and f"{modality}{_SNN_GRAPH_SUFFIX}" in listed:
         return f"{modality}{_SNN_GRAPH_SUFFIX}"
     shared = sorted(
@@ -829,6 +835,55 @@ def default_graph(keys: Iterable[str], *, modality: str | None = None) -> str | 
         if key.lower() == "snn" or (key.lower().endswith(_SNN_GRAPH_SUFFIX) and len(key) > len(_SNN_GRAPH_SUFFIX))
     )
     return shared[0] if shared else None
+
+
+@dataclass(frozen=True)
+class DefaultExpression:
+    """The matrix a dataset opens with (:func:`default_expression`)."""
+
+    #: ``"X"``, ``"raw"``, ``"layer:<name>"``, or None when there is none.
+    expression: str | None
+    #: Whether it was guessed (no ``X``: ``raw`` or a layer).
+    guessed: bool
+    #: Why ``raw`` was chosen over ``X``: ``"raw-more-genes"``, ``"x-scaled"``, or None.
+    reason: str | None
+
+
+def default_expression(
+    *, has_x: bool, has_raw: bool, layers: Sequence[str], raw_has_more_genes: bool = False, x_scaled: bool = False
+) -> DefaultExpression:
+    """The expression matrix a dataset opens with: the web app's
+    ``defaultExpression`` (``data/data-mapping.js``), pinned by the shared
+    conformance fixture.
+
+    Scanpy reads genes from ``raw`` when it is present: ``adata.raw = adata``
+    kept the log-normalized matrix of every gene before ``X`` was cut to the
+    highly variable genes or scaled. So ``raw`` when it is present and either
+    holds more genes than ``X`` (``raw-more-genes``) or ``X`` holds scaled
+    values (``x-scaled``: a dense float ``X`` with a negative value in its
+    first rows); otherwise ``X``. Without ``X``: ``raw`` (guessed); otherwise
+    the only layer; otherwise the first layer whose name contains ``norm`` or
+    ``log``, then the other layers in code-point order, ``counts`` and
+    ``raw_counts`` last (guessed). ``prepare(data=adata)`` writes the matrix
+    this rule chooses, so a prepared file opens on the genes its source did.
+    """
+    if has_raw and has_x and (raw_has_more_genes or x_scaled):
+        return DefaultExpression("raw", False, "raw-more-genes" if raw_has_more_genes else "x-scaled")
+    if has_x:
+        return DefaultExpression("X", False, None)
+    if has_raw:
+        return DefaultExpression("raw", True, None)
+    names = list(layers)
+    if not names:
+        return DefaultExpression(None, False, None)
+
+    def rank(name: str) -> tuple[int, str]:
+        lowered = name.lower()
+        tier = 0 if "norm" in lowered or "log" in lowered else 2 if name in ("counts", "raw_counts") else 1
+        return tier, name
+
+    best = names[0] if len(names) == 1 else min(names, key=rank)
+    return DefaultExpression(f"{_LAYER_PREFIX}{best}", True, None)
 
 
 def require_mapping_modality(mapping: Mapping[str, Any], modalities: Sequence[str] | None) -> None:
@@ -974,26 +1029,30 @@ def best_guess_order(keys: Iterable[str], *, modality: str | None = None) -> lis
     return sorted(keys, key=lambda key: (tier(key), namespace(key), key))
 
 
-def enabled_embedding_keys(
+def resolve_embedding_slots(
     entries: Sequence[ObsmEntry],
     *,
-    named_slots: Mapping[str, str],
-    latent_key: str | None,
+    latent_key: str | None = None,
     modality: str | None = None,
-) -> frozenset[str]:
-    """The ``obsm`` keys the web app shows an AnnData store with when it opens.
+    named_slots: Mapping[str, str] | None = None,
+    load_check: Callable[[str, list[int]], str | None] | None = None,
+) -> dict[str, Any]:
+    """The embedding of each dimension slot an AnnData store opens with.
 
-    The slots are the ones a launch named (``named_slots``, slot to key) over
-    the default rule (:func:`default_embedding_slots`); when a launch names
-    none and the default rule fills none, the best guess fills them: for 3D,
-    2D and 1D the first key of that exact width in :func:`best_guess_order`,
-    else the first wider key in 2D. Every usable array 1 to 3 columns wide is
-    shown beside them. Vector-field keys and the latent key are never guessed
-    or shown beside. This is the web app's ``resolveEmbeddingSlots`` and
-    ``defaultEnabledEmbeddings`` read from metadata alone: the browser also
-    loads each guessed array and passes over one that does not load, which
-    metadata cannot tell. ``modality``: the modality a dataset of several
-    opens with (:func:`default_embedding_slots`, :func:`best_guess_order`).
+    The web app's ``resolveEmbeddingSlots``, pinned by the shared conformance
+    fixture (``embeddingSlots``). The slots a launch names (``named_slots``,
+    slot to key) and the default rule's (:func:`default_embedding_slots`) are
+    kept; every slot they leave empty takes the best-ranked usable array of
+    exactly its width (:func:`best_guess_order`), marked guessed, so each
+    width is treated alike: ``X_umap`` beside ``X_umap_3d`` names both 2d and
+    3d. Only when no slot is filled at all is 2d taken from the best-ranked
+    wider array, at columns 0 and 1. Vector-field keys and the latent key are
+    never guessed. ``load_check(key, columns)`` returns None when the array
+    loads, else the reason, and a guessed candidate that fails is passed over
+    (``rejected``); metadata alone (no ``load_check``) cannot tell.
+
+    Returns ``{"slots": {slot: {"key", "columns"} | None}, "guessed": [...],
+    "rejected": [[key, reason], ...]}``.
     """
     vector_keys = vector_field_keys(entry.key for entry in entries)
     candidates = {
@@ -1006,22 +1065,75 @@ def enabled_embedding_keys(
         and entry.key != latent_key
     }
     slots = default_embedding_slots(entries, modality=modality)
-    if named_slots:
-        for slot, key in named_slots.items():
-            slots[slot] = {"key": key}
-    elif all(slots[slot] is None for slot in DIMENSION_SLOTS):
-        for dimension in (3, 2, 1):
-            exact = best_guess_order(
-                (key for key, width in candidates.items() if width == dimension), modality=modality
-            )
-            if exact:
-                slots[dimension_slot(dimension)] = {"key": exact[0]}
-        if all(slots[slot] is None for slot in DIMENSION_SLOTS):
-            wide = best_guess_order((key for key, width in candidates.items() if width > 3), modality=modality)
-            if wide:
-                slots[dimension_slot(2)] = {"key": wide[0]}
-    shown = {ref["key"] for ref in slots.values() if ref is not None}
-    shown.update(key for key, width in candidates.items() if width <= 3)
+    for slot, key in (named_slots or {}).items():
+        slots[slot] = {"key": key, "columns": default_columns(int(slot[0]))}
+    given = {slot for slot in DIMENSION_SLOTS if slots[slot] is not None}
+    for ref in slots.values():
+        if ref is not None:
+            candidates.pop(ref["key"], None)
+    rejected: list[list[str]] = []
+    failed: set[str] = set()
+
+    def loads(key: str, columns: list[int]) -> bool:
+        if key in failed:
+            return False
+        reason = None if load_check is None else load_check(key, list(columns))
+        if reason is None:
+            return True
+        failed.add(key)
+        rejected.append([key, reason])
+        return False
+
+    for dimension in (3, 2, 1):
+        slot = dimension_slot(dimension)
+        if slots[slot] is not None:
+            continue
+        exact = best_guess_order((key for key, width in candidates.items() if width == dimension), modality=modality)
+        for key in exact:
+            if loads(key, default_columns(dimension)):
+                slots[slot] = {"key": key, "columns": default_columns(dimension)}
+                break
+    if all(slots[slot] is None for slot in DIMENSION_SLOTS):
+        for key in best_guess_order((key for key, width in candidates.items() if width > 3), modality=modality):
+            if loads(key, [0, 1]):
+                slots["2d"] = {"key": key, "columns": [0, 1]}
+                break
+    guessed = [f"embeddings.{slot}" for slot in DIMENSION_SLOTS if slots[slot] is not None and slot not in given]
+    return {"slots": slots, "guessed": guessed, "rejected": rejected}
+
+
+def enabled_embedding_keys(
+    entries: Sequence[ObsmEntry],
+    *,
+    named_slots: Mapping[str, str],
+    latent_key: str | None,
+    modality: str | None = None,
+) -> frozenset[str]:
+    """The ``obsm`` keys the web app shows an AnnData store with when it opens.
+
+    The slots of :func:`resolve_embedding_slots` (a launch's named slots over
+    the default rule, every other width guessed), and every usable array 1 to
+    3 columns wide beside them. Vector-field keys and the latent key are never
+    guessed or shown beside. This is the web app's ``resolveEmbeddingSlots``
+    and ``defaultEnabledEmbeddings`` read from metadata alone: the browser
+    also loads each guessed array and passes over one that does not load,
+    which metadata cannot tell. ``modality``: the modality a dataset of
+    several opens with (:func:`default_embedding_slots`, :func:`best_guess_order`).
+    """
+    vector_keys = vector_field_keys(entry.key for entry in entries)
+    resolved = resolve_embedding_slots(
+        entries, latent_key=latent_key, modality=modality, named_slots=named_slots
+    )
+    shown = {ref["key"] for ref in resolved["slots"].values() if ref is not None}
+    shown.update(
+        entry.key
+        for entry in entries
+        if entry.usable
+        and entry.width is not None
+        and 1 <= entry.width <= 3
+        and entry.key not in vector_keys
+        and entry.key != latent_key
+    )
     return frozenset(shown)
 
 

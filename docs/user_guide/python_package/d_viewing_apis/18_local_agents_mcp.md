@@ -11,7 +11,7 @@ the viewer's own channel.
 The agent gets **the same tools and the same permissions** as Claude and
 ChatGPT get through the Cellucid connector: every action of the viewer, each
 described the same way, and every change runs in the viewer as one step of
-your history, labelled with the app's name ("Claude Code"). You can stop the
+your history, labeled with the app's name ("Claude Code"). You can stop the
 agent, and undo its whole turn, from the viewer.
 
 ## At a glance
@@ -112,17 +112,21 @@ in a Jupyter notebook's output (the R kernel runs no server between cells).
 - **Your permissions decide.** The agent permissions you set in the viewer
   (Agents panel > Permissions > Change…) apply to it as to every agent: changes run,
   heavy work (longer than about ten seconds here), writing a file, deleting
-  what was saved, a large download, publishing and pausing the history are
-  asked first, or whatever you chose instead. "Allow for this
+  what was saved, a large download, publishing, pausing the history and
+  opening a link you have not seen in that tab are asked first, or whatever
+  you chose instead. "Allow for this
   connection" holds for this app's session until the page closes.
 - **Asked in the viewer, and in the app.** A question appears as the
   viewer's confirm card. When the app can ask too (an MCP elicitation, as
   Claude Code does), it asks the same question there; answer in either
   place. The model never answers it: the app shows it to you.
 - **A refusal is one sentence** the agent reads ("The person's settings in
-  Cellucid do not let agents delete what was saved…"), and the agent's tool
-  list says, tool by tool, what your settings make of it; when you change
-  them, the app is told to read the list again.
+  Cellucid do not let agents delete what was saved…"). The agent's tool list
+  is the same whatever your settings and never changes: the viewer tells the
+  agent your settings after its first tool result, and again after a result
+  once you changed them. (A changed tool list would make the app rewrite its
+  cached prompt, costing several times as much and dropping the agent's
+  earlier reasoning.)
 - **What agents read goes to their provider.** The first time an agent acts
   on a dataset whose notice you have not answered, the viewer says so once,
   with the dataset's switch "Agents see names and summaries only"
@@ -139,10 +143,10 @@ in a Jupyter notebook's output (the R kernel runs no server between cells).
 - `cellucid_status`: which viewer it drives, every viewer found, and what to
   tell you when none is open.
 - Every action of the viewer: read the dataset (fields, categories, genes,
-  the history), colour, filter, highlight, make annotation fields, run
+  the history), color, filter, highlight, make annotation fields, run
   analyses (markers, differential expression), move the camera, take a
   picture of the view, undo and redo. The list is the web app's action
-  catalogue; the reference is {doc}`../../web_app/p_developer_docs/30_action_reference`.
+  catalog; the reference is {doc}`../../web_app/p_developer_docs/30_action_reference`.
 
 ## Privacy
 
@@ -154,7 +158,7 @@ agent app, and from there to the model provider the app uses. A dataset's
 of single cells, extremes (a minimum, a maximum, a median) and pictures out of
 every agent's results, this one's included, and refuses summaries over groups
 an agent made by naming cells: it is enforced by the page, which runs every
-agent's call the same way. It is not anonymisation: a summary of a very small
+agent's call the same way. It is not anonymization: a summary of a very small
 group (a narrow range, a filter, a rare category) can still reveal its cells'
 values.
 

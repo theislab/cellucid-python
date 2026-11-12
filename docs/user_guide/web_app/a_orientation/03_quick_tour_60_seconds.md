@@ -49,21 +49,21 @@ This tour references UI areas by name (the app labels). One screenshot makes
 the rest of the docs much easier to follow.
 
 ```{figure} ../../../_static/screenshots/web_app/window-orientation-map.png
-:alt: The whole application window with the Pancreas sample loaded, the sidebar showing Coloring & filtering with the embedding coloured by clusters, and the eight-row legend beside the matching colours on the canvas.
+:alt: The whole application window with the Pancreas sample loaded, the sidebar showing Coloring & filtering with the embedding colored by clusters, and the eight-row legend beside the matching colors on the canvas.
 :width: 1440px
 
 The whole app on the Pancreas sample. **Left**: one scrollable sidebar of
 collapsible accordions — every control in Cellucid is in there. **Right**: the
-canvas. The legend swatches and the point colours are the same palette, which
-is the single most useful correspondence to internalise: the sidebar and the
+canvas. The legend swatches and the point colors are the same palette, which
+is the single most useful correspondence to internalize: the sidebar and the
 picture are always describing the same thing.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
-:alt: The whole Cellucid window with the Pancreas sample coloured by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colours.
+:alt: The whole Cellucid window with the Pancreas sample colored by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colors.
 :width: 1440px
 
-The same sample coloured by `cell_type`, with the other sections collapsed so
+The same sample colored by `cell_type`, with the other sections collapsed so
 **Coloring & filtering** sits at the top: the three field selectors, the
 legend's eight rows with their cell counts, and **Filters** reading *Showing
 all 3,696 cells*. The published counts of every built-in sample are listed in
@@ -78,9 +78,11 @@ all 3,696 cells*. The published counts of every built-in sample are listed in
 
 1) After dismissing the welcome overlay, inspect the **Session** accordion:
    the **Dataset** box, **Open data**, **Stored** (once something is kept),
-   and two sections collapsed to one line each,
-   **Subsampling** ("100 % cells") and **Data mapping** ("1 embedding ·
-   UMAP 2D"); click a header to open it.
+   and two sections collapsed to one line each: **Subsampling**, the share
+   of the cells open ("100% cells"; while a large sample such as Suo is still
+   reading its cells, "100% cells · reading 197K"), and **Data mapping**, the
+   embeddings each dimension opens on ("4 embeddings · UMAP 3D/2D/1D" for
+   Suo); click a header to open it.
 2) Keep the loaded Suo sample, or choose another entry under **Sample
    dataset**. **Pancreatic endocrinogenesis (scVelo)** is the standard
    1D/2D/3D velocity example; see
@@ -130,7 +132,7 @@ setting is restored from a session.
 3) Look for the legend changing on the left.
 
 ```{figure} ../../../_static/screenshots/web_app/field-selectors-three-routes.png
-:alt: The Color by heading with its (i), above the three field selectors stacked in order — Categorical obs holding clusters, Continuous obs holding None, and an empty Gene expression search box — each followed by four small icon buttons, with the pointer pressing the first.
+:alt: The Color by heading with its (i), above the three field selectors stacked in order — Categorical obs holding clusters, Continuous obs holding None, and an empty Gene expression search box — the Categorical obs row followed by six small icon buttons, the Continuous obs row by five and the gene row by four, with the pointer pressing the first selector.
 :width: 504px
 
 The three ways in, in the order they appear. Only one can be active at a time —
@@ -142,15 +144,15 @@ choosing in one clears the other two.
 - The points change color.
 - A legend appears/updates (categories or a color scale).
 
-Colouring by a gene looks like this:
+Coloring by a gene looks like this:
 
 ```{figure} ../../../_static/screenshots/web_app/window-color-by-gene-ins1.png
-:alt: The whole window coloured by expression of the gene Ins1 on a Viridis scale, dark where the gene is absent and bright in one lobe of the embedding, with the continuous legend in the sidebar.
+:alt: The whole window colored by expression of the gene Ins1 on a Viridis scale from 0 to 1260, almost every cell dark and a small patch at the foot of the lower-right arm bright, with the continuous legend in the sidebar.
 :width: 1440px
 
 `Ins1` on the Pancreas sample. Dark means little or no expression, bright means
-high — and the bright region is exactly the beta-cell arm of the embedding,
-which is what you would want a marker gene to do.
+high. On this linear 0–1260 scale only a small patch at the foot of the
+beta-cell arm reaches the bright end; every other cell sits near the dark end.
 ```
 
 ### 4) Keep a snapshot (small multiple)
@@ -164,12 +166,14 @@ This is how you compare hypotheses side‑by‑side without losing your current 
 ### 5) Make a highlight (selection)
 
 1) Open **Highlighting**.
-2) Choose a mode (e.g., **Lasso**).
-3) Draw a selection; a highlight group should appear in the highlight list.
+2) Under **Tool**, choose **Lasso**.
+3) Hold {kbd}`Alt` and draw around some cells on the plot, then release: the
+   panel shows the step (*Step 1: … cells*).
+4) Click **Confirm**: the cells become a highlight group in the list.
 
-If you want a keyboard-first workflow, the UI supports:
-
-- `Alt` + drag for area selection (and other shortcuts; see the in‑app “Keyboard shortcuts” accordion).
+Every tool draws with {kbd}`Alt` held, so a plain drag still moves the camera
+({doc}`../f_highlighting_selection/02_selection_tools_document_each_tool`);
+the **Keyboard shortcuts** section near the foot of the sidebar lists every key.
 
 On a phone or tablet, turn on **Select mode** on the selection bar at the
 bottom of the plot (or in the Highlighting panel) and draw with one finger

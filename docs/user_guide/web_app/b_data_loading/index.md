@@ -73,7 +73,7 @@ session file is in the sidebar's **State** section, under **Session**
 :::{note}
 The Session panel keeps every loading action and connection state visible;
 Subsampling and Data mapping start collapsed, each saying what it holds in its
-header ("100 % cells · genes 6 %", "3 embeddings · UMAP 2D"), and remember
+header ("100% cells · genes 6%", "3 embeddings · UMAP 2D"), and remember
 whether you opened them, in this browser only.
 Its compact `i` buttons only open explanatory help: click one, or focus it with
 {kbd}`Tab` and press {kbd}`Enter` or {kbd}`Space`. Press {kbd}`Escape`, click
@@ -91,7 +91,7 @@ Cellucid opens when it starts. Whatever you choose last is what you get:
 - Choosing another sample, **None**, a dataset under **My datasets**, a file
   or folder with **Open…**, an address in the **Link or server** bar, or
   running the benchmark, stops the
-  load in progress at once (its downloads are cancelled) and loads your new
+  load in progress at once (its downloads are canceled) and loads your new
   choice instead. The **Dataset** box shows a spinner and what is opening, for
   example *Opening data.h5ad…*.
 - Connecting to a server or GitHub repository that holds exactly one dataset

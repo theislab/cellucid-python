@@ -181,9 +181,10 @@ def _capture_selection(event):
         print(f"Stored Group B: {len(cells)} cells")
 ```
 
-In the viewer UI:
-1) make a selection for Group A (lasso)
-2) make a second selection for Group B
+In the viewer UI (**Highlighting**, **Lasso** under **Tool**):
+1) hold {kbd}`Alt`, drag around the cells of Group A, release and click
+   **Confirm** (each **Confirm** sends one selection to Python)
+2) do the same for Group B
 
 Confirm in Python:
 

@@ -12,7 +12,9 @@ inputs and produce the same AnnData.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, cast
 from urllib.parse import urlparse
 
@@ -21,9 +23,10 @@ import pandas as pd
 from scipy import sparse
 
 from .._console import console_print
-from .._contracts import _require_display_text
+from .._contracts import _require_display_text, _require_prose_text
 from .._non_finite import describe_non_finite
 from .._plural import plural
+from .._scanpy_colors import colors_key, text_colors
 from .._scratch import Scratch
 from .._source_arrays import is_lazy_sparse, sparse_source
 from ..data_mapping import (
@@ -42,6 +45,10 @@ _FORBIDDEN_KEY_CHARACTERS = re.compile(r'[/\\<>:"|?*\x00-\x1f]')
 _WINDOWS_DEVICE_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 )
+# The longest name, in UTF-8 bytes, every platform takes as a file name: Linux
+# file systems count 255 bytes, macOS 255 UTF-8 characters, Windows 255 UTF-16
+# units, and a name's UTF-8 bytes are never fewer than either of those.
+MAX_ELEMENT_NAME_BYTES = 255
 
 
 def _plural(count: int, singular: str, plural: str) -> str:
@@ -75,6 +82,11 @@ def require_element_key(key: object, what: str) -> str:
         problem = "ends with a space or a dot, which Windows removes from file names"
     elif key.split(".", 1)[0].upper() in _WINDOWS_DEVICE_NAMES:
         problem = "is a reserved device name on Windows"
+    elif len(key.encode("utf-8")) > MAX_ELEMENT_NAME_BYTES:
+        problem = (
+            f"is {len(key.encode('utf-8')):,} {plural(len(key.encode('utf-8')), 'byte')} long in UTF-8, longer than the "
+            f"{MAX_ELEMENT_NAME_BYTES} a file name may be"
+        )
     if problem is not None:
         raise ValueError(
             f"{what} {key!r} {problem}. It becomes a path in the store, so rename it."
@@ -83,22 +95,24 @@ def require_element_key(key: object, what: str) -> str:
 
 
 def require_distinct_element_keys(keys: Sequence[str], what: str) -> None:
-    """Names side by side in one group must differ by more than letter case.
+    """Names side by side in one group must differ by more than letter case and Unicode form.
 
     On macOS and Windows ``Sex`` and ``sex`` are the same folder, and one
-    would overwrite the other.
+    would overwrite the other; ``é`` written as one code point or as ``e``
+    and an accent is one name to a file system that normalizes (macOS) and to
+    a ZIP reader that does.
     """
     seen: dict[str, str] = {}
     for key in keys:
-        folded = key.casefold()
+        folded = unicodedata.normalize("NFC", key).casefold()
         if folded in seen:
             first = seen[folded]
             if first == key:
                 raise ValueError(f"{what} name {key!r} is used twice.")
             raise ValueError(
-                f"{what} names {first!r} and {key!r} differ only in letter case. They "
-                "become folders of one Zarr group, and on macOS and Windows those are "
-                "the same folder, so rename one of them."
+                f"{what} names {first!r} and {key!r} differ only in letter case or Unicode "
+                "form. They become folders of one Zarr group, which macOS and Windows take "
+                "for one folder, so rename one of them."
             )
         seen[folded] = key
 
@@ -426,7 +440,7 @@ def _frame_column(series: pd.Series, label: str) -> Any:
             raise ValueError(
                 f"{label} holds {infinite.size:,} infinite "
                 f"{_plural(int(infinite.size), 'value', 'values')} (first at row {int(infinite[0]):,}). "
-                "A colour scale has no position for an infinity; replace it with NaN, which is "
+                "A color scale has no position for an infinity; replace it with NaN, which is "
                 "stored as a missing value."
             )
         return values
@@ -515,6 +529,118 @@ def resolve_obs(obs: object, n_cells: int) -> tuple[np.ndarray, dict[str, Any]]:
         note = unique_names_note(filled_from_index=0, renamed=unique.renamed, source=None)
         console_print(f"Cell names: {note}")
     return np.asarray(unique.names, dtype=object), _frame_columns(frame, "obs")
+
+
+@dataclass(frozen=True)
+class ObsColors:
+    """The ``obs_colors`` component: Scanpy's colors of obs columns
+    (``uns['<column>_colors']``), by column -- a MuData modality's own
+    column as ``<modality>:<column>``, the name the viewer shows it by.
+
+    ``explicit``: given as ``obs_colors=`` (each entry is checked, and one
+    that cannot be written is refused) rather than held by ``data`` (an entry
+    that cannot be written is left out, and a message says why).
+    """
+
+    colors: Mapping[str, Any]
+    explicit: bool
+
+
+def held_obs_colors(uns: Mapping[str, Any], columns: Sequence[Any], *, prefix: str = "") -> dict[str, Any]:
+    """The colors ``uns`` holds for ``columns`` as it holds them, keyed by
+    ``prefix`` + column: what ``data`` gives the ``obs_colors`` component."""
+    return {
+        f"{prefix}{column}": uns[colors_key(str(column))]
+        for column in columns
+        if colors_key(str(column)) in uns
+    }
+
+
+def require_obs_colors(value: object) -> ObsColors:
+    """``obs_colors=`` as given: ``{column: [color, ...]}``, one color (text)
+    a category; which columns and how many colors is checked when obs is."""
+    if not isinstance(value, Mapping):
+        raise TypeError(
+            f"obs_colors must be a mapping of obs column to its colors, {{'cell_type': ['#1f77b4', ...]}}, "
+            f"got {type(value).__name__}."
+        )
+    for key, colors in value.items():
+        if not isinstance(key, str):
+            raise TypeError(f"obs_colors is keyed by obs column names (text), got {type(key).__name__} {key!r}.")
+        if isinstance(colors, str) or text_colors(colors) is None:
+            raise TypeError(
+                f"obs_colors[{key!r}] must be a list of text colors, one a category in the column's "
+                f"order (Scanpy's uns['{key}_colors']), got {type(colors).__name__}."
+            )
+    return ObsColors(colors=dict(value), explicit=True)
+
+
+#: A color as the viewer reads one from a file (``utils/hex-color.js``):
+#: ``#rgb``, ``#rrggbb`` or ``#rrggbbaa``, either case.
+_HEX_COLOR = re.compile(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")
+
+
+def written_obs_colors(
+    component: ObsColors | None,
+    root: Mapping[str, Any],
+    modalities: Mapping[str, Mapping[str, Any]] | None = None,
+) -> tuple[dict[str, np.ndarray], dict[str, dict[str, np.ndarray]]]:
+    """The ``uns`` colors written: for the root's obs columns ``root`` and,
+    in a MuData, each modality's own obs columns, ``{'<column>_colors':
+    colors}`` for each column written as a categorical whose colors are
+    Scanpy's form with at least one a category (Scanpy's own condition for
+    using them), as held (a longer list is kept as it is: Scanpy colors with
+    its first ones). Anything else of ``data``'s is left out, saying why; of
+    ``obs_colors=``, refused."""
+    modalities = modalities or {}
+    at_root: dict[str, np.ndarray] = {}
+    of_modality: dict[str, dict[str, np.ndarray]] = {name: {} for name in modalities}
+    if component is None:
+        return at_root, of_modality
+
+    def refuse_or_say(key: str, column: str, where: str, error: type[Exception], reason: str) -> None:
+        if component.explicit:
+            raise error(f"obs_colors[{key!r}]: {reason}")
+        console_print(f"{where}uns['{column}_colors'] not written: {reason}")
+
+    for key, value in component.colors.items():
+        name, separator, inner = key.partition(":")
+        if separator and name in modalities and inner in modalities[name]:
+            columns, column, where, out = modalities[name], inner, f"mdata.mod[{name!r}].", of_modality[name]
+        elif key in root:
+            columns, column, where, out = root, key, "", at_root
+        else:
+            if component.explicit:
+                written = [*root, *(f"{name}:{column}" for name, own in modalities.items() for column in own)]
+                raise ValueError(f"obs_colors names {key!r}, which is no obs column written: {written}.")
+            continue
+        values = columns[column]
+        colors = text_colors(value)
+        if colors is None:
+            refuse_or_say(key, column, where, TypeError, "the colors are not a list of text (Scanpy's form).")
+            continue
+        if not isinstance(values, pd.Categorical):
+            refuse_or_say(key, column, where, TypeError, f"{column!r} is not written as a categorical, and colors go with categories.")
+            continue
+        count = len(values.categories)
+        if len(colors) < count:
+            refuse_or_say(key, column, where, ValueError, (
+                f"{len(colors):,} {plural(len(colors), 'color')} for the {count:,} "
+                f"{plural(count, 'category', 'categories')} of {column!r}; Scanpy's form is one a category, in category order."
+            ))
+            continue
+        # The viewer opens a column in its colors only when each category's
+        # is hex (palettes.js scanpyCategoryPalette, as Scanpy writes them).
+        unread = next((color for color in colors[:count] if not _HEX_COLOR.fullmatch(color)), None)
+        if unread is not None:
+            refuse_or_say(key, column, where, ValueError, (
+                f"{unread!r} is not a hex color (#rrggbb, #rgb or #rrggbbaa), and the viewer opens a column in "
+                "its colors only when each category's is one, as Scanpy writes them (matplotlib.colors.to_hex "
+                "converts a named color)."
+            ))
+            continue
+        out[colors_key(column)] = np.asarray(colors, dtype=object)
+    return at_root, of_modality
 
 
 # =============================================================================
@@ -702,7 +828,7 @@ def resolve_genes(
 
 
 # =============================================================================
-# obsp: the neighbour graph
+# obsp: the neighbor graph
 # =============================================================================
 
 
@@ -712,10 +838,10 @@ def resolve_connectivities(connectivities: object, n_cells: int) -> sparse.csr_m
     Weights are finite and non-negative, and the matrix is exactly symmetric;
     a stored zero is not an edge and is dropped, and so is the diagonal: a
     self-loop is no edge anyone can draw (Seurat's ``FindNeighbors`` counts
-    each cell among its own neighbours, so its ``<assay>_snn`` has 1 on the
+    each cell among its own neighbors, so its ``<assay>_snn`` has 1 on the
     diagonal). The web app and cellucid-r apply the same rule. A directed
     graph (Seurat's ``<assay>_nn``, Scanpy's ``distances``) is refused: the
-    viewer draws an undirected neighbour graph.
+    viewer draws an undirected neighbor graph.
     """
     label = "connectivities"
     if sparse.issparse(connectivities):
@@ -744,7 +870,7 @@ def resolve_connectivities(connectivities: object, n_cells: int) -> sparse.csr_m
     graph.eliminate_zeros()
     if (graph != graph.T).nnz:
         raise ValueError(
-            "Connectivity matrix must be exactly symmetric: a directed neighbour graph (Seurat's "
+            "Connectivity matrix must be exactly symmetric: a directed neighbor graph (Seurat's "
             "'<assay>_nn', Scanpy's 'distances') is not one the viewer draws; pass a symmetric one "
             "(obsp['connectivities'], or Seurat's '<assay>_snn')."
         )
@@ -780,7 +906,7 @@ def linked_text(
         if url is not None:
             raise ValueError(f"{text_label} is required whenever {url_label} is supplied.")
         return None
-    linked = {text_key: _require_display_text(text, label=text_label, allow_empty=False)}
+    linked = {text_key: _require_prose_text(text, label=text_label, allow_empty=False)}
     if url is not None:
         linked["url"] = _require_url(url, url_label)
     return linked

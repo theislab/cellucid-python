@@ -16,12 +16,12 @@ You never lose work by undoing. If you undo a few steps and then do something
 new, the steps you undid stay on a branch of their own, and the new steps go
 on a new branch.
 
-Example: you colour by `cell_type`, hide the Ductal cells and keep 500 Beta
+Example: you color by `cell_type`, hide the Ductal cells and keep 500 Beta
 cells. You undo the last two steps, then hide the Alpha cells instead. The
 history now has two branches:
 
 ```text
-Opening ─ Coloured by cell_type ─┬─ Hid Ductal of cell_type ─ Kept 500 cells of Beta in cell_type   (Main)
+Opening ─ Colored by cell_type ─┬─ Hid Ductal of cell_type ─ Kept 500 cells of Beta in cell_type   (Main)
                                  └─ Hid Alpha of cell_type                                           (Branch 2)
 ```
 
@@ -32,7 +32,7 @@ steps in a lane of its own, and double-clicking it shows its last step.
 
 - The first branch is **Main**. Later ones are **Branch 2**, **Branch 3**, …;
   a branch an agent starts is named after it and what it did
-  (**Claude: Coloured by Ins1**).
+  (**Claude: Colored by Ins1**).
 - **Branch here** (in a step's details or menu, `Ctrl+Shift+B`) starts the
   next change on a new branch from that step, even at the newest step. The
   status line says so (*Next change starts "Branch 3" from step 4.*), and
@@ -47,7 +47,7 @@ report, so a short, telling name ("Without Ductal") helps a reader later.
 
 - the tracker in use, as a button (**Tracker 1 ▾**: switch, start, rename or
   remove trackers; {ref}`history-trackers`), and **Map ⤢**, the branch map (below);
-- every branch with its colour, `★` for the main branch and `🔒` for a locked
+- every branch with its color, `★` for the main branch and `🔒` for a locked
   one, where it starts (`from step 3`), its steps and how long ago it last
   changed; a click shows its last step;
 - `⋯` beside each branch: its menu (below);
@@ -58,13 +58,13 @@ report, so a short, telling name ("Without Ductal") helps a reader later.
 :alt: The State section after two undos and a new step: the branch button reads Branch 1, and the branch picker under it shows the tracker button, Map, Main (starred as the main branch) and Branch 1 (from step 1, the branch shown), each with its ⋯ menu, and Branch from the step shown; below, the graph with Main folded into a stub where Branch 1 leaves it.
 :width: 540px
 
-After two undos and a new step: the branch picker with **Main** and **Branch 2**, the branch shown marked.
+After two undos and a new step: the branch picker with **Main** and **Branch 1**, the branch shown marked.
 ```
 
 ### What you can do with a branch
 
-The branch's menu (`⋯` in the picker or the map, or a right-click on its `⑂`
-row):
+The branch's menu (`⋯` in the picker or the map, **More…** in its details, or a
+right-click on its `⑂` row):
 
 | Item | What it does |
 |---|---|
@@ -109,7 +109,7 @@ at its last step, and lays them out side by side. A notification says which
 views were kept (`Kept 2 views: Main and Branch 2, side by side.`).
 
 - Each kept view shows what the selected view shows at that branch's last
-  step: its colouring, filters and camera.
+  step: its coloring, filters and camera.
 - The step shown does not move; the history stays on the branch it showed.
 - The kept views and the side-by-side layout are steps of the history like
   any kept view, so **Undo** takes them away again.

@@ -81,7 +81,9 @@ web app reads too, and serves it with `serve_anndata(...)`:
   `barcodes`/`features` or `genes` lists) → served file by file, the files listed in
   `/_cellucid/datasets`
 
-Anything else is refused: `Unable to detect format for: <path>`.
+Anything else is refused, naming what Cellucid opens: `<path> is not a file
+Cellucid opens (an .h5ad file, a .loom file, …)` or `<path> is not a folder
+Cellucid reads: …`.
 
 Details: {doc}`04_cli_cellucid_serve_quickstart`.
 

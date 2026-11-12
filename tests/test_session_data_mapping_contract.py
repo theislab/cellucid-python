@@ -1,7 +1,7 @@
 """A session is applied to an AnnData only through the data mapping it was saved with.
 
 ``datasetFingerprint.dataMapping`` names the embeddings, gene names and -- for
-an AnnData source -- the neighbour graph, expression matrix and latent space a
+an AnnData source -- the neighbor graph, expression matrix and latent space a
 session was saved against. Before anything is written, every key it names must
 exist on the AnnData, ``varCount`` must equal the size of the gene axis the
 mapping reads, and a gene a user-defined field copies is found by the name the

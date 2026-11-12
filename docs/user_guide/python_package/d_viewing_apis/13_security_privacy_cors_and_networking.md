@@ -40,9 +40,11 @@ and publishes them as one verified local generation. This lets the UI and
 dataset API use the same origin.
 
 Implications:
-- every viewer-serving startup requires access to the configured source,
+- every viewer-serving startup reads the configured source's inventory,
 - the complete declared generation is verified before the server starts,
-- source failure is reported instead of substituting a previous generation,
+- when the source cannot be reached, only a cached build whose every file
+  matches its checksums is served (and the start says so); otherwise the start
+  stops and says what is missing,
 - the local files are UI assets, not your dataset.
 
 Configure the local generation directory with `--web-cache-dir PATH` or the
@@ -202,8 +204,8 @@ elsewhere on the network:
 A wildcard bind prints the loopback origin plus the machine's own name; see {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
 
 Read that second block as the audit line it is: those are the addresses your
-neighbours on the cluster can open. When the machine has no name that resolves
-outside itself, the block is absent — there is no travelling address to print,
+neighbors on the cluster can open. When the machine has no name that resolves
+outside itself, the block is absent — there is no traveling address to print,
 and a name that resolves to loopback would be a URL that cannot leave the host.
 An IPv6 bind is bracketed as a URL requires, so `--host ::` reports
 `http://[::1]:8765` and not a bare `::1`.
@@ -243,6 +245,15 @@ notebook's link is dead once the viewer stops, but while it runs, anyone who
 can read the notebook file and reach that machine (another user of a shared
 node) could use it. Stop viewers you no longer use (`viewer.stop()`), or use
 the notebook widget, whose token is never in an address.
+
+The address with its token is said only where you are told to open it: the
+`cellucid serve` banner, `display()`, `cellucid mcp --open` on stderr (and in
+R, `cellucid_serve()`'s message, `cellucid_view(pane = "none")` or a viewer
+opened outside an interactive session, and `cellucid_mcp(open = )`). Everything that may be logged or pasted
+says the address without it: an error (a browser that could not be opened, a
+viewer that did not answer), the debug report, the server's request log, and
+R's printed viewer; `viewer.viewer_url` (R: `viewer$viewer_url`) is the
+address that opens the viewer.
 
 Practical guidance:
 - keep the server bound to localhost unless you have a strong reason,

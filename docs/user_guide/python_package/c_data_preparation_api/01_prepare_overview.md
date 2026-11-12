@@ -5,7 +5,7 @@
 **Goal:** write a Cellucid-ready AnnData and open it
 
 {func}`~cellucid.prepare` takes an AnnData (`data=adata`), or arrays and data
-frames — embeddings, cell and gene metadata, an expression matrix, a neighbour
+frames — embeddings, cell and gene metadata, an expression matrix, a neighbor
 graph, vector fields — or both (an argument replaces that one component of
 `data`), checks every one of them, and writes **one standard AnnData** that
 the Cellucid web app reads fast. Given a MuData it writes a Cellucid-ready
@@ -92,7 +92,7 @@ The Session panel gathers every loading path under **Open data**.
 
 - The dataset opens under the name you gave it.
 - Every `obs` column is listed (or the `obs_keys` you chose, in that order).
-- Typing a gene name colours the cells by its expression.
+- Typing a gene name colors the cells by its expression.
 - The embedding you named in `embedding_defaults` is the one shown first.
 
 ---
@@ -107,7 +107,7 @@ or read from `data`'s `uns['cellucid']`). Everything else is optional:
 |---|---|
 | `obs` | Cells are named `"0"` … `"n - 1"`; no metadata fields. |
 | `var`, `gene_expression` | No `X`; gene search is unavailable. `var` without `gene_expression` is refused. |
-| `connectivities` | No neighbour graph. |
+| `connectivities` | No neighbor graph. |
 | `vector_fields` | No velocity overlay. |
 | `dataset_description`, `citation_text`/`citation_url`, `source_name`/`source_url` | Not shown. |
 | `embedding_defaults`, `latent_key`, `obs_keys`, `var_gene_id_column`, `vector_field_default`, `normalize_embeddings`, `centroid_min_points` | The viewer's own choice; nothing is written to `uns['cellucid']['defaults']`. Without `latent_key` no outlier quantiles are stored, and the outlier filter waits for a latent space chosen in the viewer. |

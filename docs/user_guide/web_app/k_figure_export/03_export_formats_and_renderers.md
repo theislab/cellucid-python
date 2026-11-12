@@ -65,8 +65,9 @@ SVG export is a vector-first path designed for editability.
 - **Always vector** (when enabled):
   - title text
   - axes and tick labels
-  - legends (categorical swatches / continuous colorbars) — one shared legend
-    for a multi-panel figure whose panels match, otherwise one legend per panel
+  - legends (categorical swatches / continuous colorbars, and the entry for
+    highlighted cells) — one shared legend for a multi-panel figure whose
+    panels match, otherwise one legend per panel
   - panel labels and the `n = N selected` badge
   - 3D orientation indicator
   - centroid labels (when enabled in the viewer)
@@ -123,7 +124,7 @@ If you hit size/performance limits, switch to **Optimized** or **Hybrid** (or ex
 
 ### Hybrid SVG
 
-**What it is:** Points are rasterized into an embedded PNG image (inside the SVG), while annotations remain vector.
+**What it is:** Points are rasterized into an embedded PNG image (inside the SVG), while annotations remain vector. The points are drawn at 300 dpi at the figure's size (3.125 image pixels per SVG pixel), as a 300 DPI PNG is.
 
 This is often the best default when:
 - you have a large dataset,
@@ -152,8 +153,8 @@ PNG export produces a high-DPI raster image that is easy to paste into slides, m
 - You need maximum compatibility (everyone can open PNG).
 
 **Common pitfalls (and fixes)**
-- *“Text looks blurry”*: export at a larger plot size and/or higher DPI; don’t export tiny and scale up later.
-- *“Files are enormous”*: reduce plot size and/or export at 150 DPI for drafts/slides.
+- *“Text looks blurry”*: export at a higher DPI at the width it will be printed; don’t export narrow and scale up later.
+- *“Files are enormous”*: export at 150 DPI for drafts/slides, or check the figure is not wider than its column.
 
 **Provenance**
 - PNG exports embed UTF-8 `iTXt` metadata, including a structured JSON blob with dataset identity, export settings, and one record per exported panel (view, field, filters). See {doc}`05_metadata_and_provenance`.
@@ -192,7 +193,7 @@ Yes: it’s a fast way to confirm the export is not corrupted and that legends/a
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/figure_export/download.png
-:alt: The Download group open with the format set to SVG: the SVG point strategy select on its placeholder, shortened to "Choose S…", and Export all views (split-view) with the pointer on its checkbox, above the Export button.
+:alt: The Download group open with the format set to SVG: the SVG point strategy select on Full vector, and Export all views (split-view) with the pointer on its checkbox, above the Export button.
 :width: 532px
 
 Download settings choose output format, resolution, and whether all views are exported.

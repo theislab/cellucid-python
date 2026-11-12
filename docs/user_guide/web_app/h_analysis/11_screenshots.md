@@ -14,7 +14,7 @@ them. Nothing on this page assumes you have read the mode pages first.
 - **Dataset:** the built-in **Pancreatic endocrinogenesis (scVelo)** sample —
   3,696 cells, 3,753 genes, 8 cell types. Pick it from **Sample dataset** in the
   Session panel.
-- **View:** 2D embedding, coloured by `cell_type`, light theme.
+- **View:** 2D embedding, colored by `cell_type`, light theme.
 - **Window:** 1440 × 1000 CSS pixels, captured at 2× pixel density.
 - **Group used throughout:** one annotation group — the 262 `Ngn3 low EP` cells —
   as **Page 1**, with its complement **Rest of Page 1** (3,434 cells).
@@ -53,7 +53,7 @@ cells are staged, not saved.
 Press **Confirm**. Only now does Page 1 acquire cells.
 
 ```{figure} ../../../_static/screenshots/analysis/life-02-two-pages-ready.png
-:alt: The same Highlighting panel after Confirm: Page 1 holds 262 cells, and the list below it reads 262 cells highlighted with Clear, above the confirmed group with its checkbox and remove button.
+:alt: The same Highlighting panel after Confirm: Page 1 holds 262 cells, and the list below it reads 262 cells highlighted with CSV, .h5ad and Clear, above the confirmed group, Ngn3 low EP with its count 262, its checkbox and remove button.
 :width: 532px
 
 After **Confirm**, `Page 1` holds 262 cells and the group appears in the list
@@ -116,7 +116,7 @@ valid, Run is disabled and the line above it says why.
 ```
 
 **Which page goes in A?** The sign convention follows A: a gene with positive
-log₂ fold change is higher in **Group A**. Put the group you are characterising
+log₂ fold change is higher in **Group A**. Put the group you are characterizing
 in A and the background in B, and "upregulated" then means what you expect;
 **Swap A and B** exchanges them.
 
@@ -144,7 +144,7 @@ across all of them at once and is usually over in an instant.
 ```
 
 **Cancel** stops the run, its reads and its computations, and keeps nothing; the
-box then reads `Differential expression cancelled` with **Run again**.
+box then reads `Differential expression canceled` with **Run again**.
 Changing the form while a run is in flight does not stop it: the result arrives
 dimmed, marked **Stale · Run**, so a result that no longer matches the form is
 never mistaken for one that does.
@@ -154,16 +154,16 @@ never mistaken for one that does.
 ## Step 5 — Read the preview
 
 When the run finishes, a small volcano plot appears below the form, with an
-**⤢ Expand** button under it.
+**Expand** button under it.
 
 ```{figure} ../../../_static/screenshots/analysis/de-sidebar-result.png
-:alt: The sidebar result of a differential expression run: a small volcano plot with the genes up in Page 1 in red on the right, those down in blue on the left and the rest grey, one of its gene labels shown, and the Expand button below it under the pointer.
+:alt: The sidebar result of a differential expression run: a small volcano plot with the genes up in Page 1 in red on the right, those down in blue on the left and the rest gray, one of its gene labels shown, and the Expand button below it under the pointer.
 :width: 440px
 
 The sidebar preview is a **glance**, not a workspace. At 224 pixels wide the plot
 is confirmation that the run produced something; the numbers live in the full
 view. There is no legend here because the band under the axis fits the tick
-labels and the axis title *or* the legend, and an unlabelled axis is worse than
+labels and the axis title *or* the legend, and an unlabeled axis is worse than
 an unkeyed volcano.
 ```
 
@@ -174,7 +174,7 @@ view. If you are looking for a number and cannot find it, you have not expanded
 yet.
 :::
 
-The **⤢ Expand** button is the only way in. The preview itself is not clickable,
+The **Expand** button is the only way in. The preview itself is not clickable,
 and the button is a real button: you can reach it with `Tab` and open the full
 view with `Enter` or `Space`.
 
@@ -183,7 +183,7 @@ view with `Enter` or `Space`.
 ## Step 6 — Open the full view
 
 ```{figure} ../../../_static/screenshots/analysis/de-volcano-expanded.png
-:alt: A large modal headed Differential expression: Page 1 vs Rest of Page 1: a volcano plot with seven labelled genes top-left over a legend reading Up (395), Down (698) and Not significant (2660), an Export row of PNG, SVG and CSV buttons above the Plot options on the right, a Summary statistics table bottom-left, and a Statistical analysis table of the top genes bottom-right.
+:alt: A large modal headed Differential expression: Page 1 vs Rest of Page 1: a volcano plot with seven labeled genes stacked above the up-regulated points ("7 of 15 gene labels shown") over a legend reading Up (395), Down (698) and Not significant (2660), an Export row of PNG, SVG and CSV buttons above the Plot options on the right, a Summary statistics table bottom-left, and a Statistical analysis table of the top genes bottom-right.
 :width: 1440px
 
 The expanded view has four regions: the **plot**, the **options** column (which
@@ -197,8 +197,8 @@ Read it in this order.
 **The volcano.** Horizontal position is log₂ fold change: right means higher in
 Group A, left means higher in Group B. Vertical position is `−log₁₀` of the
 adjusted p-value, so higher up means more statistically confident. Genes that
-pass the filters are coloured — red on the right, blue on the left — and
-everything else is grey. The dashed lines are the filters themselves.
+pass the filters are colored — red on the right, blue on the left — and
+everything else is gray. The dashed lines are the filters themselves.
 
 **Summary statistics.** Worth reading carefully.
 
@@ -238,7 +238,7 @@ endocrine cells filling the rest.
 
 Nothing is recomputed when you change a filter. The test statistics were fixed
 the moment the run finished; the filters only decide which genes get called
-significant, get coloured, and get listed. Changing them is instant and lossless,
+significant, get colored, and get listed. Changing them is instant and lossless,
 in the form or at the top of the expanded view’s options.
 
 Change **Min |log2FC|** and compare.
@@ -248,7 +248,7 @@ Change **Min |log2FC|** and compare.
 
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/volcano-threshold-a.png
-:alt: A volcano plot at a log2 fold-change threshold of 0.5, with broad red and blue clouds of coloured points either side of a narrow grey band, and a legend below the axis title counting each colour.
+:alt: A volcano plot at a log2 fold-change threshold of 0.5, with broad red and blue clouds of colored points either side of a narrow gray band, and a legend below the axis title counting each color.
 :width: 1192px
 
 **|log₂FC| ≥ 0.5** — a permissive cutoff. 1,588 genes are called: 750 up and
@@ -258,7 +258,7 @@ Change **Min |log2FC|** and compare.
 
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/volcano-threshold-b.png
-:alt: The same volcano plot at a log2 fold-change threshold of 3, with the threshold lines pushed far apart and almost every point now grey, and a legend below the axis title counting each colour.
+:alt: The same volcano plot at a log2 fold-change threshold of 3, with the threshold lines pushed far apart and almost every point now gray, and a legend below the axis title counting each color.
 :width: 1192px
 
 **|log₂FC| ≥ 3** — a strict cutoff. The same run now reports 190 significant
@@ -267,7 +267,7 @@ genes instead of 1,588, all of them downregulated.
 :::
 ::::
 
-This is worth internalising: **"how many genes are significant" is a statement
+This is worth internalizing: **"how many genes are significant" is a statement
 about your thresholds as much as about your data.** If a volcano looks empty,
 check the cutoffs before concluding there is nothing there — that is the single
 most reported analysis surprise.
@@ -277,7 +277,7 @@ The other controls behave the same way:
 - **Max adjusted p** — any value from 0 to 1 (0.05).
 - **Min % expressing in either group** — hides genes expressed in few cells of
   both groups.
-- **Labelled genes** — how many gene names the plot is allowed to draw; labels
+- **Labeled genes** — how many gene names the plot is allowed to draw; labels
   that would collide are dropped, and the plot says how many fit.
 - **Point size**, **Show threshold lines**, **Color scheme** — appearance only.
 
@@ -326,7 +326,7 @@ Steps 2 and 5–8 are identical everywhere. Only the middle changes.
 | --- | --- | --- | --- |
 | {doc}`Quick <03_analysis_mode_quick_insights>` | nothing | composition bars and a statistics table | — (Quick has no expanded view) |
 | {doc}`Detailed <04_analysis_mode_detailed_analysis>` | one variable, plot type, pages | the plot | summary table + statistical tests + export |
-| {doc}`Correlation <05_analysis_mode_correlation_analysis>` | X, Y, pages; method and colour-by under More options | the scatter | per-page `r`, `r²`, `p`, `n` + strength reading + export |
+| {doc}`Correlation <05_analysis_mode_correlation_analysis>` | X, Y, pages; method and color-by under More options | the scatter | per-page `r`, `r²`, `p`, `n` + strength reading + export |
 | {doc}`Gene Signature <07_analysis_mode_gene_signature>` | gene sets, pages; method and display under More options | the distribution | per-page summary + between-page tests + gene chips + export |
 | {doc}`Marker Genes <08_analysis_mode_genes_panel>` | Group by, compare against; groups, test, filters, ranking under More options | a ranked list, heatmap or clustered heatmap | the sortable per-group table, heatmap options + CSV, all genes CSV, GMT |
 

@@ -17,8 +17,8 @@
 ### Exporting with 0 visible points (all cells filtered out)
 
 What you may see:
-- an empty plot region (no points),
-- axes/legend/title may still render,
+- an empty plot region (no points) with the notice "No visible cells" in place of axes,
+- the legend and title still render,
 - the exported artifact is “valid” but scientifically meaningless unless intentional.
 
 How to handle:
@@ -32,7 +32,7 @@ Common failure mode: the “important” points disappear in an optimized export
 Best practices:
 - Use **Emphasize selection** (mute non-selected points) rather than relying on the rare points being obvious.
 - Avoid **Optimized vector** if the exact presence of rare points matters; prefer **Hybrid** or **PNG**.
-- Increase plot size so single points are visible and anti-aliasing is not lost.
+- Export at a higher DPI, or frame the region (**Frame export**) so single points are larger in the plot, and anti-aliasing is not lost.
 
 ### NaN/Inf and invalid values
 
@@ -61,9 +61,10 @@ Workarounds:
 - confirm the active field immediately before exporting,
 - for multiview exports, keep the same field *and* the same hidden categories
   across panels when you want one shared legend instead of per-panel legends,
-- give the grid enough plot size that each panel legend has room to be drawn
-  (below roughly 208 px of usable cell width for a right legend, a panel is
-  exported without its legend).
+- give the grid enough size for its panel legends, or the figure comes out
+  larger than the size you typed: a panel legend is never dropped or cut, and
+  one wider than its plot (or every one, when beside their plots they would
+  not fit the size) stands below it.
 
 ---
 
@@ -71,19 +72,20 @@ Workarounds:
 
 ### An export that is simply too large
 
-There are two ceilings, and they fail at different moments.
+There are three ceilings, and they fail at different moments.
 
-**The field's own limit.** `W` and `H` accept a whole number between **100** and
-**20000**. A value outside that never starts an export; the input rejects it in
-place with `Width must be between 100 and 20000.` (or the height equivalent),
-or `Width must be a whole number.` for a non-integer.
+**The field's own limit.** `W` takes a width in millimetres of at least
+**10** (a plot and a line of text), with no widest. A width below that never
+starts an export; the box rejects it in place with `Figure width (mm) must be
+at least 10.`, or `Figure width (mm) must be a decimal number.` for one that
+is not a number.
 
 **The GPU's limit.** The point layer is re-rendered through WebGL at export
 resolution, so the *scaled* plot rectangle has to fit in a drawing buffer the
 graphics driver will allocate. This is the one that catches people, because the
-number that must fit is not the number you typed — it is the plot width times
-`DPI / 96`. A 6000 px plot at 600 DPI asks for 37,500 px, and a typical limit is
-16,384. When it does not fit you get a toast reading:
+number that must fit is not the width you typed — it is the plot's width in
+inches times the DPI. A 1600 mm plot at 600 DPI asks for 37,795 px, and a
+typical limit is 16,384. When it does not fit you get a toast reading:
 
 > Export failed: Figure export 37500×… exceeds this GPU's exact 16384×16384 raster limit.
 
@@ -94,7 +96,24 @@ and, in the rarer case where the buffer is accepted but comes back short:
 The limit is the machine's, not Cellucid's, so the same settings can succeed on
 one computer and fail on another.
 
-**What to do.** Lower DPI before lowering plot size: 300 DPI is the usual journal
+**The browser's canvas limit (PNG).** A PNG is composed on one browser canvas
+the size of the whole figure, legend included, at `DPI / 96`. Every browser
+refuses a canvas past a side length or an area of its own, lower on a machine
+short of memory, and none of them says so. Cellucid asks the browser directly
+— it allocates the canvas and checks that a pixel drawn in its far corner is
+really there — and refuses the export before anything is rendered when it is
+not. When the figure would fit without its legend, the toast reads:
+
+> Export failed: The legend of 4,000 categories needs a …×… px figure, more than this browser can draw; turn the legend off or show fewer categories.
+
+and otherwise:
+
+> Export failed: This figure is …×… px, more than this browser can draw; choose a smaller size or a lower DPI.
+
+with the figure's size in device pixels. The legend is never shrunk or cut to fit instead. An
+SVG is written as text and has no such limit.
+
+**What to do.** Lower DPI before lowering the width: 300 DPI is the usual journal
 requirement and 600 DPI doubles every dimension for no gain in a raster figure
 that is already oversampled. Or export **SVG**, which has no DPI stage and no
 raster ceiling for the vector strategies.
@@ -111,12 +130,14 @@ Recommended approach:
 ### Category explosion (legend overflow)
 
 Categorical legends with hundreds/thousands of categories often produce:
-- unreadable figures,
 - huge file sizes,
-- legends that dominate the layout.
+- legends that dominate the layout: every entry is drawn whole, so the legend
+  (and the figure) grows to hold them all, and past the browser's canvas limit
+  a PNG export is refused (see above).
 
 Strategies:
-- Switch legend position to **Bottom** (more space).
+- Switch legend position to **Bottom**: the legend then fills the plot's width
+  and grows downwards instead of sideways.
 - Disable legend for the figure and mention in the caption how to interpret colors.
 - Reduce categories upstream (merge, filter, or focus on a subset) if scientifically appropriate.
 
@@ -131,17 +152,17 @@ hiding them does not.
 
 Multi-panel export can become huge when you combine:
 - many panels,
-- large plot sizes,
+- wide figures,
 - and high DPI PNG export.
 
 Strategies:
 - Export fewer panels at a time.
 - Reduce DPI for drafts (150 DPI), then re-export final at 300 DPI.
-- Increase overall plot size only as needed so each panel remains readable.
+- Widen the figure only as needed so each panel remains readable (a double column holds a 2 × 2 grid well).
 - Remember that panels which disagree each carry their own legend inside their
-  cell, which costs plot area and adds vector content per panel. Making the
-  panels agree (same field, same hidden categories) collapses them back to one
-  shared legend beside the grid.
+  cell, which costs plot area (or makes the figure larger) and adds vector
+  content per panel. Making the panels agree (same field, same hidden
+  categories) collapses them back to one shared legend beside the grid.
 
 ---
 
@@ -155,21 +176,21 @@ warn afterwards — it stops before rendering anything and says what is in the
 way.
 
 ```{figure} ../../../_static/screenshots/figure_export/read-export-blocked-dialog.png
-:alt: The Export blocked dialog over the app: "Cellucid will not create an export that differs from the active view", Velocity overlay not exported with its reason, and a single Back button.
+:alt: The Export blocked dialog over the app: "Cellucid will not create an export that differs from the active view", Connectivity overlay not exported with its reason, and the buttons Back and Turn off edges and export.
 :width: 1440px
 
-Pressing **Export** with the velocity overlay running. One heading, one reason
-per blocker, one **Back** button — there is no “export anyway”.
+Pressing **Export** with the connectivity edges shown. One heading, one reason
+per blocker, **Back**, and **Turn off edges and export**, which turns the edges
+off and exports the points as shown — there is no “export anyway”.
 ```
 
 The blockers, and what each one wants you to do:
 
 | Blocker | What to do |
 |---|---|
-| **Velocity overlay not exported** | The figure would show the point layer without the flow the screen shows. Turn `Show overlay` off, export, turn it back on. |
-| **Connectivity overlay not exported** | Same reasoning for the neighbour-graph edges. Turn `Show connectivity edges` off. |
+| **Connectivity overlay not exported** | Same reasoning for the neighbor-graph edges. Turn `Show connectivity edges` off. |
 | **_<Mode>_ render mode not exported** | The active render mode has no figure renderer. Switch back to `Points`. |
-| **Velocity overlay state unavailable** / **Active render mode unavailable** / **Active viewer background unavailable** | The exporter could not read the state it needs in order to reproduce the view faithfully, so it refuses rather than guessing. Reload before exporting. |
+| **Velocity overlay state unavailable** (whether the vector field is shown cannot be read, so whether to draw its arrows) / **Active render mode unavailable** / **Active viewer background unavailable** | The exporter could not read the state it needs in order to reproduce the view faithfully, so it refuses rather than guessing. Reload before exporting. |
 
 This is a different mechanism from the **Never exported** line in the Labels &
 Annotations group. That line names four interaction aids — orbit compass, lasso
@@ -179,7 +200,7 @@ A blocker is something that would change what the figure appears to *say*.
 
 ### Reference grid
 
-The viewer's **Background** control decides two things at once: the colour the
+The viewer's **Background** control decides two things at once: the color the
 canvas is cleared to, and which reference layer is drawn behind the data: the
 matplotlib-style grid box (`Grid (light)` and `Grid (dark)`), the studio floor
 and dot surface (`Studio (light)` — the default — and `Studio (dark)`), a
@@ -187,14 +208,14 @@ painted look (`Atelier`, `Nebula`, `Abyss` and `Aurora`, light and dark), or
 nothing (`White` and `Black`).
 
 Exports reproduce that layer. The grid box is drawn as **vector rules** in SVG
-(editable `<line>` elements you can recolour or delete in Illustrator or
+(editable `<line>` elements you can recolor or delete in Illustrator or
 Inkscape) and as the same geometry on the canvas in PNG, so both formats carry
-the identical grid. The rules take their colour, spacing, line weight, and
+the identical grid. The rules take their color, spacing, line weight, and
 per-plane fade from the viewer's active background, so a light-grid view
 exports a light grid and a dark-grid view exports a dark one.
 
 The studio backdrop is reproduced from the same constants and functions its
-shader is built from, with the floor height, stage centre and screen density of
+shader is built from, with the floor height, stage center and screen density of
 the view it was drawn in:
 
 - floor rules are `<line>` elements stroked with a gradient sampled along each
@@ -202,13 +223,13 @@ the view it was drawn in:
   angle, and as its spacing family crossfades;
 - dots, of the dot surface (also the one a level 3D view sees behind the
   data) or of a floor seen from straight above, are circles;
-- the soft glow at the centre of the view and the pool under the data are
-  radial gradients. The glow lightens the viewer's own surface colour, so it is
-  drawn only with **Background: Match viewer** (or a custom colour equal to
+- the soft glow at the center of the view and the pool under the data are
+  radial gradients. The glow lightens the viewer's own surface color, so it is
+  drawn only with **Background: Match viewer** (or a custom color equal to
   it); the pool is drawn over any background.
 
-The known differences are below one 8-bit colour step or a quarter of a CSS
-pixel: the gradient between a rule's 24 colour stops is interpolated linearly,
+The known differences are below one 8-bit color step or a quarter of a CSS
+pixel: the gradient between a rule's 24 color stops is interpolated linearly,
 a rule's width is the one it has where it is strongest, and the screen's
 sub-step dither is not drawn. After a dimension or navigation change the screen
 crossfades between floor and dots for 0.3 s; an export shows the settled
@@ -229,7 +250,7 @@ the viewer draws a reference layer can neither include nor omit it honestly.
 A look (`Atelier`, `Nebula`, `Abyss`, `Aurora`) is a painted picture, not line
 geometry, so it cannot become vector elements. The export draws it again with
 the viewer's own renderer and shaders, for the figure's plot area, from the
-exact state the view shows: the same look, the same colours taken from the
+exact state the view shows: the same look, the same colors taken from the
 cells, the same contact shadow (Atelier) and the same camera, with each pixel
 placed exactly as the points are placed, so the look stays registered with the
 cells under any crop. PNG carries it at the file's resolution; SVG embeds it as
@@ -237,7 +258,7 @@ one image under the points, at twice the plot size. Star cores, paper grain and
 marine snow keep the size they have on screen.
 
 The look is drawn only when the figure's **Background** is **Match viewer**: on
-**White BG**, **Transparent** or a custom colour the figure keeps the paper you
+**White**, **Transparent** or a custom color the figure keeps the paper you
 asked for. The fade after choosing a look is not part of the figure.
 
 ### 3D shader-accurate points and SVG limitations
@@ -271,13 +292,16 @@ the relative reading of one cell against another.
 If points look “inside out” or layering seems wrong:
 - ensure **Depth sort** is enabled for export.
 
-### Axes interpretation in 3D
+### Axes on a 3D view
 
-In 3D orbit mode, axes are reported in **camera-space** coordinates:
-- useful for orientation,
-- not the same as “UMAP_1/UMAP_2” in the strict embedding coordinate sense.
-
-If you need axes that correspond to embedding coordinates, export a 2D/planar view.
+A 3D view has no axes, and no axis margins, whatever **Axes** says; nor does a
+1-D or 2-D view tilted by orbiting. Axes are drawn only where they are rulers:
+on a 1-D or 2-D view seen flat (planar navigation), whose cells all lie on the
+plane the camera looks straight down at. A perspective picture shows cells at
+many depths, so one length on the plot is a different distance at every depth,
+and ticks would be read as UMAP coordinates the picture does not have. Keep
+**3D orientation** on to show a 3D view's directions, and export a 2D view in
+planar navigation when the figure needs embedding coordinates.
 
 ### Volumetric smoke render mode not exported
 
@@ -300,13 +324,42 @@ Even if connectivity lines are visible in the viewer, exports currently include:
 
 If edges are essential for your figure, capture them via another workflow and document how they were generated.
 
-### Velocity vector field not exported
+### The vector field: arrows on a grid
 
-The velocity overlay is a data layer for the same reason connectivity is: it
-shows a measured field. Figure export renders the point layer only, so an
-enabled velocity overlay blocks the export with **Velocity overlay not
-exported** rather than silently producing a figure without the flow the active
-view shows. Turn the overlay off before exporting.
+The velocity overlay animates particles, which no figure can hold. With
+`Show overlay` on, a figure (PNG, SVG, the preview and an agent's export
+picture alike) draws a still picture of the same flow instead: arrows on a
+grid over the plot, as scVelo's `velocity_embedding_grid` draws them.
+
+- **Same field, cells and camera.** The arrows come from the field the overlay
+  shows, for every panel whose embedding it is bound to, from the cells the
+  panel shows (its filters and hidden categories) with a vector, carried
+  through the panel's own camera onto the plot. A panel showing another
+  embedding draws none, as on screen.
+- **How each arrow is made.** The plot is covered by a grid of 40 nodes along
+  its longer side. Each node takes the Gaussian-weighted mean of nearby cells'
+  vectors (a width of half a grid step), divided by the larger of 1 and the
+  weight it gathered, so a node few cells reach draws a short arrow; a node
+  that gathered under 1% of the 99th percentile weight draws none. Arrows
+  are scaled by their mean length (half a grid step), as matplotlib's quiver
+  autoscale that scVelo uses, so a fast region draws arrows longer than a step.
+- **Colors.** An arrow is colored as the overlay colors a particle: its mean
+  speed over the field's largest, through the overlay's `Color scheme`.
+  Arrows are outlined in the paper's color so they read on any background.
+- **Key.** The key names the field and how it is drawn (`velocity: mean
+  arrows of nearby cells`) and gives the colors' speed range in the
+  embedding's units (`speed 0 – 1.23`). With **Legend** on it is two rows of
+  the legend — an arrow and what it is, the colors' ramp and their speed —
+  under the entries and the highlight's row, laid out with the legend so it
+  never covers a cell. In a grid, panels that draw one field with one speed
+  range share it in the shared legend; panels whose keys differ each list
+  theirs in their own legend. With **Legend** off the key stands in the plot's
+  bottom-right corner, its line wrapped at its words to a narrow plot.
+- **Provenance.** The figure's description and its JSON record name the field
+  each panel draws (`Vector field: velocity (arrows: …)`).
+
+The overlay's look (particle size, trails, bloom, color grading) is the
+animation's and does not change the figure.
 
 ### Viewer chrome is never exported
 
@@ -320,9 +373,9 @@ mode, and blocking on it would make ordinary 3D exports impossible.
 ### Dark-background figures
 
 Titles, tick labels, axis labels, panel letters, legend text, the plot frame,
-and the selection badge take their colour from the figure's own background. A
+and the selection badge take their color from the figure's own background. A
 figure exported with **Background: Match viewer** from `Grid (dark)` or `Black`, or
-with a dark **Custom** colour, is written in light ink and stays readable. A
+with a dark **Custom** color, is written in light ink and stays readable. A
 transparent figure keeps the light ink, because the page it will be placed on
 is unknown and paper is the safe assumption.
 

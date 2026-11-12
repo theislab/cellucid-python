@@ -105,7 +105,7 @@ def test_a_lasso_then_pull_in_the_next_cell_needs_no_waiting(widget: Widget, ada
     page.binary(_result("highlight", "highlight_1",
                         {"label": "Lasso", "tool": "lasso", "pageId": "page_1", "pageName": "Page 1",
                          "color": "#e41a1c", "enabled": True}, [1, 3], None, 1))
-    page.binary(_result("categorical", "user_cat_1", {"key": "annotation", "categories": ["B", "T"], "origin": "user"},
+    page.binary(_result("categorical", "user_cat_1", {"key": "annotation", "categories": ["B", "T"], "colors": ["#ff9900", "#0077c8"], "origin": "user"},
                         None, np.array([0, 1, 255, 0], dtype=np.uint8), 2))
     page.binary(_result("geneSet", "gene_set_1",
                         {"name": "T", "description": "", "genes": ["CD3E"], "symbols": ["CD3E"], "origin": "markers"}, [], None, 3))
@@ -183,3 +183,83 @@ def test_in_a_widget_a_session_is_asked_for_in_one_cell_and_applied_in_the_next(
         widget.apply_session_to_anndata(adata, "a session")
     assert time.monotonic() - started < 1.0
     request.cancel()
+
+
+def test_a_request_collected_in_a_later_cell_says_it_has_not_arrived_yet(
+    widget: Widget, adata: ad.AnnData, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Asked in one cell and collected in the next, as the two-cell pattern
+    says, an answer that has not come is one the viewer has not sent yet --
+    never "ask in one cell and collect it in the next", which is what was done
+    (docs walk, R9X-9: a tutorial run top to bottom said exactly that)."""
+    from cellucid.jupyter import _viewer, _widget
+
+    cell = {"count": 1}
+    for module in (_viewer, _widget):
+        monkeypatch.setattr(module, "_execution_count", lambda: cell["count"])
+    request = widget.request_session()
+    cell["count"] = 2
+    with pytest.raises(RuntimeError, match="session has not arrived yet: the viewer is not shown"):
+        request.result()
+    widget._displayed = True
+    with pytest.raises(RuntimeError, match="the viewer has not connected"):
+        request.result()
+    Page(widget).connect()
+    _settle(lambda: widget.debug_connection()["channel_connected"])
+    with pytest.raises(RuntimeError, match="the viewer is still working on it.*Run this cell again"):
+        widget.apply_session_to_anndata(adata, request)
+    # Collected in the cell that asked: the two-cell advice, as before.
+    cell["count"] = 3
+    again = widget.request_session()
+    with pytest.raises(RuntimeError, match="next cell"):
+        again.result()
+    request.cancel()
+    again.cancel()
+
+
+@pytest.mark.parametrize("served", ["file", "object"])
+def test_a_viewer_given_another_dataset_id_takes_its_own_session_back(
+    tmp_path: Path, adata: ad.AnnData, served: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A viewer given dataset_id= serves the data under that id, and saves
+    its session under it; applied back through the viewer, the session goes
+    to the object it served, which declares its own id (L26-7). An object
+    declaring another id is refused, as before."""
+    import _session_files as files
+
+    from cellucid.anndata_session._apply import cell_order_digest
+
+    adata.uns["cellucid"] = {"id": "pancreas"}
+    path = tmp_path / "pancreas.h5ad"
+    adata.write_h5ad(path)
+    made = Widget(path if served == "file" else adata, dataset_name="Pancreas", dataset_id="pancreas-notebook")
+    try:
+        assert (made._served_dataset_id, made._served_declared_id) == ("pancreas-notebook", "pancreas")
+        record = files.fingerprint(cell_count=4, var_count=2, dataset_id="pancreas-notebook",
+                                   digest=cell_order_digest(adata.obsm["X_umap"]))
+        made_field = files.user_category("user_cat_1", "stage", ["early", "late"], [0, 1, 0, 1])
+        session = files.session_file(
+            tmp_path / "viewer.cellucid-session", fingerprint_record=record,
+            trackers=[{"id": "t1", "name": "Tracker 1", "root": files.state(),
+                       "steps": [{"set": {"field-overlays": files.overlays(user_fields=[made_field])}}]}],
+        )
+        from cellucid import read_session
+
+        def answered(request: Any) -> None:
+            monkeypatch.setattr(request, "result", lambda timeout=None: read_session(session))
+
+        request = made.request_session()
+        answered(request)
+        plan = made.apply_session_to_anndata(adata, request, cleanup_file=False)
+        assert [row.status for row in plan.rows] == ["write"]
+        plan.apply()
+        assert adata.obs["stage"].tolist() == ["early", "late", "early", "late"]
+        other = adata.copy()
+        other.uns["cellucid"] = {"id": "garcia"}
+        request = made.request_session()
+        answered(request)
+        with pytest.raises(ValueError, match="saved on the dataset 'pancreas-notebook', and this object is 'garcia'"):
+            made.apply_session_to_anndata(other, request, cleanup_file=False)
+    finally:
+        made.stop()
+        made.close()

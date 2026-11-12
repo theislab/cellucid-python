@@ -181,7 +181,7 @@ refused; measured 23 October 2026):
 | First gene | 0.1 MB | 0.2 s | 0.09 s |
 | Next gene | 0.1 MB | 0.2 s | 0.08 s |
 | 99 genes at once | 3.6 MB | 0.9 s | 0.2 s |
-| Neighbour graph | 66.5 MB | 13.8 s | 1.8 s |
+| Neighbor graph | 66.5 MB | 13.8 s | 1.8 s |
 | Every gene in two cell types (a differential expression test) | 62.5 MB | 13.0 s | 1.7 s |
 
 Over GitHub's HTTP/2 the folder reads as fast as one `.h5ad` or `.zarr.zip`
@@ -248,6 +248,6 @@ used up, GitHub either bills the overage or, without a payment method or with
 a zero budget, disables Git LFS for the owner's account or organization until
 the next month, for every repository it owns
 ([Git LFS billing](https://docs.github.com/en/billing/concepts/product-billing/git-lfs)).
-One visitor reading Suo's neighbour graph and a few dozen genes is already
+One visitor reading Suo's neighbor graph and a few dozen genes is already
 about 70 MB. Prefer a Zarr folder: it is read as fast and costs no LFS
 bandwidth at all.

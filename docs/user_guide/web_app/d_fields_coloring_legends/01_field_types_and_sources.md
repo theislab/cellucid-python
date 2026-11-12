@@ -90,12 +90,20 @@ In the legend you can typically:
 Categorical fields also have **centroids** (category centers), which the browser computes for every category that holds cells.
 
 ```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
-:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a color swatch, a label, a cell count, a rename pencil and a delete bin.
 :width: 488px
 
 A categorical legend. **Checkboxes and swatches** are the tell — if you see
 these, the active field is categorical.
 ```
+
+An obs column of whole numbers past 2^53 (64-bit database ids, barcodes
+hashed to integers) is categorical too: no number holds such a value exactly,
+and such values are identifiers, so the column is read as the exact text of
+each value. It is listed with the numbers until its first load finds them, and
+then with the categorical fields; its legend says so in one line ("IDs past
+2^53, read as text."), the reason in full on the line's tooltip. Whole numbers
+all within 2^53 stay numbers, exactly.
 
 ### Continuous fields
 
@@ -111,25 +119,25 @@ In the legend you can typically:
 - optionally rescale the colorbar to match your slider range.
 
 ```{figure} ../../../_static/screenshots/web_app/legend-continuous-sscore.png
-:alt: The continuous legend for S_score: the Color scale (Viridis) bar with its two end values, Log color scale off and Rescale to range on, each with its (i), and below a rule the Visible range block with Live filtering on, Minimum and Maximum sliders, and Filter and Reset.
+:alt: The continuous legend for S_score: the Color scale (Viridis) bar with its two end values, Log color scale off and Rescale to range on, each with its (i), and below a rule the Visible range block with Live filtering on, Minimum and Maximum sliders, and Reset (Filter appears only with Live filtering off).
 :width: 488px
 
-A continuous legend for the same dataset. **A colour bar with Min/Max sliders**
+A continuous legend for the same dataset. **A color bar with Min/Max sliders**
 is the tell. The same legend appears for a gene — a gene *is* a continuous
 field, just from the var axis instead of the obs axis.
 ```
 
 :::{tip}
-The (i) beside each colour-mapping toggle answers two questions this page
+The (i) beside each color-mapping toggle answers two questions this page
 would otherwise need paragraphs for:
 
-- **Gray for zero** (a gene with no negative value): Off, a 0 takes the colour
-  scale's lowest colour; On, the cells where the gene is 0 are gray beneath
+- **Gray for zero** (a gene with no negative value): Off, a 0 takes the color
+  scale's lowest color; On, the cells where the gene is 0 are gray beneath
   the expressing ones ({ref}`gray-for-zero`).
 - **Log color scale**: zero, negative and missing values have no logarithm and
   take the None color.
-- **Rescale to range**: On, the colour map stretches across the visible range;
-  Off, colours span the field's full data range.
+- **Rescale to range**: On, the color map stretches across the visible range;
+  Off, colors span the field's full data range.
 :::
 
 ---
@@ -161,12 +169,12 @@ This matters because derived fields are still “real fields”:
 
 ### All-constant or all-missing fields
 
-- A continuous field with no finite value in any cell has no colour scale, and
+- A continuous field with no finite value in any cell has no color scale, and
   Cellucid says so rather than inventing a range: `Field "<key>" has no value
-  in any of <n> cells, so it has no colour scale.`
+  in any of <n> cells, so it has no color scale.`
 - If every cell holds the same value there is no range at all, and none is
-  invented. Both ends of the colour bar print that one number, every cell is
-  drawn in the single colour from the middle of the colormap, and the Min/Max
+  invented. Both ends of the color bar print that one number, every cell is
+  drawn in the single color from the middle of the colormap, and the Min/Max
   sliders have nothing to divide — see
   {doc}`../e_filtering/06_edge_cases_filtering`.
 - Constant fields and constant genes are kept, not dropped: the viewer reads

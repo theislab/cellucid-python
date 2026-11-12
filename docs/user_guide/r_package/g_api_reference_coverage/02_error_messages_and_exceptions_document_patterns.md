@@ -84,7 +84,7 @@ Only the arguments you left out are listed.
 | `dataset_id '<id>' is reserved on Windows.` | Avoid `CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`. |
 | `dataset_name must be a non-empty string.` | Give the dataset a name. |
 | `<argument> must be exactly one string.` | One string, not a vector or `NULL` (for required text). |
-| `<argument> is displayed verbatim, so it must not carry characters that have no glyph: '<text>' ends with U+0020 SPACE. Cellucid does not remove them for you, because that would change text you did not ask to change. Pass the exact text you want shown.` | Remove leading/trailing whitespace, control characters, and U+200B, U+2060, U+FEFF from `dataset_name`, `dataset_description`, `citation_text`, `source_name`, or the URLs. |
+| `<argument> is displayed verbatim, so it must not carry characters that have no glyph: '<text>' contains U+200B ZERO WIDTH SPACE. Cellucid does not remove them for you, because that would change text you did not ask to change. Pass the exact text you want shown.` | Remove control characters and U+200B, U+2060, U+FEFF from `dataset_name`, `dataset_description`, `citation_text`, `source_name` (white space at their ends is removed for you), or those and white space at either end from the URLs. |
 | `citation_text is required whenever citation_url is supplied.` | Add the citation text. |
 | `source_name is required whenever source_url is supplied.` | Add the source name. |
 | `<argument> must be an absolute http:// or https:// address; got '<url>'.` | For example `https://doi.org/...`. |
@@ -129,7 +129,7 @@ subject:
 | `Cell names must not be missing (<source>).` | Fix the row names. |
 | `obs column '<name>' is a Date column, which has no AnnData encoding Cellucid writes. Convert it first, for example with as.character() or as.numeric().` | Convert dates, times, and other classed columns. |
 | `obs column '<name>' is of type complex, which has no AnnData encoding Cellucid writes. ...` | Convert it. |
-| `obs column '<name>' holds 1 infinite value (first at row 2). A colour scale has no position for an infinity; replace it with NA, which is written as a missing value.` | Replace `Inf` with `NA`. |
+| `obs column '<name>' holds 1 infinite value (first at row 2). A color scale has no position for an infinity; replace it with NA, which is written as a missing value.` | Replace `Inf` with `NA`. |
 
 ## `gene_expression`, `var`, `gene_identifiers`
 
@@ -159,7 +159,7 @@ subject:
 | `connectivities must be a real numeric or logical matrix or a Matrix::Matrix sparse matrix.` | Pass a matrix. |
 | `connectivities must be <n> x <n> (one row and one column per cell), got <a> x <b>.` | Pass the cells x cells graph. |
 | `Connectivity weights must all be finite.` / `Connectivity weights must all be non-negative.` | Fix the weights. |
-| `Connectivity matrix must be exactly symmetric: a directed neighbour graph ...` | A directed graph (Seurat's `RNA_nn`): pass a symmetric one (`RNA_snn`), or symmetrize, for example `(graph + Matrix::t(graph)) / 2` (`pmax()` makes a large sparse matrix dense). A diagonal is left out, never refused. |
+| `Connectivity matrix must be exactly symmetric: a directed neighbor graph ...` | A directed graph (Seurat's `RNA_nn`): pass a symmetric one (`RNA_snn`), or symmetrize, for example `(graph + Matrix::t(graph)) / 2` (`pmax()` makes a large sparse matrix dense). A diagonal is left out, never refused. |
 | `The Matrix package is required to store connectivities.` | `install.packages("Matrix")`. |
 
 ## `vector_fields`

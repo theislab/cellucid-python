@@ -40,7 +40,7 @@ Once you have a `viewer` (from `show_anndata(...)`), you can:
 
 - **Act on the viewer (Python → viewer)**: everything a person can do is an
   action, and every action is a method
-  - colour by an obs field or a gene (`viewer.color_by(field=...)`)
+  - color by an obs field or a gene (`viewer.color_by(field=...)`)
   - highlight cells by row, mask or obs name (`viewer.highlight_cells(cells=...)`)
   - clear highlights (`viewer.highlight_clear_all()`)
   - hide/show cells (`viewer.cells_visibility_set(cells=..., visible=...)`)

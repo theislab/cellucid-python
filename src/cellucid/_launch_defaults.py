@@ -35,17 +35,19 @@ from .data_mapping import (
 
 
 def _require_expression_source(value: object) -> str:
-    """Validate ``expression_source``: ``"X"``, ``"raw"`` or ``"layer:<name>"``."""
-    if not isinstance(value, str) or not (
-        value in ("X", "raw") or (value.startswith("layer:") and len(value) > len("layer:"))
-    ):
+    """Validate ``expression_source``: ``"X"``, ``"raw"`` or ``"layer:<name>"``,
+    the layer's name holding no ``/`` (the web app's ``defaults.expression``,
+    ``layers/<name>``, names one group; cellucid-r's ``.served_expression()``
+    takes the same)."""
+    layer = value[len("layer:") :] if isinstance(value, str) and value.startswith("layer:") else None
+    if not isinstance(value, str) or not (value in ("X", "raw") or (layer and "/" not in layer)):
         raise ValueError(
-            f"expression_source must be 'X', 'raw', or 'layer:<name>', got {value!r}."
+            f"expression_source must be 'X', 'raw', or 'layer:<name>' (a layer's name, without '/'), got {value!r}."
         )
     return value
 
 
-def _require_embedding_keys(
+def _require_embedding_defaults(
     value: object, *, label: str
 ) -> dict[str, tuple[str, list[int] | None]]:
     """Validate ``{"2d": "X_tsne"}`` or ``{"2d": ("X_pca", [0, 1])}``, named ``label``."""
@@ -102,16 +104,14 @@ def launch_defaults(
     contents: AnnDataContents | None,
     *,
     latent_key: str | None,
-    gene_id_column: str | None,
+    var_gene_id_column: str | None,
     normalize_embeddings: bool | None,
     centroid_min_points: int | None,
     obs_keys: Sequence[str] | None,
-    embedding_keys: Mapping[str, EmbeddingKeySpec] | None,
+    embedding_defaults: Mapping[str, EmbeddingKeySpec] | None,
     knn_key: str | None,
     expression_source: str | None,
     vector_field_default: str | None,
-    embedding_label: str = "embedding_keys",
-    gene_id_label: str = "gene_id_column",
     modality: str | None = None,
 ) -> dict[str, Any]:
     """Check every launch choice against the store and return the ``defaults`` document.
@@ -119,8 +119,9 @@ def launch_defaults(
     Only metadata is consulted: each named element must exist and have a shape
     the choice can use. A choice left at None is not written: the viewer then
     takes it from the store's own ``uns['cellucid']['defaults']``, else applies
-    its default rule. ``embedding_label`` and ``gene_id_label`` are the names
-    the caller's arguments go by, for messages.
+    its default rule. Messages name the arguments as ``prepare()``,
+    ``serve_anndata()`` and ``show_anndata()`` all take them
+    (``embedding_defaults``, ``var_gene_id_column``).
 
     ``contents`` is None for a store Python does not read (an R object, a
     MatrixMarket folder, Loom, a 10x file, served as bytes for the browser to
@@ -152,12 +153,12 @@ def launch_defaults(
                 )
         defaults["modality"] = chosen
 
-    for slot, (key, columns) in _require_embedding_keys(embedding_keys, label=embedding_label).items():
+    for slot, (key, columns) in _require_embedding_defaults(embedding_defaults, label="embedding_defaults").items():
         dimension = slot_dimension(slot)
         width = (
             _UNKNOWN_WIDTH
             if contents is None
-            else _require_obsm_key(contents, key, label=f"{embedding_label}[{slot!r}]")
+            else _require_obsm_key(contents, key, label=f"embedding_defaults[{slot!r}]")
         )
         try:
             resolved = validate_embedding_columns(
@@ -166,7 +167,7 @@ def launch_defaults(
                 width=width,
             )
         except DataMappingError as error:
-            raise ValueError(f"{embedding_label}[{slot!r}] (obsm[{key!r}]): {error}") from error
+            raise ValueError(f"embedding_defaults[{slot!r}] (obsm[{key!r}]): {error}") from error
         defaults[f"embedding{slot}"] = {"key": key, "columns": resolved}
 
     knn = _optional_key(knn_key, label="knn_key")
@@ -174,7 +175,7 @@ def launch_defaults(
         if contents is not None and knn not in contents.obsp:
             raise ValueError(
                 f"knn_key names obsp[{knn!r}], which this store does not have. "
-                f"obsp holds: {sorted(contents.obsp)}. Compute the neighbour graph "
+                f"obsp holds: {sorted(contents.obsp)}. Compute the neighbor graph "
                 "with sc.pp.neighbors(adata), or leave knn_key unset."
             )
         defaults["knn"] = knn
@@ -203,12 +204,12 @@ def launch_defaults(
             else "X"
         )
 
-    column = _optional_key(gene_id_column, label=gene_id_label)
+    column = _optional_key(var_gene_id_column, label="var_gene_id_column")
     if column is not None:
         if gene_axis_columns is not None and column not in gene_axis_columns:
             axis = "raw.var" if expression_source == "raw" else "var"
             raise ValueError(
-                f"{gene_id_label} names {axis}[{column!r}], which this store does not have. "
+                f"var_gene_id_column names {axis}[{column!r}], which this store does not have. "
                 f"{axis} holds: {sorted(gene_axis_columns)}."
             )
         defaults["geneIdColumn"] = column
@@ -303,6 +304,6 @@ def _require_drawn_vector_field(contents: AnnDataContents, field: str, defaults:
             f"vector_field_default names field {field!r}, whose embeddings "
             f"(obsm 'X_<basis>' of each '{field}_<basis>') the viewer does not show "
             "when the store opens, so the field is not drawn. Show one of them "
-            "(embedding_keys), or choose a field drawn on a shown embedding: "
+            "(embedding_defaults), or choose a field drawn on a shown embedding: "
             f"{sorted(name for name, drawn in declared.items() if drawn)}."
         )

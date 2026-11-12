@@ -9,7 +9,7 @@ plus the CORS origin patterns the Python server matches.
 
 Before this contract existed the split was enforced in one direction only: a
 test pinned the documentation header link at the apex and nothing stopped a
-frozen identifier from being "normalised" to `www`. This module enforces both
+frozen identifier from being "normalized" to `www`. This module enforces both
 directions:
 
 * every bare-apex occurrence must be a declared identifier or origin pattern,
@@ -135,7 +135,7 @@ def test_frozen_identifiers_are_still_written_at_the_bare_apex() -> None:
                 f"{relative} no longer declares the frozen identifier {required!r}. "
                 "These are names, not addresses: adding the `www` host to a "
                 "published schema $id or to exported figure provenance is a "
-                "breaking change, not a normalisation."
+                "breaking change, not a normalization."
             )
 
 

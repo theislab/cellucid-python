@@ -96,6 +96,13 @@ def test_debug_connection_probes_every_listed_store(
     assert probed == [store_url]
     assert report["anndata_store_probes"] == {"alpha": {"url": store_url}}
     assert "dataset_identity_probes" not in report
+    # A report is pasted when asking for help: the page's address, without
+    # the token that grants the channel (the page's own snapshot drops it too).
+    assert viewer._viewer_token not in json.dumps(report, default=str)
+    assert report["viewer_url"] == (
+        f"http://127.0.0.1:8765/?viewer=true&viewerId={viewer._viewer_id}&anndata=true"
+    )
+    assert "viewerToken" in viewer.viewer_url
 
 
 @pytest.mark.parametrize(

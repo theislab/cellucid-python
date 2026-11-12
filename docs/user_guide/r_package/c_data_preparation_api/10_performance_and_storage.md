@@ -14,7 +14,7 @@ from the conda-forge build), with simulated data:
 - `obs` with 4 columns (a 20-level factor, a 3-value character column, an
   integer, a double);
 - `X_umap` (2 columns) and `X_pca` (50 columns), standard normal values;
-- a symmetric 15-neighbour graph (2,999,642 stored values).
+- a symmetric 15-neighbor graph (2,999,642 stored values).
 
 | Output | Size | Write time |
 |---|---|---|
@@ -41,13 +41,13 @@ at all -- so treat these numbers as a scale, not a promise.
 - **Stored expression values.** Each stored value costs 4 bytes of float32
   plus 4 bytes of int32 index before compression. The cell count is fixed;
   the gene count is yours to choose (`gene_identifiers`, for example highly
-  variable genes plus marker genes). Store the values you colour by --
+  variable genes plus marker genes). Store the values you color by --
   normalized, log-transformed -- rather than several layers.
 - **Wide embeddings.** Every column is stored. A 50-column PCA is
   50 x 4 bytes per cell; store the columns you will plot or use as a latent
   space.
 - **The graph.** Each edge is stored twice (both directions) as 4-byte weight
-  plus 4-byte index. A 15-neighbour graph of 100,000 cells is about 19 MB.
+  plus 4-byte index. A 15-neighbor graph of 100,000 cells is about 19 MB.
   Leave out `connectivities` if you will not draw the graph.
 - **obs columns** are small: categorical columns store one small integer per
   cell plus their labels once.
@@ -81,7 +81,7 @@ The store is laid out for the viewer's reads:
   the first rows of every array — reads little beyond its own cells, and a
   gene's first values are its values on those cells;
 - **byte shuffle and deflate,** which browsers decompress natively (the
-  shuffle puts the similar high bytes of neighbouring values together; the
+  shuffle puts the similar high bytes of neighboring values together; the
   expression values themselves compress best unshuffled);
 - **consolidated metadata,** so the structure of the store is one request.
 

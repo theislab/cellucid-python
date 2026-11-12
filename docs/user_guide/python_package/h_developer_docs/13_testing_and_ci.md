@@ -27,7 +27,7 @@ branches do not reach, string for string with cellucid-r;
 pinned `mcp_tools.json`, the shared `local_agents.json` fixture, the agent
 messages of the viewer channel, a viewer's publication and loopback endpoint
 and its refusals, and `cellucid mcp` over stdio against a fake page:
-initialize, lists, calls, errors, cancellation, elicitation, list changes, a
+initialize, lists, calls, errors, cancellation, elicitation, a list that never changes, a
 viewer stopping), vector fields, cache and path confinement, documentation, cross-platform repository
 paths, and release artifacts. The MuData tests need `mudata`, which the `dev`
 extra brings with it (they are skipped without it). On Python 3.11 pip
@@ -45,15 +45,23 @@ the history model schema byte for byte (`test_sessions.py`,
 (`test_sessions.py`, `test_session_layout.py`), and the web app's AnnData and
 priority readers on what `prepare()` writes
 (`test_prepare_data_and_mudata_contract.py`,
-`test_prepare_priority_order_contract.py`). They find the web app at
-`CELLUCID_WEB_ROOT` (a checkout or worktree of the `cellucid` repository),
-else in the `cellucid` checkout beside this repository (`tests/_web_root.py`).
-A web checkout that is named or present must hold the file a test reads: one it
-lacks fails the test. Only when there is no web checkout at all, as in this
-repository's own CI, are they skipped, saying so.
+`test_prepare_priority_order_contract.py`). Others compare with cellucid-r's
+sources: every public name's R twin, `prepare()`'s arguments, the launch
+defaults and the offline texts (`test_r_python_parity_contract.py`), the R
+tutorials' calls (`test_round_trip_tutorials_contract.py`) and the MuData
+cross-writer stores (`test_prepare_data_and_mudata_contract.py`). They find the
+web app at `CELLUCID_WEB_ROOT` (a checkout or worktree of the `cellucid`
+repository) and cellucid-r at `CELLUCID_R_ROOT`, else in the checkouts beside
+this repository (`tests/_web_root.py`). A checkout that is named or present must
+hold the file a test reads: one it lacks fails the test. Only when there is no
+checkout of a sibling at all are its tests skipped, saying so, and only when
+`CELLUCID_SIBLINGS_REQUIRED` is not set: this repository's CI checks out
+cellucid-r and the web app's code (its `main`, after the package is installed,
+so the day's pushes of the three repositories have landed) beside this one,
+installs Node, and sets it, so there a missing checkout or Node fails.
 
 ```bash
-CELLUCID_WEB_ROOT=/path/to/cellucid python -m pytest
+CELLUCID_WEB_ROOT=/path/to/cellucid CELLUCID_R_ROOT=/path/to/cellucid-r python -m pytest
 ```
 
 ---
@@ -119,9 +127,11 @@ Current workflows:
 
 - `docs-check.yml`: builds Sphinx docs with warnings as errors
   (`sphinx-build -W --keep-going`) on PRs and pushes to `main`
-- `test.yml`: installs `.[dev]` (which brings `mudata`) and runs the complete pytest suite,
-  Ruff, mypy, and distribution checks on Python 3.11–3.14 on Ubuntu, and on
-  3.11, 3.12 and 3.14 on macOS and on Windows
+- `test.yml`: installs `.[dev]` (which brings `mudata`), checks out cellucid-r and
+  the web app's code beside this repository, and runs the complete pytest suite
+  (the cross-repository tests required, `CELLUCID_SIBLINGS_REQUIRED`), Ruff,
+  mypy, and distribution checks on Python 3.11–3.14 on Ubuntu, and on 3.11,
+  3.12 and 3.14 on macOS and on Windows
 - `pypi-publish.yml`: runs when a GitHub Release is published (and on
   nothing else); proves the release and tag provenance, validates source and
   docs, normalizes and verifies the source-distribution digest, installs both

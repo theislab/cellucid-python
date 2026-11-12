@@ -21,6 +21,7 @@ It assumes **zero knowledge** of Cellucid, and only minimal Python.
 
 **Prerequisites**
 - `pip install cellucid`
+- Only to compute a UMAP or clusters here (Steps 2–3): `pip install scanpy igraph`
 - A dataset in one of these forms:
   - an in-memory `AnnData`
   - a `.h5ad` file
@@ -64,7 +65,7 @@ viewer
 ```
 
 Then inside the viewer UI:
-- find the **Field** (color-by) selector
+- open **Coloring & filtering**; under **Color by**, open **Categorical obs**
 - choose your cluster column (often called `leiden`, `louvain`, `cell_type`, `seurat_clusters`, etc.)
 
 If you don’t have a cluster column or UMAP, continue with the step-by-step sections below.
@@ -140,7 +141,7 @@ The viewer opens on a UMAP without being told which one:
 If one of those keys exists, you can proceed. Any other embedding in `obsm`
 (`X_tsne`, `X_draw_graph_fa`, two columns of `X_pca`) can be picked after
 opening, under **Session › Data mapping**, or named up front with
-`embedding_keys=`.
+`embedding_defaults=`.
 
 ### If you do NOT have UMAP (compute it with Scanpy)
 
@@ -190,7 +191,7 @@ import pandas as pd
 
 categorical_like = [
     c for c in adata.obs.columns
-    if pd.api.types.is_categorical_dtype(adata.obs[c])
+    if isinstance(adata.obs[c].dtype, pd.CategoricalDtype)
     or pd.api.types.is_object_dtype(adata.obs[c])
     or pd.api.types.is_string_dtype(adata.obs[c])
 ]
@@ -207,7 +208,7 @@ Clustering is not “required” for Cellucid, but it is one of the easiest ways
 import scanpy as sc
 
 # Requires that neighbors graph exists (sc.pp.neighbors)
-sc.tl.leiden(adata, key_added="leiden")
+sc.tl.leiden(adata, key_added="leiden", flavor="igraph", n_iterations=2, directed=False)
 adata.obs["leiden"].value_counts().head()
 ```
 
@@ -230,7 +231,7 @@ viewer
 ```{tip}
 If you want Cellucid to use a specific gene identifier column (e.g. gene symbols stored in `adata.var["gene_symbols"]`), pass:
 
-`show_anndata(adata, gene_id_column="gene_symbols", dataset_name="My dataset", dataset_id="my-dataset")`
+`show_anndata(adata, var_gene_id_column="gene_symbols", dataset_name="My dataset", dataset_id="my-dataset")`
 ```
 
 ---
@@ -239,8 +240,9 @@ If you want Cellucid to use a specific gene identifier column (e.g. gene symbols
 
 In the viewer:
 
-1) Open the **Field selector** (color-by)
-2) Find your cluster column (e.g. `leiden`)
+1) Open **Coloring & filtering**; under **Color by** sit three selectors,
+   **Categorical obs**, **Continuous obs** and **Gene expression**
+2) Open **Categorical obs** and find your cluster column (e.g. `leiden`)
 3) Select it
 
 ### What success looks like

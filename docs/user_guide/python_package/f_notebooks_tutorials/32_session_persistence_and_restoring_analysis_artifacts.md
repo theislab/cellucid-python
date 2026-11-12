@@ -42,7 +42,7 @@ It holds the dataset's **history**:
   named branches, with notes, bookmarks, turns and the journal of the
   history's own edits
 - the values of the viewer's state the steps show (labels, user-defined
-  fields, highlights, gene sets, filters, colours, views, camera, layout),
+  fields, highlights, gene sets, filters, colors, views, camera, layout),
   each stored once
 
 In Python, it is read with {func}`cellucid.read_session` as a
@@ -175,7 +175,7 @@ meaningful in analysis contexts:
   `adata.uns['cellucid']['history_applied']` (JSON text; read it with
   `cellucid.history_applied(adata)`)
 
-Presentation (filters, colours, views, the camera, analyses) is reported as
+Presentation (filters, colors, views, the camera, analyses) is reported as
 one row per domain the step changed and never applied: it is how the data was
 shown, not the data. Any other step: `step="s3"`, a branch's tip with
 `branch=`, another tracker with `tracker=`; `tracker.steps` lists the ids.
@@ -326,7 +326,7 @@ included.
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/highlighting-selected-page.png
-:alt: The Highlighting panel with one page renamed "Left lobe" carrying 826 cells, the summary "826 cells highlighted", and one group row labelled "Lasso (826 cells) (826)".
+:alt: The Highlighting panel with one page renamed "Left lobe" carrying 826 cells, the summary "826 cells highlighted" above CSV, .h5ad and Clear buttons, and one group row labeled "Lasso" with its count 826.
 :width: 532px
 
 Highlighted cells are stored on a named page that can be used by analysis and session workflows.

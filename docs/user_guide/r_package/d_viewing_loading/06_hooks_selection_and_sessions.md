@@ -11,8 +11,8 @@ it does.
 ## Actions
 
 Everything a person can do in the viewer -- and everything an agent reads
-from it -- is an action of one catalogue, and every action is a function of
-this package, generated from the catalogue (`inst/action_catalog.json`, the
+from it -- is an action of one catalog, and every action is a function of
+this package, generated from the catalog (`inst/action_catalog.json`, the
 web app's own, with its help page: `?cellucid_highlight_cells`):
 
 ```r
@@ -26,7 +26,7 @@ cellucid_camera_reset(viewer, view = "live")
 cellucid_mapping_set(viewer, modality = "ADT")   # a Seurat object with an ADT assay
 ```
 
-Each is one step of the viewer's history, labelled as R's, undone like a
+Each is one step of the viewer's history, labeled as R's, undone like a
 person's click. `cellucid_act(viewer, "color.by", field = ...)` sends any
 action named in data (its arguments are written `.viewer` and `.action`, so
 no action parameter is partially matched to them). Fields, genes and
@@ -38,11 +38,21 @@ one binary frame. Every action returns a request, invisibly, at once:
 request <- cellucid_fields_list(viewer)
 fields <- cellucid_action_result(request)   # in a notebook: in a later cell
 request$step                                # the history step a change made
+request$unrecorded                          # or why a change made none
 ```
 
 `cellucid_action_result(request, timeout = 60)` returns the outcome (a read's
 result, as lists) or stops with the viewer's reason when it did not apply the
-action; a refusal nobody collects arrives as a `command_error` naming its
+action. A change the viewer applied but recorded no history step for keeps
+why in `request$unrecorded` -- `"unchanged"` (it was so already),
+`"retracted"` (it put back the step just before it, which was taken out),
+`"off"` (the History settings do not record this kind of change),
+`"paused"` (recording is paused), `"elsewhere"` (another tracker was shown
+meanwhile) or `"no-history"` (the dataset's history has not started) -- and
+`cellucid_action_result()` returns its outcome with a warning of class
+`cellucid_action_not_recorded` ("cellucid_color_by(): it changed nothing (it
+was so already), so no step was recorded."); a read records no step by
+nature and warns nothing. A refusal nobody collects arrives as a `command_error` naming its
 request (a warning unless a hook handles it). `cellucid_mapping_set()` changes
 only the groups it names; the mapping the viewer then shows becomes
 `viewer$data_mapping`. An object is served with one
@@ -52,7 +62,7 @@ the embeddings instead. A file given by path may hold layers
 (`expression = "layer:counts"`).
 
 ```{figure} ../../../_static/screenshots/r_package/cellucid-view-driven-from-r.png
-:alt: Cellucid opened by cellucid_view() on a Seurat object in an R session, after R called cellucid_color_by(viewer, ...) and cellucid_highlight_cells(viewer, ...) on the Ductal cells: the points are coloured by clusters with the Ductal cells highlighted, and the Dataset box names the object.
+:alt: Cellucid opened by cellucid_view() on a Seurat object in an R session, after R called cellucid_color_by(viewer, ...) and cellucid_highlight_cells(viewer, ...) on the Ductal cells: the points are colored by clusters with the Ductal cells highlighted, and the Dataset box names the object.
 :width: 1440px
 
 `cellucid_view()` on a Seurat object of the Pancreas sample, opened in a
@@ -63,7 +73,7 @@ folder · R*: the object is served from memory by this R session.
 
 ## The history
 
-Each action R sends is one step of the viewer's history, labelled **R** in the
+Each action R sends is one step of the viewer's history, labeled **R** in the
 viewer's **State › History** list, beside the person's own steps and an
 agent's. R reads the history and moves it as the viewer's own buttons do:
 
@@ -101,7 +111,7 @@ cellucid_history_turn_undo(viewer, turn = turn)   # every step of the turn, at o
 
 `cellucid_turn(viewer, label, code)` makes every action sent while `code`
 runs one turn of the history: the State panel shows its steps as one group,
-labelled `label` and by R, and undoes them together, as it does an agent's
+labeled `label` and by R, and undoes them together, as it does an agent's
 turn. It returns the turn's id (`"r-"` and 12 hexadecimal digits),
 invisibly. Turns do not nest; a turn whose code stops on an error closes all
 the same.
@@ -146,11 +156,18 @@ The events are `selection`, `hover`, `click`, `ready`, `data_mapping`,
 `command_error`, `action_result` (an action's answer, which also completes its
 request), `pong`, `debug_snapshot`, `session_bundle`, `result`,
 `result_removed` and `results` (what the viewer made, as
-`cellucid_results()` lists it), `color_by` (the field it colours by),
+`cellucid_results()` lists it), `color_by` (the field it colors by),
 `history_changed` (every change of its history) and `session_loaded` (a
-session `cellucid_load_session()` pushed in, loaded). A handler runs
+session `cellucid_load_session()` pushed in, loaded); `message` catches every
+one of them, before its own handlers, with its kind as `event` (Python's
+`on_message`). Any other name is refused, as Python's hooks refuse it: a
+misspelt event would never be heard. A handler runs
 whenever R is idle; one that fails gives a warning and the others still run.
 `cellucid_off(viewer, "hover")` removes a kind's handlers.
+`cellucid_wait_event(viewer, "click", timeout = 30, predicate = NULL)` waits
+for the next event of a kind (one the predicate accepts) and returns it, as
+Python's `viewer.wait_for_event()`; like every wait, it cannot work inside a
+Jupyter notebook cell, where a handler does.
 
 Cells are 1-based positions in every event, as the actions take them: a
 `selection` gives `cells` and `cell_names`, a `hover` or `click` gives `cell`
@@ -184,7 +201,7 @@ cellucid_steps(tracker)[, c("id", "branch", "label", "origin")]
 `cellucid_request_session()` asks the viewer for its whole session -- its
 history: every step a person, an agent or R took, each tracker and branch,
 its notes, bookmarks and turns, and the state each step leaves (highlights,
-colours, filters, annotations, the camera) -- and `cellucid_session_result()`
+colors, filters, annotations, the camera) -- and `cellucid_session_result()`
 saves it as a `.cellucid-session` file (session format 4: the whole history,
 every tracker and branch with its notes and Recently deleted, without the
 conversations; the viewer's **Share…** writes a chosen part of the same) and
@@ -278,14 +295,19 @@ object changed since it was made is refused: make it again.
 - **A column the person made is never replaced**, whatever `overwrite` says:
   its row says so and the rest applies.
 - **Presentation is reported, never applied.** Each other domain whose value
-  at the step differs from the tracker's opening (filters, colours, views,
-  the camera, analyses) is one `presentation` row: how the data was shown,
-  not the data.
+  at the step differs from the tracker's opening (filters, colors, views,
+  the camera, analyses, the expression values) is one `presentation` row:
+  how the data was shown, not the data.
 - **Each apply that writes is recorded.** One provenance record is appended
   to `cellucid$history_applied` (Seurat `misc$cellucid`;
   `metadata(x)$cellucid`): the session's SHA-256, the tracker, branch and
   step, when, the package and its version, the columns it wrote, what it
-  renamed and what it did not apply. `cellucid_history_applied(seu)` reads
+  renamed, what it did not apply, and the expression values the genes were
+  shown in at the step (`expression`: `list(normalize, log1p)`, `NULL` when
+  the session holds none) -- what the person looked at, recorded and never
+  applied: the object's expression values stay as stored, and
+  `NormalizeData()` (`scale.factor = 1e4`) gives normalized and log1p
+  together. `cellucid_history_applied(seu)` reads
   them, oldest first; `keep_session = TRUE` also keeps the session file
   itself (base64), so the history can be rebuilt from the object alone.
   cellucid-python's `uns['cellucid']['history_applied']` holds the same
@@ -309,13 +331,43 @@ object changed since it was made is refused: make it again.
   row: its record and column stay. The columns are not rows of the plan; the
   shared fixture pins them (`apply.sequence[].var_columns`), as it pins the
   web app's **Save AnnData with this state…**.
+- **Colors go with the columns**, where the object keeps what an AnnData
+  keeps in `uns` (Seurat `misc`, `metadata(x)` -- as zellkonverter carries
+  `uns` -- or a data frame's attributes), under Scanpy's name,
+  `<column>_colors`: a categorical field gets the colors it is shown in, one
+  `#rrggbb` a level in the factor's order, every level, used or not (in the
+  view in focus at the step, a level's color the person or an agent chose,
+  else its `palette` -- a field made from highlight pages opens in its pages'
+  colors -- else Cellucid's own category colors); any other column written
+  gets none (colors left under its name described
+  another column and are removed). A column of the object (a factor, such as
+  `seurat_clusters`) recolored in the view in focus gets the colors it is
+  shown in too, under its name after the step's renames and in its levels'
+  order after the step's relabels: a level's color the person or an agent
+  chose, else the color it opens with -- its own `<column>_colors` as the
+  viewer draws them (`#rrggbb` in lowercase), when there is one a level,
+  else Cellucid's -- one `column-colors` row of the plan each (`unchanged`
+  when the object holds them already; `not-applied`, saying why, for a
+  column that is not a factor or one with none of the levels recolored). A
+  renamed column carries its colors (a
+  character vector; another form is removed), merged levels keep their first
+  level's color (colors that did not cover the levels are removed), a text
+  column relabeled loses them, and a column left as it is keeps them. The
+  rule is cellucid-python's ({ref}`apply-column-colors`); `cellucid_pull()`
+  of a session file writes a field's colors the same way, under the column
+  name it writes, and `cellucid_pull()` from a live viewer writes a
+  categorical field with the colors its view in focus shows it in (the
+  viewer's result carries them).
 - **The priority-order column is never touched.** A plan that would write,
   rename or replace the cell-metadata column `cellucid_original_position`
   (each cell's original position in a store written in priority order) is
   refused before anything is written, dry runs included.
 - **Only what the chosen step needs is checked**, before anything is written:
-  the cell count, the dataset id when the object's cellucid record names
-  one, the data mapping the session was saved with and its gene count, the
+  the cell count, the dataset id (the one the object was shown under:
+  `dataset_id =` when a viewer was given another id than the one the object
+  declares -- `cellucid_apply_session(object, request)` names it itself for
+  an object declaring the id the viewer's data declared -- else the one its
+  cellucid record names, when it names one), the data mapping the session was saved with and its gene count, the
   cells' order when the object has the embedding the session names (a
   cell-order digest of its stored values), and the obs columns and genes the
   step's state uses.

@@ -33,13 +33,13 @@ names its earlier controls, read instead:
 
 | Record says | Now |
 | --- | --- |
-| `#dataset-info` as a two-column table (Name, Description, Source, URL, Citation, Cells, Genes, Obs fields, Connectivity; `#dataset-url`, `#dataset-source`, …) | the **Dataset** box, `#dataset-info` with `data-state` `empty` / `loading` / `ready`: `#dataset-name` ("No dataset open" with none), `#dataset-summary` (`#dataset-cells` · `#dataset-genes`), `#dataset-origin` (format · host), `#dataset-description` with **More**, `#dataset-read` ("5.5 MB read in 43 requests"), and a collapsed **Details** (`#dataset-details`, `#dataset-details-list`: Source, Citation, File, Format, Size, Read, Cells, Genes, Obs fields, Embeddings, Layers, Raw, Neighbour graph, Latent space, Vector fields). It never shows the dataset id. |
+| `#dataset-info` as a two-column table (Name, Description, Source, URL, Citation, Cells, Genes, Obs fields, Connectivity; `#dataset-url`, `#dataset-source`, …) | the **Dataset** box, `#dataset-info` with `data-state` `empty` / `loading` / `ready`: `#dataset-name` ("No dataset open" with none), `#dataset-summary` (`#dataset-cells` · `#dataset-genes`), `#dataset-origin` (format · host), `#dataset-description` with **More**, `#dataset-read` ("5.5 MB read in 43 requests"), and a collapsed **Details** (`#dataset-details`, `#dataset-details-list`: Source, Citation, File, Format, Size, Read, Cells, Genes, Obs fields, Embeddings, Layers, Raw, Neighbor graph, Latent space, Vector fields). It never shows the dataset id. |
 | **Files** with **H5AD** `#user-data-h5ad-btn`, **Zarr ZIP** `#user-data-zarr-archive-btn`, **Zarr folder** `#user-data-zarr-folder-btn` | **File or folder**: one **Open…** button, `#user-data-open-btn`, whose menu `#user-data-open-menu` has **File…** `#user-data-file-item` (`#user-data-file-input`; hint "AnnData, Seurat/SCE .rds/.rda, Loom, 10x .h5, .h5mu") and **Folder…** `#user-data-folder-item` (`#user-data-folder-input`; hint "Zarr, 10x outs, MatrixMarket") |
 | **Server** `#remote-server-url` + **Connect** `#remote-connect-btn`, **Reconnect**; **Open from link** `#data-link-url` + **Connect** `#data-link-connect-btn` | **Link or server**: one bar `#data-address` (placeholder `Link or localhost:8765`) and **Open** `#data-address-open-btn`; while connected one line, `#remote-disconnect-container` (**Server**, `#remote-connection-target`) or `#data-link-disconnect-container` (**Link**, `#data-link-connection-target`), with a compact **Disconnect**. No Reconnect. |
 | the **Transfers** list (`#transfers-block`, `#transfers-list`) | gone: the read line of the Dataset box, notifications for progress and retries, `[cellucid:transfer]` in the console |
-| linked datasets listed in **Sample dataset** as **Linked data** | the dropdown lists one source: the samples, or a connected catalog's datasets labelled "Dataset from <host>"; it shows "—" (`__dataset_unlisted__`) while a file, single-dataset link or server dataset is open |
+| linked datasets listed in **Sample dataset** as **Linked data** | the dropdown lists one source: the samples, or a connected catalog's datasets labeled "Dataset from <host>"; it shows "—" (`__dataset_unlisted__`) while a file, single-dataset link or server dataset is open |
 | **Data mapping** opening by itself for a file without a UMAP | it never opens on its own: the best-guess notification's **Show** opens it |
-| the outlier slider greyed out with a line and **Choose latent space** | without a latent space only the label, its (i) and **Choose latent space**; with one, the slider and at most one line |
+| the outlier slider grayed out with a line and **Choose latent space** | without a latent space only the label, its (i) and **Choose latent space**; with one, the slider and at most one line |
 
 The new captures are listed in {doc}`07_open_from_link_captures`.
 :::
@@ -48,7 +48,7 @@ The new captures are listed in {doc}`07_open_from_link_captures`.
 **The analysis panel changed on 2026-10-24.** Its **Performance settings**
 block is gone; **Marker genes**, **Differential expression** and **Dot plot**
 gained an **Expression matrix** select, differential expression a
-**Replicates** select (pseudobulk), and clicking a gene in a result colours the
+**Replicates** select (pseudobulk), and clicking a gene in a result colors the
 plot by that gene. Every record below that shows or specifies the analysis
 panel's settings predates this. Recapture `analysis-panel-modes.png`,
 `marker-genes-ranked.png`, `autorun-vs-run-b.png` and `de-page-selection.png`
@@ -65,8 +65,8 @@ on a decimal-point number locale. The images no scenario produced are gone:
 capture), `data_loading/h5ad-current-visualization.png`, `h5ad-firefox.png`
 and `h5ad-webkit.png` (the tool is Chromium-only; supported browsers are in
 ``a_orientation/02_system_requirements``), and the two JupyterLab images
-`jupyter/pancreas-notebook-embed.png` (replaced by the viewer
-`show_anndata()` serves, `python-viewer-driven-from-python`) and
+`jupyter/pancreas-notebook-embed.png` (replaced by the viewer a Python
+`AnnDataViewer` serves, `python-viewer-driven-from-python`) and
 `jupyter/pancreas-debug-connection.png` (replaced by a text transcript of a
 real `viewer.debug_connection()` run). New figures: the R objects, Loom, 10x
 `outs/`, MatrixMarket and `.h5mu` Modality captures, the opening progress and
@@ -104,7 +104,7 @@ building it. Nothing here is useful until you have read that.
 | --- | --- | ---: | --- |
 | `{doc}`00_capture_tooling_and_conventions`` | how to capture, size rules, traps, validation | — | current |
 | `{doc}`01_pages_orientation_data_loading`` | A orientation · B data loading · G · Q troubleshooting | 20 | **assignment** |
-| `{doc}`02_pages_interactions_fields_filtering`` | C core interactions · D fields/colouring/legends · E filtering | 25 | status record |
+| `{doc}`02_pages_interactions_fields_filtering`` | C core interactions · D fields/coloring/legends · E filtering | 25 | status record |
 | `{doc}`03_pages_selection_analysis_accessibility`` | F highlighting/selection · H analysis · O accessibility/privacy | 23 | **assignment** |
 | `{doc}`04_pages_velocity_annotation_export`` | I velocity · J community annotation · K figure export | 23 | **assignment** |
 | `{doc}`05_pages_sessions_performance`` | L sessions/sharing · N benchmarking/performance | 23 | **assignment** |
@@ -195,10 +195,10 @@ Recorded here so nobody spends a run discovering it:
   residue.
 - **Flow rate in the velocity overlay** cannot be shown in a still. Do not fake a
   before/after pair for it.
-- **Screen-reader behaviour** is not screenshot-shaped. Focus rings and the
+- **Screen-reader behavior** is not screenshot-shaped. Focus rings and the
   shortcuts overlay are; announcements are not.
 - **The browser download shelf and the OS file picker** render real local paths
-  and cannot be sanitised. Where an artifact must be shown, use a prepared
+  and cannot be sanitized. Where an artifact must be shown, use a prepared
   terminal instead.
 - Several performance topics are numbers in a table, not pictures. The section
   file says which.

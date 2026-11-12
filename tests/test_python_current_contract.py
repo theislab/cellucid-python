@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -14,7 +15,7 @@ from cellucid._viewer_channel import (
     unregister_event_callback,
 )
 from cellucid.anndata_server import AnnDataServer
-from cellucid.jupyter import AnnDataViewer, HookRegistry
+from cellucid.jupyter import HOOK_EVENTS, AnnDataViewer, HookRegistry
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 RETIRED_PATH_LANGUAGE = re.compile(
@@ -118,6 +119,35 @@ def test_mypy_uses_each_ci_interpreter_and_ci_keeps_the_supported_boundaries() -
     assert 'python: "3.14"' in workflow
     assert 'python: "3.10"' not in workflow
     assert "python -m mypy src/cellucid" in workflow
+
+
+def test_ci_checks_out_every_sibling_the_tests_compare_with() -> None:
+    """The cross-repository tests (tests/_web_root.py) skip only where a
+    sibling is not checked out; CI checks out each one beside this repository
+    and requires it, so there they always run (a test reading cellucid-r
+    without its checkout failed every job, run 43106597330)."""
+    from _web_root import _SIBLINGS
+
+    workflow = (REPOSITORY_ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
+    assert re.search(r'(?m)^      CELLUCID_SIBLINGS_REQUIRED: "1"$', workflow)
+    assert re.search(r"(?m)^          path: cellucid-python$", workflow)
+    for repository in _SIBLINGS:
+        assert re.search(
+            rf"(?m)^          repository: theislab/{re.escape(repository)}\n          path: {re.escape(repository)}$",
+            workflow,
+        ), repository
+    # The web app's sparse checkout holds every tree the tests read of it.
+    sparse = re.search(r"repository: theislab/cellucid\n(?:.*\n)*?\s+sparse-checkout: \|\n((?:\s{12}.*\n)+)", workflow)
+    assert sparse is not None
+    assert sorted(line.strip() for line in sparse.group(1).strip().splitlines()) == [
+        "assets/external/",
+        "assets/js/",
+        "assets/wasm/",
+        "assets/workers/",
+        "scripts/",
+        "tests/fixtures/",
+    ]
+    assert "actions/setup-node@" in workflow
 
 
 def test_release_version_and_embedding_dimensions_are_coherent() -> None:
@@ -232,6 +262,31 @@ def test_hook_registry_delivers_each_event_once_and_propagates_failure() -> None
     hooks.register("selection", fail)
     with pytest.raises(RuntimeError, match="hook failed"):
         hooks.trigger("selection", {"cells": [1]})
+
+
+def test_hook_events_are_the_protocol_events_and_a_misspelt_one_is_refused() -> None:
+    # Every event the viewer sends a notebook takes a hook, except an agent
+    # app's own (delivered to its port), plus the catch-all ``message``:
+    # cellucid-r's cellucid_on() pins the same names to the same fixture
+    # (test-viewer-protocol.R). A misspelt event used to be taken and never fired.
+    protocol = json.loads((Path(__file__).parent / "fixtures" / "viewer_protocol.json").read_text(encoding="utf-8"))
+    events = {*protocol["events"], *protocol["binaryEvents"]}
+    assert set(HOOK_EVENTS) == {event for event in events if not event.startswith("agent_")} | {"message"}
+
+    hooks = HookRegistry()
+    for call in (
+        lambda: hooks.register("selections", print),
+        lambda: hooks.on("selections"),
+        lambda: hooks.unregister("selections", print),
+        lambda: hooks.clear("selections"),
+        lambda: hooks.register("agent_result", print),
+    ):
+        with pytest.raises(ValueError, match="^event must be one of 'action_result', .*; got '(selections|agent_result)'.$"):
+            call()
+    viewer = object.__new__(AnnDataViewer)
+    for event in ("selections", "message"):
+        with pytest.raises(ValueError, match=f"^event must be one of 'action_result', .*; got '{event}'.$"):
+            viewer.wait_for_event(event, timeout=0)
 
 
 def test_send_message_after_stop_is_an_explicit_error() -> None:

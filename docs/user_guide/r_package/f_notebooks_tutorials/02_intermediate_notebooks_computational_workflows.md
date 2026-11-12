@@ -119,4 +119,4 @@ adata.uns["cellucid"]["defaults"]
 ```
 
 Next: {doc}`03_advanced_notebooks_expert_developer` adds vector fields and a
-neighbour graph.
+neighbor graph.

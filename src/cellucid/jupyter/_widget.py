@@ -60,9 +60,11 @@ from .._websocket import (
     CLOSE_POLICY_VIOLATION,
     WebSocketClosed,
     WebSocketProtocolError,
+    read_exact_by_receipt,
+    read_rest_by_receipt,
 )
 from ..data_mapping import EmbeddingKeySpec
-from ._viewer import AnnDataViewer
+from ._viewer import AnnDataViewer, _execution_count
 
 if TYPE_CHECKING:
     import anndata
@@ -235,31 +237,12 @@ class _CommMessage:
         return written
 
     def read_exact(self, size: int) -> bytearray:
-        result = bytearray(size)
-        filled = 0
-        with memoryview(result) as view:
-            while filled < size:
-                count = self.readinto(view[filled:])
-                if count == 0:
-                    raise WebSocketProtocolError(CLOSE_POLICY_VIOLATION, "Binary message ended early")
-                filled += count
-        return result
+        # Grown with what arrives, never to the size the page named.
+        return read_exact_by_receipt(self, size)
 
-    def read_rest(self, initial: int = 0) -> bytearray:
-        result = bytearray(max(initial, len(self._piece) - self._offset))
-        filled = 0
-        while True:
-            if filled == len(result):
-                if self.done:
-                    break
-                result.extend(bytes(max(len(result), 64 * 1024)))
-            with memoryview(result) as whole, whole[filled:] as view:
-                count = self.readinto(view)
-            if count == 0:
-                break
-            filled += count
-        del result[filled:]
-        return result
+    def read_rest(self, limit: int | None) -> bytearray:
+        # Grown with what arrives, refused past `limit`, as over a WebSocket.
+        return read_rest_by_receipt(self, limit)
 
     def drain(self) -> None:
         scratch = memoryview(bytearray(256 * 1024))
@@ -388,7 +371,7 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
 
     The same viewer API as :class:`AnnDataViewer` -- hooks
     (``@viewer.on_selection``, ``on_hover``, ``on_click``, ``on_ready``, ...),
-    ``viewer.state``, actions (one method per action of the catalogue:
+    ``viewer.state``, actions (one method per action of the catalog:
     ``color_by``, ``highlight_cells``, ``history_get``, ...; ``act``),
     sessions -- shown in a notebook cell's output and reached through
     the notebook's own connection: no port, proxy or server address, so it
@@ -423,6 +406,8 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
             print(len(event["cells"]))
     """
 
+    #: A widget is always a notebook's (the viewer says "the notebook").
+    _runtime = "jupyter"
     _esm = _STATIC / "widget.js"
     _css = _STATIC / "widget.css"
 
@@ -437,13 +422,13 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
         height: int = 600,
         *,
         latent_key: str | None = None,
-        gene_id_column: str | None = None,
+        var_gene_id_column: str | None = None,
         normalize_embeddings: bool | None = None,
         centroid_min_points: int | None = None,
         dataset_name: str | None = None,
         dataset_id: str | None = None,
         obs_keys: Sequence[str] | None = None,
-        embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
+        embedding_defaults: Mapping[str, EmbeddingKeySpec] | None = None,
         knn_key: str | None = None,
         expression_source: str | None = None,
         vector_field_default: str | None = None,
@@ -488,13 +473,13 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
             self.data = data
             self._prepare_dataset(
                 latent_key=latent_key,
-                gene_id_column=gene_id_column,
+                var_gene_id_column=var_gene_id_column,
                 normalize_embeddings=normalize_embeddings,
                 centroid_min_points=centroid_min_points,
                 dataset_name=dataset_name,
                 dataset_id=dataset_id,
                 obs_keys=obs_keys,
-                embedding_keys=embedding_keys,
+                embedding_defaults=embedding_defaults,
                 knn_key=knn_key,
                 expression_source=expression_source,
                 vector_field_default=vector_field_default,
@@ -522,10 +507,11 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
         )
         # The viewer names the program serving it from _cellucid/info; a
         # widget has no host or port of its own.
-        server.runtime = "jupyter"
-        server.server_info.update(runtime="jupyter", host=None, port=None)
+        server.runtime = self._host_runtime()
+        server.server_info.update(runtime=server.runtime, host=None, port=None)
         self._server = server
         self._served_dataset_id = server.dataset_id
+        self._served_declared_id = server.declared_dataset_id
         cell_count = server.server_info["n_cells"]
         self._served_cell_count = cell_count if isinstance(cell_count, int) else None
 
@@ -652,7 +638,7 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
         that runs them: a cell that waits there would wait until its timeout
         for an answer that cannot arrive before it ends.
         """
-        if threading.current_thread() is not (self._comm_thread or threading.main_thread()):
+        if not self._on_answering_thread():
             return
         if "the session" in what or "session_bundle" in what:
             hint = (
@@ -680,8 +666,34 @@ class Widget(AnnDataViewer, anywidget.AnyWidget):
 
     def _await(self, waiter: Any, timeout: float | None, message: str) -> None:
         if waiter.payload is None:
+            if self._on_answering_thread() and waiter.cell is not None and waiter.cell != _execution_count():
+                # Asked in an earlier cell, as the two-cell pattern says: the
+                # answer has simply not come yet. Say why, not "ask in one
+                # cell and collect in the next", which is what was done.
+                raise RuntimeError(
+                    f"{message.removeprefix('Timed out waiting for ').capitalize()} has not arrived yet: "
+                    + self._why_unanswered()
+                    + " Run this cell again once it has (the request's .done is True then)."
+                )
             self._require_answerable(message.removeprefix("Timed out waiting for "))
         super()._await(waiter, timeout, message)
+
+    def _on_answering_thread(self) -> bool:
+        """Whether this thread is the one that hands the widget the viewer's answers."""
+        return threading.current_thread() is (self._comm_thread or threading.main_thread())
+
+    def _why_unanswered(self) -> str:
+        """Why the viewer has not answered, from what is known of it here."""
+        from .._viewer_channel import viewer_is_connected
+
+        if not self._displayed:
+            return "the viewer is not shown in any cell output (show it: viewer, or viewer.display())."
+        if not (self._message_routing_registered and viewer_is_connected(self._viewer_id, self._viewer_token)):
+            return (
+                "the viewer has not connected (its output has not loaded the app; "
+                "viewer.debug_connection() says why)."
+            )
+        return "the viewer is still working on it."
 
     def wait_for_ready(self, timeout: float | None = 30.0) -> dict[str, Any]:
         """Return the viewer's ``ready`` payload, waiting for it if it has not arrived.
@@ -897,15 +909,6 @@ def _claim_cell(widget: Widget) -> None:
     for old in replaced:
         if id(old) not in shown_elsewhere:
             old.stop()
-
-
-def _execution_count() -> int | None:
-    try:
-        from IPython import get_ipython
-    except ImportError:
-        return None
-    shell = get_ipython()
-    return None if shell is None else getattr(shell, "execution_count", None)
 
 
 __all__ = ["Widget", "show_widget"]

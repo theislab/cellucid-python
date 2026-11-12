@@ -44,11 +44,11 @@ The one confirmation a share produces.
 ## Loading
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-04-restore-confirmation.png
-:alt: The two notifications a completed restore publishes: "Loaded "Tracker 1 (shared)" from Pancreatic endocrinogenesis (scVelo).cellucid-session beside yours." with Undo, and the restore's progress entry, now titled "Loaded" and reading "Session fully restored.".
-:width: 760px
+:alt: The one notification a completed load leaves, titled "Loaded "Tracker 1 (shared)" beside yours" and reading "Session fully restored.", with an Undo button.
+:width: 676px
 
-A completed load says which trackers it added beside yours, with **Undo**,
-and its own progress entry completes as **Session fully restored.**.
+A completed load ends in one notice: it says which trackers it added beside
+yours, reads **Session fully restored.**, and offers **Undo**.
 ```
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-07-restored-view.png
@@ -93,7 +93,7 @@ The same four values after the session was loaded into a freshly started app. Se
 ## Catalog starting view (official sample)
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/official-01-sample-state-applied.png
-:alt: The whole application window shortly after the Pancreas built-in sample was chosen, showing the embedding coloured by cell type in a 3-D orbit view on the Studio (light) background, with the sidebar beside it.
+:alt: The whole application window shortly after the Pancreas built-in sample was chosen, showing the embedding colored by cell type in a 3-D orbit view on the Studio (light) background, with the sidebar beside it.
 :width: 1440px
 
 Choosing a built-in sample puts back the starting view its catalog names,

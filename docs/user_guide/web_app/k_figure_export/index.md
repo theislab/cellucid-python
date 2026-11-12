@@ -52,7 +52,7 @@ In typical usage, exports include:
   - PNG exports use shader-accurate rendering (so 3D “spheres” match what you see).
   - Hybrid SVG exports rasterize points but keep annotations vector.
 - **Annotations you choose**: title, axes, legend, 3D orientation indicator.
-- **Overlays tied to the view buffers** such as highlights (rings) and centroid overlays (if enabled in the viewer).
+- **Overlays tied to the view buffers** such as highlights (a cyan dot inside a black ring) and centroid overlays (if enabled in the viewer).
 
 :::{important}
 Figure export settings are **saved in session bundles** with the views they export. To reproduce a specific export later, save a session after exporting (the exported file also embeds metadata; see {doc}`05_metadata_and_provenance`).
@@ -73,14 +73,18 @@ Some things are intentionally not exported:
 
 ## Output size and DPI (important for PNG)
 
-Cellucid treats **Plot size** as the size of the **plot content area**.
+A figure is sized as it is printed: you set its **width** (a journal column —
+single 89 mm, 1.5 column 120 mm, double 183 mm — or millimetres of your own),
+and the figure fills it exactly, at the height its plots make it, with its
+legend, axes and title inside the width. Text is set in **points** and keeps
+its printed size at any width and DPI.
 
-- The exported file can be **larger than your plot size** because legend/axes/title are placed *around* the plot (without shrinking the plot).
-- For PNG, **DPI scales the final pixel dimensions**:
+- For PNG, **DPI sets the pixels**: `PNG width (px) = width (mm) / 25.4 × DPI`.
+  A double column at 300 DPI is 2163 px wide.
+- An SVG is the same size, in millimetres.
 
-`output_pixels ≈ plot_pixels × (DPI / 96)` (plus extra for legend/axes/title)
-
-Example: a 1200×900 plot at 300 DPI will produce an image roughly `1200×(300/96) ≈ 3750` pixels wide (plus annotation padding).
+Example: a double-column figure of a 4:3 view with axes, a title and a short
+legend is about 183 × 130 mm: 2163 × 1541 px at 300 DPI.
 
 ---
 
@@ -96,7 +100,7 @@ Example: a 1200×900 plot at 300 DPI will produce an image roughly `1200×(300/9
   - `<dataset>_<color-field>_<view>_dpi300_<timestamp>.png` (when exporting multiple DPIs)
   - `<dataset>_<color-field>_<view>_batch_<timestamp>.zip` (batch download)
   - `<view>` is `multiview` for a grid, and `<color-field>` is dropped when the
-    grid's panels do not all use the same field. A view still labelled with
+    grid's panels do not all use the same field. A view still labeled with
     its color field adds no `<view>` segment, so the field appears once.
 
 :::{important}

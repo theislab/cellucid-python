@@ -3,7 +3,7 @@ Latent-space outlier quantiles, which :func:`cellucid.prepare` stores with
 the latent space it is given.
 
 For each categorical obs column, each cell's quantile says how far it lies
-from the centre of its category in the latent space (an ``obsm`` array such
+from the center of its category in the latent space (an ``obsm`` array such
 as scVI or PCA, never the 2D/3D layout): the share of its category at that
 distance or closer. The web app's outlier filter hides the cells above a
 threshold. The rule, for each category with at least ``min_points`` cells,

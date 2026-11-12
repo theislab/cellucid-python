@@ -1,6 +1,6 @@
 # Gene expression (`X`)
 
-**Audience:** everyone who wants gene search and gene colouring
+**Audience:** everyone who wants gene search and gene coloring
 **Time:** 10 minutes
 **Goal:** pass expression in the right orientation and know how it is stored.
 
@@ -33,7 +33,7 @@ check `nrow(expr)` against your cell count yourself.
 
 Which values to pass is your choice: the viewer shows what you store.
 Normalized, log-transformed values (Seurat's `data` layer, a
-SingleCellExperiment's `logcounts`) are the usual choice for colouring.
+SingleCellExperiment's `logcounts`) are the usual choice for coloring.
 
 ## How it is stored
 
@@ -67,6 +67,32 @@ See {doc}`09_cellucid_ready_anndata_specification` for every detail.
 Gene names come from `rownames(var)` or `colnames(gene_expression)`;
 `gene_identifiers` stores a subset; `var_gene_id_column` picks the names the
 viewer shows. See {doc}`05_var_gene_metadata`.
+
+## Each cell's total count
+
+When `X` holds counts (every value a whole number of at least 0),
+`cellucid_prepare()` writes each cell's sum over the genes stored as
+`obs['total_counts']` and records it in `uns['cellucid']['totalCounts']`
+(`over = "stored genes"`), so the viewer normalizes a gene (10,000 counts per
+cell, **Session › Data mapping › Expression values**) from one column instead
+of reading every gene. Totals over a gene panel are not the cell's depth: name
+the column computed over every gene before any was selected,
+
+```r
+cellucid_prepare("pbmc.zarr", "zarr", data = seurat, total_counts = "nCount_RNA")
+```
+
+recorded with `over = "all genes"`; it must hold, for every cell, a finite
+total at least the sum of its stored genes. With several modalities name one
+column of the cells' `obs` per modality, `total_counts = c(RNA = "nCount_RNA")`;
+without it each counts modality gets `mod/<name>/obs/total_counts`. Totals
+over every gene of the source's gene panel -- a targeted or integration panel,
+more genes than are stored but not the whole transcriptome -- are named with
+`total_counts_over = "source panel"` and recorded so (several modalities: one
+value, or `c(RNA = "source panel")`). A column of the object's own named
+`total_counts` is kept as given. cellucid-python's
+`prepare(total_counts=)` writes the same; the contract is
+{ref}`total-counts-spec`.
 
 ## Size
 

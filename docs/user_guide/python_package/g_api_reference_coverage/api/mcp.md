@@ -23,10 +23,12 @@ itself:
 ```
 
 - **Tools**: every action of the viewer, generated from the web app's action
-  catalogue exactly as the Cellucid connector lists them (names, input
+  catalog exactly as the Cellucid connector lists them (names, input
   schemas, descriptions, annotations), plus `cellucid_status`. While a
-  viewer page is open, its own list for this connection is used: each
-  description says what your permission settings make of it.
+  viewer page is open, its own list is used (the same tools). The list is
+  the same whatever your settings and never changes while the server runs
+  (`tools.listChanged` is false): the viewer tells the agent your settings
+  after its tool results.
 - **Calls** run in the viewer page as the app's agent ("Claude Code"),
   through a connection of kind `local` ("Claude Code (local)" in the viewer).
   A question the person is asked is the viewer's confirm card and, when the

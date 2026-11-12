@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from _web_root import sibling_file, web_file
+from _web_root import rendered_by_web, sibling_file, web_file
 
 from cellucid import _history_model as model
 from cellucid import _history_rules as rules
@@ -31,7 +31,7 @@ from cellucid.history import STEP_COLUMNS, Branch, Group, Step, Tracker
 
 ROOT = Path(__file__).resolve().parents[1]
 #: The digest of ``history_model.schema.json``; the web app and cellucid-r pin the same one.
-HISTORY_MODEL_SHA256 = "bc403ababa0a52bf62a1446b6f3598135b1990cd5a4116818ab26e3696004bc7"
+HISTORY_MODEL_SHA256 = "0896116c1e791e370b7247d61e734bc22f96047f5d1ed49a39738cf4f8a5333c"
 REGENERATE = (
     "Run node scripts/generate-history-model.mjs in the cellucid repository (it writes the three copies and "
     "prints the digest), then python scripts/generate_history_model.py here, and pin the digest in the three suites."
@@ -55,6 +55,13 @@ def test_the_schema_is_pinned_and_the_web_apps() -> None:
     assert hashlib.sha256(data).hexdigest() == HISTORY_MODEL_SHA256, REGENERATE
     assert web_file("tests/fixtures/history-model.schema.json").read_bytes() == data, REGENERATE
     assert sibling_file("cellucid-r", "inst/history_model.schema.json").read_bytes() == data, REGENERATE
+
+
+def test_the_schema_is_the_model_the_web_apps_source_makes_now() -> None:
+    """Against ``app/history/model.js`` itself, not only the web app's
+    committed copy: a model changed (a domain added) without regenerating the
+    three copies fails here, as it fails the web suite."""
+    assert rendered_by_web("scripts/generate-history-model.mjs", "renderHistoryModel") == _schema_text(), REGENERATE
 
 
 def test_the_generated_model_is_current() -> None:

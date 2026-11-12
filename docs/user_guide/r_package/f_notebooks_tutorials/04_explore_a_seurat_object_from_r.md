@@ -25,8 +25,8 @@ Dataset id 'pbmc_small' (sessions are kept under it); name it with dataset_id = 
 ```
 
 The viewer opens in the RStudio or Positron Viewer pane (elsewhere, in your
-browser). The first time, the Cellucid web app is downloaded once (about 17
-MB) and kept for later viewers. The 80 cells appear on the t-SNE, the PCA
+browser). The first time, the Cellucid web app is downloaded once (about 40
+MB, under a minute on a typical connection) and kept for later viewers. The 80 cells appear on the t-SNE, the PCA
 beside it under **Data mapping**, and every `meta.data` column under
 **Coloring & filtering** (`groups`, `RNA_snn_res.1`, …, and `active_ident`).
 
@@ -38,10 +38,14 @@ viewer
 
 ```text
 <Cellucid viewer> pbmc_small (pbmc_small), running
-  address:  http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
+  address:  http://127.0.0.1:8765/?viewer=true&viewerId=…&anndata=true (opened by viewer$viewer_url)
   data:     zarr, 80 cells
   channel:  connected
 ```
+
+The address is printed without its viewer token (the key to the viewer's
+channel), so a printed viewer can go into a log or a knitted report;
+`viewer$viewer_url` is the address that opens it.
 
 ## Step 2: drive the viewer from the console
 
@@ -50,11 +54,11 @@ cellucid_color_by(viewer, field = list(source = "obs", key = "groups"))
 cellucid_highlight_cells(viewer, cells = WhichCells(pbmc_small, idents = "1"), color = "#e41a1c")
 ```
 
-The cells turn to the colours of `groups`, and the 25 cells of cluster 1 are
+The cells turn to the colors of `groups`, and the 25 cells of cluster 1 are
 highlighted in red. Cells are given by name (as here), by 1-based position, or
 as `TRUE`/`FALSE` per cell. Every action of the viewer is a function like
 these (`?cellucid_act` lists the way to call any of them), each one step of
-the viewer's history labelled as R's; each returns a request at once, and
+the viewer's history labeled as R's; each returns a request at once, and
 `cellucid_action_result()` collects the viewer's answer. An action sent before
 the page has connected waits and goes out as soon as it does.
 

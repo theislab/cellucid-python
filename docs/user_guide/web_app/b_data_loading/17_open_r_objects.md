@@ -35,7 +35,7 @@ nothing is saved to your Downloads folder). A gzipped copy (`.rds.gz`,
 `.rda.gz`, `.RData.gz`, as GEO stores R objects) opens the same way: the
 file's content, not its name, says how many times it is compressed, and it
 is decompressed as it streams. A file dialog that matches only a file's last
-extension may grey out an `.rds.gz`; drop it on the viewer instead.
+extension may gray out an `.rds.gz`; drop it on the viewer instead.
 
 ### Try it with SeuratObject's own sample
 
@@ -49,7 +49,7 @@ saveRDS(pbmc_small, "pbmc_small.rds")
 Open `pbmc_small.rds`. Expected: **80 cells**, **230 genes**, the embeddings
 `X_pca` and `X_tsne`, the obs fields of `pbmc_small[[]]` (`orig.ident`,
 `nCount_RNA`, `RNA_snn_res.0.8`, `letter.idents`, `groups`, …) plus
-`active_ident`, and the `RNA_snn` neighbour graph. The Dataset box says
+`active_ident`, and the `RNA_snn` neighbor graph. The Dataset box says
 *Read whole once (it cannot be read in parts), kept in this browser's storage
 for next time · 5 parts not read*:
 `pbmc_small` carries a `scale.data` matrix, PCA loadings and JackStraw
@@ -69,7 +69,7 @@ the same way.
 | the default assay's `data` layer (else `counts`) | `logcounts` (else `counts`) | the expression matrix `X`; the other is a layer |
 | `meta.features` / the Assay5 feature table, `VariableFeatures()` | `rowData(sce)`, row names | the gene table; `highly_variable` marks the variable features |
 | other assays (`ADT`, `peaks`, `SCT`) | `altExps(sce)` | modalities ({doc}`19_multimodal_mudata`), the default assay first |
-| `obj@graphs` (`RNA_snn`, `RNA_nn`) | `colPairs(sce)` (weights: the first metadata column, as `colPair(sce, asSparse = TRUE)` reads them) | neighbour graphs; the default assay's `RNA_snn` opens (its unit diagonal is no edge); the directed `RNA_nn` is listed, and refused as not symmetric if chosen |
+| `obj@graphs` (`RNA_snn`, `RNA_nn`) | `colPairs(sce)` (weights: the first metadata column, as `colPair(sce, asSparse = TRUE)` reads them) | neighbor graphs; the default assay's `RNA_snn` opens (its unit diagonal is no edge); the directed `RNA_nn` is listed, and refused as not symmetric if chosen |
 | Visium and FOV images | | the cells' positions as the embedding `spatial` |
 | `obj@misc$cellucid` | `metadata(sce)$cellucid` | what the dataset says about itself (`uns['cellucid']`) |
 | `obj@project.name` | | the dataset's title (unless `SeuratProject`) |
@@ -140,18 +140,18 @@ graph, meta.data; `scripts/rds-corpus/make_bench.R`):
 | the 50,000-cell object as xz / bzip2 (0.98 GB / 0.99 GB) | from disk (Node): about 200 s / 115 s (the decompression itself, about 13 / 23 MB/s) | 1.2 s | |
 
 A Seurat object stores its assays first and its reductions near the end
-(the 50,000-cell object's embedding starts after 98 % of the file), so no
+(the 50,000-cell object's embedding starts after 98% of the file), so no
 view can be drawn before the whole file is read. The pass holds a bounded
 window in memory, whatever the object's size (under 700 MB in Node for
 either object). While it reads, the opening shows how much is read, how
-fast and the time left, with **Cancel**; a cancelled pass leaves nothing
+fast and the time left, with **Cancel**; a canceled pass leaves nothing
 behind. To share a large object with others, write it once as a
 Cellucid-ready AnnData with `cellucid::cellucid_prepare(path, data = obj)`
 (R) or `cellucid.prepare()` (Python): that is read in place, so a viewer
 reads only what a view needs.
 
 ```{figure} ../../../_static/screenshots/data_loading/opening-progress.png
-:alt: The opening panel centred over the empty viewer while a linked Seurat .rds is downloaded: "Opening" and the file's address, the step "Downloading the whole file (9.4 MB): … does not serve parts of files", a progress bar part-way, how much has arrived with the speed and time left, the note saying the host serves the file only whole, how much is downloaded and that it is kept, and a Cancel button.
+:alt: The opening panel centered over the empty viewer while a linked Seurat .rds is downloaded: "Opening" and the file's address, the step "Downloading the whole file (9.4 MB): … does not serve parts of files", a progress bar part-way, how much has arrived with the speed and time left, the note saying the host serves the file only whole, how much is downloaded and that it is kept, and a Cancel button.
 :width: 856px
 
 A linked Seurat `.rds` opening while no other dataset is on screen: the panel
@@ -245,8 +245,8 @@ is larger than its lists and tables opens in two parts:
    (the same rule as a gene sample of a matrix stored by cell,
    {doc}`21_subsampled_loading`), every cell when they all fit. What is kept
    follows that share, never the file: on a 4 GB device GSE119945's 2.06
-   million cells keep 165,515 (8 %), about 0.8 GB, where every cell's matrix
-   would be 10 GB. Once it is read, genes colour those cells, analyses use
+   million cells keep 165,515 (8%), about 0.8 GB, where every cell's matrix
+   would be 10 GB. Once it is read, genes color those cells, analyses use
    them, and the other cells show no value until **Genes read for**
    (Session › Subsampling) reads the matrix again for more (its cost is said
    first).
@@ -333,8 +333,8 @@ followed by *· 5 parts not read* when something was left out. The
 - **Read**: *Whole, once, from start to end (it cannot be read in parts),
   from this computer; nothing is uploaded*, or *… from* the host of a link;
 - **Kept**: where the converted data stays (this browser's storage, the
-  origin-private file system, until it is cleared or the browser needs the
-  room; or memory, until the tab closes);
+  origin-private file system, until it is removed in **Session › Stored ›
+  Manage…** or the browser needs the room; or memory, until the tab closes);
 - **Read in parts**: what is read in parts instead, a Cellucid-ready AnnData
   written with `cellucid_prepare()` (R) or `cellucid.prepare()` (Python);
 - **Not read**: one line per part left out and why, named by its place in the
@@ -367,7 +367,7 @@ removed, and opening the file again reads it again.
 A Seurat object saved with `saveRDS()` and opened from this computer, with
 **Details** open: **Read** says it was read whole, once, from start to end and
 nothing was uploaded, **Kept** that the converted data stays in this browser's
-storage until it is cleared, and **Read in parts** what is read in parts
+storage until it is removed (**Session › Stored › Manage…**), and **Read in parts** what is read in parts
 instead.
 This object carries nothing Cellucid leaves out, so no *parts not read* follow.
 ```

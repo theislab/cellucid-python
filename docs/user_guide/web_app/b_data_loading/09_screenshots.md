@@ -65,7 +65,7 @@ reads its `datasets.json` ({doc}`15_host_on_github`).
 ## Opening each format
 
 ```{figure} ../../../_static/screenshots/data_loading/h5ad-current-loaded.png
-:alt: The whole Cellucid window after the Pancreas sample was opened as an .h5ad file with Open… › File…: the Session panel's Dataset box names the file, its cells and genes and "h5ad file · this computer", and the canvas shows its UMAP.
+:alt: The whole Cellucid window after the Pancreas sample was opened as an .h5ad file with Open… › File…: the Session panel's Dataset box names the dataset, Pancreatic endocrinogenesis, its cells and genes and "h5ad file · this computer", and the canvas shows its UMAP.
 :width: 1440px
 
 An `.h5ad` opened with **Open… › File…**. It is read in place, so only what a
@@ -104,7 +104,7 @@ A Loom file, read in place; its stored title names the dataset
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/tenx-outs-window.png
-:alt: The whole Cellucid window after a Cell Ranger outs/ folder was opened with Open… › Folder…: the Dataset box reads "10x Cell Ranger outs folder · this computer", and the canvas shows Cell Ranger's UMAP coloured by its clustering, gene_expression_clusters.
+:alt: The whole Cellucid window after a Cell Ranger outs/ folder was opened with Open… › Folder…: the Dataset box reads "Cell Ranger outs/ folder · this computer", and the canvas shows Cell Ranger's UMAP colored by its clustering, gene_expression_clusters.
 :width: 1440px
 
 A Cell Ranger `outs/` folder opened with **Open… › Folder…**: the matrix is
@@ -131,7 +131,7 @@ A CITE-seq `.h5mu`: **Data mapping › Genes** shows a **Modality** select
 ## The opening itself
 
 ```{figure} ../../../_static/screenshots/data_loading/opening-progress.png
-:alt: The opening panel centred over the empty viewer while a linked Seurat .rds is downloaded: "Opening" and the file's address, the step "Downloading the whole file (9.4 MB): … does not serve parts of files", a progress bar part-way, how much has arrived with the speed and time left, the note saying the host serves the file only whole, how much is downloaded and that it is kept, and a Cancel button.
+:alt: The opening panel centered over the empty viewer while a linked Seurat .rds is downloaded: "Opening" and the file's address, the step "Downloading the whole file (9.4 MB): … does not serve parts of files", a progress bar part-way, how much has arrived with the speed and time left, the note saying the host serves the file only whole, how much is downloaded and that it is kept, and a Cancel button.
 :width: 856px
 
 While nothing else is on screen, an opening is shown over the empty viewer:

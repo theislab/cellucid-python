@@ -18,7 +18,7 @@ as :mod:`cellucid.history`). It is the web app's
    stored bytes.
 
 **Manifest**: ``createdAt``, ``app`` (the Cellucid version that wrote it and
-the SHA-256 of its action catalogue), ``actions`` (the action types its steps
+the SHA-256 of its action catalog), ``actions`` (the action types its steps
 use: one stamp per type and parameters version, with the digest of that
 version's parameter schema), ``scope`` (what the share chose to include),
 ``datasetFingerprint`` (the dataset it was saved on), ``source`` (where that
@@ -123,6 +123,14 @@ SESSION_SIGNATURE = _SIGNATURE_PREFIX + f"{SESSION_FORMAT_VERSION}\n".encode("as
 NOT_A_SESSION_FILE_MESSAGE = (
     f"This file is not a Cellucid session file of format {SESSION_FORMAT_VERSION} "
     f"(it does not start with CELLUCID_SESSION/{SESSION_FORMAT_VERSION})."
+)
+#: A file holding a value nested more deeply than the interpreter's own
+#: recursion follows (Python's recursion limit, R's expression and C stack):
+#: no Cellucid writes one, and the reader refuses it in a sentence, not with
+#: the interpreter's error (cellucid-r's ``.session_too_deep_message``).
+TOO_DEEP_SESSION_MESSAGE = (
+    "This session file holds a value nested more deeply than this package reads, "
+    "so it was not opened. Cellucid does not write such files: was it made by another program?"
 )
 
 
@@ -273,8 +281,11 @@ def _parse_json(data: bytes, label: str) -> Any:
         if text.startswith("﻿"):
             text = text[1:]
         return json.loads(text, parse_constant=_refuse_constant, parse_int=_parse_int)
-    except (UnicodeDecodeError, ValueError, RecursionError) as error:
+    except (UnicodeDecodeError, ValueError) as error:
         raise _damaged(f"{label} is not JSON.") from error
+    except RecursionError as error:
+        # JSON, nested past what the parser follows: not damaged, unreadable here.
+        raise ValueError(TOO_DEEP_SESSION_MESSAGE) from error
 
 
 def _utf16_key(value: str) -> bytes:
@@ -1519,9 +1530,14 @@ def _read_contents(path: Path) -> _Contents:
             if frames.remaining != 0 or handle.read(1):
                 raise _damaged("it holds bytes after its last chunk.")
             trackers = reading.finish(header)
-        except ValueError as error:
+        except (ValueError, RecursionError) as error:
             if newer is not None:
                 raise ValueError(newer_session_message(newer, package_version())) from error
+            if isinstance(error, RecursionError):
+                # Python's own limit on what the reader follows, refused in a
+                # sentence as every other file it cannot read is (cellucid-r's
+                # reader says the same).
+                raise ValueError(TOO_DEEP_SESSION_MESSAGE) from error
             raise
     return _Contents(
         manifest=manifest,
@@ -1579,7 +1595,7 @@ class CellucidSession:
         self.created_at: str = manifest["createdAt"]
         """Canonical ISO time of the save (UTC)."""
         self.app: AppStamp = model.build("AppStamp", manifest["app"])
-        """What wrote the file: the Cellucid version and the SHA-256 of its action catalogue."""
+        """What wrote the file: the Cellucid version and the SHA-256 of its action catalog."""
         self.actions: tuple[ActionStamp, ...] = tuple(model.build("ActionStamp", stamp) for stamp in manifest["actions"])
         """The action types its steps use, each with the digest of its parameter schema, sorted by type."""
         self.scope: Scope = model.build("Scope", manifest["scope"])
@@ -1754,6 +1770,7 @@ class CellucidSession:
         dry_run: bool = True,
         overwrite: bool = False,
         keep_session: bool = False,
+        dataset_id: str | None = None,
     ) -> Any:
         """What applying one step of this session to ``adata`` would change, or the change made.
 
@@ -1764,7 +1781,7 @@ class CellucidSession:
 
         return apply_cellucid_session_to_anndata(
             adata, self, tracker=tracker, branch=branch, step=step, dry_run=dry_run, overwrite=overwrite,
-            keep_session=keep_session,
+            keep_session=keep_session, dataset_id=dataset_id,
         )
 
     def __repr__(self) -> str:

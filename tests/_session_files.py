@@ -108,7 +108,7 @@ def user_category(field_id: str, key: str, categories: list[Any], codes: Any, *,
         "categories": categories,
         "codes": {"cells": None if cells_of is None else cells(cells_of), "values": typed(code_type, codes)},
         "sourcePages": [], "overlapStrategy": "first", "overlapLabel": None, "intersectionLabels": None,
-        "uncoveredLabel": None,
+        "uncoveredLabel": None, "palette": None,
     }
 
 

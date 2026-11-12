@@ -159,7 +159,7 @@ Text frame:
 ### `action_result`
 
 The viewer's answer to one action ({doc}`06_python_to_frontend_commands`): one
-binary frame, header `{"type": "action_result", "requestId": …, "step": …}`,
+binary frame, header `{"type": "action_result", "requestId": …, "step": …, "unrecorded": …}`,
 then the action's outcome as UTF-8 JSON -- a read's result can be as large as
 it asks for (a picture of a view, the values of many cells), so it never
 travels as a text frame. Python decodes the body and builds this record:
@@ -167,13 +167,16 @@ travels as a text frame. Python decodes the body and builds this record:
 ```python
 {
     "requestId": "exact-request-id",
-    "step": {"id": "s4", "label": "Coloured by cell_type"},   # or None: a read, or nothing changed
+    "step": {"id": "s4", "label": "Colored by cell_type"},   # or None: a read, or a change that made none
+    "unrecorded": None,                                       # why a change made no step ("unchanged", "paused", ...)
     "outcome": None,                                          # a change's outcome, or a read's result
 }
 ```
 
 It completes the `ActionRequest` of that `requestId`: `request.result()`
-returns `outcome` and `request.step` is `step`. The body must be UTF-8 JSON
+returns `outcome` (and warns `ActionNotRecordedWarning` when `unrecorded` is
+not `None`), `request.step` is `step` and `request.unrecorded` is
+`unrecorded`. The body must be UTF-8 JSON
 with finite numbers; anything else closes the channel (1008).
 
 ### `session_bundle`
@@ -197,7 +200,7 @@ answers, and builds this record:
 An invalid file is removed and reported as a `command_error` naming
 `requestSessionBundle` and the request, so the request's `result()` raises
 with the reason instead of waiting for its timeout. A session nobody is
-waiting for any more (its request timed out or was cancelled) is read and
+waiting for any more (its request timed out or was canceled) is read and
 dropped; the channel stays open.
 
 ### `command_error`
@@ -282,7 +285,7 @@ recent refusals after the fact.
 
 The viewer reports its *data mapping* (always `kind: "anndata"`) — the
 enabled embeddings and each dimension's default, the bound vector fields (each
-`{"key": <obsm key>, "embedding": {"key", "columns"}}`), the neighbour graph,
+`{"key": <obsm key>, "embedding": {"key", "columns"}}`), the neighbor graph,
 the gene names, the expression matrix and the latent space.
 It sends one after the dataset loads and another whenever the mapping changes,
 whoever changed it -- a person, a session, or this notebook's `mapping_set`.

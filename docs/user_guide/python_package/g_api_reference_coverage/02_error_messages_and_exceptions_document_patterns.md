@@ -84,9 +84,10 @@ Document these explicitly:
 - an existing output (`force=True`), and a folder that is not a Zarr store
 
 Display text is a family of its own because the defect is invisible. A name
-with a trailing space renders exactly like the clean name beside it, so the
-message makes the character visible and says why the writer will not remove
-it, opening with the argument name: `dataset_name is displayed verbatim, so it
+holding a zero-width space renders exactly like the clean name beside it, so
+the message makes the character visible and says why the writer will not
+remove it (white space at the ends of descriptive text is the one thing
+removed: the web app reads it trimmed), opening with the argument name: `dataset_name is displayed verbatim, so it
 must not carry characters that have no glyph: 'Suo\u200b' contains U+200B ZERO
 WIDTH SPACE. ...`
 

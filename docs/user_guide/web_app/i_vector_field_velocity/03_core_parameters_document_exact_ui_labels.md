@@ -11,7 +11,7 @@ These controls appear under **Visualization → Vector field** after
 :width: 496px
 
 Every core control, at the values the table below records as initial: `15K`,
-`3.0×`, `8.0s`, size `1`, `60%`, `Viridis`, `Sync with LOD` on. The numeric
+`3.0×`, `8.0 s`, size `1.0`, `60%`, `Viridis`, `Sync with LOD` on. The numeric
 readout beside each slider is the *transformed* value, not the slider position.
 ```
 
@@ -59,12 +59,14 @@ deliberately not held to the floor.
 :::
 
 :::{note}
-At most 65,536 distinct cells can ever seed particles, chosen deterministically
-from the currently visible cells. On a dataset larger than that, the flow is
-drawn from a sample of your cells, not from all of them. The sample is stable
-for a given visible set, so the picture is reproducible — but a sparse-looking
-region in a very large dataset may be a sampling artefact rather than a
-low-magnitude one.
+At most 65,536 cells seed particles at a time, chosen deterministically from
+the currently visible cells. With more visible cells than that, the moving flow
+refills its seeds once every `Trail length` (one particle lifetime) from where
+the last fill stopped, so over successive refills every visible cell seeds
+particles. Under reduced motion the overlay is a still picture drawn from the
+first fill only ({doc}`05_performance_and_quality`): reproducible, but on a
+very large dataset a sparse-looking region in it may be a sampling artifact
+rather than a low-magnitude one.
 :::
 
 ## Scientific reading preset
@@ -121,7 +123,7 @@ Check in this order:
 1. `Opacity` is above 0%.
 2. The selected view has visible cells.
 3. `Particle size` is large enough for the display.
-4. The status does not read `Failed to load vector field.`
+4. The status does not read `The vector field could not be shown.`
 5. Vector magnitudes are not all zero.
 
 See {doc}`07_troubleshooting_velocity_overlay` for data, network, dimension,

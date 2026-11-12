@@ -18,6 +18,10 @@ Inecik, K. PLACEHOLDER: Cellucid preprint, title to be announced (forthcoming on
 ```
 <!-- END cellucid-citation -->
 
+In the web app, **Cite** in the sidebar footer opens this reference with
+**Copy reference** and **Copy BibTeX**
+({doc}`user_guide/web_app/a_orientation/08_cite_cellucid`).
+
 ## Other things you may need to cite
 
 - **A built-in sample dataset.** Cite the study it came from, not Cellucid.

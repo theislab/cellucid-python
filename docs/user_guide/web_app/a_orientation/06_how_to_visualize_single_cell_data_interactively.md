@@ -77,12 +77,12 @@ Seurat or SingleCellExperiment object:
 
 ## What to do once it is open
 
-- **Colour by anything**: a cluster column, a QC metric, or a gene, from
+- **Color by anything**: a cluster column, a QC metric, or a gene, from
   **Coloring & filtering**.
 - **Filter** to a subset of categories or a value range, and the plot follows.
-- **Compare** two colourings, two subsets or the 2D and 3D layout side by side
+- **Compare** two colorings, two subsets or the 2D and 3D layout side by side
   with **Keep view** under **Compare views**.
-- **Select cells** with lasso, neighbourhood or proximity tools and compare the
+- **Select cells** with lasso, neighborhood or proximity tools and compare the
   selection in **Analysis** (differential expression, marker genes, gene-set
   scores).
 - **Export a figure** as vector SVG or high-resolution PNG.
@@ -94,7 +94,7 @@ Seurat or SingleCellExperiment object:
 A dataset written to a public GitHub repository opens from a link, a README
 badge or an embedded frame on a web page; see
 {doc}`../l_sessions_sharing/13_share_links_badges_and_embeds`. To send your exact
-view — camera, colours, filters and selections — save a session file.
+view — camera, colors, filters and selections — save a session file.
 
 See also {doc}`07_cellucid_and_other_viewers` for how Cellucid relates to other
 interactive single-cell viewers.

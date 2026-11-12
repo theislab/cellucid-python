@@ -33,23 +33,32 @@ names itself.
 | Element | Contract |
 |---|---|
 | `X` | The gene expression, cells × genes, **gene-major**: a `csc_matrix` when sparse, a dense array otherwise. `float32`; `float64` only for integer counts above 2^24, which `float32` cannot hold exactly (below). Every stored value finite; a sparse `X` has no stored zeros. Absent when the dataset has no expression. |
-| `obs` | One row per cell: in {ref}`priority order <priority-order>`, `obs['cellucid_original_position']` (`<u4`) holding each row's original position, or in the order given with `priority_seed=None`. The index (`_index`) holds unique cell names. Text columns whose values repeat or are missing are `categorical` (categories in code-point order, missing = code -1); other text columns are `string-array`; categoricals stay categoricals; numbers stay numbers in their own dtype (no infinities; NaN is missing); booleans stay booleans; integer and boolean columns with missing values are `nullable-integer` / `nullable-boolean`. |
+| `obs` | One row per cell: in {ref}`priority order <priority-order>`, `obs['cellucid_original_position']` (`<u4`) holding each row's original position, or in the order given with `priority_seed=None`. The index (`_index`) holds unique cell names. Text columns whose values repeat or are missing are `categorical` (categories in code-point order, missing = code -1); other text columns are `string-array`; categoricals stay categoricals; numbers stay numbers in their own dtype (no infinities; NaN is missing); booleans stay booleans; integer and boolean columns with missing values are `nullable-integer` / `nullable-boolean`. When `X` holds counts, each cell's total count: `obs['total_counts']` (`<f8`) unless a column is named for it, recorded in `uns['cellucid']['totalCounts']` ({ref}`total-counts-spec`). |
 | `var` | One row per column of `X`. The index holds unique gene names (usually gene ids); a gene-symbol column, when present, is named by `uns['cellucid']['defaults']['geneIdColumn']`. |
 | `obsm/<key>` | Embeddings: dense `float32`, two-dimensional, one row per cell, every column of the input at its own coordinates (the viewer selects columns and normalizes). The latent space for outlier measurement is one of them. A row holding `NaN` (or an infinity) is a cell the embedding does not place (one computed on some of the cells, a MuData modality that did not measure the cell): it is written as given; the viewer draws it in no view of that embedding and says how many such cells there are, naming the first; other embeddings, filters and analyses keep it. Every other value is finite and within the `float32` range, and at least one cell is placed. |
-| `obsm/<field>_<basis>` | A vector field, dense `float32`, one row per cell and exactly as many columns as the embedding `obsm['X_<basis>']` it is named for (scVelo's naming: `velocity_umap` over `X_umap`, `velocity_branches` over `X_branches`). The viewer reads it as the field `<field>` drawn over that embedding: the vector-field key rule below. A `NaN` row is a cell without a vector: drawn without an arrow. |
-| `obsp/connectivities` | The neighbour graph, when present: `csr_matrix`, `float32`, cells × cells, exactly symmetric, finite non-negative weights, zero diagonal, no stored zeros. The writers leave a given graph's diagonal out (a self-loop is no edge: Seurat's `RNA_snn` has 1 there) and refuse a directed one (`RNA_nn`, `distances`); from an object without `connectivities` they write the graph the viewer's default rule opens with: Seurat's `<assay>_snn` of the default assay, else the first other `*_snn`. A reader ignores a diagonal the same way. |
+| `obsm/<field>_<basis>` | A vector field, dense `float32`, one row per cell and exactly as many columns as the embedding `obsm['X_<basis>']` it is named for (scVelo's naming: `velocity_umap` over `X_umap`, `velocity_branches` over `X_branches`). The viewer reads it as the field `<field>` drawn over that embedding: the vector-field key rule below. A row holding `NaN` or an infinity is a cell without a vector: drawn without an arrow. |
+| `obsp/connectivities` | The neighbor graph, when present: `csr_matrix`, `float32`, cells × cells, exactly symmetric, finite non-negative weights, zero diagonal, no stored zeros. The writers leave a given graph's diagonal out (a self-loop is no edge: Seurat's `RNA_snn` has 1 there) and refuse a directed one (`RNA_nn`, `distances`); from an object without `connectivities` they write the graph the viewer's default rule opens with: Seurat's `<assay>_snn` of the default assay, else the first other `*_snn`. A reader ignores a diagonal the same way. |
 | `varm` | Present; empty, except `varm['cellucid_prefix_counts']` beside a sparse `X` of a file in priority order ({ref}`priority order <priority-order>`). |
 | `varp`, `layers` | Present and empty. |
 | `uns['title']` | The dataset name, so tools that read a file's title (every CELLxGENE file carries one) show it too. |
 | `uns['cellucid']` | The dataset's description and launch defaults (§2). |
+| `uns['<column>_colors']` | Scanpy's colors of a categorical obs column, when the source has them: a one-dimensional text array, one color a category in the column's category order (at least as many as its categories; Scanpy and the viewer use the first ones). The writers keep a source's colors for every categorical column they write (`prepare(obs_colors=)`, `cellucid_prepare(obs_colors =)`; from an object, the colors it holds: an AnnData's or a MuData's `uns`, a Seurat object's `misc`, `metadata(x)` of a SingleCellExperiment) and write none for a column not written; colors that cannot color the written column (not text, fewer than its categories, one of the first not a hex color, a column not written as a categorical) are left out, saying why. The viewer opens the column in them when each of the first ones is a hex color (`#rrggbb`, `#rgb`, `#rrggbbaa`), as Scanpy writes them; otherwise in Cellucid's colors, so the writers write no other. |
 
 Element names that become paths in a store — obs and var column names, obsm
 keys — are portable path components on every platform: no `/ \ < > : " | ? *`
 or control character, not `.`/`..` or a Zarr metadata name (`.zarray`,
 `.zattrs`, `.zgroup`, `.zmetadata`, `zarr.json`), no trailing space or dot, no
-Windows device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9`, `LPT1`–`9`), and
-names in one group differ by more than letter case. A column may not be named
-`_index`.
+Windows device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`9`, `LPT1`–`9`), at
+most 255 bytes in UTF-8 (the longest file name Linux, macOS and Windows all
+take), and names in one group differ by more than letter case (and, in the
+web app and Python, Unicode form: `é` as one code point or as `e` and an
+accent). A column may not be named `_index`. `prepare()` and
+`cellucid_prepare()` refuse a name that breaks the rule; the web app's
+writers, which copy names they did not choose (a copy of the open dataset, a
+converted R object or MatrixMarket folder, the highlighted cells' `.h5ad`),
+write each such name in its portable form — each forbidden character, and a
+trailing space or dot, as `_`; a reserved name after `_`; cut to 255 bytes; a
+name taken already followed by `_2`, `_3`, … — and say which they renamed.
 
 ### Vector-field keys
 
@@ -165,6 +174,25 @@ pandas categorical may have number categories. Under a missing value (`mask`
 set), the `values` of a nullable column are unspecified to a reader; both
 writers store 0 or `false` there.
 
+**Integers past 2^53 are identifiers.** No double holds a whole number beyond
+±(2^53 − 1) exactly, and a column holding one (a 64-bit database id, a barcode
+hashed to an integer) is a column of identifiers, never of measurements. The
+viewer reads an `obs` column of 64-bit integers (`<i8`, `<u8`, plain or
+`nullable-integer`) that holds such a value among all its cells (whatever
+cells are open: with a subsample, the stored column is scanned once when the
+field is first shown) as the exact decimal text of each value: a text column, coded as one, which says why
+on its legend line ("IDs past 2^53, read as text."). Integer categories of a
+categorical past 2^53 are their decimal texts likewise. A column whose 64-bit
+integers are all within 2^53 stays numbers, exact (float64). The writers keep
+such a column's dtype (`<i8` from Python; R has no 64-bit integer and refuses a
+`bit64::integer64` column, saying to write it `as.character()`). Applying a
+session (`apply_cellucid_session_to_anndata()`, `cellucid_apply_session()`)
+and pushing a column (`push`) read the column the same way: its categories
+are those texts, and a label renamed in the viewer is written back as text. A
+text table beside a matrix (a MatrixMarket folder's metadata) holding such a
+whole number is a text column too, and an R `integer64` column the web app
+converts is kept as 64-bit integers.
+
 ---
 
 ## 2. `uns['cellucid']`
@@ -189,14 +217,23 @@ apply.
 | `source` | mapping `{name, url}` | Where the data comes from; `url` optional, an absolute `http(s)` address. |
 | `defaults` | mapping, below | The launch defaults the dataset opens with. |
 | `outlierQuantiles` | mapping, below | Every categorical obs field's latent outlier quantiles in one latent space. |
+| `totalCounts` | mapping `{field, over}`, below | The obs field holding each cell's total count (its library size) and what it covers. |
 | `priority` | mapping `{seed, specVersion, nObs, levels}` | The file stores its cells in priority order ({ref}`priority order <priority-order>`): `seed` (integer, 0 to 2^32 − 1) the seed of the ranks, `specVersion` (integer `1`) the version of the {doc}`subsampling specification <../../web_app/p_developer_docs/19_subsampling_specification>` the ranks follow, `nObs` (integer) the cell count the file was written with, `levels` (integer list, ascending, each at least 1: those of `nObs`) the prefix sizes `varm['cellucid_prefix_counts']` counts at. Unlike every other key, a `priority` that does not describe the file's cells is never refused: the file is read as one Cellucid did not write ({ref}`priority order <priority-order>`, "Verified before use"). |
-| `history_applied` | text | The records {func}`~cellucid.apply_cellucid_session_to_anndata` (cellucid-r: `cellucid_apply_session()`; the web app's browser copy, `package` `web`) appends, one per apply that wrote something: a JSON list as text ({func}`~cellucid.history_applied` reads it). The viewer never reads it. |
+| `history_applied` | text | The records {func}`~cellucid.apply_cellucid_session_to_anndata` (cellucid-r: `cellucid_apply_session()`; the web app's browser copy, `package` `web`) appends, one per apply that wrote something: a JSON list as text ({func}`~cellucid.history_applied` reads it), each record the history model's `Provenance` (`session_sha256`, `tracker`, `branch`, `step`, `applied_at`, `cellucid_version`, `package`, `columns`, `renamed`, `skipped`, `expression`, `session`). `expression` is the step's expression values, `{normalize, log1p}` (null when the session holds none): what the genes were shown in, recorded and never applied, so `X` and the layers keep their values. The viewer never reads it. |
 | `gene_sets` | mapping by gene set name `{genes, description, origin, pulled_from, id}` | The gene sets a pull, an applied history or a browser copy wrote (an applied history's and a copy's with `origin` `session`; a copy's `pulled_from` `viewer`); an apply and a copy also mark each set it writes as a boolean `var` column, `cellucid_gene_set__<name>` (§4, {ref}`browser copy <browser-copy-profile>`). The viewer never reads it. |
 | `pulled` | mapping by column name `{kind, id, pulled_from, ...}` | What each `obs` column a pull wrote came from: the result it holds (`kind`, `id`, and its label, key or page) and `pulled_from` (`"viewer"` or the file's name). The viewer never reads it. |
 
 Text is stored as one `string` scalar (the web app also reads a one-element
 list of text as that text) and must be drawable exactly as stored: no control or zero-width
-character and no leading or trailing white space.
+character. Identifiers and keys (`id`, every key and field name, `latentKey`,
+`obsKeys`, the `totalCounts` field) carry no leading or trailing white space,
+or the file is refused. Descriptive text -- `name`, `description`, the
+citation's `text`, the source's `name` -- is read with white space at either
+end removed (a paragraph typed by hand often ends in a space), and the writers
+(`prepare()`, `cellucid_prepare()`, the web app's browser copy) write it so.
+The white space removed: tab, line feed, vertical tab, form feed, carriage
+return, the Unicode space separators (U+0020, U+00A0, U+1680, U+2000–U+200A,
+U+202F, U+205F, U+3000), U+2028, U+2029 and U+FEFF.
 
 ### `defaults`
 
@@ -207,7 +244,7 @@ the viewer's own choice. The names are the web app's
 | Key | Type | Meaning | `prepare()` argument |
 |---|---|---|---|
 | `embedding1d`, `embedding2d`, `embedding3d` | text (an `obsm` key, plotted by its first columns), or mapping `{key, columns}` (columns a 0-based integer list, one per axis) | The embedding the dimension opens on. | `embedding_defaults` |
-| `knn` | text (an `obsp` key) | The neighbour graph drawn. (Not written by `prepare()`; the viewer's own rule finds `obsp['connectivities']`.) | — |
+| `knn` | text (an `obsp` key) | The neighbor graph drawn. (Not written by `prepare()`; the viewer's own rule finds `obsp['connectivities']`.) | — |
 | `modality` | text (a modality: a `mod/<name>` of a Cellucid-ready MuData, §5) | The modality the viewer opens on; `geneIdColumn` then names a column of its `var`. Only a MuData has one. Absent: the first gene-expression modality (`rna`, `gex`, `gene expression`, `gene_expression`, `sct`, any case), else the first in `mod-order`. | `modality` |
 | `expression` | `'X'`, `'raw/X'` or `'layers/<name>'` | The matrix genes are read from. (Not written by `prepare()`, which stores only `X`.) | — |
 | `geneIdColumn` | text (a `var` column) | The column whose values name the genes. Absent: the `var` index. | `var_gene_id_column` |
@@ -218,7 +255,7 @@ the viewer's own choice. The names are the web app's
 | `centroidMinPoints` | positive integer | The fewest cells a category needs to get outlier quantiles. | `centroid_min_points` |
 
 A server may pass the same keys for one session (`cellucid serve --embedding-2d`,
-`serve_anndata(embedding_keys=...)`); they override the file's own.
+`serve_anndata(embedding_defaults=...)`); they override the file's own.
 
 There is no `defaults` key for how an expression matrix is transformed or which
 genes are highly variable. Those are Scanpy's own records, which the viewer
@@ -238,22 +275,22 @@ panel can change.
 Written by both writers whenever `latent_key` is given, so the web app's
 outlier filter reads a few MB instead of the whole latent space. For each
 categorical obs field, each cell's quantile is the share of its category that
-lies at its distance from the category's centre in the latent space, or closer
+lies at its distance from the category's center in the latent space, or closer
 (the rule, bit for bit: `cellucid.prepare_data._outliers`; the web app's
 `assets/js/data/latent-outliers.js`; the numpy reference
 `scripts/generate-latent-outlier-conformance.py` in the web repository):
 
 1. over the latent values as stored (`float32`, widened exactly to `float64`),
-   a category's centre is its cells' column sums, accumulated cell by cell in
+   a category's center is its cells' column sums, accumulated cell by cell in
    cell order, divided by its cell count;
 2. a cell's distance is the square root of its squared differences from the
-   centre, accumulated column by column in column order;
+   center, accumulated column by column in column order;
 3. its quantile is the number of the category's cells at that distance or
    closer divided by the cell count, both as `float32`.
 
 A cell whose latent row is not finite (`NaN` in any column: a cell the latent
 space does not place) is left out as a cell with a missing value is: it adds
-nothing to its category's centre or count. Only categories with at least
+nothing to its category's center or count. Only categories with at least
 `minPoints` such placed cells are measured; every other cell (a missing value,
 an unplaced cell, a smaller category) is `NaN`.
 
@@ -294,6 +331,47 @@ In Python:
  'outlierQuantiles': {'latentKey': 'X_pca', 'minPoints': 10,
                       'fields': {'leiden': array([0.62, 0.15, ..., 0.98], dtype=float32)}}}
 ```
+
+(total-counts-spec)=
+### `totalCounts`
+
+Normalizing a cell's counts (the web app's **Data mapping › Expression
+values**: `x · 10,000 / t`, scanpy's `normalize_total(target_sum=1e4)`) needs
+each cell's total count `t`. A file whose `X` holds counts — every value it
+stores a whole number of at least 0 — records where the totals are, so the
+viewer reads one column instead of every gene:
+
+| Key | Type | Meaning |
+|---|---|---|
+| `field` | text | The obs field holding each cell's total: a finite number of at least 0, one per cell. |
+| `over` | `"all genes"`, `"source panel"` or `"stored genes"` | `"all genes"`: the writer's caller named the column (`prepare(total_counts=...)`, `cellucid_prepare(total_counts = )`): each cell's total over every gene measured, before any gene was selected (scanpy's `calculate_qc_metrics` before subsetting, Seurat's `nCount_RNA`); the writers refuse one below the sum of the cell's stored genes. `"source panel"`: the caller named the column and said it covers every gene of the source's gene panel (`total_counts_over="source panel"`): a targeted or integration panel, more genes than are stored but not the whole transcriptome (the built-in atlas samples' 8,192 integration genes); checked as `"all genes"` is. `"stored genes"`: the sum of the cell's row of `X` as written. |
+
+Both writers write it whenever `X` holds counts: the named column (`"all
+genes"`, or `"source panel"` as the caller says), else `obs['total_counts']`, `<f8`, each row's sum over the stored
+genes in float64 (exact for whole counts below 2^53, so both writers store the
+same bytes), placed before `cellucid_original_position` (`"stored genes"`). A
+column of the data's own already named `total_counts` (any letter case) is
+kept as given and recorded only when it is exactly those sums. An `X` that
+holds no counts (normalized, log-transformed, a value below 0) has no record.
+
+In a Cellucid-ready MuData (§5) the record maps each modality to its own
+`{field, over}`, the field named as the viewer shows it: a column of the cells'
+`obs` (`nCount_RNA`) or of the modality's own `obs` (`rna:total_counts`, which
+the writers compute into `mod/<name>/obs/total_counts`):
+
+```pycon
+>>> adata.uns["cellucid"]["totalCounts"]
+{'field': 'total_counts', 'over': 'stored genes'}
+>>> mdata.uns["cellucid"]["totalCounts"]
+{'rna': {'field': 'nCount_RNA', 'over': 'all genes'}}
+```
+
+The web app takes the totals from the field the record names (else from an obs
+field named like a cell's total, `total_counts`, `n_counts`, `nCount_RNA`, …;
+else by summing every gene once) and says which, and what they cover, in every
+normalized result. A prepared file read back and prepared again keeps a
+named column named, with what it covers (`"all genes"`, `"source panel"`), and
+sums the stored genes again.
 
 (priority-order)=
 ### Priority order
@@ -413,7 +491,7 @@ In R the record is where the importers that keep `uns` put it (anndataR,
 zellkonverter): `metadata(sce)$cellucid$priority` of a SingleCellExperiment,
 `misc$cellucid$priority` of a Seurat object, the `"cellucid"` attribute of a
 data frame. A Seurat object is reordered in every part — each assay's layers
-(or matrices), reductions, graphs (both axes), neighbour indices, cell
+(or matrices), reductions, graphs (both axes), neighbor indices, cell
 metadata and identities.
 
 Preparing an object in a verified stored order again (`prepare(data=adata)`,
@@ -490,6 +568,13 @@ package writes no HDF5.
 An array shorter than its chunk size is one chunk of exactly its length; an
 empty array has chunks of 1.
 
+A Zarr store holds every chunk of every array, also one whose values are all
+the fill value (a scalar `0` such as `uns['cellucid']['priority']['seed']`, a
+run of zeros in a column). zarr-python leaves such a chunk out by default; a
+web host answers a chunk left out with 404, which the browser reports as an
+error, and leaving it out saves no request, since a reader asks for it either
+way. Both writers store them (Python since 2026-11-10).
+
 A store a server presents for data it holds (`serve_anndata`, `show_anndata`,
 `cellucid_serve`, `cellucid_view`) is not a file: it holds the same arrays,
 uncompressed, chunked alike except an expression matrix's `data` and `indices`,
@@ -507,7 +592,7 @@ entries of one read no more than with smaller chunks.
 | Zarr format 3 | `{"name": "blosc", "configuration": {"typesize": <bytes>, "cname": "zlib", "clevel": 6, "shuffle": "shuffle", "blocksize": 0}}` on every array Zarr format 2 shuffles, `{"name": "gzip", "configuration": {"level": 6}}` on every other array; only codecs of the Zarr v3 specification (and `vlen-utf8` for strings); unsharded |
 
 **Shuffle.** A byte shuffle stores the first byte of every value, then every
-second byte, and so on, so the similar high bytes of neighbouring values
+second byte, and so on, so the similar high bytes of neighboring values
 compress together: on the Suo atlas the gene indices of `X` shrank by a third
 and the embeddings and graph weights by 7–9%. The expression values (a sparse
 `X`'s `data`, a dense `X`) are the exception: real expression values repeat
@@ -588,7 +673,7 @@ Measured on 23 October 2026 on the Suo atlas (561,947 cells × 8,192 genes,
 raw counts) and the He atlas (71,650 cells), with
 `scripts/benchmark-anndata.mjs` of the web repository — the web app's reader
 opening the file, reading every `obs` field, the embeddings, a first and a next
-gene, 99 genes at once, 1,000 cells, the neighbour graph and every gene in the
+gene, 99 genes at once, 1,000 cells, the neighbor graph and every gene in the
 cells of the two largest cell types — from local files and over simulated
 links (0, 20, 80 and 150 ms round trips; HTTP/1.1 with six requests at a time,
 HTTP/2 with GitHub's 100), and with the reader in a Chromium worker and its
@@ -642,12 +727,12 @@ What each change bought, and what was measured and not chosen:
   5 MB/s: against 2^16, a 1% subsample's 99 genes fetched 2.4 instead of
   8.9 MB (0.68 instead of 1.94 s) and every cell's 99 genes 8.7 instead of
   14.5 MB (1.90 instead of 3.06 s), each gene dragging fewer of its
-  neighbours' values; 2^12 fetched less still (0.8 MB) but its chunk index,
+  neighbors' values; 2^12 fetched less still (0.8 MB) but its chunk index,
   16 times larger, cost the first gene 0.64 MB and a round trip. The cost is
   requests: a whole-matrix read of a `.zarr` folder fetches four times as many
   files as with 2^16 (before, on Suo: 2^15 doubled them over HTTP/1.1, 41 s
   instead of 21 s for the two cell types); a single file (`.h5ad`,
-  `.zarr.zip`) reads neighbouring chunks as one range.
+  `.zarr.zip`) reads neighboring chunks as one range.
 - **Chunks of the per-cell arrays**: 2^16 values (an embedding's rows: 2^16
   over its width), so a subsample — the first rows in priority order — reads
   little beyond its cells: on the file above a 1% subsample's 2-D embedding
@@ -730,7 +815,7 @@ stores it:
   the dataset as it was opened when the file names none; integer `uns`
   scalars `<i8`; a priority order the source verifies kept (its record, the
   position column and the prefix counts, computed from the rows for a
-  transposed `X`); element names as stored, never normalised.
+  transposed `X`); element names as stored, never normalized.
 - **Kept as in the source, not made to this page:** the cells' order (a file
   not in priority order stays as it is); every value's type and bits (`X`
   stays `float64`, or an integer type, if it was; `float16` stays `float16`;
@@ -762,6 +847,11 @@ test suites), applied to the step shown:
   or replaced, on the var of the gene axis the data mapping reads (`X` or a
   layer; in a MuData, the mapping's modality's var), true on the rows whose
   gene, as the mapping names genes, the set lists (the rule below).
+- `uns['<column>_colors']`: each written, renamed or relabeled obs column's
+  colors, as Scanpy keeps them -- a field made from highlight pages its
+  `palette` (one `#rrggbb` a category, in its order), any other written
+  column none, a renamed column's carried along, a merged category its first
+  category's ({ref}`apply-column-colors`).
 - `uns['cellucid']['gene_sets']`: each gene set, by name (`origin`
   `session`, `pulled_from` `viewer`).
 - `uns['cellucid']['history_applied']`: one record appended, `package`
@@ -811,12 +901,13 @@ writes the Zarr forms from a multi-assay object
 | `.h5mu` user block | 512 bytes before the HDF5 signature, starting `MuData (format-version=0.1.0;creator=cellucid;...)` as mudata writes it. |
 | `obs` | The cells, one row each, unique names: the global `obs`. A column mudata copies from a modality (`<name>:<column>`) is not stored again; the viewer shows each modality's own columns under that name, missing where the modality did not measure the cell. |
 | `obsm` | The shared embeddings and vector fields, laid out as an AnnData's (§1); and mudata's per-modality masks: `obsm/<name>`, boolean `(n_cells, 1)`, which cells the modality measured (the viewer shows them as `<name>:measured`). |
-| `obsp/connectivities` | The shared neighbour graph, as in an AnnData (§1). |
+| `obsp/connectivities` | The shared neighbor graph, as in an AnnData (§1). |
 | `uns['title']`, `uns['cellucid']` | At the root only, as in an AnnData (§2); `defaults` may name the `modality` the viewer opens on. |
+| `uns['<column>_colors']` | The global obs columns' colors at the root, a modality's own columns' in `mod/<name>/uns` (where Scanpy run on the modality keeps them; the viewer reads `<name>:<column>`'s there), as in an AnnData (§1). |
 | `var` | Every modality's feature names, in `mod-order`: mudata's global `var` (index only). |
 | `varm`, `varp` | Present and empty. |
 | `obsmap/<name>`, `varmap/<name>` | For every modality: `uint32`, one entry per global cell (feature), the 1-based row of the modality that holds it, `0` where the modality has none. |
-| `mod` | The attribute `mod-order` lists the modalities; each `mod/<name>` is a Cellucid-ready AnnData (§1, §3) without `uns['cellucid']` and `uns['title']`: gene-major `X` (required), its `var` and `obs`, its own embeddings in `obsm` (shown as `<name>:<key>`) and `obsp/connectivities`. |
+| `mod` | The attribute `mod-order` lists the modalities; each `mod/<name>` is a Cellucid-ready AnnData (§1, §3) without `uns['cellucid']` and `uns['title']`: gene-major `X` (required), its `var` and `obs` (with its columns' colors in its `uns`), its own embeddings in `obsm` (shown as `<name>:<key>`) and `obsp/connectivities`. |
 
 Modality names follow the element-name rule of §1. Cell names are unique
 across the MuData and within every modality: MuData places a modality's cells

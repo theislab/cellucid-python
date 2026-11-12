@@ -80,7 +80,7 @@ platform, whichever platform writes it:
   `LPT1`-`LPT9`, also with an extension);
 - not `.`, `..`, `.zarray`, `.zattrs`, `.zgroup`, or `.zmetadata`;
 - for a data frame column, not `_index` (AnnData keeps the row names there);
-- different from its neighbours by more than letter case: `"Sex"` and `"sex"`
+- different from its neighbors by more than letter case: `"Sex"` and `"sex"`
   are one folder on macOS and Windows.
 
 A name that breaks a rule is refused with the rule and a way to rename it.
@@ -88,10 +88,13 @@ A name that breaks a rule is refused with the rule and a way to rename it.
 ## Dataset text
 
 `dataset_name`, `dataset_description`, `citation_text`, `citation_url`,
-`source_name`, and `source_url` are shown to readers verbatim. Each must be one
-string free of control characters (U+0001-U+001F, U+007F-U+009F), of the
-zero-width characters U+200B, U+2060, and U+FEFF, and of leading or trailing
-whitespace. Nothing is trimmed for you. `dataset_name` must not be empty;
+`source_name`, and `source_url` are shown to readers as stored. The four
+descriptive texts (`dataset_name`, `dataset_description`, `citation_text`,
+`source_name`) are written with white space at either end removed, as the web
+app reads them; the URLs are taken as given. What remains must be one string
+free of control characters (U+0001-U+001F, U+007F-U+009F) and of the
+zero-width characters U+200B, U+2060 and U+FEFF; a URL also of white space at
+either end. `dataset_name` must not be empty;
 `dataset_description` may be `""`. A URL must be an absolute `http://` or
 `https://` address, and is accepted only beside its text: `citation_url` needs
 `citation_text`, `source_url` needs `source_name`.

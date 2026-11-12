@@ -37,7 +37,7 @@ Antibody Capture       17
 ## Step 2: a MuData of two modalities
 
 Split the matrix by feature type, compute the embedding on RNA, and keep the
-shared parts (the cells' clusters, the UMAP and the neighbour graph) at the
+shared parts (the cells' clusters, the UMAP and the neighbor graph) at the
 MuData's root, where every modality shares them:
 
 ```python
@@ -111,7 +111,7 @@ viewer = cellucid.show_anndata("pbmc_1k_citeseq.h5mu")
 The 713 cells open on the UMAP, with the field `leiden`. In the viewer's
 **Session › Data mapping › Genes**, **Modality** lists `rna` (33,538
 features) and `prot` (17). Choose **prot**, click **Apply**, and search a
-protein (`CD3_TotalSeqB`, `CD19_TotalSeqB`) to colour the cells by it; marker
+protein (`CD3_TotalSeqB`, `CD19_TotalSeqB`) to color the cells by it; marker
 genes and the dot plot then compare proteins
 ({doc}`../../web_app/b_data_loading/19_multimodal_mudata`).
 

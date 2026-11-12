@@ -82,7 +82,7 @@ the viewer's outlier filter as one of them and name it with `latent_key`:
 the file, so the filter works at once
 ({doc}`../../web_app/e_filtering/02_outlier_filtering_per_active_field`).
 
-### Expression and genes (for gene colouring)
+### Expression and genes (for gene coloring)
 
 `gene_expression` is cells × genes, sparse or dense; `var` has one row per
 gene. Name the symbol column with `var_gene_id_column` when `var.index` holds
@@ -148,7 +148,7 @@ web app's **Open…** button, or host it and paste its address into the
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
-:alt: The whole Cellucid window with the Pancreas sample coloured by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colours.
+:alt: The whole Cellucid window with the Pancreas sample colored by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colors.
 :width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
@@ -184,7 +184,7 @@ Compressing the chunks takes most of the time, and it runs on several cores
 for every container; a `.zarr.zip` adds packing the folder. Converting a large CSR
 matrix to CSC also takes a few seconds.
 
-### Symptom: “The viewer opens it but gene colouring is missing”
+### Symptom: “The viewer opens it but gene coloring is missing”
 
 `gene_expression` and `var` were not passed, or the gene names are ids: set
 `var_gene_id_column`.

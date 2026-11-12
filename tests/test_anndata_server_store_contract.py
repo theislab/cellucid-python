@@ -182,10 +182,10 @@ def test_the_catalog_names_the_dataset_its_store_and_nothing_private(tmp_path: P
 def test_every_launch_choice_is_checked_and_published_in_the_viewer_vocabulary() -> None:
     with _serving(
         _adata(),
-        embedding_keys={"2d": ("X_pca", [3, 1]), "3d": "X_pca"},
+        embedding_defaults={"2d": ("X_pca", [3, 1]), "3d": "X_pca"},
         knn_key="connectivities",
         expression_source="layer:counts",
-        gene_id_column="symbol",
+        var_gene_id_column="symbol",
         latent_key="X_pca",
         vector_field_default="velocity",
         obs_keys=["score", "cell_type"],
@@ -221,14 +221,18 @@ def test_each_expression_source_has_one_viewer_spelling(expression: str, publish
     ("choices", "message"),
     [
         ({"knn_key": "distances"}, r"knn_key names obsp\['distances'\]"),
-        ({"embedding_keys": {"2d": "X_tsne"}}, r"obsm\['X_tsne'\], which this store does not have"),
-        ({"embedding_keys": {"3d": "X_umap"}}, "needs at least 3 columns"),
-        ({"embedding_keys": {"2d": ("X_pca", [0, 0])}}, "different column"),
-        ({"embedding_keys": {"2d": ("X_pca", [0, 9])}}, "does not exist"),
-        ({"embedding_keys": {"4d": "X_pca"}}, "'1d', '2d', or '3d'"),
+        ({"embedding_defaults": {"2d": "X_tsne"}}, r"obsm\['X_tsne'\], which this store does not have"),
+        ({"embedding_defaults": {"3d": "X_umap"}}, "needs at least 3 columns"),
+        ({"embedding_defaults": {"2d": ("X_pca", [0, 0])}}, "different column"),
+        ({"embedding_defaults": {"2d": ("X_pca", [0, 9])}}, "does not exist"),
+        ({"embedding_defaults": {"4d": "X_pca"}}, "'1d', '2d', or '3d'"),
         ({"expression_source": "layer:log1p"}, "names a layer this store does not have"),
         ({"expression_source": "raw.X"}, "expression_source must be"),
-        ({"gene_id_column": "gene_symbols"}, r"var\['gene_symbols'\]"),
+        # The web app's layers/<name> names one group: a "/" in it is refused here,
+        # as cellucid-r's .served_expression() and the browser refuse it.
+        ({"expression_source": "layer:a/b"}, r"expression_source must be .* \(a layer's name, without '/'\)"),
+        ({"expression_source": "layer:"}, "expression_source must be"),
+        ({"var_gene_id_column": "gene_symbols"}, r"var\['gene_symbols'\]"),
         ({"latent_key": "X_scVI"}, r"latent_key names obsm\['X_scVI'\]"),
         ({"vector_field_default": "velocity_umap"}, "does not declare"),
         ({"vector_field_default": "drift"}, "does not declare"),
@@ -288,7 +292,7 @@ def test_a_default_vector_field_must_be_drawn_on_an_embedding_shown_at_open() ->
     # Showing the wide X_pca draws drift there again.
     shown = defaults(
         latent_key="X_tsne",
-        embedding_keys={"2d": ("X_pca", [0, 1])},
+        embedding_defaults={"2d": ("X_pca", [0, 1])},
         vector_field_default="drift",
     )
     assert shown["vectorFieldDefault"] == "drift"
@@ -302,8 +306,8 @@ def test_a_gene_id_column_is_looked_up_on_the_axis_of_the_chosen_matrix() -> Non
     )
     with pytest.raises(ValueError, match=r"raw.var\['symbol'\]"):
         AnnDataServer(adata, port=0, quiet=True, serve_web_ui=False, dataset_name="x",
-                      dataset_id="x", expression_source="raw", gene_id_column="symbol")
-    with _serving(adata, expression_source="raw", gene_id_column="raw_symbol") as (_s, host, port):
+                      dataset_id="x", expression_source="raw", var_gene_id_column="symbol")
+    with _serving(adata, expression_source="raw", var_gene_id_column="raw_symbol") as (_s, host, port):
         defaults = _json(host, port, "/_cellucid/datasets")["datasets"][0]["anndata"]["defaults"]
     assert defaults["geneIdColumn"] == "raw_symbol"
 

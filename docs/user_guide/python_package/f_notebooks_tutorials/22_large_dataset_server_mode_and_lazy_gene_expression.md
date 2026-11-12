@@ -159,7 +159,7 @@ matrix, gzip-compressed):
 Choosing a graph at launch costs nothing at startup either:
 
 ```python
-viewer = cellucid.show_anndata(
+viewer = show_anndata(
     "data.h5ad",
     dataset_name="My dataset",
     dataset_id="my-dataset",
@@ -245,7 +245,7 @@ ssh -L 8765:127.0.0.1:8765 user@remote-host
 
 In your browser:
 - open the printed Viewer URL:
-  `http://127.0.0.1:8765/?anndata=true`
+  `http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true`
 
 ```{warning}
 Be careful with `--host 0.0.0.0`. It exposes the server to your network. Use it only if you understand the security implications.
@@ -344,7 +344,7 @@ Likely causes:
 - the viewer opened with a different (or no) neighbor graph.
 
 How to confirm:
-- open **Session › Data mapping › Neighbour graph** and check which `obsp`
+- open **Session › Data mapping › Neighbor graph** and check which `obsp`
   matrix is chosen.
 
 Fix:
@@ -366,7 +366,7 @@ How to confirm:
 
 Fix:
 - repair or compute an embedding, or name a usable one with
-  `embedding_keys={"2d": "<key>"}` (`--embedding-2d <key>` from the terminal),
+  `embedding_defaults={"2d": "<key>"}` (`--embedding-2d <key>` from the terminal),
   then re-save the file if you serve a path rather than an in-memory object.
 
 ### Symptom: a browser-tab viewer on a remote machine is blank or unreachable

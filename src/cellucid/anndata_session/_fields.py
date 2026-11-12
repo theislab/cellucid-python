@@ -8,7 +8,12 @@ lists every field a person or a notebook made (``userFields``), each one of:
   values}`` by original position (``cells`` null: every cell); a code is a
   category's index, and its code type's largest value marks a cell with no
   category. The column is a pandas ``category`` with those categories in
-  order, missing where a cell has no category;
+  order (every one, used or not), missing where a cell has no category. The
+  colors it is shown in go with it as ``uns['<key>_colors']``
+  (:func:`._columns.write_columns`), one ``#rrggbb`` a category
+  (:func:`._colors.shown_category_colors`): the view in focus's recolors,
+  else its ``palette`` (the colors it opens with: a field made from highlight
+  pages takes its pages'), else Cellucid's own category colors;
 - continuous with its own values (a column a notebook pushed): ``values``, a
   per-cell column of ``Float32Array`` values, NaN for no value. The column is
   ``float32``, NaN where a cell has no value;
@@ -26,6 +31,7 @@ missing.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import numpy as np
@@ -34,6 +40,7 @@ from scipy import sparse
 
 from .._plural import plural
 from ..data_mapping import mapped_expression_matrix, resolve_gene_names
+from ._colors import Recolors, shown_category_colors
 from ._columns import categorical_column, continuous_column, without_unknown
 from ._primitives import (
     _require_array,
@@ -157,7 +164,12 @@ def _copied_values(shown: Any, *, mapping: dict[str, Any], source: str, source_f
     return _numeric_series(values, n_obs=n_obs, index=shown.obs_names, label=label)
 
 
-def _check_category_definition(field: dict[str, Any], *, label: str) -> list[Any]:
+#: A palette color as a session writes it.
+_HEX_COLOR = re.compile(r"#[0-9a-f]{6}")
+
+
+def _check_category_definition(field: dict[str, Any], *, label: str) -> tuple[list[Any], tuple[str, ...] | None]:
+    """A categorical field's categories and its palette (None when it has none)."""
     categories = _require_category_list(field["categories"], label=f"{label}.categories")
     _require_list(field["sourcePages"], label=f"{label}.sourcePages")
     if field["overlapStrategy"] not in OVERLAP_STRATEGIES:
@@ -166,7 +178,16 @@ def _check_category_definition(field: dict[str, Any], *, label: str) -> list[Any
     if field["intersectionLabels"] is not None:
         _require_record(field["intersectionLabels"], label=f"{label}.intersectionLabels")
     _require_optional_text(field["uncoveredLabel"], label=f"{label}.uncoveredLabel")
-    return categories
+    # The colors its categories open with in the viewer (a field made from
+    # highlight pages: its pages' colors), or null.
+    palette = field["palette"]
+    if palette is not None and (
+        not isinstance(palette, list)
+        or len(palette) != len(categories)
+        or not all(isinstance(color, str) and _HEX_COLOR.fullmatch(color) for color in palette)
+    ):
+        raise ValueError(f"This session's {label}.palette must be null or one #rrggbb color a category.")
+    return categories, None if palette is None else tuple(palette)
 
 
 #: Why a field the session made is not applied.
@@ -180,8 +201,11 @@ def _plan_user_fields(
     *,
     mapping: dict[str, Any],
     known: np.ndarray | None,
+    recolors: Recolors,
 ) -> list[_Candidate]:
-    """One column per user field, every field checked before any column is built."""
+    """One column per user field, every field checked before any column is built;
+    a categorical one with the colors it is shown in (``recolors``: the view
+    in focus's, :func:`._colors.focused_recolors`)."""
     n_obs = int(shown.n_obs)
     index = shown.obs_names
     ids: set[str] = set()
@@ -226,8 +250,10 @@ def _plan_user_fields(
         if purged:
             candidates.append(unapplied(PURGED_NOTE))
             continue
+        colors: tuple[str, ...] | None = None
         if kind == "category":
-            categories = _check_category_definition(field, label=label)
+            categories, palette = _check_category_definition(field, label=label)
+            colors = shown_category_colors(categories, palette, recolors.get((source, field_id)))
             cells, codes, code_type = _column_part(field["codes"], tuple(CODE_TYPES), n_obs, label=f"{label}.codes")
             missing = CODE_TYPES[code_type]
             if len(categories) > missing:
@@ -261,6 +287,6 @@ def _plan_user_fields(
         known_values = without_unknown(values, known)
         candidates.append(_Candidate(
             kind="user-field", domain="field-overlays", name=key, values=known_values,
-            cells=int(known_values.notna().sum()), note=None, metadata=metadata,
+            cells=int(known_values.notna().sum()), note=None, metadata=metadata, colors=colors,
         ))
     return candidates

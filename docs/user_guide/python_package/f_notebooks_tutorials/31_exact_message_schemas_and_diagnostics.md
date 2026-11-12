@@ -119,7 +119,7 @@ waits for nothing and reports the widget's side instead (`transport`,
 ## Use the generated action methods
 
 Every action of the viewer is a typed method, generated from the action
-catalogue, and its parameters are checked before anything is sent:
+catalog, and its parameters are checked before anything is sent:
 
 ```python
 viewer.highlight_cells(cells=[1, 2, 3], color="#ff0000")
@@ -169,8 +169,8 @@ that viewer's channel (WebSocket close code 1008, policy violation).
 
 ## Adding a new protocol variant
 
-A new action needs nothing here: defined once in the web app's catalogue, it
-reaches Python by regenerating the catalogue copy and the methods
+A new action needs nothing here: defined once in the web app's catalog, it
+reaches Python by regenerating the catalog copy and the methods
 ({doc}`../h_developer_docs/11_hooks_events_protocol_and_schema`). A new
 message type is a coordinated contract change, not a runtime extension:
 

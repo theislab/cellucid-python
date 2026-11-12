@@ -2,7 +2,7 @@
 
 A dataset of millions of cells can be opened with a share of them: a seeded,
 reproducible subsample, read **while the dataset opens**. Every part of
-Cellucid then works on those cells alone — the view, colours, filters,
+Cellucid then works on those cells alone — the view, colors, filters,
 highlights, analyses, gene expression, exports — and only the parts of the
 file that hold them are read. Over a network that is less to download; on any
 device it is less memory.
@@ -11,7 +11,7 @@ device it is less memory.
 
 How much of a dataset is read is chosen under **Session › Subsampling**, a
 section collapsed by default whose header says it in one line while collapsed
-("100 % cells · genes 6 %": the share of the dataset's cells open, and, for a
+("100% cells · genes 6%": the share of the dataset's cells open, and, for a
 file whose genes are read for a sample of the open cells, that sample's share
 of them; {ref}`genes-read-for`). Click it to open it; whether it is open is
 remembered in this browser (never in a session or the address). It holds
@@ -43,53 +43,53 @@ field's categories are from every cell's). A value with more behind it is
 underlined with dots: its tooltip says why.
 
 1. Move the slider (or type the percentage, with a decimal point or a
-   decimal comma: *12,5* is 12.5 %) below 100 %. The settings of the
+   decimal comma: *12,5* is 12.5%) below 100%. The settings of the
    subsample appear: how the cells are chosen, its seed, and what the method
    needs (a field, an embedding). When the share you chose would read nearly
    the whole file anyway (its cells lie in nearly every stored chunk, and a
    chunk is read whole), the line says so before you apply it, with what the
    cheap method would read, and one button switches to it. On a file in its
-   own order that is blocks ("Reads about 100 % of the file for 1.0 % of its
-   cells; blocks read about 1 %.", **Use blocks**); on a file Cellucid wrote
+   own order that is blocks ("Reads about 100% of the file for 1% of its
+   cells; blocks read about 1%.", **Use blocks**); on a file Cellucid wrote
    in priority order it is uniform with the file's own seed, since blocks of
-   neighbouring cells lie throughout such a file (**Use the file's order**).
+   neighboring cells lie throughout such a file (**Use the file's order**).
 2. Press **Apply**. A larger or smaller share of the same method and seed
    changes the open cells in place ({ref}`raising-and-lowering-the-share`).
    Other cells are read again, in the same reader and through the parts of
    the file already open. The control is yours again as soon as the new
    cells are open: what the views showed comes back on them behind it (a
-   view coloured by a gene reads that gene for the new cells, which on a
+   view colored by a gene reads that gene for the new cells, which on a
    large atlas takes a while), and another share can be applied meanwhile.
    Your
    highlights, label fields, columns a notebook pushed and cells you hid stay
    on the cells that are still open, matched by each cell's original
    position: a highlight none of whose cells is open any more is named and
-   dropped, a label field you set by hand leaves the cells it never labelled
+   dropped, a label field you set by hand leaves the cells it never labeled
    empty, and a pushed column has no value (NaN) on cells it never had one
    for. What you made from the file's columns takes the newly open cells as
    it does when the share is raised in place: a highlight made from a
    category or a range keeps that rule and takes the new cells in it that
    are visible, and a label field made from a column labels them from it.
    Where you were stays
-   too: every view's camera and layout, the field each view is coloured by and
+   too: every view's camera and layout, the field each view is colored by and
    its filters, the sidebar settings, and the open analysis windows. A part
    the new cells cannot take (a filter on a category none of them has) is
    named in a notice; the rest is kept. A text column whose new cells hold
    labels it had not shown lists them in their code-point places; every
-   label it showed keeps its colour and whether it is hidden. A categorical
+   label it showed keeps its color and whether it is hidden. A categorical
    with more categories than open cells and than one request reads (one
    category per cell, as barcodes kept as a categorical) lists the categories its open cells hold, and the
    new cells' join them in the file's order, the same way. What the view
    shows then is exactly what opening the dataset at that share directly
-   shows, but for one thing: a new label whose own colour a label already
-   shown holds takes the next free colour, where a direct opening may have
+   shows, but for one thing: a new label whose own color a label already
+   shown holds takes the next free color, where a direct opening may have
    given the two the other way round.
 3. Datasets you open next in this tab open with the same share and method.
    A method a dataset cannot use (a stratifying field or an embedding it does
    not have) opens the same share by the file's default method instead
    ([How the cells are chosen](#how-the-cells-are-chosen)), and says so.
 
-Back to 100 % and Apply opens every cell: in place for a file Cellucid wrote
+Back to 100% and Apply opens every cell: in place for a file Cellucid wrote
 (only the cells not open yet are read), read anew for any other file.
 
 The **Dataset** box shows what is open: "228K of 2.3M cells", and under
@@ -100,10 +100,16 @@ Details the method and seed ("uniform, seed 0").
 | Method | Keeps | Use it when |
 |---|---|---|
 | **File default** (shown as *File default (uniform)* or *File default (blocks)*) | for a file Cellucid wrote (stored in priority order): uniform under the file's own seed; for any other file: blocks aligned to how it is stored | always the first choice: either way only about the chosen share of the file is read |
-| **Blocks** | whole runs of neighbouring cells | a file Cellucid did not write: parts of it that hold only left-out cells are never read. On a file Cellucid wrote, blocks are scattered through it and read more (Details says so: *Stored order*) |
-| **Uniform** | every cell equally likely | on a file Cellucid wrote, with its own seed (the default), it reads only its share; with another seed, or on any other file, its cells lie in most of the file's chunks, so it reads more (Details says how much: *Matrix read* "45 % for 10 % of the cells") |
+| **Blocks** | whole runs of neighboring cells | a file Cellucid did not write: parts of it that hold only left-out cells are never read. On a file Cellucid wrote, blocks are scattered through it and read more (Details says so: *Stored order*) |
+| **Uniform** | every cell equally likely | on a file Cellucid wrote, with its own seed (the default), it reads only its share; with another seed, or on any other file, its cells lie in most of the file's chunks, so it reads more (Details says how much: *Matrix read* "45% for 10% of the cells") |
 | **Stratified** | every category of a field in proportion, or the same count of each (*Same count per category*) | rare cell types must stay visible, or each sample should keep its share |
-| **Spatial** | cells on a grid over an embedding, dense regions thinned, sparse ones kept | the map's outskirts matter more than its crowded centre |
+| **Spatial** | cells on a grid over an embedding, dense regions thinned, sparse ones kept | the map's outskirts matter more than its crowded center |
+
+**Spatial**'s **Embedding** menu lists the embeddings **Data mapping** shows in
+2D or 3D, its 2D default first (columns 0 and 1 are thinned); a vector field,
+a table or an array the mapping does not show is not offered. Opened before any
+mapping exists (a link that names `sample=spatial`), it thins the best-ranked
+array of two columns or more, by the same ranking as the mapping's defaults.
 
 Details also shows how far the open cells' categories are from every cell's
 (*Categories* "cell_type: within 0.3 percentage points (B cell)": the largest
@@ -135,7 +141,7 @@ read anew (through the parts of the file already open).
 - **Raising** the share reads only the new cells: their positions in every
   embedding loaded, their values of every field and gene loaded, and the gene
   index of a matrix stored cell by cell (most atlases, every CELLxGENE file)
-  for them alone. The new cells join the view where they belong, coloured by
+  for them alone. The new cells join the view where they belong, colored by
   the field shown, under its filters. What you made from the file's columns
   takes them as opening the larger share would: a highlight made by
   clicking a category or brushing a range takes the new cells in it that
@@ -145,7 +151,7 @@ read anew (through the parts of the file already open).
   stays.
 - **Lowering** it reads nothing: the cells that stay keep everything; a
   highlight keeps those of its cells that are still open (one left with none
-  is named and removed); a selection under way is cancelled.
+  is named and removed); a selection under way is canceled.
 
 On the graphics card the same holds: the cells kept stay where they are
 and only the cells added are sent (a lower sends nothing, or at most the
@@ -165,7 +171,7 @@ gene picked while the cells change loads on the new cells. An embedding
 whose new cells hold a value that cannot be drawn can no longer be shown,
 as when opening those cells (said); when it is the one shown, Apply opens
 the cells anew.
-Statistics follow the cells: a filter or colour range at a field's bound
+Statistics follow the cells: a filter or color range at a field's bound
 moves with the bound, one inside it stays (one no open cell lies in is reset,
 and said). Kept views are made again from their settings. Outlier filters
 in use get their outlier measures again, over the cells now open.
@@ -181,8 +187,11 @@ Cellucid shows a first view of fewer of them at once, then grows it in place
 to the cells asked for, doubling the cells open at each step. Every step is
 the first cells of the order they open in (a sample of them, or, for a
 share opened in the file's block order, its cells in the blocks read so
-far), so the picture, the colours and filters are right from the first view;
-**Cells to open** says how many are open so far while it grows. The first
+far), so the picture, the colors and filters are right from the first view;
+**Cells to open** says how many are open so far while it grows, and the
+collapsed **Subsampling** header says the share it grows to and the cells
+read so far ("100% cells · reading 197K"; Suo, the default sample, grows to
+all 561,947 cells this way in a few seconds). The first
 view is sized from what reading is measured to cost here: the link's
 measured speed and latency, the stored bytes of the parts of the embedding
 its cells lie in (a file's parts are the least it can deliver), and how long
@@ -261,24 +270,24 @@ where each of those cells' rows starts in the file (their row pointers,
 and only theirs), once: a step of its own in the read activity. Over a link,
 values stored compressed are read with the first gene, so the genes after it
 read nothing more. With a subsample, or a gene sample,
-the gene's colours appear before the read ends: first on about a
+the gene's colors appear before the read ends: first on about a
 thirty-second of the cells it is read for, then on twice as many, and so on,
-the cells not read yet shown in the missing-value colour. Each step is a sample of the
-open cells, so the picture is right from the first colours; the notice says
-how many cells are coloured so far and how long the rest of the gene will
+the cells not read yet shown in the missing-value color. Each step is a sample of the
+open cells, so the picture is right from the first colors; the notice says
+how many cells are colored so far and how long the rest of the gene will
 take, and the read activity's bytes and time left are the whole gene's,
 not one step's. A share whose cells lie spread through the file (a
 **Uniform** share of a file in its own order, past a few tens of thousands
 of cells) is read in one pass in the file's order instead: its cells lie in
 nearly every stored chunk, so each step would read nearly the whole matrix
-again, and one pass reads each chunk once (a 10 % share of a 10M-cell file
-read its matrix twice over in steps). Its gene's colours then come once, at
+again, and one pass reads each chunk once (a 10% share of a 10M-cell file
+read its matrix twice over in steps). Its gene's colors then come once, at
 the end of that pass, and its notice promises no earlier ones. Later genes
 read only themselves.
 
 Picking another gene while the first is still being read does not start
 over: the new gene joins the read under way, and nothing read is read
-again. A gene cancelled on its own stops the read; the next gene goes on
+again. A gene canceled on its own stops the read; the next gene goes on
 from where it stopped.
 
 ### The gene index is kept for later visits
@@ -344,6 +353,26 @@ With **Blocks**, cells next to each other in the file come together. Files
 written sample by sample (most atlases) keep whole stretches of a sample: the
 subsample is still seeded and reproducible, but less even than Uniform over
 samples. Use Stratified on the sample field when that matters.
+
+## From an agent or a notebook
+
+An agent in the chat, a connected Claude or ChatGPT, a notebook and a replay
+open a share of the cells with the same choices: `cells_open` reads the open
+dataset again with them (one step of its history, undone like **Apply**), and
+`dataset_open` opens another dataset with them at once, so "open Suo at 10%" is
+one reading at 10% rather than an opening of the default view and a second
+reading. Both take `count` (an exact number of cells, at least 2) or
+`fraction` (`0.1` for a tenth, `1` for every cell), and the method, seed and
+the method's settings (`field` and `allocation` for Stratified, `embedding`
+for Spatial). A subsample asked for this way is exact: a field or an embedding
+the dataset lacks fails the opening, with the reason (a refusal of the request,
+never advice about the connection); it never switches to another method. On
+the dataset open, Spatial's `embedding` is one the data mapping shows in 2D or
+3D, the 2D default when none is named; another is refused, naming those it
+shows. Given to `dataset_open`, it applies to that one opening; datasets
+opened next still open with what **Cells to open** chose. A dataset already
+open is not opened again: asked for other cells, `dataset_open` says to use
+`cells_open`.
 
 (in-a-link)=
 ## In a link
@@ -468,7 +497,7 @@ the map, with all its categorical fields, and a gene is read for a
   the same block order, its cells filtered: its gene sample is its cells in
   the blocks every cell's sample reads first, so it never downloads more,
   nor asks for more, than every cell's would in the same time. In its own
-  order each of its first cells lay in a part of the file of its own (a 1 %
+  order each of its first cells lay in a part of the file of its own (a 1%
   share of a 10-million-cell file read its first gene for 71 cells in 10.7 s
   where every cell's read 1.5 million in 5.5 s); the cells are exactly the share's either way — a session, a
   link, Python's and R's `subsample_cells` give the same ones — and only
@@ -488,11 +517,11 @@ the map, with all its categorical fields, and a gene is read for a
   almost to the background and never in the gray of 0, beneath every cell
   read. The cells read are drawn on top and larger, sized from how dense the
   sample is on screen, so the pattern shows at once. Their zeros take the
-  colour scale's lowest colour, or, with the legend's **Gray for zero** on
+  color scale's lowest color, or, with the legend's **Gray for zero** on
   ({ref}`gray-for-zero`), a gray beneath the expressing cells (made from the
   background: light on a light background, mid-dark on a dark one,
   {doc}`../d_fields_coloring_legends/03_color_by_behavior`). The legend names
-  the states in one line, each beside a dot of its colour — **Faded: not
+  the states in one line, each beside a dot of its color — **Faded: not
   read**, and **· gray: 0** when the zeros are gray — and so does an exported
   figure. Under it one line, **Gene read for 40K of 2.3M cells** (the exact
   counts in its (i): the line fits the narrowest panel), is a link: it opens
@@ -512,7 +541,7 @@ the map, with all its categorical fields, and a gene is read for a
   view of a gene draws itself again); run it again to use them. Analyses of categorical and continuous
   fields (Composition, a field's Detailed view) use every open cell.
 - **Sessions** record the sample, and a viewer in a notebook hears it with
-  the gene it colours by ({ref}`sessions-and-the-gene-sample`).
+  the gene it colors by ({ref}`sessions-and-the-gene-sample`).
 
 On the Human Lung Cell Atlas's 2.3 million cells over a home connection this
 opens the whole map with its cell types in seconds, and reads genes for a
@@ -538,15 +567,15 @@ never below what this opening measured.
 of the **open** cells a gene is read for, as a share of them, and reads genes
 for more of them. It is not Cells to open: that chooses which of the
 dataset's cells are on the map; this, among the cells open, how many each gene
-has a value for, so 100 % is every open cell however few Cells to open opened
-(lowering Cells to open lowers what 100 % is). It shows only while genes are
+has a value for, so 100% is every open cell however few Cells to open opened
+(lowering Cells to open lowers what 100% is). It shows only while genes are
 read for a sample of the open cells (a file stored cell by cell); a file whose
 genes are read for every open cell has nothing to choose, and the control is
-not shown. It applies to every gene read: the colouring, analyses and exports.
+not shown. It applies to every gene read: the coloring, analyses and exports.
 
 - **The slider** looks and works like Cells to open's (a slider and a percent
   box), and stops at steps: the share read now, then 1, 5, 10, 25, 50 and
-  100 % of the open cells above it. When the gene index of every open cell
+  100% of the open cells above it. When the gene index of every open cell
   fits neither this device's memory nor the storage this site may use (the
   full Human Lung Cell Atlas: about 15 GB), the last step is the most cells
   it does fit; when no more fit, the slider is still and the line says *no
@@ -567,7 +596,7 @@ not shown. It applies to every gene read: the colouring, analyses and exports.
   ({doc}`../p_developer_docs/23_decisions_partial_reading` has the numbers). The gene shown and every gene loaded
   fill in after each step; the line counts the cells read and the time left
   (priced again after each step), and **Read** becomes **Stop**, which, like
-  **Cancel** in its notification, keeps what is read. 100 % reads every open
+  **Cancel** in its notification, keeps what is read. 100% reads every open
   cell; once every open cell's genes are read, the control goes and later
   genes read every open cell.
 - **Analyses** run before genes were read for more cells are marked **Stale**
@@ -582,13 +611,13 @@ The gene's legend and an analysis's gene sample line are links to it: they
 open the sidebar, the Session panel and its Subsampling section, and put the
 focus on the slider.
 
-## Neighbour graphs
+## Neighbor graphs
 
-A subsample keeps the edges of the neighbour graph between two open cells;
+A subsample keeps the edges of the neighbor graph between two open cells;
 an edge from an open cell to one left out cannot be drawn. Once the graph is
 read, the Dataset box says how much of the open cells' graph that is, beside
-its edge count ("10 % of the open cells' edges; the others lead to cells not
-open"): with Uniform at 10 %, each neighbour of an open cell is open with a
+its edge count ("10% of the open cells' edges; the others lead to cells not
+open"): with Uniform at 10%, each neighbor of an open cell is open with a
 chance of about a tenth, so about a tenth of the edges remain.
 
 Reading a share's graph never costs more than reading every cell's: the open
@@ -620,14 +649,14 @@ Everything works on the cells open, as if the file held only them:
   (*10% of cells · uniform*). A **uniform** subsample, or a **stratified,
   proportional** one with no minimum per category, is a random sample of the
   file at one rate: its proportions and p-values estimate the file's.
-  **Blocks** (whole runs of neighbouring cells: the default for a file
+  **Blocks** (whole runs of neighboring cells: the default for a file
   Cellucid did not write), **stratified, balanced** (or with a minimum per
   category), **spatial**, and the first chunks of a subsample still opening
   are not: a file stored by sample or cell type loses whole samples or types
   in blocks, cells of one block are alike, and the other methods give rare
   categories or sparse regions more of their cells on purpose. Their chip is
   a warning, and its tooltip says what that means for the result; open every
-  cell, or a uniform subsample, to analyse the file. **Composition** refuses
+  cell, or a uniform subsample, to analyze the file. **Composition** refuses
   to run when the open cells are stratified at unequal shares by the field
   it compares (its proportions would be the subsample's design).
 - **Every count of the open cells says how many of every cell they are**:
@@ -635,7 +664,8 @@ Everything works on the cells open, as if the file held only them:
   with a filter) under Coloring & Filtering, *Counted on the 240 of 1,200
   cells open.* above a categorical legend's counts, *Total: 240 of 1,200
   cells* in the category builder, and the dataset picker's *Atlas (240 of
-  1.2K cells)*, besides the Dataset box and **Cells to open**. A count of
+  1.2K cells)* when you open its list (closed, it names the dataset alone),
+  besides the Dataset box and **Cells to open**. A count of
   some of the open cells (a category, a highlight, a page) is of the open
   ones.
 - **Filters** (categories, value ranges, genes, any of them at once) act on
@@ -646,9 +676,9 @@ Everything works on the cells open, as if the file held only them:
 - **Highlights, lasso and labels** name open cells; in a notebook and in
   exports they are named by their row in the whole file, and cells not open
   are unknown (NA).
-- **Overlays**: the neighbour graph keeps the edges between open cells
+- **Overlays**: the neighbor graph keeps the edges between open cells
   (below), a vector field shows the open cells' vectors, and Data mapping
-  offers each neighbour graph on the open cells.
+  offers each neighbor graph on the open cells.
 - **When the open cells change**, an analysis result is marked
   **Stale · Run**, and is not saved, exported or sent to a notebook until it
   is run again; so is one that read genes when genes are then read for more
@@ -698,7 +728,7 @@ session read them for more (with the cost said and **Cancel**); with the
 cells in another order it reads them again in the session's order. A session
 saved with every open cell's genes read records nothing of it, and opens
 with the sample this device and connection fit (**Genes read for** reads
-more, {ref}`genes-read-for`). A viewer in a notebook hears the sample with the gene it colours
+more, {ref}`genes-read-for`). A viewer in a notebook hears the sample with the gene it colors
 by: the `color_by` event's `cells_read` is how many of the open cells the
 gene is read for (the first ones), or null when every open cell's are. Applied in Python or R
 (`cellucid.apply_cellucid_session_to_anndata()`, `cellucid_apply_session()`),
@@ -711,7 +741,7 @@ the cells themselves.
 ```python
 import cellucid
 kept = cellucid.subsample_cells(adata, fraction=0.1, method="uniform", seed=0)
-small = adata[kept].copy()          # the cells the viewer opens at 10 %, seed 0
+small = adata[kept].copy()          # the cells the viewer opens at 10%, seed 0
 ```
 
 ```r

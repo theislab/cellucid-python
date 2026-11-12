@@ -53,37 +53,37 @@ Hard constraints:
 
 ### Point vertex streams
 
-**Visibility is the alpha texture; a colour's alpha byte layers it.** A cell
+**Visibility is the alpha texture; a color's alpha byte layers it.** A cell
 is shown or hidden by its view's transparency alone, which the renderer holds
 as an R8 linear texture (`u_alphaTex`); a filter writes the transparency and
-never the colours (no copy of a colour array a kept view shares, no colour
-re-upload). The colour's alpha byte says how the cell is layered, bottom to
+never the colors (no copy of a color array a kept view shares, no color
+re-upload). The color's alpha byte says how the cell is layered, bottom to
 top (`alpha-visibility.js`): `UNREAD_ALPHA_BYTE` (253) for a cell a gene
-sample did not read, `BENEATH_ALPHA_BYTE` (254) for a field's no-value grey
+sample did not read, `BENEATH_ALPHA_BYTE` (254) for a field's no-value gray
 (a gene's cells read that do not express it, a missing value), 255 for the
-rest. `colorLayersOf` reads a published colours array once (whether it is
+rest. `colorLayersOf` reads a published colors array once (whether it is
 layered, how many cells are not read). A layered view is drawn one pass a
-layer over the same slots and ranges (`u_drawPass` 1 then 2), the grey
-first, so the coloured cells lie on top in 2D blending order; in 3D the grey
+layer over the same slots and ranges (`u_drawPass` 1 then 2), the gray
+first, so the colored cells lie on top in 2D blending order; in 3D the gray
 pass yields in depth by one drawn point diameter (`u_yieldDepth`), so a
-coloured cell on the same surface shows while a cell well in front still
+colored cell on the same surface shows while a cell well in front still
 occludes. Every level of detail, culled range and kept view draws it so; a
-figure draws the grey cells first too (`drawnSequence`).
+figure draws the gray cells first too (`drawnSequence`).
 
 **Cells a gene sample did not read** (`rendering/read-cell-layer.js`) take a
 pass of their own first (`u_drawPass` 3): flat (no lighting), at the level's
 size, without depth writes (so every cell read shows over them in 3D too),
-in one colour, `u_unreadColor`, made from the view's background by
-`unreadCellColor`. That colour is the background moved toward the grey for
+in one color, `u_unreadColor`, made from the view's background by
+`unreadCellColor`. That color is the background moved toward the gray for
 0 by 8 CIE L*, or half the way where the two are closer, so the map keeps
 its shape, recedes, and never looks like a 0; the viewer sets it with every
-background (`setLayerBackground`, which also sets the grey for 0,
+background (`setLayerBackground`, which also sets the gray for 0,
 `u_zeroColor`, from the same background: `zeroCellColor`; decision record
 {doc}`28_decisions_rendering_layers`). The cells read are then drawn larger:
 `readCellSizeMultiplier` projects up to 8,192 cells of the map and as many
 read cells each frame (under a millisecond at any size). It measures the
 map's area on screen as the cells of an occupancy grid that hold a probe,
-and takes the diameter at which the read cells shown would cover 40 % of
+and takes the diameter at which the read cells shown would cover 40% of
 that area. The multiplier never goes below 1 (the normal size), nor above
 the square root of the drawn cells over the read ones: a sample of every
 cell draws at the normal size. On a whole-screen map, 2,000 of 2.3M cells
@@ -92,13 +92,13 @@ The read cells are drawn at every level of detail from their own slot list,
 `high-perf/read-cell-index.js`: an element buffer, 4 bytes a read cell,
 drawn with `drawElements` over the store's own vertex arrays, so nothing is
 copied. It is used when no more cells are read than the level draws, and is
-made again when the colours, the store's order or its segments change. A
+made again when the colors, the store's order or its segments change. A
 level with fewer cells than that draws its own share of the read cells, by
 range. Picking follows the same rule (`getCurrentPointLayers`): an upper
 layer wins (in 3D, any read cell over a cell not read), read cells are found
 at their drawn size, and when drawn at every level, outside the level too.
 Figure export draws the same three layers (`FigurePointLayers`, the faded
-colour made from the figure's own background) in PNG, Hybrid and both
+color made from the figure's own background) in PNG, Hybrid and both
 vector strategies.
 
 Full detail is drawn from two `ARRAY_BUFFER`s bound into one VAO:
@@ -175,10 +175,10 @@ draw; a 100M-point frame costs at most 6 extra calls.
 by bytes (Chromium 2^31 − 2^21, Firefox 2^31 − 1, WebKit 2^32 − 1), so one
 buffer of 3D positions (12 bytes a point) would stop at 178.8M points on
 Chromium, and Direct3D 11 caps one resource lower still. Every per-point
-vertex store -- the live and kept views' positions and colours -- is a
+vertex store -- the live and kept views' positions and colors -- is a
 `PointStore` (`rendering/high-perf/point-store-segments.js`): consecutive
 segments of at most 16,777,216 slots, one buffer each (192 MiB of 3D
-positions, 64 MiB of colours). A view draws through one vertex array a segment
+positions, 64 MiB of colors). A view draws through one vertex array a segment
 (`SegmentedVertexArray`), one draw a segment in slot order; full detail, a
 reduced level's prefix and frustum-culled ranges (`splitRangesBySegment`, one
 `multiDrawArraysWEBGL` a segment) are split at segment boundaries, and the
@@ -214,7 +214,7 @@ copies its whole buffer, so such an array crosses threads in pieces of at most
 192 MiB (`PieceSender` → `PieceReceiver`, each piece transferred), assembled at
 the other end: the AnnData reader worker posts any array of a reply it cannot
 transfer that way (`{event: 'piece'}` before the reply), the generator worker
-its positions and colours, the figure-export client its uploads, and the tree
+its positions and colors, the figure-export client its uploads, and the tree
 worker assembles the slices it is sent. Embeddings and vector fields are read
 by row range and made in pieces of 2^24 cells in the reader worker
 (`embedding-payload.js`), each posted as it is made, so the worker never holds
@@ -254,7 +254,7 @@ comes from how the dataset was opened (`cellPriorityOf`, set by
   priority order) opened whole or by a prefix, and a subsample of a cell-level
   method (`uniform`, `stratified`, `spatial`), are open **in** priority order
   (`OPEN_ORDER_PRIORITY`): open cell `i` has rank `i`;
-- a `blocks` subsample opens whole runs of neighbours in run order, so its
+- a `blocks` subsample opens whole runs of neighbors in run order, so its
   cells are ranked one by one under its seed; so is every other share not
   open in its own order (one opened in the file's cell order, a
   priority-ordered file's share in file order, and a step of a share grown
@@ -330,14 +330,14 @@ store holds is a `StoreOrder` (`high-perf/store-order.js`): slots
 mapping from one R32UI slot map (texel `s` is the cell of slot `s`) below
 `u_orderedSlots`, and takes slot `s` itself from there on. Each band is
 gathered in place from its own cells (`GpuPermuter#writeWordsRange`): its slot
-map texels are written, then its positions and the colours of every view
+map texels are written, then its positions and the colors of every view
 presented on the store, copied from the store itself on the GPU (a band is at
 most 2,097,152 cells, one gather pass), so the page uploads 4 bytes a cell
 for the map and nothing else. That holds too for a band still in an earlier
 tree's order (cells kept by an Apply below a cut, or below the cells added):
 it holds the same ranks in another order, so for the gather its map texels
 first name the slot of that order holding each cell (`earlierSlotsOf`), then
-the cell; 4 more bytes a cell instead of the band's positions and colours from
+the cell; 4 more bytes a cell instead of the band's positions and colors from
 page memory. The earlier order's slot map already holds that order below its
 `orderedSlots`, so it is taken over when it is large enough (a cut, or a new
 tree over the same cells) instead of a new map being written. Only a band
@@ -368,16 +368,16 @@ is its own cells) and draws levels from then on.
 **Cells added or removed in place.** An Apply of a larger or smaller share of
 the same method and seed (`app/open-cells-resize.js`) keeps the stores of the
 cells kept (`viewer.resizeLiveCells` → `HighPerfRenderer#resizeLiveCells`):
-added cells are appended to the position and colour stores (`PointStore#resize`
+added cells are appended to the position and color stores (`PointStore#resize`
 copies the one partial segment on the GPU and writes only the new slots), in
 rank order behind whatever order the store holds; removed cells are cut from
 the end, and where the store holds a tree's order past the cut, the band the
 cut falls in (at most 2,097,152 cells) is rewritten in rank order, so the first
 `n'` slots hold exactly the first `n'` cells. Nothing else is uploaded or
 reordered: levels by rank are drawn at once over the new count, and the next
-tree's order is adopted band by band as above. Colours are compared with the
+tree's order is adopted band by band as above. Colors are compared with the
 published ones over the kept cells and sent whole only if they differ (a
-colour scale over every open cell can change). The alpha texture, one byte
+color scale over every open cell can change). The alpha texture, one byte
 a cell, keeps its storage whenever that holds the new count, and only the rows
 that change are sent: the kept cells' rows whose bytes moved, and every row
 from the one where the old and new counts meet (`_resizeAlphaTexture`,
@@ -403,7 +403,7 @@ and full detail draws every cell. A tree over cells open in priority order is
 banded whether or not levels were asked for (it costs nothing there); levels
 built under another priority are dropped and built again.
 
-Neighbouring points are neighbours in memory and on screen, which is also what
+Neighboring points are neighbors in memory and on screen, which is also what
 makes the stored order faster at full detail: 10,000,000 points drew in 18 ms
 against 68 ms in source order on Chromium (15 against 57 on WebKit, 14 against
 57 on Firefox), a reduced level of 8,000,000 points in 15 ms against 14 ms for
@@ -412,8 +412,8 @@ the compact copy it replaced, and a zoomed-in culled frame in 7–8 ms against
 WebGL2 harness on the real draw order, translucent 2-px points, all cases in
 one run on a loaded machine).
 
-Positions are per geometry, so each geometry carries its order; colours are
-per view, and each view's colour store is gathered into the order of the
+Positions are per geometry, so each geometry carries its order; colors are
+per view, and each view's color store is gathered into the order of the
 geometry it shows. Alpha stays in source order in its R8 texture, read through
 the store order's R32UI slot map (`u_orderedSlots`: texel `k` is the cell
 stored in slot `k`, below that count), so a visibility change still touches
@@ -561,14 +561,14 @@ culling and level of detail off too (a cell lookup's tree,
 `prepareCellPicking`). Before a tree
 exists a geometry is stored in source order, straight from the published
 arrays with no client copy. The adoption uploads the permutation (4 bytes a
-point), then rewrites the store's positions and the colours of every view
+point), then rewrites the store's positions and the colors of every view
 that draws it in place on the GPU (`GpuPermuter`,
 `high-perf/gpu-permute.js`): the source-order words go into a transient
 R32UI texture, one texel a word, and one transform-feedback pass writes each
 stored slot's words, fetched through the order's R32UI permutation texture,
 bit for bit. A store still in source order is its own source: its words are
 drawn into the texture on the GPU (one point a word, at its texel, into the
-texture as a colour attachment), so nothing is uploaded from the page; only a
+texture as a color attachment), so nothing is uploaded from the page; only a
 store in another order, or whose first upload is still pending, uploads its
 words. Above 16,777,216 points (`GATHER_CHUNK_POINTS`) the gather never holds
 the whole source on the GPU: it uploads the source one chunk of points at a
@@ -586,10 +586,10 @@ bound to its GPU process, so the vertex array kept the store's last segment,
 and the next gather writing that segment with it bound drew
 `INVALID_OPERATION` ("a transform feedback buffer that would be written to is
 also bound to a non-transform-feedback target"): a kept view of more than one
-segment (16.7M cells) could not be recoloured. Every attribute is released
+segment (16.7M cells) could not be recolored. Every attribute is released
 that way (`releaseVertexAttribute`, `rendering/gl-utils.js`;
 `tests/vertex-attribute-release-contract.test.mjs` rejects a pointer made
-with no buffer bound), which also frees a dormant kept view's colour store
+with no buffer bound), which also frees a dormant kept view's color store
 when it is released for memory: on Chromium its vertex arrays kept every
 segment allocated (128 MiB measured for 32M cells). The error queue is read
 once a chunk, after its passes and before the next chunk allocates; a write
@@ -617,28 +617,28 @@ GPU's refusal), the view draws at full detail, and the store tries again when
 LOD or culling is toggled. (An upload from the store bound as `PIXEL_UNPACK_BUFFER` is the
 obvious copy, but Firefox on macOS warns on every one.) At 10M 3D points
 the adoption takes 14–19 ms of CPU, once (it uploaded 120 MB of positions
-and 40 MB of colours: 32–35 ms); turning LOD on used to block the page for
+and 40 MB of colors: 32–35 ms); turning LOD on used to block the page for
 2.3 s. The tree itself crosses from the worker as typed arrays
 (`encodeSpatialTree`): a structured clone of a 10M-point octree's 38,568
 node objects took 35 ms on the main thread; decoding and installing it takes
-10–11 ms. A kept view's colour store is RGBA8,
+10–11 ms. A kept view's color store is RGBA8,
 4 bytes a point like the live one, and is written the same way, one word a
 point (its alpha byte is never read: a kept view's alpha is its R8 texture).
 It used to be packed RGB, 3 bytes a point, but Metal needs a 4-byte vertex
 stride, so ANGLE kept a converted 4-byte copy of that store and converted it
 again after every write. Nothing proportional to the point count
-is gathered on the CPU, and no frame is kept alive for it. Colours are copied
-as 32-bit words, which is why colour arrays handed to the renderer must start
+is gathered on the CPU, and no frame is kept alive for it. Colors are copied
+as 32-bit words, which is why color arrays handed to the renderer must start
 on a 4-byte boundary.
 
-A recolour rewrites the view's colour store in place: one upload of 4 bytes a
+A recolor rewrites the view's color store in place: one upload of 4 bytes a
 point and one GPU pass, whether or not the store is in a draw order. A kept
-view's recolour does the same when the view alone owns its store and the
+view's recolor does the same when the view alone owns its store and the
 store holds the order it draws with; only a shared store, or one in another
 order, is replaced.
-A view that switches to another representation keeps the colour store it
-leaves (keyed by that order); switching back while the colours are unchanged
-draws from it again with no upload. Kept colour stores count against the
+A view that switches to another representation keeps the color store it
+leaves (keyed by that order); switching back while the colors are unchanged
+draws from it again with no upload. Kept color stores count against the
 retention budget with retained geometry and are evicted first.
 
 The 2D overlap order of translucent points therefore follows the spatial tree
@@ -651,20 +651,20 @@ on source order.
 - **Smoke / volumetric density**
   - Backend: `SmokeRenderer` (`cellucid/assets/js/rendering/smoke-cloud/`)
   - `viewer.buildSmokeVolumeGPU(...)` builds the visible-point volume through
-    one WebGL2 transaction: bounded position + colour batches → R32F density
-    splat atlas (eight trilinear corners per cell) and RGBA32F colour splat
+    one WebGL2 transaction: bounded position + color batches → R32F density
+    splat atlas (eight trilinear corners per cell) and RGBA32F color splat
     atlas (one texel per cell) → logarithmic GPU maximum reduction of the
     density → normalized RGBA8 atlas → RGBA8 3D texture with mipmaps. Red is
     the normalized density; green, blue, and alpha are the cells' mean display
-    colour premultiplied by that density, so filtering and mipmapping average
-    colour by the cells that produced it (`density-shaders.js`).
+    color premultiplied by that density, so filtering and mipmapping average
+    color by the cells that produced it (`density-shaders.js`).
   - A flat cloud — a 1D or 2D embedding, or a planar 3D one, thinner than two
     voxels along an axis — is spread along that axis into a soft slab of fixed
     half-thickness (`SMOKE_SLAB_HALF_THICKNESS`, about four voxels of the 128³
     grid) by both splat passes, so a ray never steps over a voxel-thin sheet.
   - From each published volume, `buildDerivedVolumesGPU(...)` derives two more
     for the fixed key-light direction: a lighting volume (RG16F, half the grid:
-    r = optical depth towards the key light, g = sky occlusion) that replaces a
+    r = optical depth toward the key light, g = sky occlusion) that replaces a
     per-sample shadow ray, and an occupancy volume (R8, one texel per 4³ block
     of voxels: the largest density a sample in the block can read) that lets
     the ray march leap over empty blocks. Both are rebuilt only when the
@@ -673,9 +673,9 @@ on source order.
   - The product path performs no `readPixels` synchronization. It publishes the
     new texture and bounds before completing its notification, preserves the
     prior volume on failure, and returns only a frozen non-owning summary.
-  - The volume is a function of visibility, positions, and colours. The viewer
-    reports every live position or colour republication (a field, colormap,
-    category colour or log-scale change, a dimension switch, a new dataset)
+  - The volume is a function of visibility, positions, and colors. The viewer
+    reports every live position or color republication (a field, colormap,
+    category color or log-scale change, a dimension switch, a new dataset)
     through `setSmokeSourceChangeHandler`, and the render controls mark the
     volume dirty exactly as they do for a visibility change.
   - The exact UI grid inventory is 32³, 48³, 64³, 96³, and 128³. The builder
@@ -704,8 +704,8 @@ on source order.
   - A build reads the GL error state once, after its allocations (each read
     is a synchronous round trip that waits for every queued command). A
     rebuild asked for inputs identical to the shown volume's (the same
-    positions, colours, visibility and outlier-quantile arrays, held by weak
-    reference, the colours and the visibility at the same write counts
+    positions, colors, visibility and outlier-quantile arrays, held by weak
+    reference, the colors and the visibility at the same write counts
     `getSmokeDensitySource` reports — every write to them goes through
     `per-cell-array-ownership.js`, which counts it — and the same threshold,
     grid size and gamma) does no work. Nothing per cell is copied for it.
@@ -795,7 +795,10 @@ on source order.
 
 - **Highlight tools**
   - Backend: `HighlightTools` (`cellucid/assets/js/rendering/highlight-renderer.js`)
-  - Handles interactive selection and highlight overlay rendering.
+  - Handles interactive selection and highlight overlay rendering: each
+    highlighted cell a dot of `HIGHLIGHT_COLOR` inside a ring of
+    `highlightRingColorFor` it (black), the same in figure export
+    ({doc}`28_decisions_rendering_layers`).
 
 - **Centroids**
   - Small, separate centroid shader program (centroid count is typically small).
@@ -846,7 +849,7 @@ The viewer exposes a small API surface used by `DataState` and `main.js`.
 - `viewer.updateColors(colors)`
   - Rewrites the 4-byte-per-point color stream in place on the next frame,
     gathered on the GPU into the live geometry's draw order when it has one, and drops the
-    colour stores kept for other orders. Positions and the alpha texture are not
+    color stores kept for other orders. Positions and the alpha texture are not
     touched.
 
 - `viewer.updateTransparency(alphaArray)` (a `Uint8Array` of 0/1; a Float32 or out-of-range array is rejected)
@@ -859,7 +862,7 @@ The viewer exposes a small API surface used by `DataState` and `main.js`.
     dimension.
   - Must preserve the same indices; `positions` must hold exactly
     `pointCount * dimensionLevel` values, and other lengths are rejected.
-  - It replaces only the positions: colours, transparency and the alpha
+  - It replaces only the positions: colors, transparency and the alpha
     texture are per cell, not per representation, and are kept. The position
     stream and spatial tree come from that representation's pooled geometry
     when a kept view shows it or it was shown lately (no upload, no tree
@@ -878,13 +881,13 @@ Full reloads are the fastest way to introduce jank on large datasets.
 
 Cellucid can render:
 - one live view
-- **any number** of snapshot views. Each owns an RGBA8 colour store and an R8
+- **any number** of snapshot views. Each owns an RGBA8 color store and an R8
   alpha texture (5 bytes a cell; positions are shared by geometry). Memory,
   not a count, limits them: when an allocation is refused, the stores of kept
   views not presented this frame are released first
   (`HighPerfRenderer._releaseDormantSnapshotStores`; the viewer reports the
   presented views every frame with `setPresentedViews`), and a released view
-  is rebuilt from its published colours and transparency (both kept by
+  is rebuilt from its published colors and transparency (both kept by
   reference) when it is next drawn or edited (`_restoreSnapshotStores`),
   drawing exactly what it drew. Only a set of views shown at once that does
   not fit is refused, by the device. A kept view holds no CPU copy of its R8
@@ -941,7 +944,7 @@ every view is laid out relative to it by one pure function,
   covers nothing. The hidden sidebar is `inert`.
 - The viewer resolves the layout from the canvas backing-store and CSS sizes
   (so device-pixel-ratio changes are included), the occlusion ratio, the
-  layout mode, the focused view, and the view inventory. It is memoised: it is
+  layout mode, the focused view, and the view inventory. It is memoized: it is
   recomputed only when one of those inputs changes, together with one
   projection matrix per pane, and is otherwise one frozen object.
   `viewer.getPresentedLayout()` returns it and
@@ -961,8 +964,8 @@ every view is laid out relative to it by one pure function,
 - **Single view**: the pane keeps the whole canvas (the scene continues under
   the sidebar), and its projection is shifted horizontally so the principal
   point - the camera target in Orbit and Planar, the look direction in
-  Free-fly - sits at the centre of the presented area. This is what a single
-  view always showed in Orbit and Planar; Free-fly now uses the same centre,
+  Free-fly - sits at the center of the presented area. This is what a single
+  view always showed in Orbit and Planar; Free-fly now uses the same center,
   so switching modes no longer shifts the picture.
 
 Each pane carries its WebGL viewport (`viewport*`, framebuffer pixels,
@@ -977,7 +980,7 @@ Python or R viewer, every highlight tool (lasso polygons are clipped to the pane
 presented rectangle; proximity and KNN indicators are clipped like the WebGL
 scissor), projectile aiming and the charge ring, centroid labels, view title
 chips, overlays, `getPresentedViewState()` (figure export and its preview),
-and the selection bar, which is centred in `presentedArea`.
+and the selection bar, which is centered in `presentedArea`.
 
 ### Layout arithmetic, and why it changes the cost
 
@@ -1014,7 +1017,7 @@ viewport. Level of detail is the lever for multiview: with it, the same four
 views took 13.5 ms.
 
 :::{warning}
-Do not “optimise” the viewport-height uniform to the canvas height for
+Do not “optimize” the viewport-height uniform to the canvas height for
 consistency across panes. Feeding the full canvas height into a 2×2 grid would
 quadruple fill cost and make four views genuinely four times a single view.
 :::
@@ -1061,7 +1064,7 @@ render()  (rAF armed only while something can change; draws only then)
   │
   ├─ frame gate ── invalidated, animating, or resized? ── no, settled ─▶ (no draw; loop stops)
   │                                    │ yes
-  ├─ dirty-flag gate ── colours dirty or in another order? ── no ──┐
+  ├─ dirty-flag gate ── colors dirty or in another order? ── no ──┐
   │                                    │ yes                        │
   │                                    └─▶ upload + GPU gather      │
   │                                                                 │
@@ -1106,9 +1109,9 @@ so the canvas keeps showing — and reading back — the last drawn frame.
 Inside a drawn frame, three independent gates keep the work proportional to what
 changed, each cheap to check:
 
-1. **Buffer dirty flags** — set by colour updates, cleared on flush. A colour
+1. **Buffer dirty flags** — set by color updates, cleared on flush. A color
    store also follows its geometry's draw order, from a kept store when one
-   holds the current colours.
+   holds the current colors.
 2. **Frustum cache** — an exact element-wise comparison of the model-view-projection
    matrix, the dimension and the bounds. An idle camera re-extracts nothing.
 3. **Draw ranges** — a camera move collects the leaf runs inside the frustum
@@ -1121,12 +1124,12 @@ changed, each cheap to check:
    a failure can appear: after an allocation (`_allocateGpu`, which retries
    only `OUT_OF_MEMORY`, once, after releasing memory kept for speed).
    Writes into storage WebGL has already accepted (a filter tick's alpha
-   rows, a recolour, a kept view's alpha, a draw order's rows) fail
+   rows, a recolor, a kept view's alpha, a draw order's rows) fail
    synchronously or not at all and only check `isContextLost()`
    (`requireLiveContext`); a filter tick at 10M points in four views spent
    40 of its 75 ms waiting there. Highlight buffers check once, after the
    store is sized, on the first allocation and when it grows past the size
-   already verified. A highlight of many cells (when its colour words, 4
+   already verified. A highlight of many cells (when its color words, 4
    bytes a slot of the view's point store, are fewer bytes than its own
    records, 16 bytes a cell) is drawn from the point store itself: positions
    from the store, the words written on the GPU from the highlight and
@@ -1138,7 +1141,7 @@ changed, each cheap to check:
    hold, with no read; only new storage reads the error queue, once (the
    velocity overlay reads it for both tables a slice after allocating them,
    before publishing). A filter change, a category toggle or a kept view's
-   recolour with the velocity overlay on reads nothing; restoring a session
+   recolor with the velocity overlay on reads nothing; restoring a session
    of seven views reads once per new table, not four times per view.
    `gl.isTexture` is a round trip too and is not used to check ownership.
    An error nobody reads where it happens is read by the next owner that
@@ -1164,7 +1167,7 @@ The practical rule: **if you add work to the draw path, it must sit behind a gat
 of its own.** “It is only a few microseconds” is how the idle frame stops being
 free.
 
-### Where the GPU time goes, and which optimisations are already closed
+### Where the GPU time goes, and which optimizations are already closed
 
 Measured with GPU timer queries on **one Apple M1 Pro through ANGLE Metal**,
 1440×1000 at DPR 1, 10,000,000 synthetic points, LOD and frustum culling off,
@@ -1174,8 +1177,8 @@ milliseconds belong to that machine; the ratios are the durable part.
 | Stage | Measured | Verdict |
 | --- | --- | --- |
 | Vertex | 2.62 ms, flat at every point size — 4.2% of the frame | fetch-bound; hoisting the redundant matrix product and the per-vertex `tan()` measured **no effect** |
-| Fragment | 190× the fragments costs 1.82× the time | only ~5% of rasterised fragments survive the depth test to be shaded |
-| Per-sprite rasterisation | ~5.7 ns/sprite, ~175M sprites/s | **this is the floor** |
+| Fragment | 190× the fragments costs 1.82× the time | only ~5% of rasterized fragments survive the depth test to be shaded |
+| Per-sprite rasterization | ~5.7 ns/sprite, ~175M sprites/s | **this is the floor** |
 
 Fill only reaches parity with the per-sprite cost at `gl_PointSize` ≈ 15 px.
 Below that the frame is primitive-bound; above it, fill-bound.
@@ -1215,7 +1218,7 @@ the maintenance ledger rather than being folklore:
   from the sprite radius the vertex shader passes (`v_radiusPx`; screen-space
   derivatives are undefined along a sprite's edge). Depth passes keep the hard
   edge: a partially covered rim fragment would still write depth, and in a
-  dense cloud every disc grew a ring of background colour where later points
+  dense cloud every disc grew a ring of background color where later points
   behind it were rejected.
 - **Fog is one model, evaluated per vertex.** Points, highlight rings,
   connectivity edges, the orbit anchor and the velocity overlay splice the same
@@ -1227,11 +1230,11 @@ the maintenance ledger rather than being folklore:
   their own alpha floor), so the layers of one scene faded at different rates.
   The transmittance is an `exp2` evaluated once per point or edge endpoint and
   passed on as a varying. Fog **thins** a translucent layer —
-  `fogOpacity(T) = T·(0.1 + 0.9·T)` — instead of mixing its colour toward a
-  constant `u_fogColor`: over a backdrop of the fog colour that is exactly the
-  picture the colour-mixing law drew, and over anything else (a grid, a
+  `fogOpacity(T) = T·(0.1 + 0.9·T)` — instead of mixing its color toward a
+  constant `u_fogColor`: over a backdrop of the fog color that is exactly the
+  picture the color-mixing law drew, and over anything else (a grid, a
   vignette, the points further back) a fogged point fades into what is really
-  behind it instead of being tinted with a colour that is not. The figure
+  behind it instead of being tinted with a color that is not. The figure
   export's vector strategies apply the same opacity, so a circle fades into the
   paper. With fog off a point is drawn at full opacity, and that measured
   cheaper than before the change for dense views (10,000,000 points, device
@@ -1252,14 +1255,14 @@ the maintenance ledger rather than being folklore:
   per-instance attributes gathered for the shown edges only, so no vertex
   fetches a texture.
 - **The smoke ray march does less arithmetic per sample**: the density-texture
-  coordinate map and the volume normalisation are formed once per pixel, the
+  coordinate map and the volume normalization are formed once per pixel, the
   three multiple-scattering octaves share one `exp` (the other two are its 4th
   and 16th powers), and the blue-noise jitter is fetched once. Same pixels;
   17.2 against 14.5 ms a frame on the 562,000-cell Suo sample (median of three
   interleaved runs, Apple M1 Pro, device pixel ratio 2).
 - **A different primitive.** `GL_POINTS` beat instanced quads and both triangle
   arrangements by 1.41–2.12× at one sample and by up to 1.90× with MSAA enabled
-  at 4 samples, with the quad arms' rasterised and shaded fragment counts matched to
+  at 4 samples, with the quad arms' rasterized and shaded fragment counts matched to
   five decimal places. Halving the primitive count with one triangle per point
   was the *worst* arm.
 - **Order-independent transparency, a depth prepass, storage reordering, and the
@@ -1280,23 +1283,44 @@ from the dataset's cell count and the active view's dimension — against
 depth-rejected — re-decided on every dataset publication and on every
 `view:representation-changed` of the active view.
 
-**Shader quality selects shading, never geometry.** All three point vertex
-shaders — and the copy `HP_VS_HIGHLIGHT` keeps of the formula — clamp
-`gl_PointSize` to the same `[0.5, 128.0]`. A higher ceiling in the lighter
-shaders once made them draw *larger* sprites than `full`, so the "faster"
-quality was up to 1.93× slower at close range. `tests/point-size-clamp-contract.test.mjs`
-pins the three bounds together; keep them identical in any fork.
+**Shader quality selects shading, never geometry.** Every vertex shader
+that sizes a cell's sprite — the point passes of all four qualities, the
+highlight ring's dot and the centroid markers — calls the one GLSL function
+`pointSpriteSize(eyeDepth)` (`POINT_SPRITE_GLSL`, `rendering/point-sprite.js`):
+the perspective size, clamped to `[0.5, u_pointSizeMax]`. A higher ceiling in the lighter shaders once made them draw *larger*
+sprites than `full`, so the "faster" quality was up to 1.93× slower at close
+range, and a ring sized by its own copy of the clamp sat inside its dot; with
+one function neither can drift. `u_pointSizeMax` is the viewer's cap,
+`POINT_SPRITE_MAX_PX` (160 px since 2026-11-11, F97; 128 before), or the
+GPU's `ALIASED_POINT_SIZE_RANGE[1]` where smaller (`pointSpriteCap`, read
+again on a restored context); a figure export sets it times its raster
+scale. Picking (`drawnPointRadiusCss`), the read-cell layer's density
+estimate and the figure export's vector circles size with the JavaScript
+`pointSpriteSize`, which `tests/point-sprite-contract.test.mjs` proves equal
+to the GLSL (evaluated, transliterated) at every combination it tries.
+
+**No fade or shrink by distance (owner decision 2026-11-11).** A cell near
+the camera is drawn whole, opaque and at its perspective size (up to the
+cap), and is picked like any other, in every quality, in the highlight ring
+and centroid markers, and in every figure export path. A near fade (F97: in
+3-D orbit panes a cell's opacity fell by a smoothstep from 0.5 to 0.2 of the
+orbit radius, drawn as an ordered dither of opaque fragments, cells under
+half seen not picked) was shipped and removed the same day: the owner
+rejected cells fading as the camera approaches. A shrinking variant was
+rejected before it. `tests/browser/point-near-camera-solid.spec.mjs` checks,
+on the GPU, that a cell at 0.13 and at 0.52 of the orbit radius is drawn
+whole at exactly the cap, picked, and in the figure.
 
 **`sculpted`, the fourth quality, is opaque by design.** Its fragment
 shaders (`HP_FS_SCULPTED`, `HP_FS_SCULPTED_NO_DEPTH`) light each sprite as a
-sphere in linear light (the colour squared, encoded back with a square root,
+sphere in linear light (the color squared, encoded back with a square root,
 so the round trip is exact) and multiply by `u_invCenterShade`, the
-reciprocal of the lighting at the sphere's centre for the scene light, so the
-centre shows exactly the legend colour (`sculptedCenterShade` mirrors the
+reciprocal of the lighting at the sphere's center for the scene light, so the
+center shows exactly the legend color (`sculptedCenterShade` mirrors the
 shader's constants). The gloss fades in between sprite radii of two and six
 pixels from the vertex shader's `v_radiusPx`, never from screen-space
 derivatives, which are undefined along a sprite's edge. In a 3D pass the
-points are opaque: `enterOpaquePointBlending` replaces the colour
+points are opaque: `enterOpaquePointBlending` replaces the color
 (`blendFuncSeparate(ONE, ZERO, ONE, ONE_MINUS_SRC_ALPHA)`) and, when the pass
 draws into the multisampled scene target (`renderParams.multisampled`, from
 `sceneMsaaTarget.isMultisampledThisFrame()`), enables
@@ -1316,14 +1340,19 @@ they blend like the other qualities. One list names the qualities
 
 **The point-size curve lives in one module**,
 `cellucid/assets/js/rendering/point-size-scale.js`: the slider curve (anchored at
-0.25 at position 0 and 200 at position 100, with the domain extended down to
-position -24 so stored sessions and published presets keep their meaning), the
+0.25 at position 0 and the largest sprite drawn, `POINT_SPRITE_MAX_PX` (160),
+at position 100, so no slider travel lies past what can be drawn, with the
+domain extended down to position -24 below the anchor), the
 viewer's bound, and `pointSizeSliderPositionForCellCount`, the size a dataset
 opens at. It used to be a `0.25` in the sidebar module and a second `0.25` in
 `viewer.setPointSize`; do not reintroduce a second copy — lowering the reachable
 minimum in one place and not the other makes the slider throw at its own low end.
 
-The reachable minimum is 0.050, well below the `0.5` clamp floor, and that is not
+The top was 200 until R9R-9 (2026-11-11): a size above the 160-pixel cap draws
+the cap for every cell nearer the camera than the perspective scale, so the
+last 3.4% of the slider drew the same sprite while its readout climbed.
+
+The reachable minimum is 0.053, well below the `0.5` clamp floor, and that is not
 a contradiction: sizes under about 0.5 device pixels are only distinguishable
 where perspective size scaling lifts the rendered size back above the clamp.
 
@@ -1335,13 +1364,13 @@ where perspective size scaling lifts the rendered size back above the clamp.
 
 Filtered-out points are not skipped by shrinking them. Setting `gl_PointSize` to
 zero does **not** remove a point: the driver’s minimum aliased point size is one
-pixel, so the point is still assembled, rasterised and shaded, and only then
+pixel, so the point is still assembled, rasterized and shaded, and only then
 discarded in the fragment stage — and the ultralight fragment shader has no
 `discard` at all, so hidden points were also writing depth and occluding visible
 ones.
 
 The point vertex shaders now push hidden vertices outside the clip volume as
-well as zeroing the size, which removes them before rasterisation. This is what
+well as zeroing the size, which removes them before rasterization. This is what
 makes a heavily filtered view cheaper than an unfiltered one.
 
 **Every** vertex shader that draws per-cell geometry does this now, including
@@ -1365,11 +1394,11 @@ Prefer:
 - reusing scratch buffers (float32/uint8) sized to `pointCount`
 - debouncing expensive work in UI modules
 
-Smoke density never makes a full duplicate position or colour array. It
-retains the dataset-owned positions, colours, alpha, and optional
+Smoke density never makes a full duplicate position or color array. It
+retains the dataset-owned positions, colors, alpha, and optional
 outlier-quantile arrays, validates them in place, and streams visible cells
 through two transient buffers fixed at 262,144 cells: positions in the source
-layout (at most 3 MiB, for a 3D embedding) and RGBA8 colours (1 MiB), 4 MiB per
+layout (at most 3 MiB, for a 3D embedding) and RGBA8 colors (1 MiB), 4 MiB per
 batch. Large inputs are submitted in bounded batches.
 Do not replace this with a buffer sized to the complete dataset or introduce
 GPU→CPU volume readback. The grid cap and early release of completed reduction
@@ -1452,7 +1481,7 @@ from CPU state), which the dialog offers. When the browser restores the
 context, every GPU object is made again from what the CPU holds
 (`restoreLostGraphics`): the renderer with its settings (quality, level of
 detail, culling, forced level, cell priority), the live cells, each kept view
-with its own geometry, centroids and colours, the highlights
+with its own geometry, centroids and colors, the highlights
 (`HighlightTools#resumeRendering`), the connectivity edges (the layer's
 `suspend`/`resume`), the grid, studio and centroid programs, the antialiasing
 target and smoke settings, the backdrop look with its ambient motion; the
@@ -1460,7 +1489,7 @@ velocity overlay and the smoke volume are drawn again by their owners
 (`onGraphicsReset`, the smoke source change). A restored context has every
 value of its state back at the initial one, so the viewer sets again what it
 set on the context itself (`applyViewerGlState`: depth test, blending and the
-background's clear colour, without which a black, white or grid background
+background's clear color, without which a black, white or grid background
 cleared to transparent black), and the state shadow forgets what it knew and
 reads the context afresh (`primeGlState`, `gl-state-shadow.js`).
 Filters, selections, kept views and analyses never leave the page. Only if

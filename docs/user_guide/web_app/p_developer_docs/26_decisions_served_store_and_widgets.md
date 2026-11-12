@@ -136,7 +136,7 @@ same change as the code it describes.
 
 | Date | Decision | Why | Rules out |
 |---|---|---|---|
-| 2026-10-28 | One gene-major layout for `prepare()`, backed `prepare()` and the served store, in both languages | Same bytes everywhere (3,628 files identical before and after); one place to optimise | A separate writer and server layout; `lexsort` of the whole matrix |
+| 2026-10-28 | One gene-major layout for `prepare()`, backed `prepare()` and the served store, in both languages | Same bytes everywhere (3,628 files identical before and after); one place to optimize | A separate writer and server layout; `lexsort` of the whole matrix |
 | 2026-10-28 | Layout in a background worker, `X` first; `503` + `Retry-After` only for a file matrix not yet counted | The viewer opens without waiting for a pass over every value | Blocking the first view on the layout |
 | 2026-10-28 | Object arrays read-only while laid out or copied | An in-place change must not mix into what is served | Copying the object before serving it |
 | 2026-10-28 | The browser keeps no parts of same-machine or served stores; after a hidden tab released memory, a reopen reads loopback again (measured: 15 requests, 4.2 MB, no network) | A copy duplicates data already on this disk; object stores are new every run | A browser cache of served bytes |
@@ -150,7 +150,7 @@ same change as the code it describes.
 | 2026-10-30 | One pass size for every gene-major pass: `PASS_ENTRIES` in `prepare_data/_gene_major.py`, sized so a step's temporaries (about 40 B a value) take a 64th of physical memory (6.7M values on 16 GB), imported by `_served_store.py`; one `machine_memory_bytes()` (`_scratch.py`), and in R one `.machine_memory_bytes()` (`R/native.R`) for the default cache and the backed passes | The served store used 2^23 and the layout 2^22 with no reason; layout time is flat from 2^20 to 2^24 at 3M × 10 (0.66–0.69 s) and the bytes are identical | Two constants for one concept |
 | 2026-10-30 | R backed matrices (BPCells, DelayedArray) stay on disk: one counting pass, then placing passes of at most ¼ of physical memory, 64-bit positions | The old path joined every block into one double `dgCMatrix` (12–24 B a value, int32 pointers) | The 2^31 − 1 value cap; a dgCMatrix of the whole matrix |
 | 2026-10-30 | Speed and less download outrank memory, as long as memory is counted and bounded | Project decision | Trading speed for memory that is already explained |
-| 2026-10-30 | App timings are taken on a real GPU only | SwiftShader holds the main thread on synchronous GL calls | Timing on a software rasteriser |
+| 2026-10-30 | App timings are taken on a real GPU only | SwiftShader holds the main thread on synchronous GL calls | Timing on a software rasterizer |
 
 ## Measurements that justify it
 
@@ -165,7 +165,7 @@ per cell, 2026-10-30, unless stated. R timings taken with
 | | Before | After |
 |---|---|---|
 | R layout alone | 6.8 s (one thread) | 7.56 s (1 thread) → 1.15 s (8) / 1.19 s (10) |
-| R first gene during layout | 2.66–2.98 s | 0.64 s (layout at 0 %); same chunk next 0 ms; others 0.22–0.30 s |
+| R first gene during layout | 2.66–2.98 s | 0.64 s (layout at 0%); same chunk next 0 ms; others 0.22–0.30 s |
 | R 100 genes during layout | 4.9 s | 1.91 s (to the layout's end, 3.10 s) |
 | R written block (`cellucid_prepare()`) | 4.73 s (1 thread) | 1.05 s (10 threads), same bytes |
 | Python first gene during layout | 2.02–2.20 s | 0.13 s; later ones 0.13–0.26 s |
@@ -275,7 +275,7 @@ requests and 300–510 MB/s in 1 MiB requests (Chromium, Firefox, WebKit).
 
 ## Known issues (pre-commit)
 
-Defects, regressions and unverified behaviour known when this version was
+Defects, regressions and unverified behavior known when this version was
 committed (2026-10-30), each with where it is recorded above. An item is
 removed in the change that fixes or verifies it.
 

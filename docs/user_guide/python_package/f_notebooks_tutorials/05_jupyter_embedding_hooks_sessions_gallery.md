@@ -35,11 +35,11 @@ jupyter lab docs/user_guide/python_package/f_notebooks_tutorials/jupyter_pancrea
 ```
 
 ```{figure} ../../../_static/screenshots/jupyter/show-anndata-driven-from-python.png
-:alt: The Cellucid viewer after Python called viewer.color_by(...) and viewer.highlight_cells(...): the Pancreas sample coloured by clusters with the highlighted cells.
+:alt: The Cellucid viewer after Python called viewer.color_by(...) and viewer.highlight_cells(...): the Pancreas sample colored by clusters with the highlighted cells.
 :width: 1440px
 
-The viewer the notebook drives, captured in a browser tab: the same app the
-notebook's output frames, after Python ran
+A Python `cellucid.AnnDataViewer` in a browser tab — the same app and viewer
+API as the widget the notebook's output frames — after Python ran
 `viewer.color_by(field={"source": "obs", "key": "clusters"})` and
 `viewer.highlight_cells(...)`.
 ```

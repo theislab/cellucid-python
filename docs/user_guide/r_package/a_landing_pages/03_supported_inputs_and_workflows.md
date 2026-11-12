@@ -40,7 +40,7 @@ Without `data`, these five carry no default (with `data`, only `out_path` and
 - **`gene_expression`**: cells × genes, dense `matrix` or sparse `Matrix` (recommended)
 - **`var`**: `data.frame`, one row per gene; only together with `gene_expression`
 - **`gene_identifiers`**: the genes to store (default: all)
-- **`connectivities`**: cells × cells neighbour graph
+- **`connectivities`**: cells × cells neighbor graph
 - **`vector_fields`**: per-cell vectors drawn over a UMAP, `list(velocity = list(X_umap = v2))`
 - **Metadata**: `dataset_description`, `citation_text`, `citation_url`, `source_name`, `source_url`
 - **Launch defaults**: `embedding_defaults`, `latent_key`, `obs_keys`,
@@ -105,7 +105,7 @@ no row names at all, cells are named `"0"` to `"n - 1"`, as anndata names them.
 Every `obs`/`var` column name and every `obsm` key becomes a folder in the
 store, so it must be a portable file name: no `/ \ : * ? " < > |` or control
 character, no trailing space or dot, not a Windows device name, not `_index`
-for a column, and distinct from its neighbours by more than letter case. See
+for a column, and distinct from its neighbors by more than letter case. See
 {doc}`../c_data_preparation_api/02_input_requirements_global`.
 
 ## Recommended workflow decision tree

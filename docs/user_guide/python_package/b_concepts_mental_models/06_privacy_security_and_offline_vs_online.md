@@ -65,7 +65,11 @@ That means:
 
 There is no secret in the data routes: the browser reads them with plain range
 requests. The viewer channel (commands and events) does need the per-viewer
-token, so another user can read the data but cannot drive your notebook. When
+token, so another user can read the data but cannot drive your notebook. A
+local agent app (`cellucid mcp`) reaches a viewer with a second secret, kept in
+a file only your account can read (see
+{doc}`../d_viewing_apis/18_local_agents_mcp`; `CELLUCID_AGENTS=off` publishes
+no viewer to agents). When
 the data must not be readable by the other users of the machine, use the
 notebook widget (`show_anndata()`: no port is opened), or run the server on a
 machine only you use.
@@ -145,9 +149,9 @@ address anything can connect to, so Cellucid never prints it inside a URL. A
 wildcard bind reports the loopback origin — what a browser on the serving
 machine and the far end of a tunnel both use — and then names **the machine
 itself** under `Bound to every network interface. From another machine:`. Those
-machine URLs are the audit line: they are the addresses your neighbours on the
+machine URLs are the audit line: they are the addresses your neighbors on the
 cluster can open. If the machine has no name that resolves beyond itself, that
-block is absent, because there is no travelling address to print.
+block is absent, because there is no traveling address to print.
 
 ---
 
@@ -162,7 +166,7 @@ name flips, the browser believes that site and your Cellucid server are the same
 origin: it sends no `Origin` header, applies no CORS check, and hands the page
 whatever the server returns — which is your dataset.
 
-So the bind address is not the last line of defence. The `Host` header is:
+So the bind address is not the last line of defense. The `Host` header is:
 
 - Cellucid reads the `Host` on every request, before any route, file read or
   event delivery runs.
@@ -252,19 +256,26 @@ A notebook widget keeps no copy: the browser loads the app from
 Before binding its HTTP server, Cellucid:
 
 1. fetches `cellucid-web-assets.json` from the configured source,
-2. downloads every declared object into a staging directory,
-3. verifies the complete file set, MIME types, byte lengths, SHA-256 hashes,
+2. serves the local generation as it is when it holds that very build and
+   every file verifies; otherwise
+3. stages a new generation (files the cache holds with the declared bytes are
+   copied, every other declared object downloaded),
+4. verifies the complete file set, MIME types, byte lengths, SHA-256 hashes,
    and build identity, and
-4. atomically publishes that generation locally.
+5. atomically publishes that generation locally.
 
 ### What this means without source access
 
-- `cellucid serve`, `serve_anndata(...)` and `AnnDataViewer(...)` require the
-  configured source at each startup when they serve the viewer UI.
+- `cellucid serve`, `serve_anndata(...)` and `AnnDataViewer(...)` read the
+  configured source's inventory at each startup when they serve the viewer UI.
 - `show_anndata(...)` needs the *browser* to reach `https://www.cellucid.com`
   (or `web_source_url`), not the kernel.
-- Source or inventory failure stops startup. A previous local generation is
-  kept intact but is not served as a substitute.
+- When the source cannot be read, a cached build whose every file matches its
+  checksums is that exact build: it is served, and the start says *Could not
+  reach … ; serving the cached web app (build …).* With no cache, or one that
+  does not check out, the start stops and says which, and how to get the app:
+  connect once, or set `web_cache_dir` to a folder that holds a verified build.
+  The R package says the same words.
 - `cellucid serve ... --no-web-ui` is the explicit data-endpoint-only mode and
   does not require viewer-source access.
 
@@ -315,8 +326,9 @@ clear_web_cache()
 ```
 
 ```{important}
-`force=False` is verification-only. Viewer/server startup always establishes
-the configured source generation and reports source failure directly.
+`force=False` is verification-only. Viewer/server startup establishes the
+configured source generation, or serves the verified cached one when the source
+cannot be reached.
 ```
 
 ---

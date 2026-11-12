@@ -23,8 +23,19 @@ from _mapped_files import mapped_files
 from anndata import AnnData
 from scipy import sparse
 
+from cellucid._server_base import public_viewer_url
 from cellucid.anndata_server import AnnDataServer, serve_anndata
 from cellucid.jupyter import AnnDataViewer, Widget, show_anndata
+
+
+def _established(kwargs: dict):
+    """What ensure_web_ui_cached returns, for a stub of it."""
+    from cellucid import web_cache
+
+    return web_cache.WebCachePrefetchSummary(
+        cache_dir=Path(kwargs["cache_dir"]), source_url=kwargs["source_url"], build_id="build-1",
+        downloaded_files=0, downloaded_bytes=0, skipped_files=0,
+    )
 
 
 def _adata() -> AnnData:
@@ -76,13 +87,13 @@ def _assert_released(server: AnnDataServer, temporary: Path) -> None:
 
 LAUNCH_CHOICES = [
     "latent_key",
-    "gene_id_column",
+    "var_gene_id_column",
     "normalize_embeddings",
     "centroid_min_points",
     "dataset_name",
     "dataset_id",
     "obs_keys",
-    "embedding_keys",
+    "embedding_defaults",
     "knn_key",
     "expression_source",
     "vector_field_default",
@@ -286,7 +297,7 @@ def test_anndata_server_reports_exact_viewer_generation_establishment(
     )
     monkeypatch.setattr(
         "cellucid.web_cache.ensure_web_ui_cached",
-        lambda **kwargs: cache_calls.append(kwargs),
+        lambda **kwargs: cache_calls.append(kwargs) or _established(kwargs),
     )
     server = AnnDataServer(
         _adata(),
@@ -336,17 +347,30 @@ def test_a_browser_that_does_not_open_is_a_transactional_start_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server = _server(open_browser=True)
+    # As serve_anndata() and cellucid serve: the address carries a token.
+    server.viewer_channel = True
     temporary = _held(server)
     original = RuntimeError("exact browser failure")
+    opened: list[str] = []
 
-    def open_browser(_url: str) -> bool:
+    def open_browser(url: str) -> bool:
+        opened.append(url)
         if browser == "raises":
             raise original
         return False
 
     monkeypatch.setattr("cellucid.anndata_server.webbrowser.open", open_browser)
-    with pytest.raises(RuntimeError, match="exact browser failure|Could not open the browser"):
+    with pytest.raises(RuntimeError, match="exact browser failure|Could not open the browser") as raised:
         server.start_background()
+    # The error is logged and pasted: it names the address without the
+    # token the browser was handed.
+    assert "&viewerToken=" in opened[0]
+    assert "viewerToken" not in str(raised.value)
+    if browser == "false":
+        assert str(raised.value) == (
+            f"Could not open the browser for {public_viewer_url(opened[0])}. Serve with "
+            "--no-browser (open_browser=False) and open the Viewer URL it prints."
+        )
 
     _assert_released(server, temporary)
     _assert_socket_released(server.port)
@@ -431,3 +455,43 @@ def test_a_notebook_viewer_takes_the_next_free_port_when_its_own_is_taken() -> N
         holder.close()
     viewer_port = inspect.signature(AnnDataViewer.__init__).parameters["port"].default
     assert viewer_port is None  # None is 8765 with the walk, a given port is used or refused
+
+
+@pytest.mark.parametrize("host", ["no-such-host.invalid", "192.0.2.1"])
+def test_a_host_that_is_no_address_of_this_machine_is_refused_saying_so(host: str) -> None:
+    """An unresolvable name, or an address of another machine (TEST-NET-1),
+    is said as such -- not as the resolver's ``gaierror`` or "Can't assign
+    requested address" -- in cellucid-r's words (R9Y-5)."""
+    server = AnnDataServer(_adata(), host=host, port=0, quiet=True, serve_web_ui=False,
+                           dataset_name="Host fixture", dataset_id="host-fixture")
+    with pytest.raises(OSError, match=rf"^Host '{host}' is not an address this machine can serve from\. Use host='127\.0\.0\.1'"):
+        server.start(blocking=False)
+
+
+def test_an_explicit_port_already_in_use_is_said_as_the_command_line_says_it() -> None:
+    """One sentence for the API and ``cellucid serve`` (``bind_refusal``), each
+    spelling the setting as its caller gives it."""
+    from cellucid.anndata_server import bind_refusal
+    from cellucid.cli import _operating_system_message
+
+    holder = socket.socket()
+    holder.bind(("127.0.0.1", 0))
+    holder.listen()
+    port = holder.getsockname()[1]
+    try:
+        server = AnnDataServer(_adata(), host="127.0.0.1", port=port, quiet=True, serve_web_ui=False,
+                               dataset_name="Port fixture", dataset_id="port-fixture")
+        with pytest.raises(OSError) as caught:
+            server.start(blocking=False)
+    finally:
+        holder.close()
+    said = str(caught.value)
+    assert said == (
+        f"Port {port} is already in use on 127.0.0.1, so Cellucid could not start its server there. Another "
+        "program is listening on that port, often an earlier Cellucid that was never stopped. Serve on a "
+        "different port with port=9000, or let the operating system pick a free one with port=0 and use the "
+        "Viewer URL it prints."
+    )
+    args = type("Args", (), {"host": "127.0.0.1", "port": port})()
+    assert _operating_system_message(caught.value, args) == said.replace("port=", "--port ")
+    assert bind_refusal(OSError(5, "other"), "127.0.0.1", port, spelled=lambda name, value: name) is None

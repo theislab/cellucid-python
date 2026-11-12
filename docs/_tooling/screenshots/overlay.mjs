@@ -17,11 +17,15 @@
 //     A flat black arrow disappears over dark UI and a flat white one
 //     disappears over light UI; the outlined form reads on both, and the shadow
 //     makes it legible as a deliberate annotation rather than a rendering
-//     artefact.
+//     artifact.
 //
 // Everything is `position: fixed`, `pointer-events: none`, and painted above
 // the application, so nothing here can reflow the page or change what the
-// application does. Every function in this module is serialised into the page
+// application does. "Above" includes the top layer: the layer is a manual
+// popover shown last, so it is drawn over a modal `<dialog>` (the community
+// annotation dialogs, every `app-dialog`), which a z-index cannot reach — a
+// pointer drawn under one was hidden by it, leaving a hovered button with no
+// arrow. Every function in this module is serialized into the page
 // by Playwright and therefore closes over nothing.
 
 /** Element id of the injected layer, used to remove it again. */
@@ -44,9 +48,21 @@ export function paintOverlay(plan) {
   const root = document.createElement('div');
   root.id = plan.rootId;
   root.setAttribute('aria-hidden', 'true');
+  root.popover = 'manual';
+  // The user-agent popover box (centered, bordered, sized to its content) is
+  // reset to a transparent layer over the whole viewport.
   root.style.cssText = [
     'position:fixed',
     'inset:0',
+    'width:auto',
+    'height:auto',
+    'max-width:none',
+    'max-height:none',
+    'margin:0',
+    'padding:0',
+    'border:0',
+    'background:transparent',
+    'overflow:visible',
     'pointer-events:none',
     'z-index:2147483647',
     'contain:strict',
@@ -139,6 +155,7 @@ export function paintOverlay(plan) {
   }
 
   document.body.appendChild(root);
+  root.showPopover();
 }
 
 /**

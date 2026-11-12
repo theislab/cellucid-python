@@ -38,10 +38,10 @@ For a Cellucid figure, that usually means recording:
 - highlights/selection emphasis (if used)
 
 **Export settings**
-- plot size (W×H)
+- figure width (millimetres, or the journal column) and text sizes (points)
 - format (SVG vs PNG)
 - DPI (for PNG)
-- explicit SVG point strategy (Full vector, Optimized vector, or Hybrid)
+- SVG point strategy (Full vector, Optimized vector, or Hybrid)
 - include axes/legend/title/background
 - frame export crop rectangle (if used)
 
@@ -56,7 +56,7 @@ If you saved a session bundle right before exporting, you captured the view/scie
 Cellucid exports embed metadata by default (there is no “metadata off” toggle in the current UI).
 
 Every panel’s record is read out of the same atomic snapshot the panel is drawn
-from — the camera and render state, the point positions, colours and
+from — the camera and render state, the point positions, colors and
 transparency the viewer is drawing with, that view’s own filters, and its legend
 — so an export cannot stamp a figure with a view it did not draw. That snapshot
 carries the view itself into the figure rather than an approximation of it: the
@@ -92,6 +92,10 @@ PNG exports include standard uncompressed `iTXt` fields:
 - `Description`: a human-readable summary, one clause per panel
 - `Comment`: a compact JSON blob with the structured record
 
+PNG exports also record their resolution: a `pHYs` chunk of the chosen DPI (300
+dpi is 11,811 pixels per meter), so Word, Illustrator, Inkscape and journal
+checks place the figure at its intended size instead of assuming 72 dpi.
+
 ### What `Description` looks like
 
 Every panel appears with the letter it is drawn with, its field, and its own
@@ -101,7 +105,8 @@ filters. A single-view export drops the letter (there is only one panel):
 Views: Live (Field: cell_type; Filters: none) • Source: https://example.org/pancreas
 ```
 
-A grid names each panel separately:
+A grid names each panel separately, as its title says it: a view you named
+(double-click its row in **Compare views**) by its name, any other by its label:
 
 ```text
 Views: A. Live (Field: cell_type; Filters: total_counts: 500.00 – 12000.00) | B. Endoderm (Field: leiden; Filters: none) • Source: pancreas
@@ -115,7 +120,7 @@ shows:
 Views: Live (Field: cell_type; Filters: none) • Cells: a subsample, 228,245 of 2,282,447 (uniform, seed 0; cell set 3f2a00c1d2e3f405) • Source: …
 ```
 
-Read it as: `Views:` then one `Panel. Label (Field: …; Filters: …)` clause per
+Read it as: `Views:` then one `Panel. Name (Field: …; Filters: …)` clause per
 panel joined by ` | `, then (for a subsample) the cells, then the source. `none` means exactly that — no color
 field, or no active filter. A panel's filters are the ones in force in that
 view, including a gene range filter, whether or not the view is the focused
@@ -132,23 +137,24 @@ so it is identical text for the same export.
   "dataset": {
     "name": "Pancreas", "id": "pancreas", "sourceType": "link",
     "baseUrl": "https://example.org/pancreas", "userPath": null,
-    "source": { "name": null, "url": null, "citation": null },
+    "source": { "name": null, "url": null },
+    "citation": null,
     "cells": null
   },
   "views": [
     {
-      "panel": "A", "id": "live", "label": "Live",
+      "panel": "A", "id": "live", "label": "Live", "name": null,
       "field": { "key": "cell_type", "kind": "category" },
       "filters": ["total_counts: 500.00 – 12000.00"]
     },
     {
-      "panel": "B", "id": "view_2", "label": "Endoderm",
+      "panel": "B", "id": "view_2", "label": "leiden", "name": "Endoderm",
       "field": { "key": "leiden", "kind": "category" },
       "filters": []
     }
   ],
   "export": {
-    "format": "png", "width": 1200, "height": 900, "dpi": 300,
+    "format": "png", "width": 692, "height": null, "dpi": 300,
     "strategy": null, "includeAxes": true, "includeLegend": true,
     "legendPosition": "right", "background": "white",
     "backgroundColor": "#ffffff", "crop": null
@@ -157,18 +163,28 @@ so it is identical text for the same export.
 ```
 
 Notes on reading it:
+- `dataset.source` is where the data comes from and `dataset.citation` how to
+  cite it, as one line (the text, then its address unless the text carries
+  it), both from the dataset's `uns['cellucid']`; `null` when it has none.
 - `dataset.cells` is `null` when every cell is open; for a subsample it is
   `{"open", "of", "method", "digest"}`: the cells shown, the dataset's, how
   they were chosen, and their cell-set digest.
 - `views` always has one entry per rendered panel, in drawing order.
 - `panel` is the drawn panel letter (`A`, `B`, … `AA`) in a multi-panel export
   and `null` in a single-view export, where no letter is drawn.
+- `label` is the view's own label (its field and filters, as its title chip
+  says them); `name` is the name the view was given, which titles its panel,
+  or `null` when it has none (the panel is then titled by `label`).
 - `field.key` / `field.kind` are `null` when the panel has no active color
   field; `kind` is `"category"` or `"continuous"`.
 - `filters` lists only real restrictions; the app's “No filters active”
   placeholder never enters the record, so an unfiltered panel gets `[]`.
 - `export.dpi` is `null` for SVG jobs, and `export.strategy` is the explicit SVG
   point strategy (`null` for PNG-only requests).
+- `export.width` is the figure's width in figure pixels (1/96 inch: 692 is a
+  183 mm double column), which the figure fills, and `export.height` is `null`:
+  the figure is as tall as its plots make it. A picture of a view asked for in
+  a box (`view.picture`) records the box's width and height.
 
 ### SVG metadata (RDF / Dublin Core + Cellucid JSON)
 
@@ -194,8 +210,8 @@ Exports are named conservatively:
 
 Two segments behave differently for a multi-panel export:
 
-- `<view>` is the exported view's label for a single-view export, and the
-  literal `multiview` for a grid. A view whose label is just its color field
+- `<view>` is the exported view's name for a single-view export (its label
+  when it has no name), and the literal `multiview` for a grid. A view whose label is just its color field
   (one you never renamed) adds no segment of its own, so the field is not
   written twice: `<dataset>_<color-field>_<timestamp>.png`.
 - `<color-field>` is **omitted** when the panels do not all share one color
@@ -221,7 +237,7 @@ The embedded metadata is useful, but it does not replace version control. For lo
 
 Use this as a starting point and adapt to your norms/journal requirements:
 
-> “Figures were generated in Cellucid (cellucid.com; version/commit: ___) from dataset ___ (dataset id/version: ___). The exported view used color-by field ___ with filters ___ applied. The interactive state (camera, fields, and filters) was saved as a session bundle (___). Figures were exported at plot size ___×___ using ___ format (___ DPI for PNG) and ___ strategy (full/optimized/hybrid).”
+> “Figures were generated in Cellucid (cellucid.com; version/commit: ___) from dataset ___ (dataset id/version: ___). The exported view used color-by field ___ with filters ___ applied. The interactive state (camera, fields, and filters) was saved as a session bundle (___). Figures were exported ___ mm wide using ___ format (___ DPI for PNG) and ___ strategy (full/optimized/hybrid).”
 
 If you used point reduction (optimized vector), add:
 
@@ -290,7 +306,7 @@ leaves your machine, know that it can contain:
 - **A name from your own disk.** If you opened a local file or Zarr folder, the
   file or folder name you chose is embedded, and it is the *first* thing used for the
   human-readable source line.
-- **What you coloured by — including gene symbols.** The colour field key of
+- **What you colored by — including gene symbols.** The color field key of
   every exported panel. For a gene, that is the gene symbol.
 - **Your filters, in words.** Each panel's active filter lines, including the
   names of the categories you hid.
@@ -303,23 +319,25 @@ leaves your machine, know that it can contain:
   filename. Comparing the two reveals your time zone.
 
 Two of these also land in the **filename**, before anyone opens the file: the
-colour field key and the view label.
+color field key and the view label.
 
 What is **not** embedded, which is worth knowing so you do not over-worry: no
-session identifier, no serialised app state, no page URL, no `localStorage`, no
+session identifier, no serialized app state, no page URL, no `localStorage`, no
 browser or user-agent string, and no GitHub credential or token of any kind.
 
 And one thing that is not metadata at all but travels just as far — the **Title**
-box is pre-filled for you, from the dataset name and the visible categories of
-the coloured field, and it is *drawn into the image*:
+box is pre-filled for you, from the dataset name and the colored field (and any
+categories of it you hid), and it is *drawn into the image*:
 
 ```{figure} ../../../_static/screenshots/figure_export/labels-annotations.png
-:alt: The Labels and annotations group open: the Title box pre-filled, starting with the dataset name; the Annotations checkboxes Axes, Legend, Reference grid, 3D orientation and Depth sort; the X and Y axis labels; Legend: Right; and Emphasize selection.
+:alt: The Figure export section with its Labels and annotations group open and Framing, Style and Download folded: the Title box pre-filled, starting with the dataset name; the Annotations checkboxes Axes, Legend, Reference grid, 3D orientation and Depth sort; the X and Y axis labels; Legend: Right; Emphasize selection, unchecked; and the Export button at the bottom.
 :width: 532px
 
-The **Title:** box is not empty by default. It is pre-filled with the dataset
-name, the coloured field, and up to three of its visible categories. Clear it if
-you do not want the dataset's name printed on the figure.
+The **Title** box is not empty by default. It is pre-filled with the dataset
+name and the colored field, and, when you have hidden some of its categories,
+which ones as the Filters list says it (the smaller side: "hiding B1 cells" or
+"showing only B cells, T cells"). Clear it if you do not want the dataset's name
+printed on the figure.
 ```
 
 (figure-export-source-file-privacy)=

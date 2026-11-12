@@ -4,7 +4,7 @@ Every internal page reference on the docs site is a `{doc}` role. A bare
 backtick is inline literal text: Sphinx does not resolve it, does not check
 that the target exists, and does not render a link. The docs build runs with
 `-W`, so a `{doc}` role pointing at a missing page fails the build — but a
-backticked page name bypasses that check entirely and ships as plain grey text.
+backticked page name bypasses that check entirely and ships as plain gray text.
 
 That is not hypothetical. A reference to `k_sessions_sharing/index` survived in
 the highlighting section long after the directory was renamed to

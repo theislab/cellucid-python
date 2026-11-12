@@ -87,7 +87,7 @@ You typically care about:
 
 **GPU memory, roughly.** Before the renderer has published a measured figure,
 Cellucid's own reports estimate GPU memory from what the points renderer stores
-per cell — 4 bytes per position axis, 4 of colour and 1 of alpha: **13 bytes per
+per cell — 4 bytes per position axis, 4 of color and 1 of alpha: **13 bytes per
 point in 2D and 17 in 3D**, about 12 and 16 MiB at one million points. Read it as an order of
 magnitude for whether a dataset will fit, not as a measurement: the report marks
 it `GPU memory (estimate)` while it is one, and switches to `GPU memory` once
@@ -144,7 +144,7 @@ Before you measure:
    and a 2×2 grid are three different workloads: each view draws every point
    again, and point size follows pane height, so they are not points on one
    curve.
-4) Keep the filter state fixed. Hidden cells are rejected before rasterisation,
+4) Keep the filter state fixed. Hidden cells are rejected before rasterization,
    so a run on a filtered view and a run on the full dataset measure different
    scenes.
 5) Avoid changing multiple quality knobs between runs — and set `Point size`

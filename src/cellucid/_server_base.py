@@ -319,6 +319,27 @@ def print_success(message: str = "Done"):
     console_print(f"      ✓ {message}")
 
 
+#: A ``viewerToken`` query parameter followed by another parameter, and one
+#: that ends its query (``public_viewer_url``).
+_TOKEN_BEFORE_PARAMETER = re.compile(r"([?&])viewerToken=[^&#\s]*&")
+_TOKEN_ENDING_QUERY = re.compile(r"[?&]viewerToken=[^&#\s]*(?=[#\s]|$)")
+
+
+def public_viewer_url(text: str) -> str:
+    """``text`` with every viewer page address in it stripped of what grants
+    access to the page: an address, or a line naming one (a request line).
+
+    The ``viewerToken`` query parameter is the viewer channel's secret. The
+    address with it is said once, to the person, where they are told to open
+    it (the banner, ``display()`` on a console, ``cellucid mcp --open`` on
+    stderr). Everything that may be logged or pasted — an error, a debug
+    report, a request log line — says this form instead and names
+    ``viewer_url`` as the address that opens it (cellucid-r's
+    ``.public_viewer_url()``, the same two patterns).
+    """
+    return _TOKEN_ENDING_QUERY.sub("", _TOKEN_BEFORE_PARAMETER.sub(r"\1", text))
+
+
 def print_server_banner(
     url: str,
     viewer_url: str,
@@ -684,7 +705,7 @@ class CORSMixin:
         re-resolves its own hostname to ``127.0.0.1`` (DNS rebinding). The
         browser then considers this server same-origin, so no CORS check runs
         and the response body — the user's private single-cell data — is handed
-        to that page. Validating ``Host`` is the only defence, and this is the
+        to that page. Validating ``Host`` is the only defense, and this is the
         one boundary every request crosses: ``handle_one_request()`` dispatches
         to ``do_GET``/``do_HEAD``/``do_POST``/``do_OPTIONS`` only after
         ``parse_request()`` returns ``True``.

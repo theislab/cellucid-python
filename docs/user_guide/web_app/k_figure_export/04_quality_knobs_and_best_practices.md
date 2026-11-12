@@ -28,14 +28,14 @@ Start by deciding what matters most **after** export:
   - pixel-identical appearance (especially for 3D/shader-accurate point rendering),
   - minimal surprises across tools.
 
-Then choose the point strategy:
+Then the point strategy (**Full vector** until you choose another):
 
 - **Full vector**: maximum editability of points, but only practical for small datasets.
 - **Optimized vector**: density-preserving reduction for medium datasets (approximate but still vector).
 - **Hybrid**: raster points + vector annotations (recommended for very large datasets and most 3D exports).
 
 :::{tip}
-If you are unsure, export **PNG (300 DPI)** first. If you later need editability, export **SVG + PNG** and use the SVG only for text/legend/layout edits.
+If you are unsure, export **PNG** at 300 DPI first. If you later need editability, export **SVG + PNG** and use the SVG only for text/legend/layout edits.
 :::
 
 ---
@@ -46,20 +46,24 @@ If you are unsure, export **PNG (300 DPI)** first. If you later need editability
 
 Most “this doesn’t look publication-grade” complaints come down to:
 
-1) **Plot size** (W×H)
+1) **Figure width** (millimetres, or the journal column) and **text sizes** (points)
 2) **DPI** (for PNG)
 
 Everything else is secondary.
 
-### Plot size vs output pixels (PNG)
+### Figure width vs output pixels (PNG)
 
-Cellucid scales PNG pixel dimensions by DPI:
+The figure is exactly as wide as you set it, at every DPI; a PNG is that
+width in inches times the DPI:
 
-`output_pixels ≈ plot_pixels × (DPI / 96)` (plus extra for legend/axes/title)
+`PNG width (px) = width (mm) / 25.4 × DPI` — a double column (183 mm) at 300 DPI is 2163 px.
 
 Practical implications:
-- A large plot size combined with 300–600 DPI can create *very large* images (slow to export, huge file size).
-- If you want a smaller output, reduce plot size or export at 150 DPI for drafts.
+- Set the width the figure will be printed at, not a larger one to scale down
+  later: its text is set in points (Auto text: 7 pt, the size journals ask
+  for) and keeps that size only at the width it was made for.
+- A wide figure at 600 DPI can be a *very large* image (slow to export, huge
+  file size); export at 150 DPI for drafts.
 
 ### Rule-of-thumb sizing recipes
 
@@ -68,29 +72,31 @@ Use these as starting points; then adjust based on your legends and number of pa
 **Slides / lab meeting**
 - Format: PNG
 - DPI: 150–300
-- Plot size: 1200×900 or 1600×1200
-- Auto text: ON
+- Width: double column (183 mm), or a custom width for a 16:9 slide (about 250 mm)
+- Auto text: ON (or larger text, in points, for the back of the room)
 
 **Manuscript single-panel**
 - Format: PNG (300 DPI) or SVG (Hybrid/Full)
-- Start with plot size: 900×700 to 1400×1000
-- If text is too small, increase plot size rather than scaling up in PowerPoint/Illustrator.
+- Width: the column the panel goes in (single 89 mm, 1.5 column 120 mm, double 183 mm)
+- Auto text sets 7 pt (ticks 6 pt, title 8 pt); never scale the file up or down afterwards, which changes the text's size.
 
 **Multi-panel (2×2 or 3×2 grid)**
 - Use **Export all views (split-view)** in grid compare mode.
-- Increase overall plot size so each panel has enough pixels (e.g., 2000×1500+ as a starting point).
+- Use a double column (183 mm): the panels keep their on-screen arrangement and their views' shapes, and the figure fills the width at the height they make.
+- The panels' shape is the views' shape on screen: several views side by side
+  are tall and narrow. To choose it, use **Frame export** with **Lock aspect**.
 - Size for the legends you will actually get: panels that disagree (different
   field, or the same field with different hidden categories) each carry their
-  own legend inside their cell, and a cell needs roughly 208 px of usable width
-  (Legend: Right) or 104 px of usable height below its panel label
-  (Legend: Bottom) before that legend is drawn at all. A 3×2 grid at 2000×1500
-  clears this comfortably; the same grid at 600×450 does not.
+  own legend. A panel legend stands beside its plot when it is no wider than
+  the plot, and otherwise below it; legends take room from the plots down to
+  half their size without legends, and past that the figure comes out larger
+  than the size you typed (nothing is dropped or cut).
 
 ### Readability checklist
 
 - Turn **Auto text** on unless you have a specific typography target.
-- Use **Legend: Bottom** when the legend is wide and would otherwise squeeze the plot.
-- Prefer **White BG** or **Match viewer** with high contrast for print.
+- Use **Legend: Bottom** when a long legend would otherwise make the figure much wider than the plot: below the plot it fills the plot's width and grows downwards instead.
+- Prefer **White** or **Match viewer** with high contrast for print.
 - Verify in the tool you will actually use (PowerPoint, Illustrator, Inkscape, or a PDF workflow).
 
 ---
@@ -148,10 +154,13 @@ If you have many categories:
 - avoid exporting unreadable “wall of legend” figures (it looks unprofessional and is hard to interpret).
 
 :::{note}
-Hiding categories does not shorten the exported legend. A hidden category keeps
-its entry, marked `(hidden)` with a hollow gray swatch, so a filtered figure
-cannot pass as a complete one. Merge or drop categories upstream if you need a
-shorter legend.
+Hiding categories does not shorten the exported legend. A category you hid
+keeps its entry, marked `(hidden)` with a hollow gray swatch, so a filtered
+figure cannot pass as a complete one. A filter on another field does shorten
+it: a category left with no cells (the row the on-screen legend shows
+disabled) is not listed, and the title (a grid panel's label) names that
+filter. Merge or
+drop categories upstream if you need a shorter legend.
 :::
 
 ### Continuous colormaps
@@ -167,7 +176,7 @@ shorter legend.
   log scale) is exported the same way, and the colorbar says `Gray: 0` (with
   a gene read for a sample of the cells, `Gene read for … cells. Faded: not
   read · gray: 0`); with Gray for zero off its zeros take the scale's lowest
-  colour, and a gene sample's note says only `Faded: not read`.
+  color, and a gene sample's note says only `Faded: not read`.
 
 ### Colorblindness preview (high value, low effort)
 
@@ -186,7 +195,7 @@ Colorblindness simulation is **preview-only**. It does not change the exported a
 
 ### Background choices
 
-- **White BG**: safest for papers and screenshots.
+- **White**: safest for papers and screenshots.
 - **Transparent**: useful for overlaying in slides, but be careful:
   - some viewers show transparency as a checkerboard,
   - anti-aliased text/halo effects can look different depending on what you place behind it.

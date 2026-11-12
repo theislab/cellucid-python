@@ -149,7 +149,7 @@ If `max >= adata.n_obs`, you are definitely mismatched.
 ## Symptom: Python actions don’t affect the UI (highlight/color/reset do nothing)
 
 ### Likely causes (ordered)
-1. The viewer **refused** the action — the field, category, cell or colour was
+1. The viewer **refused** the action — the field, category, cell or color was
    not one it could apply.
 2. The viewer has not connected yet: actions wait in Python and are delivered,
    in order, once it does (the viewer loads after the cell that showed it ends).

@@ -205,7 +205,7 @@ export function usersPending() {
   };
 }
 
-/** Four voters, unanimous on one label — Consensus at 100 %. */
+/** Four voters, unanimous on one label — Consensus at 100%. */
 export function usersConsensus() {
   const votes = { [SUGGESTION.betaCell]: 'up' };
   return {

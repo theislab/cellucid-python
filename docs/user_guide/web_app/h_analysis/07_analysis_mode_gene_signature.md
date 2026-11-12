@@ -23,7 +23,8 @@ pathway, or cell program.
 
 Cellucid turns each signature into a **per-cell score**:
 - one number per cell and gene set,
-- compared across the pages you select.
+- compared across the pages you select, or across the categories of a field
+  ([Group by a field](#group-by-a-field)).
 
 Intuition for wet lab users:
 - a high score means “the genes of the program are high in this cell”,
@@ -35,13 +36,14 @@ Intuition for wet lab users:
 
 | Where | Options |
 | --- | --- |
-| Essentials | **Gene sets**, then **Pages** (with **Rest of \<page\>**) |
+| Essentials | **Gene sets**, **Group by**, then **Pages** (with **Rest of \<page\>**; while Group by is Pages) |
+| More options → Groups and cells | **Groups to score**, **Cells** (while Group by names a field) |
 | More options → Scoring | **Method**; **Control genes**, **Expression bins**, **Random seed** (Module score); **Max rank** (UCell) |
 | More options → Display | **Plot**, **Rescale**, **Sets** |
 
 Typing never runs anything: press **Run**. The line above Run says what is
-missing (`Add genes to a set`, `Select at least one page`, `None of the genes are
-in this dataset`). After a run, changing the genes, the pages or a scoring option
+missing (`Add genes to a set`, `Select at least one page, or group by a field`,
+`Choose at least one group`, `None of the genes are in this dataset`). After a run, changing the genes, the pages or a scoring option
 marks the result **Stale · Run**; the display options redraw at once.
 
 ### Defaults
@@ -50,6 +52,9 @@ marks the result **Stale · Run**; the display options redraw at once.
 | Label | Default |
 |---|---|
 | Gene sets | One empty set |
+| Group by | Pages (the highlight pages chosen) |
+| Groups to score | All |
+| Cells | All cells |
 | Method | Mean |
 | Control genes | 50 |
 | Expression bins | 25 |
@@ -99,6 +104,24 @@ measured, so a signature gene can be absent rather than misspelled; see
 
 ---
 
+## Group by a field
+
+**Group by → Pages** (default) scores the highlight pages chosen under the gene
+sets. **Group by → a categorical field** scores every category of it in one run —
+a program per cell type, per stage, per donor — with no highlight page made
+(before, scoring 8 stages took 8 highlight pages, each left in the person's
+highlights). **Groups to score** keeps some of the categories, and **Cells**
+scores within all cells, the visible ones or a page's (a lineage, say). A
+category with no cell in those cells is left out. Each category is a group of the
+result, in the field's order and colors: the plot, the expanded view's tests
+between the groups (Welch's t and Mann–Whitney for two, ANOVA and Kruskal–Wallis
+for more), the CSV (its `page` column names the category) and an agent's
+`analysis.result` (one row per set and group, `about.group_by` the field). A
+session keeps the field, and on opening checks that each group's cells are still
+of that category.
+
+---
+
 ## Methods
 
 Each cell `i` and set `G` (the set’s genes found in the dataset), on the
@@ -141,9 +164,16 @@ What a run reads:
   across the analysis workers.
 
 :::{note}
-Scores are on the scale of the expression matrix in use: log-normalised values
-give log-scale scores, counts give count-scale scores. UCell is the method least
-sensitive to that choice.
+Scores are on the scale of the values scored: those **Data mapping ›
+Expression values** sets (as stored by default). With both switches on, a matrix
+of counts is scored as `ln(1 + x · 10,000 / cell total)`, as scanpy's
+`normalize_total` + `log1p` and Seurat's `LogNormalize` give it (see
+[Values tested](08_analysis_mode_genes_panel.md#values-tested)), so Mean,
+Median, Mean z-score and Module score are on the log-normalized scale they were
+designed for; a gene's mean and spread for Mean z-score and Module score's bins
+are of the same values. UCell ranks the genes within each cell, which a
+per-cell scaling and the log leave unchanged, so it reads the values as stored.
+The result's `about.values` says which.
 :::
 
 ---
@@ -178,7 +208,8 @@ or a proxy for cell type composition. The tests are exploratory; see
 ## Export (CSV)
 
 `gene_signature_scores.csv`, one line per scored cell and set:
-`page,set,cell_index,score`. `cell_index` is the cell's row in the whole
+`page,set,cell_index,score`, or `group,set,cell_index,score` when the cells
+are scored per category of a **Group by** field. `cell_index` is the cell's row in the whole
 dataset in its original order (0-based, also with a subsample open), so the
 file joins back to `adata.obs`. See {doc}`09_exporting_analysis_results`.
 

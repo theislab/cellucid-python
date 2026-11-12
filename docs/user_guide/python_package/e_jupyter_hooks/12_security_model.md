@@ -67,9 +67,9 @@ before the server binds.
 
 Security implications:
 - Your dataset is **not uploaded** to cellucid.com by this mechanism.
-- Every browser-tab server startup needs outbound access to its configured
-  `web_source_url`; an existing generation directory is not an offline
-  substitute.
+- Every browser-tab server startup reads its configured `web_source_url`;
+  when it cannot, only a cached build whose every file matches its checksums is
+  served offline.
 
 ## Authentication and integrity
 

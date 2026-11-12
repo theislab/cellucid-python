@@ -19,7 +19,7 @@ The R help pages (`?cellucid_prepare`, `?cellucid_transition_drift`,
 `?cellucid_apply_session`, `?cellucid_debug_connection`,
 `?cellucid_clear_web_cache`) are hand-written and authoritative -- each
 action function's page (`?cellucid_color_by`, `?cellucid_highlight_cells`, …)
-is generated from the action catalogue with the function --, and
+is generated from the action catalog with the function --, and
 `cellucid-r`'s own test suite rebuilds each `\usage` block into a function and
 compares it to the real signature. The two pages here restate them for the
 web, with links into the guide.

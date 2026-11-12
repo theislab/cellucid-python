@@ -105,7 +105,7 @@ viewer = show_anndata("pbmc_cellucid.h5ad", height=600)
 | You pass | Best for | Tradeoffs |
 |---|---|---|
 | a path (`.h5ad`, Zarr store, or any other format Cellucid reads) | large data; files you will reopen | read in place, nothing copied (an AnnData file not in priority order is served in priority order, from the file) |
-| an in-memory `AnnData` or `MuData` | the object you are analysing now | served in priority order, made from it as the viewer reads it: the viewer opens at once, and its expression matrices are laid out gene-major in the background (read-only meanwhile); released when the viewer stops, or when the cell that showed it runs again |
+| an in-memory `AnnData` or `MuData` | the object you are analyzing now | served in priority order, made from it as the viewer reads it: the viewer opens at once, and its expression matrices are laid out gene-major in the background (read-only meanwhile); released when the viewer stops, or when the cell that showed it runs again |
 | a file written by `prepare()` | the fastest reads; sharing | written once by `prepare()` |
 
 ## How the embed works (so you can debug it)

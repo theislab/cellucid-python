@@ -17,7 +17,8 @@ def _asset_payloads(build_id: str) -> dict[str, tuple[bytes, str]]:
             "text/css; charset=utf-8",
         ),
         "assets/js/app.js": (
-            b"export const ready = true;\n",
+            # Changed by every build, as a real build changes some files.
+            f"export const build = {build_id!r};\n".encode(),
             "application/javascript; charset=utf-8",
         ),
         "index.html": (
@@ -96,6 +97,16 @@ def _install_fetch_fixture(
 
     monkeypatch.setattr(web_cache, "_fetch_web_response", fetch)
     return calls
+
+
+def _established(kwargs: dict, unreachable: str | None = None):
+    """What ensure_web_ui_cached returns, for a stub of it."""
+    from cellucid import web_cache
+
+    return web_cache.WebCachePrefetchSummary(
+        cache_dir=Path(kwargs["cache_dir"]), source_url=kwargs["source_url"], build_id="build-1",
+        downloaded_files=0, downloaded_bytes=0, skipped_files=3, unreachable=unreachable,
+    )
 
 
 def _cache_snapshot(cache_dir: Path) -> dict[str, bytes]:
@@ -258,8 +269,10 @@ def test_force_refresh_downloads_one_complete_verified_generation(
         show_progress=False,
     )
 
-    assert calls == [
-        "cellucid-web-assets.json",
+    # The inventory comes first; the files it declares are then downloaded
+    # several at once, so each is fetched exactly once in no stated order.
+    assert calls[0] == "cellucid-web-assets.json"
+    assert sorted(calls[1:]) == [
         "assets/css/main.css",
         "assets/js/app.js",
         "index.html",
@@ -401,7 +414,9 @@ def test_prefetch_rejects_internally_inconsistent_inventory_http_metadata(
         ),
     )
 
-    with pytest.raises(ValueError, match="body length|Content-Length"):
+    # A source that answers inconsistently cannot be read: with nothing cached
+    # the error names both, and how to get the app.
+    with pytest.raises(RuntimeError, match="could not be downloaded from .*(body length|Content-Length).*no copy of it is cached"):
         web_cache.ensure_web_ui_cached(
             cache_dir=tmp_path / "cache",
             source_url="https://viewer.example",
@@ -599,16 +614,13 @@ def test_failed_generation_never_replaces_the_last_complete_cache(
             ["cellucid-web-assets.json"],
         ),
         (
+            # The unchanged stylesheet is copied from the cache, never asked for.
             "assets/js/app.js",
-            [
-                "cellucid-web-assets.json",
-                "assets/css/main.css",
-                "assets/js/app.js",
-            ],
+            ["cellucid-web-assets.json", "assets/js/app.js"],
         ),
     ],
 )
-def test_force_refresh_network_failure_propagates_and_preserves_prior_generation(
+def test_force_refresh_network_failure_keeps_the_prior_generation(
     monkeypatch,
     tmp_path: Path,
     failure_asset: str,
@@ -657,15 +669,26 @@ def test_force_refresh_network_failure_propagates_and_preserves_prior_generation
 
     monkeypatch.setattr(web_cache, "_fetch_web_response", fail_selected_request)
 
-    with pytest.raises(ConnectionError, match="refresh network failure"):
-        web_cache.ensure_web_ui_cached(
-            cache_dir=cache_dir,
-            source_url="https://viewer.example",
-            force=True,
-            show_progress=False,
+    if failure_asset == web_cache.WEB_ASSET_INVENTORY_FILENAME:
+        # The source cannot be read at all: the verified cache is that build
+        # exactly and is served offline, as the R package serves it (R9X-15).
+        summary = web_cache.ensure_web_ui_cached(
+            cache_dir=cache_dir, source_url="https://viewer.example", force=True, show_progress=False
         )
+        assert (summary.build_id, summary.downloaded_files, summary.unreachable) == ("build-1", 0, "refresh network failure")
+    else:
+        # A download that fails part way stops the start; the cache stays whole.
+        with pytest.raises(ConnectionError, match="refresh network failure"):
+            web_cache.ensure_web_ui_cached(
+                cache_dir=cache_dir,
+                source_url="https://viewer.example",
+                force=True,
+                show_progress=False,
+            )
 
-    assert attempts == expected_attempts
+    # Downloads run several at once: index.html may or may not have been asked
+    # for before the failure stopped the rest.
+    assert [path for path in attempts if path != "index.html"] == expected_attempts
     assert _cache_snapshot(cache_dir) == before
     assert web_cache.verify_web_ui_cache(cache_dir).build_id == "build-1"
     assert list(tmp_path.glob(".cache.staging-*")) == []
@@ -792,7 +815,7 @@ def test_source_url_must_already_be_canonical(tmp_path: Path) -> None:
         # Neither of these is loopback; only an exact match may be exempt.
         "http://localhost.viewer.example",
         "http://127.0.0.1.viewer.example",
-        # Integer-encoded 127.0.0.1: not a recognised literal, so not exempt.
+        # Integer-encoded 127.0.0.1: not a recognized literal, so not exempt.
         "http://2130706433",
     ],
 )
@@ -924,7 +947,7 @@ def test_the_server_reports_exact_viewer_generation_establishment(
     )
     monkeypatch.setattr(
         "cellucid.web_cache.ensure_web_ui_cached",
-        lambda **kwargs: cache_calls.append(kwargs),
+        lambda **kwargs: cache_calls.append(kwargs) or _established(kwargs),
     )
     server = _anndata_server(
         host="127.0.0.1",
@@ -1072,3 +1095,136 @@ def test_an_asset_rewritten_in_place_with_its_time_put_back_is_checked_again(
     assert (after.st_size, after.st_mtime_ns, after.st_ino) == (before.st_size, before.st_mtime_ns, before.st_ino)
     with pytest.raises(ValueError, match="sha256"):
         web_cache.read_cached_web_asset(cache_dir, "assets/js/app.js")
+
+
+def test_a_cache_of_the_published_build_is_used_without_downloading_it_again(monkeypatch, tmp_path: Path) -> None:
+    """Every server start reads the source's inventory; when the cache holds that
+    very build, verified file by file, nothing else is downloaded."""
+    from cellucid import web_cache
+
+    cache_dir = tmp_path / "cache"
+    calls = _install_fetch_fixture(monkeypatch, build_id="build-1", assets=_asset_payloads("build-1"))
+    web_cache.ensure_web_ui_cached(cache_dir=cache_dir, source_url="https://viewer.example", force=True, show_progress=False)
+    before = _cache_snapshot(cache_dir)
+    calls.clear()
+    summary = web_cache.ensure_web_ui_cached(cache_dir=cache_dir, source_url="https://viewer.example", force=True, show_progress=False)
+    assert calls == ["cellucid-web-assets.json"]
+    assert (summary.downloaded_files, summary.downloaded_bytes, summary.skipped_files) == (0, 0, 3)
+    assert _cache_snapshot(cache_dir) == before
+
+    # A cached file that no longer verifies is not trusted: the build is staged
+    # again, the damaged file downloaded and the intact ones copied.
+    (cache_dir / "assets/css/main.css").write_bytes(b"damaged")
+    calls.clear()
+    summary = web_cache.ensure_web_ui_cached(cache_dir=cache_dir, source_url="https://viewer.example", force=True, show_progress=False)
+    assert calls == ["cellucid-web-assets.json", "assets/css/main.css"]
+    assert (summary.downloaded_files, summary.skipped_files) == (1, 2)
+    assert _cache_snapshot(cache_dir) == before
+
+
+def test_a_new_build_downloads_only_the_files_it_changed(monkeypatch, tmp_path: Path) -> None:
+    from cellucid import web_cache
+
+    cache_dir = tmp_path / "cache"
+    _install_fetch_fixture(monkeypatch, build_id="build-1", assets=_asset_payloads("build-1"))
+    web_cache.ensure_web_ui_cached(cache_dir=cache_dir, source_url="https://viewer.example", force=True, show_progress=False)
+    new_assets = _asset_payloads("build-2")
+    calls = _install_fetch_fixture(monkeypatch, build_id="build-2", assets=new_assets)
+    summary = web_cache.ensure_web_ui_cached(cache_dir=cache_dir, source_url="https://viewer.example", force=True, show_progress=False)
+    assert calls[0] == "cellucid-web-assets.json"
+    assert sorted(calls[1:]) == ["assets/js/app.js", "index.html"]
+    changed = sum(len(new_assets[path][0]) for path in ("assets/js/app.js", "index.html"))
+    assert (summary.build_id, summary.downloaded_files, summary.downloaded_bytes, summary.skipped_files) == ("build-2", 2, changed, 1)
+    assert web_cache.verify_web_ui_cache(cache_dir, expected_source_url="https://viewer.example").build_id == "build-2"
+    for path, (payload, _content_type) in new_assets.items():
+        assert (cache_dir / path).read_bytes() == payload
+
+
+def test_a_build_is_downloaded_several_files_at_once(monkeypatch, tmp_path: Path) -> None:
+    """Each file was once fetched only after the previous one arrived: 1,209
+    files from www.cellucid.com took over six minutes. Here every download
+    waits until another is in flight with it, which one at a time never is."""
+    import threading
+
+    from cellucid import web_cache
+
+    assets = _asset_payloads("build-1")
+    _install_fetch_fixture(monkeypatch, build_id="build-1", assets=assets)
+    fetch = web_cache._fetch_web_response
+    together = threading.Barrier(2, timeout=10)
+    in_flight = {"now": 0, "most": 0}
+    lock = threading.Lock()
+
+    def overlapping(*, source_url: str, asset_path: str, timeout: float):
+        if asset_path == web_cache.WEB_ASSET_INVENTORY_FILENAME:
+            return fetch(source_url=source_url, asset_path=asset_path, timeout=timeout)
+        with lock:
+            in_flight["now"] += 1
+            in_flight["most"] = max(in_flight["most"], in_flight["now"])
+        if asset_path != "index.html":
+            together.wait()
+        with lock:
+            in_flight["now"] -= 1
+        return fetch(source_url=source_url, asset_path=asset_path, timeout=timeout)
+
+    monkeypatch.setattr(web_cache, "_fetch_web_response", overlapping)
+    web_cache.ensure_web_ui_cached(cache_dir=tmp_path / "cache", source_url="https://viewer.example", force=True, show_progress=False)
+    assert in_flight["most"] >= 2
+
+
+def test_offline_a_verified_cache_is_served_and_anything_else_says_what_is_missing(monkeypatch, tmp_path: Path) -> None:
+    """Offline start parity with the R package (R9X-15): the source cannot be
+    read; a cache whose every file matches its inventory is served, an
+    unverified one or none is refused with the shared words."""
+    from cellucid import web_cache
+
+    cache_dir = tmp_path / "cache"
+    _install_fetch_fixture(monkeypatch, build_id="build-1", assets=_asset_payloads("build-1"))
+    web_cache.ensure_web_ui_cached(cache_dir=cache_dir, source_url="https://viewer.example", force=True, show_progress=False)
+
+    def offline(*, source_url: str, asset_path: str, timeout: float):
+        raise OSError("Network is unreachable")
+
+    monkeypatch.setattr(web_cache, "_fetch_web_response", offline)
+    summary = web_cache.ensure_web_ui_cached(cache_dir=cache_dir, source_url="https://viewer.example", force=True, show_progress=False)
+    assert (summary.build_id, summary.unreachable, summary.downloaded_files) == ("build-1", "Network is unreachable", 0)
+    assert web_cache.WEB_APP_OFFLINE_NOTICE.format(source=summary.source_url, build_id=summary.build_id) == (
+        "Could not reach https://viewer.example; serving the cached web app (build build-1)."
+    )
+
+    (cache_dir / "assets/js/app.js").write_bytes(b"changed")
+    with pytest.raises(RuntimeError) as unverified:
+        web_cache.ensure_web_ui_cached(cache_dir=cache_dir, source_url="https://viewer.example", force=True, show_progress=False)
+    assert str(unverified.value).startswith(
+        "The Cellucid web app could not be downloaded from https://viewer.example (Network is unreachable), "
+        f"and the copy cached in {cache_dir} does not check out ("
+    )
+    assert "assets/js/app.js" in str(unverified.value)
+    assert str(unverified.value).endswith(
+        "Connect to the internet once, or set web_cache_dir to a folder that holds a verified build."
+    )
+
+    with pytest.raises(RuntimeError) as missing:
+        web_cache.ensure_web_ui_cached(cache_dir=tmp_path / "none", source_url="https://viewer.example", force=True, show_progress=False)
+    assert str(missing.value) == (
+        "The Cellucid web app could not be downloaded from https://viewer.example (Network is unreachable), "
+        f"and no copy of it is cached in {tmp_path / 'none'}. "
+        "Connect to the internet once, or set web_cache_dir to a folder that holds a verified build."
+    )
+
+
+def test_a_server_started_offline_says_it_serves_the_cached_build_even_when_quiet(monkeypatch, tmp_path: Path) -> None:
+    printed: list[str] = []
+    monkeypatch.setattr("cellucid.anndata_server.console_print", lambda *values, **_: printed.append(" ".join(map(str, values))))
+    monkeypatch.setattr(
+        "cellucid.web_cache.ensure_web_ui_cached",
+        lambda **kwargs: _established(kwargs, unreachable="Network is unreachable"),
+    )
+    server = _anndata_server(quiet=True, serve_web_ui=True, web_source_url="https://viewer.example", web_cache_dir=tmp_path / "web-cache")
+    server.start_background()
+    try:
+        assert any(
+            "Could not reach https://viewer.example; serving the cached web app (build build-1)." in line for line in printed
+        )
+    finally:
+        server.stop()

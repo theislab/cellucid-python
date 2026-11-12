@@ -70,7 +70,9 @@ the Highlighting panel: a one-finger tap or drag then does what `Alt+click` or
 buttons replace `Alt`, `Shift+Alt`, and `Ctrl/Cmd+Alt`. Two fingers still zoom
 and pan. The same switch and choice sit on the **selection bar** at the bottom
 of the plot, beside each tool's **Confirm**, **Undo** and **Cancel**, so on a
-phone a selection can be finished without reopening the menu. See
+phone a selection can be finished without reopening the menu. While it is on,
+each tool's step line says so ("Select mode: Intersect, Add or Subtract under
+the tools combines each gesture") in place of the `Alt` keys. See
 {ref}`select-mode` and {ref}`selection-bar`.
 
 ### Rule 3: selections are multi-step (and undoable)
@@ -129,7 +131,7 @@ The candidate set can persist across tool switches, but per-tool undo/redo histo
 | **Annotation** | “Select all cells like this one” (category) or “cells in this value range” (continuous) | Field space | Works in both; reads the field of the view you click in | A categorical or continuous color-by field | Selects only *visible* cells in that category/range |
 | **Lasso** | Drawing around a region in the plot | Screen-space polygon (projection) | In 3D it selects by projection | None | In 3D it can include points “behind” your intended region |
 | **Proximity drag** | Selecting a local blob by distance | Embedding-space radius | In 2D it behaves like a disk; in 3D like a sphere | None | If you miss-click, center may be wrong (or nothing happens) |
-| **KNN drag** | Selecting along the neighbor graph (manifold-aware) | Graph distance (degree) | Independent of camera; still view-filtered | Connectivity/edges must be loaded | A press before the graph has loaded only starts the load; with no graph at all, “No neighbor graph available for this dataset” |
+| **KNN drag** | Selecting along the neighbor graph (manifold-aware) | Graph distance (degree) | Independent of camera; still view-filtered | Connectivity/edges must be loaded | A press before the graph has loaded only starts the load; with no graph at all, “This dataset has no neighbor graph, so KNN drag cannot select by neighbors; use Proximity drag or Lasso.” |
 
 ---
 
@@ -179,12 +181,12 @@ If that field is **continuous**:
 During `Alt+drag`, Cellucid shows a **range preview label** and preview-highlights what would be selected.
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/select-category-by-click.png
-:alt: Annotation selection after Alt+click on a cell of the green Beta arm: all 591 Beta cells are drawn in the highlight colour, a tooltip by the pointer names Beta, 591 cells and cell_type, and the panel reads Step 1: 591 cells with the help line "Alt to replace, Shift+Alt to add, Ctrl+Alt to subtract" above the Confirm, undo, redo and Cancel controls.
+:alt: Annotation selection after Alt+click on a cell of the green Beta arm: all 591 Beta cells are drawn in the highlight color, a tooltip by the pointer names Beta, 591 cells and cell_type, and the panel reads Step 1: 591 cells with the help line "Alt to replace, Shift+Alt to add, Ctrl+Alt to subtract" above the Confirm, undo, redo and Cancel controls.
 :width: 1440px
 
 One `Alt+click` on one cell, and every visible cell sharing its `cell_type`
 becomes the candidate set — including cells nowhere near the pointer. The count
-in the step readout (`591`) is the candidate set; `No cells highlighted` above
+in the step readout (`591`) is the candidate set; `No cells highlighted` below
 it is still true, because nothing has been confirmed.
 ```
 
@@ -214,7 +216,7 @@ Lasso selects based on a polygon you draw on screen. In 3D, this is a **projecti
 3) Release mouse → that completes a step.
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/01-draw-lasso.png
-:alt: The 2D planar Pancreas embedding mid-lasso: Alt is held, the pointer is pressed at the end of a dotted path drawn most of the way round the upper part of the left lobe, and the cells the path already encloses are drawn in the highlight colour while the panel shows no step yet.
+:alt: The 2D planar Pancreas embedding mid-lasso: Alt is held, the pointer is pressed at the end of a dotted path drawn most of the way round the upper part of the left lobe, and the cells the path already encloses are drawn in the highlight color while the panel shows no step yet.
 :width: 1440px
 
 Mid-draw. The path does not have to be closed by hand — releasing closes it. The
@@ -236,7 +238,7 @@ Releasing records a step and reveals the step controls:
 `Step 1: 826 cells`, then **Confirm**, undo (`↩`), redo (`↪`) and **Cancel**.
 Undo reaches every earlier step: the oldest steps are dropped only when the
 recorded selections together outgrow a share of the device's memory. Redo is
-greyed out until you have used undo at least once.
+grayed out until you have used undo at least once.
 ```
 
 ### How it works (2D vs 3D)
@@ -261,7 +263,7 @@ the focused view is colored by a different field; the range label of a
 continuous drag is that panel's range. Lasso applies to the specific panel you
 started the gesture in.
 Only cells that panel actually shows can be selected: the part of a path that
-strays into a neighbouring panel (or under the sidebar) selects nothing there.
+strays into a neighboring panel (or under the sidebar) selects nothing there.
 Proximity and KNN likewise grow from the cell under the pointer in the panel
 you pressed, and their circles are drawn clipped to that panel.
 
@@ -293,10 +295,10 @@ Modifiers:
 - `Ctrl/Cmd+Alt` = subtract (remove)
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/drag-proximity-radius.png
-:alt: Proximity drag mid-gesture on the 2D embedding: a dashed circle centred on a dot at the seed cell in the left lobe, the cells inside it drawn in the highlight colour, and the pointer pressed on the circle's edge.
+:alt: Proximity drag mid-gesture on the 2D embedding: a dashed circle centered on a dot at the seed cell in the left lobe, the cells inside it drawn in the highlight color, and the pointer pressed inside the circle, below and to the right of the seed.
 :width: 1440px
 
-Mid-drag. The dashed circle is the current radius and the dot at its centre is
+Mid-drag. The dashed circle is the current radius and the dot at its center is
 the seeded cell. Note that the panel shows no step yet: proximity publishes its
 step on release, not while you drag.
 ```
@@ -317,7 +319,7 @@ If you click empty space:
   click ray crosses the plane through that selection’s centroid facing the
   camera — that is, *where you clicked, at the selection’s depth*. This is what
   makes “grow/shrink around the current
-  selection” work in 3D without seeding on a cell, but the blob is centred on
+  selection” work in 3D without seeding on a cell, but the blob is centered on
   your pointer, not on the selection.
 
 ### When to use
@@ -326,7 +328,7 @@ If you click empty space:
 
 ### Performance considerations
 When you press, proximity measures every visible cell's distance from the
-centre once. Each pointer move after that re-tests only the cells between the
+center once. Each pointer move after that re-tests only the cells between the
 previous radius and the new one, so growing or shrinking the circle costs the
 cells it sweeps, not a scan of the dataset.
 
@@ -340,12 +342,14 @@ KNN drag grows a selection outward along the neighbor graph (connectivities).
 KNN selection requires a neighbor graph.
 
 What you see:
-- Choosing **KNN drag** loads the graph on demand, under a *“Loading neighbor
-  graph for KNN mode”* notification that turns into *“Neighbor graph ready
-  (N edges)”*. An `Alt+click` made before that finishes only starts the load
-  and selects nothing; seed the drag again once the graph is ready.
-- A dataset without a neighbour graph raises one warning notification,
-  *“No neighbor graph available for this dataset”*, and KNN drag selects
+- Choosing **KNN drag** loads the graph on demand, under one *“Reading the
+  neighbor graph · … read”* notification that turns into *“Neighbor graph
+  read: N edges”* (one card for the read, whether KNN drag, **Show
+  connectivity edges** or both asked for it). An `Alt+click` made before that
+  finishes only starts the load and selects nothing; seed the drag again once
+  the graph is ready.
+- A dataset without a neighbor graph raises one warning notification,
+  *“This dataset has no neighbor graph, so KNN drag cannot select by neighbors; use Proximity drag or Lasso.”*, and KNN drag selects
   nothing.
 
 Practical fix:
@@ -364,11 +368,11 @@ Modifiers:
 - `Ctrl/Cmd+Alt` = subtract (remove)
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/drag-knn-degree.png
-:alt: KNN drag mid-gesture from the same seed cell, dragged upward by the same distance: a small dashed circle labelled 3° around the seed, and the highlighted cells spreading through the left lobe along the neighbour graph rather than filling a disc, with the pointer pressed above the seed.
+:alt: KNN drag mid-gesture from the same seed cell, dragged upward by the same distance: a small dashed circle labeled 3° around the seed, and the highlighted cells spreading through the left lobe along the neighbor graph rather than filling a disc, with the pointer pressed above the seed.
 :width: 1440px
 
 The same seed cell and the same drag distance as the proximity capture above,
-dragged upward, and a visibly different result: the selection follows the neighbour
+dragged upward, and a visibly different result: the selection follows the neighbor
 graph, so it grows along the manifold rather than filling a disc.
 ```
 
@@ -380,7 +384,7 @@ Degree `2` = neighbors-of-neighbors, etc.
 The step readout names the degree it has reached, e.g. `Step 1: 90 cells (2°
 neighbors)`. As degree grows, selection can grow very quickly.
 
-Each degree reads the neighbour lists of the cells the last one reached from
+Each degree reads the neighbor lists of the cells the last one reached from
 the file (the graph is checked once, when the tool first needs it, and its
 edges are then let go unless they are shown; its rows are read by cell), so
 the tool holds no memory per cell or edge of the graph however large the
@@ -409,12 +413,11 @@ not be read”*.
 3) A new highlight group appears in the list (on the active page).
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/03-confirm-lasso-group.png
-:alt: The Highlighting panel after Confirm: the page tab reads Page 1 826, and the ringed group list shows the summary "826 cells highlighted", a Clear button, and one group row labelled "Lasso (826 cells) (826)" with a checkbox and a remove control.
+:alt: The Highlighting panel after Confirm: the page tab reads Page 1 826, and the ringed group list shows the summary "826 cells highlighted", CSV, .h5ad and Clear buttons, and one group row labeled "Lasso" with a checkbox, its count 826 and a remove control.
 :width: 532px
 
-After **Confirm**. The group is named for the tool that made it and carries its
-count twice — once inside the label the tool wrote, once as the live membership
-count beside the checkbox. Groups cannot be renamed or recoloured; see
+After **Confirm**. The group is named for the tool that made it, `Lasso`, and
+its live membership count stands in a column of its own beside the name. Groups cannot be renamed or recolored; see
 {doc}`03_highlight_ui`.
 ```
 

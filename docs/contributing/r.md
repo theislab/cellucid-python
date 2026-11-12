@@ -54,7 +54,7 @@ not against `cellucid-r`. The R pages are {doc}`/user_guide/r_package/index`
 
 The R package's own documentation — `man/`, `vignettes/`, and
 `cellucid-r/README.md` — lives in the `cellucid-r` repository and is changed
-there. A behaviour change usually needs both: the help page beside the code and
+there. A behavior change usually needs both: the help page beside the code and
 the page on this site.
 
 When one of those pages points at another page on this site, write the

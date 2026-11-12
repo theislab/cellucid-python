@@ -24,11 +24,11 @@ This checklist resolves a large fraction of figure export reports:
    - Check filters/visibility: exporting “0 visible points” produces an empty plot (see {doc}`06_edge_cases`).
 
 3) **Try a minimal “sanity export”**
-   - Export a small **PNG** at a small plot size (e.g., 600×450, 150 DPI).
+   - Export a small **PNG**: a single column (89 mm) at 150 DPI.
    - If this fails, the issue is likely download permissions, environment, or an internal error (not file size).
 
 4) **Reduce size before debugging**
-   - For big exports, first cut plot size in half and export at 150 DPI.
+   - For big exports, first try a single column at 150 DPI.
    - If the smaller export works, scale up cautiously.
 
 5) **Check for Export Fidelity Warnings**
@@ -58,8 +58,8 @@ Common blockers and what they mean:
 - **“Connectivity overlay not exported”**  
   Connectivity edges are visible, but figure export covers the point layer only.
   Press **Turn off edges and export** in the dialog, or turn the edges off
-  yourself and export again. The velocity overlay is the same (**Turn off
-  vector field and export**).
+  yourself and export again. The velocity overlay does not block: the figure
+  draws its field as arrows on a grid ({doc}`06_edge_cases`).
 
 - **“Volumetric smoke cloud render mode not exported”**  
   The viewer is drawing a volumetric density field, but figure export renders
@@ -94,7 +94,7 @@ There is no “export anyway” action: resolve every listed blocker first.
 
 1) Allow downloads for the site (browser settings).
 2) Disable extensions temporarily (or use an incognito window).
-3) Export a small PNG first; then increase plot size/DPI.
+3) Export a small PNG first (single column, 150 DPI); then widen it / raise the DPI.
 4) If you see a console error, capture it and file a bug with context (see {doc}`09_reference_implementation_notes`).
 
 ### Prevention
@@ -114,13 +114,13 @@ There is no “export anyway” action: resolve every listed blocker first.
 
 ### How to confirm
 
-- Try a smaller export (smaller plot size; 150 DPI).
+- Try a smaller export (a narrower width; 150 DPI).
 - Try exporting **SVG** (Hybrid) instead of a huge PNG, or vice versa.
 - Check the browser console for the exact error message.
 
 ### Fix
 
-1) Reduce plot size and/or DPI.
+1) Reduce the width and/or DPI.
 2) Switch strategy:
    - Large dataset → Hybrid SVG or PNG.
    - Medium dataset → Optimized vector.
@@ -133,10 +133,9 @@ There is no “export anyway” action: resolve every listed blocker first.
 ### Likely causes (ordered)
 
 - You exported **Full vector** with too many visible points.
-- Category explosion: a huge categorical legend dominates the file size (its
-  box is never larger than the plot, so past a few thousand categories the
-  entries are drawn too small to read, and every one is still written).
-- Multi-panel export with many views and a large plot size.
+- Category explosion: a huge categorical legend dominates the file size (every
+  entry is written whole, and the legend and the figure grow to hold them).
+- Multi-panel export with many views in a wide figure.
 
 ### How to confirm
 
@@ -156,7 +155,7 @@ There is no “export anyway” action: resolve every listed blocker first.
 
 ### Prevention
 
-- Choose the SVG strategy explicitly; Full vector has no automatic size guard.
+- An SVG is Full vector until you choose another strategy, and Full vector has no automatic size guard: for a large dataset choose Hybrid or Optimized vector.
 - Use {doc}`04_quality_knobs_and_best_practices` as your sizing/strategy playbook.
 
 ---
@@ -165,9 +164,9 @@ There is no “export anyway” action: resolve every listed blocker first.
 
 ### Likely causes (ordered)
 
-- Export background differs (e.g., White BG vs Match viewer).
+- Export background differs (e.g., White vs Match viewer).
 - You changed the active view/field/filters right before export and are looking at a different state than you think.
-- Very small plot size + later scaling up makes the export look blurry compared to the interactive view.
+- A narrow figure scaled up later looks blurry (and its text no longer the size it was set in); export at the width it is printed.
 
 ### How to confirm
 
@@ -178,7 +177,7 @@ There is no “export anyway” action: resolve every listed blocker first.
 ### Fix
 
 1) Make the exported plot larger (don’t export tiny and scale up).
-2) Use **PNG (300 DPI)** or **Hybrid SVG** for 3D/shader-heavy views.
+2) Use **PNG** (at 300 DPI) or **Hybrid** SVG for 3D/shader-heavy views.
 3) Restore WebGL2 in the current environment by resolving the named policy,
    driver, or extension restriction.
 4) If text/legend quality is the issue, export SVG (Hybrid) and edit text in a vector editor.
@@ -211,37 +210,30 @@ There is no “export anyway” action: resolve every listed blocker first.
 
 - Legend/axes are disabled in export settings.
 - The panel has no active color-by field, so there is nothing for a legend to explain.
-- Multi-panel export, and the cells are too small to carry a readable panel
-  legend (see below).
-- Plot size is too small for the requested legend/category count, causing layout crowding.
-- Font substitution in your downstream editor shifts text widths.
+- Font substitution in your downstream editor changes text widths, so a name
+  laid out to fit its column can run into the next one.
 
 ### How to confirm
 
 - Ensure **Legend** and **Axes** are enabled in the export panel.
 - Confirm a color-by field is active in the panel you expected a legend for.
-- Increase plot size and export again; if the panel legends appear, the cells
-  were below the readability floor.
 - Open the SVG in a browser to see whether it’s a renderer issue or an editor-specific issue.
 
 ### Fix
 
-1) Increase plot size (and for PNG, choose appropriate DPI).
+1) Set the width the figure is printed at (and for PNG, an appropriate DPI).
 2) Move legend to **Bottom** or disable legend.
 3) For large datasets, use **Hybrid** (reduces SVG complexity).
 4) If the issue is editor-specific, try Inkscape vs Illustrator vs browser rendering.
 
 :::{note}
-**A colored panel is never exported without a legend because the panels
-disagree.** When the panels do not all share one field and one legend model
-(hidden categories included), Cellucid gives each panel its own legend inside
-its cell instead of one shared legend. The one case where a panel legend is
-deliberately not drawn is size: a panel legend may take at most half its cell,
-and it is skipped when that half minus an 8 px gap falls under **96 px wide**
-(Legend: Right) or **44 px tall** (Legend: Bottom) — roughly 208 px of usable
-cell width, or 104 px of usable cell height below the panel label. That is a
-legibility floor, not a bug: no legend text would be readable at that size.
-Increase the plot size or export fewer panels.
+**A colored panel is never exported without a legend.** When the panels do not
+all share one field and one legend model (hidden categories included), Cellucid
+gives each panel its own legend inside its cell instead of one shared legend.
+A panel legend wider than its plot stands below it (every panel legend does
+when beside their plots they would not fit the size), and a grid too small for
+its legends comes out larger than the size you typed: no legend is dropped and
+no name is cut.
 :::
 
 ---
@@ -307,7 +299,7 @@ field individually. See {doc}`05_metadata_and_provenance`.
 
 1) Enable **Frame export**.
 2) Adjust the frame and click **Confirm** to validate.
-3) If you want the crop aspect to match your plot, click **Lock aspect**.
+3) The plot takes the frame's shape and the figure keeps its width, so the frame sets the figure's height; **Lock aspect** keeps the frame's shape while you resize it.
 4) Use **Reset** (or double-click) to return to full frame and try again.
 
 ---

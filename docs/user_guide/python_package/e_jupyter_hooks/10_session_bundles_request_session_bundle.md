@@ -40,7 +40,7 @@ written by the web app. It holds the dataset's history: its trackers (each an
 independent tree of steps, with named branches), every step (which action it
 applied, with which parameters, who took it, its label), and the values of
 the viewer's state each step shows -- labels and categories, user-defined
-fields, highlight pages and groups, gene sets, filters, colours, views,
+fields, highlight pages and groups, gene sets, filters, colors, views,
 camera, layout. The chat bar's conversations are left out of a session a
 notebook asks for.
 
@@ -150,7 +150,7 @@ stops waiting. R: `cellucid_load_session()`, then
   bounded), so the only limit is the free space of the temporary directory.
   Each chunk inside the file is inflated to exactly its declared size when it
   is read.
-- A request waits until it is collected or cancelled (`request.cancel()`, or
+- A request waits until it is collected or canceled (`request.cancel()`, or
   the viewer stops); `result(timeout=...)` bounds only how long that call
   waits, and a later `result()` still collects it.
 
@@ -188,7 +188,7 @@ Fix:
 
 ### Symptom: “Dropped a session bundle nobody is waiting for” in the log
 
-A session arrived after its request was cancelled (`request.cancel()`, or the
+A session arrived after its request was canceled (`request.cancel()`, or the
 viewer stopped). The file is discarded and the channel stays open.
 
 Fix:

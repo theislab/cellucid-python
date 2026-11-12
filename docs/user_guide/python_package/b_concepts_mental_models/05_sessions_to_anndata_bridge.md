@@ -170,7 +170,15 @@ This is the “most useful” mapping because it makes interactive groups explic
 - Each column is named by the field's key.
 - A categorical field (labels, a merge of categories, an annotation) is a
   `category` column with its categories in order; a cell with no category is
-  missing.
+  missing. Its colors go with it as Scanpy keeps them,
+  `adata.uns["<key>_colors"]`: the colors it is shown in, in the view in
+  focus at the step (a category's color the person or an agent chose there,
+  else its `palette` — a field made from highlight pages opens in its pages'
+  colors — else Cellucid's own category colors). A column without categories
+  has none (stale colors under its name are removed). A renamed column
+  carries its colors, a merged category keeps its first category's, and a
+  column that came with the dataset, recolored in the view in focus, takes
+  the colors it is shown in ({ref}`apply-column-colors`).
 - A continuous field a notebook pushed is `float32`, `NaN` for no value.
 - A continuous copy of another field copies that field: an obs column, or a
   gene's values across cells (it does not create a gene-aligned `adata.var`
@@ -188,7 +196,10 @@ This is the “most useful” mapping because it makes interactive groups explic
   `adata.uns["cellucid"]["history_applied"]` (JSON text holding a list; read
   it with `cellucid.history_applied(adata)`): the session's SHA-256, the
   tracker, branch and step, when, the package and its version, the columns it
-  wrote, the renames it applied and what it did not apply. With
+  wrote, the renames it applied, what it did not apply and the expression
+  values the genes were shown in at the step (`expression`:
+  `{"normalize", "log1p"}`, what the person looked at; `X` keeps its values).
+  With
   `keep_session=True` it also keeps the session file (base64), so the history
   can be rebuilt from the object alone.
 
@@ -204,7 +215,8 @@ This is the “most useful” mapping because it makes interactive groups explic
 ```{important}
 Not everything in a session becomes a clean AnnData mutation.
 The goal is to materialize the parts that make sense as dataset annotations (labels, highlights, fields, gene sets).
-Presentation (filters, colours, views, the camera, analyses) is reported as one
+Presentation (filters, colors, views, the camera, analyses, the expression
+values) is reported as one
 `presentation` row per domain the step changed and never applied; it stays in
 the session (`tracker.step(step).state()` reads it).
 ```
@@ -290,7 +302,12 @@ cell-order digest catches other cells or another order only when `adata` has
 the session's embedding.
 
 Dataset ids are compared when the object names one in
-`uns['cellucid']['id']` (see {doc}`04_dataset_identity_and_reproducibility`).
+`uns['cellucid']['id']` (see {doc}`04_dataset_identity_and_reproducibility`),
+or with the id it was shown under: a viewer given `dataset_id=` serves the
+object under that id and saves its session under it, so
+`viewer.apply_session_to_anndata` takes the session back to an object that
+declares the id the viewer's data declared, and a session file is applied with
+`apply_cellucid_session_to_anndata(adata, path, dataset_id=...)`.
 
 ---
 
@@ -360,7 +377,7 @@ Fix:
 
 ### Symptom: “Dropped a session bundle nobody is waiting for” (log)
 
-This means the session arrived after its request was cancelled
+This means the session arrived after its request was canceled
 (`request.cancel()`, or the viewer stopped). A viewer tab from an old kernel cannot send one at all:
 its channel is refused and the view freezes.
 

@@ -38,7 +38,7 @@ GENERATOR = REPOSITORY_ROOT / "scripts" / "generate_transition_drift_conformance
 
 #: The same digest is pinned in cellucid-r
 #: (tests/testthat/test-transition-drift.R). Update both together.
-FIXTURE_SHA256 = "0c3a15648c21a6441f2e530d25a2837298dacd5113942f3ef280b048a1ea81e8"
+FIXTURE_SHA256 = "1488017dafe4085eb0e1a1041e7ddf5c7ae3e9717971f017897a15b71c5ce5f8"
 
 
 def _cases() -> list[dict[str, Any]]:

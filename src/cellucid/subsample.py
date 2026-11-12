@@ -363,7 +363,7 @@ def subsample_cells(
         since one cell has no coordinate variation to draw.
     method
         ``"uniform"`` (every cell alike), ``"blocks"`` (runs of ``block_size``
-        neighbouring cells in file order, kept together), ``"stratified"``
+        neighboring cells in file order, kept together), ``"stratified"``
         (split over the categories of ``groupby``), or ``"spatial"`` (split
         over the occupied boxes of a ``grid_size`` grid on ``basis``, balanced,
         so sparse regions keep their cells).

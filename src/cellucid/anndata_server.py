@@ -94,7 +94,7 @@ from ._contracts import (
 from ._file_versions import file_version, open_shared, path_version
 from ._launch_defaults import launch_defaults
 from ._plural import plural
-from ._served_store import NotReady, StoreBody, require_cache_bytes
+from ._served_store import NotReady, SourceChanged, StoreBody, require_cache_bytes
 from ._server_base import (
     CELLUCID_WEB_URL,
     DEFAULT_HOST,
@@ -112,6 +112,7 @@ from ._server_base import (
     print_server_banner,
     print_step,
     print_success,
+    public_viewer_url,
     require_allowed_hosts,
     require_server_port,
 )
@@ -232,6 +233,7 @@ def _resolve_store_route(served: _ServedStore, route: str) -> Path | tuple[Store
     if key is None:
         return None
     if served.priority is not None:
+        served.priority.require_unchanged()
         body = served.priority.body(key)
         return None if body is None else (body, served.priority.etag)
     generated = served.generated_metadata
@@ -246,6 +248,16 @@ def _resolve_store_route(served: _ServedStore, route: str) -> Path | tuple[Store
     if not resolved.is_file() or not resolved.is_relative_to(served.store.path):
         return None
     return resolved
+
+
+def _source_changed_answer(changed: SourceChanged) -> tuple[int, dict[str, str], bytes]:
+    """The answer to a key of a store in priority order whose file changed on
+    disk since it was opened (:class:`~cellucid._served_store.SourceChanged`):
+    ``409``, as a file served as it is answers one that changed while it was
+    read, with the message. The viewer refuses the store's reads from then on
+    and says it changed on disk (``formats/zarr/stores/http.js``)."""
+    body = str(changed).encode("utf-8")
+    return 409, {"Content-Type": "text/plain", "Content-Length": str(len(body))}, body
 
 
 def _not_ready_answer(waiting: NotReady) -> tuple[int, dict[str, str], bytes]:
@@ -360,7 +372,7 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
                 self.send_error_response(404, f"Not found: {path}")
         except ConnectionError:
             # The client went away mid-response: a closed tab, a reload, or a
-            # cancelled read. There is no socket left to answer on.
+            # canceled read. There is no socket left to answer on.
             self.close_connection = True
             logger.debug("Client disconnected while receiving %s", raw_path)
         except Exception:
@@ -380,6 +392,15 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
         except NotReady as waiting:
             # Raised before any header is sent: the bytes are made first.
             self._send_not_ready(waiting)
+        except SourceChanged as changed:
+            # Raised before any header is sent, as NotReady is.
+            status, headers, body = _source_changed_answer(changed)
+            self.send_response(status)
+            for name, value in headers.items():
+                self.send_header(name, value)
+            self.end_headers()
+            if self.command != "HEAD":
+                self._response_writer().write(body)
 
     def _send_not_ready(self, waiting: NotReady) -> None:
         """``503``: a file's matrix the store has not counted yet; ``Retry-After``
@@ -510,14 +531,18 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
         assert interval is not True
         start, end = interval if interval is not None else (0, body.size - 1)
         data = b"" if head_only or body.size == 0 else body.read(start, end + 1)
+        # Bytes made while the file was written again are not sent.
+        if self.served.priority is not None:
+            self.served.priority.require_unchanged()
         length = self._send_head(size=body.size, interval=interval, etag=etag)
         if not head_only and length:
             self._response_writer().write(data)
 
     def log_message(self, format: str, *args):
-        """Override to use Python logging (formatted only when it is shown)."""
+        """Override to use Python logging (formatted only when it is shown),
+        the viewer page's request line without its viewer token."""
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("%s - %s", self.address_string(), format % args)
+            logger.debug("%s - %s", self.address_string(), public_viewer_url(format % args))
 
 
 # =============================================================================
@@ -620,7 +645,9 @@ class _HostViewer:
             self.viewer_id,
             self.viewer_token,
             self._deliver,
-            on_socket=lambda attached: self.port.page_back() if attached else self.port.page_gone(),
+            on_page_gone=self.port.page_gone,
+            # The cells this process serves (None when only the browser reads the data).
+            cell_count=lambda: count if isinstance(count := server.server_info.get("n_cells"), int) else None,
         )
         publish_viewer(self.viewer_id, self.port, runtime=server.runtime)
 
@@ -650,6 +677,51 @@ class _HostViewer:
         with contextlib.suppress(Exception):
             self._send_viewer_command(self.viewer_id, self.viewer_token, self._frame({"type": "freeze"}), queue=False)
         unregister_event_callback(self.viewer_id, self.viewer_token)
+
+
+class ServerBindError(OSError):
+    """The server could not bind its address: an ``OSError`` of the
+    operating system's ``errno``, said in one sentence (``bind_refusal``),
+    without the ``[Errno n]`` prefix."""
+
+    def __str__(self) -> str:
+        return str(self.strerror)
+
+
+def _argument_spelling(name: str, value: object) -> str:
+    """An argument of ``serve_anndata()`` / ``show_anndata()`` as a message names it."""
+    return f"{name}={value!r}"
+
+
+def bind_refusal(error: OSError, host: str, port: int, *, spelled: Callable[[str, object], str]) -> str | None:
+    """Why the server could not bind ``host:port``, with the setting that
+    resolves it, or None for another failure. One sentence for the API and
+    ``cellucid serve``; ``spelled(name, value)`` writes a setting as the
+    caller gives it (``port=9000``, ``--port 9000``). cellucid-r's
+    ``cellucid_view()`` says the same with R's spelling (``port = 9000``)."""
+    import errno
+    import socket
+
+    if isinstance(error, socket.gaierror) or error.errno == errno.EADDRNOTAVAIL:
+        return (
+            f"Host {host!r} is not an address this machine can serve from. Use {spelled('host', '127.0.0.1')} to "
+            f"serve only this computer, which is the default, or {spelled('host', '0.0.0.0')} to accept "
+            "connections from other machines."
+        )
+    if error.errno == errno.EADDRINUSE:
+        return (
+            f"Port {port} is already in use on {host}, so Cellucid could not start its server there. Another "
+            "program is listening on that port, often an earlier Cellucid that was never stopped. Serve on a "
+            f"different port with {spelled('port', 9000)}, or let the operating system pick a free one with "
+            f"{spelled('port', 0)} and use the Viewer URL it prints."
+        )
+    if error.errno in {errno.EACCES, errno.EPERM} and error.filename is None:
+        return (
+            f"The operating system refused to let Cellucid bind {host}:{port}. Ports below 1024 need "
+            f"administrator rights on most systems, so choose a higher port such as {spelled('port', 8765)}, "
+            f"or {spelled('port', 0)} for any free port."
+        )
+    return None
 
 
 class AnnDataServer:
@@ -692,13 +764,13 @@ class AnnDataServer:
         quiet: bool = False,
         *,
         latent_key: str | None = None,
-        gene_id_column: str | None = None,
+        var_gene_id_column: str | None = None,
         normalize_embeddings: bool | None = None,
         centroid_min_points: int | None = None,
         dataset_name: str | None = None,
         dataset_id: str | None = None,
         obs_keys: Sequence[str] | None = None,
-        embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
+        embedding_defaults: Mapping[str, EmbeddingKeySpec] | None = None,
         knn_key: str | None = None,
         expression_source: str | None = None,
         vector_field_default: str | None = None,
@@ -742,7 +814,7 @@ class AnnDataServer:
             ``uns['cellucid']['defaults']['latentKey']``. The viewer reads the
             outlier quantiles the store holds for it, or computes them on first
             use.
-        gene_id_column : str, optional
+        var_gene_id_column : str, optional
             Exact column in ``var`` (``raw.var`` with ``expression_source="raw"``)
             whose values name the genes. If None, genes are named by the index.
         normalize_embeddings : bool, optional
@@ -765,17 +837,18 @@ class AnnDataServer:
         obs_keys : sequence of str, optional
             Exact ``obs`` columns the viewer shows, in this order. If None,
             every column is shown.
-        embedding_keys : mapping, optional
+        embedding_defaults : mapping, optional
             The embedding of a dimension slot, overriding the default for that
             slot: ``{"2d": "X_tsne"}`` reads the first two columns of
             ``obsm['X_tsne']``, and ``{"2d": ("X_pca", [2, 0])}`` reads the 0-based
             columns named. Slots not named follow the default rule
             (``X_umap_1d``/``X_umap_2d``/``X_umap_3d``, else the first 1- to
             3-column of ``X_umap``, ``X_UMAP``, ``X_wnn.umap`` and
-            ``X_ref.umap``); when no slot resolves, the viewer makes a deterministic
-            best guess from the other ``obsm`` arrays and reports it.
+            ``X_ref.umap``); every slot still empty gets a deterministic best
+            guess, the best-ranked other ``obsm`` array of exactly its width,
+            marked guessed (:func:`cellucid.data_mapping.resolve_embedding_slots`).
         knn_key : str, optional
-            The ``obsp`` matrix the viewer draws as the neighbour graph, usually
+            The ``obsp`` matrix the viewer draws as the neighbor graph, usually
             ``"connectivities"``. None follows the viewer's default rule. The
             graph is read only when a view draws it.
         expression_source : str, optional
@@ -821,6 +894,7 @@ class AnnDataServer:
         """
         self.dataset_name: str = ""
         self.dataset_id: str = ""
+        self.declared_dataset_id: str | None = None
         given_name = (
             None if dataset_name is None else _require_dataset_name(dataset_name, label="dataset_name")
         )
@@ -861,9 +935,12 @@ class AnnDataServer:
         #: Whether a taken ``port`` is passed over for the next free one
         #: (:class:`AnnDataViewer` sets it when no port was given).
         self.next_free_port = False
-        #: The program serving the viewer, as ``/_cellucid/info`` names it and
-        #: the viewer shows it (the shared protocol's ``runtimes``): "python",
-        #: or "jupyter" for a notebook viewer (:class:`AnnDataViewer` sets it).
+        #: What opened the viewer, as ``/_cellucid/info`` names it and every
+        #: sentence of the viewer names it (the shared protocol's
+        #: ``runtimes``): "python" (a script or session), "jupyter" (a notebook
+        #: kernel), "cellucid-serve" (``cellucid serve``), "cellucid-mcp"
+        #: (``cellucid mcp --open``); set by what opens it
+        #: (:func:`serve_anndata`, :class:`AnnDataViewer`, the CLI).
         self.runtime = "python"
         #: Whether the page this server opens holds a viewer channel of its
         #: own (``serve_anndata`` and ``cellucid serve`` set it): its address
@@ -879,11 +956,11 @@ class AnnDataServer:
                 given_id,
                 given_name,
                 latent_key=latent_key,
-                gene_id_column=gene_id_column,
+                var_gene_id_column=var_gene_id_column,
                 normalize_embeddings=normalize_embeddings,
                 centroid_min_points=centroid_min_points,
                 obs_keys=obs_keys,
-                embedding_keys=embedding_keys,
+                embedding_defaults=embedding_defaults,
                 knn_key=knn_key,
                 expression_source=expression_source,
                 vector_field_default=vector_field_default,
@@ -913,6 +990,10 @@ class AnnDataServer:
         sessions are kept under it.
         """
         declared_id, declared_name = declared
+        # The id the data declares, whatever id it is served under: a session
+        # saved under the id given is applied back to it (the viewer's
+        # apply_session_to_anndata names the id it served it under).
+        self.declared_dataset_id = declared_id if isinstance(declared_id, str) and declared_id else None
         if given_id is None and declared_id is not None:
             given_id = _require_dataset_id(declared_id, label="uns['cellucid']['id']")
         if given_name is None and declared_name is not None:
@@ -948,7 +1029,16 @@ class AnnDataServer:
             self._resolve_identity(
                 given_id,
                 given_name,
-                read_cellucid_identity(store),
+                # A field the caller names is not needed from the store: one
+                # that cannot be read there is left out (cellucid-r alike).
+                read_cellucid_identity(
+                    store,
+                    named=[
+                        field
+                        for field, given in (("id", given_id), ("name", given_name))
+                        if given is not None
+                    ],
+                ),
                 name=store.path.name,
                 id_label=_file_label(store.path),
             )
@@ -1173,6 +1263,8 @@ class AnnDataServer:
             )
         except NotReady as waiting:
             return _not_ready_answer(waiting)
+        except SourceChanged as changed:
+            return _source_changed_answer(changed)
         if resolved is None:
             body = f"Not found: {route}".encode()
             return 404, {"Content-Type": "text/plain", "Content-Length": str(len(body))}, body
@@ -1214,9 +1306,15 @@ class AnnDataServer:
                 assert not isinstance(resolved, Path)
                 # Only the bytes asked for are made (a file's matrix not counted yet: 503).
                 try:
-                    return status_code, headers, resolved[0].read(start, start + length)
+                    data = resolved[0].read(start, start + length)
+                    # Bytes made while the file was written again are not answered.
+                    if self._served.priority is not None:
+                        self._served.priority.require_unchanged()
+                    return status_code, headers, data
                 except NotReady as waiting:
                     return _not_ready_answer(waiting)
+                except SourceChanged as changed:
+                    return _source_changed_answer(changed)
             file.seek(start)
             body = file.read(length)
             if len(body) != length:
@@ -1331,6 +1429,14 @@ class AnnDataServer:
             {"viewer": "true", "viewerId": host_viewer.viewer_id, "viewerToken": host_viewer.viewer_token, "anndata": "true"}
         )
 
+    def _browser_not_opened(self) -> str:
+        """What a failed browser open says (the server then stops): the
+        address without its token, since an error is logged and pasted."""
+        return (
+            f"Could not open the browser for {public_viewer_url(self.viewer_url)}. Serve "
+            "with --no-browser (open_browser=False) and open the Viewer URL it prints."
+        )
+
     @property
     def viewer_url(self) -> str:
         """Get the full URL to open the viewer: with its viewer channel's id
@@ -1366,20 +1472,29 @@ class AnnDataServer:
                 print_step(4, 4, "Starting server")
 
             if self.serve_web_ui:
-                from .web_cache import ensure_web_ui_cached
+                from .web_cache import WEB_APP_OFFLINE_NOTICE, ensure_web_ui_cached
 
                 if not self.quiet:
                     print_detail(
                         "Viewer UI generation",
                         "establishing exact configured source",
                     )
-                ensure_web_ui_cached(
+                established = ensure_web_ui_cached(
                     cache_dir=self.web_cache_dir,
                     source_url=self.web_source_url,
                     force=True,
                     show_progress=not self.quiet,
                 )
-                if not self.quiet:
+                if established.unreachable is not None:
+                    # Said even when quiet, as the R package says it: the app is
+                    # the cached build, not what the source publishes now.
+                    console_print(
+                        "      "
+                        + WEB_APP_OFFLINE_NOTICE.format(
+                            source=established.source_url, build_id=established.build_id
+                        )
+                    )
+                elif not self.quiet:
                     print_success("Viewer UI generation established")
 
             self._server = self._bind()
@@ -1402,7 +1517,7 @@ class AnnDataServer:
 
             if blocking:
                 if self.open_browser and webbrowser.open(self.viewer_url) is not True:
-                    raise RuntimeError(f"Could not open the browser for {self.viewer_url}")
+                    raise RuntimeError(self._browser_not_opened())
                 self._serving = True
                 try:
                     self._server.serve_forever()
@@ -1418,7 +1533,7 @@ class AnnDataServer:
                 self._thread.start()
                 self._serve_entered.wait()
                 if self.open_browser and webbrowser.open(self.viewer_url) is not True:
-                    raise RuntimeError(f"Could not open the browser for {self.viewer_url}")
+                    raise RuntimeError(self._browser_not_opened())
         except BaseException:
             self._rollback_failed_start(shutdown=self._thread is not None)
             raise
@@ -1438,9 +1553,13 @@ class AnnDataServer:
                 return CellucidThreadingHTTPServer((self.host, port), self._handler())
             except OSError as error:
                 taken = error.errno in (errno.EADDRINUSE, errno.EACCES) or getattr(error, "winerror", None) == 10013
-                if not (self.next_free_port and taken and 0 < port < 65535):
+                if self.next_free_port and taken and 0 < port < 65535:
+                    port += 1
+                    continue
+                said = bind_refusal(error, self.host, port, spelled=_argument_spelling)
+                if said is None:
                     raise
-                port += 1
+                raise ServerBindError(error.errno, said) from error
 
     def _handler(self) -> Any:
         return partial(
@@ -1592,13 +1711,13 @@ def serve_anndata(
     quiet: bool = False,
     *,
     latent_key: str | None = None,
-    gene_id_column: str | None = None,
+    var_gene_id_column: str | None = None,
     normalize_embeddings: bool | None = None,
     centroid_min_points: int | None = None,
     dataset_name: str | None = None,
     dataset_id: str | None = None,
     obs_keys: Sequence[str] | None = None,
-    embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
+    embedding_defaults: Mapping[str, EmbeddingKeySpec] | None = None,
     knn_key: str | None = None,
     expression_source: str | None = None,
     vector_field_default: str | None = None,
@@ -1648,7 +1767,7 @@ def serve_anndata(
         filter measures in, instead of the store's own
         ``uns['cellucid']['defaults']['latentKey']``. The viewer reads the
         outlier quantiles the store holds for it, or computes them on first use.
-    gene_id_column : str, optional
+    var_gene_id_column : str, optional
         Exact column in ``var`` (``raw.var`` with ``expression_source="raw"``)
         whose values name the genes. If None, genes are named by the index.
     normalize_embeddings : bool, optional
@@ -1670,13 +1789,13 @@ def serve_anndata(
     obs_keys : sequence of str, optional
         Exact ``obs`` columns the viewer shows, in this order. If None, every
         column is shown.
-    embedding_keys : mapping, optional
+    embedding_defaults : mapping, optional
         The embedding of a dimension slot, overriding the default for that
         slot: ``{"2d": "X_tsne"}`` reads the first two columns of
         ``obsm['X_tsne']``, and ``{"2d": ("X_pca", [2, 0])}`` reads the 0-based
         columns named.
     knn_key : str, optional
-        The ``obsp`` matrix the viewer draws as the neighbour graph, usually
+        The ``obsp`` matrix the viewer draws as the neighbor graph, usually
         ``"connectivities"``; read only when a view draws it.
     expression_source : str, optional
         Where gene expression is read: ``"X"``, ``"raw"`` or
@@ -1730,20 +1849,21 @@ def serve_anndata(
     ...     dataset_id="example",
     ... )
     """
-    server = AnnDataServer(
+    return _serve_viewer(
+        python_host_runtime(),
         data=data,
         port=port,
         host=host,
         open_browser=open_browser,
         quiet=quiet,
         latent_key=latent_key,
-        gene_id_column=gene_id_column,
+        var_gene_id_column=var_gene_id_column,
         normalize_embeddings=normalize_embeddings,
         centroid_min_points=centroid_min_points,
         dataset_name=dataset_name,
         dataset_id=dataset_id,
         obs_keys=obs_keys,
-        embedding_keys=embedding_keys,
+        embedding_defaults=embedding_defaults,
         knn_key=knn_key,
         expression_source=expression_source,
         vector_field_default=vector_field_default,
@@ -1754,7 +1874,24 @@ def serve_anndata(
         allowed_hosts=allowed_hosts,
         cache_bytes=cache_bytes,
     )
+
+
+def python_host_runtime() -> str:
+    """What a viewer this Python process opens names itself by
+    (``/_cellucid/info``'s ``runtime``): "jupyter" in a notebook kernel,
+    "python" in any other Python."""
+    from .jupyter._viewer import _detect_jupyter_context
+
+    return "jupyter" if _detect_jupyter_context()["in_jupyter"] else "python"
+
+
+def _serve_viewer(runtime: str, **options: Any) -> AnnDataServer:
+    """Serve a dataset whose page holds a viewer channel of its own, named
+    ``runtime`` -- :func:`serve_anndata` (its caller's Python) and ``cellucid
+    serve`` ("cellucid-serve") -- and block until it stops."""
+    server = AnnDataServer(**options)
     # Its page holds a viewer channel: agent apps on this computer can drive it.
     server.viewer_channel = True
+    server.runtime = runtime
     server.start()
     return server

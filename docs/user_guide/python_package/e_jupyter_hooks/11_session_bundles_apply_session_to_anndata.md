@@ -117,8 +117,8 @@ DataFrame, one row per change, in domain order:
 
 | Column | Meaning |
 |---|---|
-| `kind` | `column-renamed`, `categories-renamed`, `categories-merged`, `field-deleted`, `user-field`, `gene-set`, `highlight` or `presentation` |
-| `domain` | the state domain it comes from (`field-overlays`, `gene-sets`, `highlights`, or a presentation domain) |
+| `kind` | `column-renamed`, `categories-renamed`, `categories-merged`, `field-deleted`, `user-field`, `gene-set`, `highlight`, `column-colors` or `presentation` |
+| `domain` | the state domain it comes from (`field-overlays`, `gene-sets`, `highlights`, `colors`, or a presentation domain) |
 | `name` | the column, category or gene set it writes (a presentation row: the domain's name) |
 | `column` | the column a category is in |
 | `from` | the old name or category |
@@ -180,6 +180,30 @@ One column per field the session made, named by the field's key:
 A field deleted in the session, and a purged one (which holds no values), is
 `not-applied`.
 
+A categorical field is written with the colors it is shown in, where Scanpy
+keeps a column's colors, so `sc.pl.umap(adata, color=key)` and the viewer show
+the same colors:
+
+```text
+adata.uns["<key>_colors"]  # ['#808080', '#0077c8', ...], one a category, in the column's order
+```
+
+Each category's color is the one it has in the view in focus at the applied
+step: the color the person or an agent gave it there (Colors, `color.category`),
+else the color the field opens with — its `palette` (a field made from
+highlight pages, in Create categorical, opens in its pages' colors), else
+Cellucid's own category colors by position. Every category has one, used or
+not. A column that came with the dataset and was recolored in the view in
+focus (`clusters`, `cell_type`) is written the same way, one `column-colors`
+row each: the categories recolored, the rest in the colors it opens with (its
+own `uns` colors, else Cellucid's). The plan's Colors row stays `not-applied`
+(every other color — a color map, a gene's, another view's — is how the data
+was shown) and says so when colors went with a column. A column the apply writes
+without categories (a highlight group, a continuous field) has no colors:
+colors left under its name described another column and are removed. Renamed
+columns carry their colors; merged categories keep their first category's
+({ref}`the full rule <apply-column-colors>`).
+
 ### 3) Highlight groups → boolean `adata.obs` columns
 
 One `bool` column per group of every page, named
@@ -234,11 +258,21 @@ fixture `history_golden.expected.json` (`apply.sequence[].var_columns`).
 
 ### 5) Presentation → reported, not applied
 
-The data mapping, views, the active field, filters, colours, hidden cells, the
-camera and its path, settings, analyses and the layout are how the data was
-shown, not the data. Each such domain whose
+The data mapping, the expression values, views, the active field, filters,
+colors, hidden cells, the camera and its path, settings, analyses and the
+layout are how the data was shown, not the data. Each such domain whose
 value at the step differs from the tracker's opening is one `presentation`
 row, `not-applied`. The session file keeps them; `step.state()` reads them.
+
+The **expression values** (Session › Data mapping › Expression values:
+normalized to 10,000 counts per cell, log1p, both, or as stored) are a way of
+looking at the stored values, so an apply never changes `X` or a layer.
+What the person looked at is recorded instead: each apply's record (below)
+holds the step's `expression`, `{"normalize": bool, "log1p": bool}`, as the
+person asked it (a matrix that does not hold counts was shown as stored; None
+for a session that holds no expression values), so a notebook can follow the
+same transform, for example with `sc.pp.normalize_total(adata,
+target_sum=1e4)` and `sc.pp.log1p(adata)` on a copy.
 
 ### 6) Provenance → `adata.uns["cellucid"]["history_applied"]`
 
@@ -251,13 +285,16 @@ Each apply that writes something appends one record to
 cellucid.history_applied(adata)[-1]
 # {"session_sha256": ..., "tracker": "t1", "branch": "b1", "step": "s7",
 #  "applied_at": "2026-11-04T09:12:44.512Z", "cellucid_version": ..., "package": "python",
-#  "columns": [...], "renamed": [...], "skipped": [...], "session": None}
+#  "columns": [...], "renamed": [...], "skipped": [...],
+#  "expression": {"normalize": True, "log1p": True}, "session": None}
 ```
 
 `columns` are the columns it wrote (an earlier apply's columns are the ones
 a later apply replaces only with `overwrite=True`), `renamed` each rename it
 applied (`kind`, `column`, `from`, `to`), `skipped` each row not applied
-(`kind`, `name`, `note`), and `session` the session file itself (base64) with
+(`kind`, `name`, `note`), `expression` the expression values the genes were
+shown in at the step (recorded, never applied; None when the session holds
+none), and `session` the session file itself (base64) with
 `keep_session=True`, so the history can be rebuilt from the object alone.
 cellucid-r's `cellucid_history_applied()` reads the same records.
 
@@ -270,12 +307,12 @@ Only what the chosen step needs, before anything is written:
 | The share | a session shared as its steps only (without the values they leave behind) cannot be applied |
 | The step | the tracker, branch and step must be in the session; a step named with a branch must be on its path |
 | Cell order on file | an `AnnData` in a Cellucid-ready file's stored order is refused |
-| `datasetId` | must equal `uns['cellucid']['id']` when the object names one and the session names one |
+| `datasetId` | must equal the id the object was shown under, `dataset_id=` (a viewer given another id than the one the data declares saves its session under that id; `viewer.apply_session_to_anndata` names it itself for an object declaring the id the viewer's data declared), else `uns['cellucid']['id']` when the object names one; checked when the session names one |
 | `cellCount` | must equal `adata.n_obs`; for a session saved on a subsample, `adata.n_obs` must be the cells it was drawn from |
 | `dataMapping` | every key it names must exist on `adata` (for a MuData, its modality too) |
 | `varCount` | must equal the gene count of the mapped axis: `adata.raw.n_vars` for `expression: "raw"`, `0` when the mapping reads no expression, else `adata.n_vars` |
 | `cellOrder` | when `adata` has the embedding it names, the cell-order digest of its stored values over the session's cells must be the session's |
-| The step's fields | the obs columns and genes the step's views colour by or filter on, and its highlight groups are bound to, must exist; all missing ones are named in one error |
+| The step's fields | the obs columns and genes the step's views color by or filter on, and its highlight groups are bound to, must exist; all missing ones are named in one error |
 | The priority-order column | no row may write, rename or replace `obs['cellucid_original_position']`, nor rename another column onto it (it holds each row's original position in a file stored in priority order); a plan that would is refused, dry runs included |
 
 The fingerprint's `name` is not checked: it is the dataset's display name (or
@@ -347,6 +384,17 @@ This is almost always because:
 
 Fix:
 - apply to the exact same AnnData, in its original cell order (`cellucid.restore_original_order` for a Cellucid-ready file read with anndata).
+
+### Symptom: “This session was saved on the dataset 'x', and this object is 'y'”
+
+The viewer was given another id than the one the object declares
+(`show_anndata(adata, dataset_id="x")`, `cellucid serve --dataset-id x`), and
+saved its session under it. Applied through that viewer
+(`viewer.apply_session_to_anndata(adata, request)`), the session goes back to
+an object declaring the id its data declared; applied from a file, name the
+id it was shown under: `apply_cellucid_session_to_anndata(adata, path,
+dataset_id="x")`. The cell count, data mapping and cell order are checked as
+always.
 
 ### Symptom: a row is `not-applied`
 

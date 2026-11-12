@@ -84,9 +84,10 @@ manual step in both release checklists.
 When the store or the arguments change, update:
 - the hand-written help pages under `cellucid-r/man/` (`cellucid_prepare.Rd`,
   `cellucid_view.Rd` and the other viewer pages), and the reference index in
-  `cellucid-r/_pkgdown.yml` when a topic is added (the article index when a
-  vignette is added; `.github/scripts/validate-pkgdown.R` refuses a site whose
-  indexes miss one)
+  `cellucid-r/_pkgdown.yml` when a hand-written topic is added (the article
+  index when a vignette is added; the actions' group is written by
+  `tools/generate-actions.R`; `.github/scripts/validate-pkgdown.R`, which
+  `test-current-contract.R` also runs, refuses a site whose indexes miss one)
 - `cellucid-r/README.md` and `cellucid-r/vignettes/cellucid.Rmd` (and
   `vignettes/viewer.Rmd` for the viewer)
 - user guide API docs: {doc}`../c_data_preparation_api/index`

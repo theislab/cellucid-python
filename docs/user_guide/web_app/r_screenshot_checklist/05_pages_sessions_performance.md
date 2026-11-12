@@ -26,7 +26,7 @@ source, not inferred.
 | Images the section *owns* (live under its own `_static/screenshots/<topic>/`) | **0** | 1 | 1 |
 | Pages with at least one figure | 4 | 3 | 7 |
 | Pages with **zero** figures | 9 | 7 | 16 |
-| Borrowed-image directives | 4 (100 %) | 3 (60 %) | 7 (78 %) |
+| Borrowed-image directives | 4 (100%) | 3 (60%) | 7 (78%) |
 
 :::{important}
 **The table above records the state this audit was taken against, and section L
@@ -86,7 +86,7 @@ sequence is a single scripted Playwright run producing 14 captures. Steps 6 and
 | Parameter | Value | Why it is fixed |
 |---|---|---|
 | Viewport | 1440 × 900 CSS px, `deviceScaleFactor: 2` | Floating panels are clamped to the viewport on restore ({doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases`), so a BEFORE/AFTER pair captured at different sizes is not a valid comparison. |
-| Dataset | `#dataset-select` → option value `dataset:local-demo:pancreas` | 3,696 cells / 3,753 genes — loads in seconds; publishes 1D + 2D + 3D embeddings with `default_dimension: 3`; recognisable endocrinogenesis trajectory for a wet-lab reader. Verified in the sample catalog at audit time (prepared, before 0.9.5). |
+| Dataset | `#dataset-select` → option value `dataset:local-demo:pancreas` | 3,696 cells / 3,753 genes — loads in seconds; publishes 1D + 2D + 3D embeddings with `default_dimension: 3`; recognizable endocrinogenesis trajectory for a wet-lab reader. Verified in the sample catalog at audit time (prepared, before 0.9.5). |
 | Embedding | the 3D UMAP throughout | The session records the embedding each view shows and verifies its cell order against the embedding `cellOrder.embedding` names, whichever one is on screen, so the success path does not depend on it; keeping one embedding keeps the BEFORE/AFTER frames comparable. |
 | Theme / background | app defaults (light / Studio (light)) | Matches the reviewed official starting state, so the reset in step 10 is visually unambiguous. |
 | Welcome modal | dismissed with `Escape` (`#welcome-modal`) — see `tests/browser/helpers/welcome.mjs` | Otherwise it covers the sidebar in every frame. |
@@ -119,7 +119,7 @@ Output directory for every file: `_static/screenshots/sessions_sharing/`.
 - **Why:** establishes "this is what everyone gets by default", so the restored
   state in step 13 is provably *not* the default.
 
-### Step 3 — change the colouring
+### Step 3 — change the coloring
 
 - **Interaction:** `#categorical-field` → `clusters_coarse` (5 categories:
   Ductal, Ngn3 low EP, Ngn3 high EP, Pre-endocrine, Endocrine). Deliberately
@@ -128,7 +128,7 @@ Output directory for every file: `_static/screenshots/sessions_sharing/`.
 - **Crop:** `#coloring-filtering-section` (summary **Coloring & Filtering**),
   including `#legend`.
 - **Cursor:** yes, on `#categorical-field`.
-- **File:** `session-lifecycle-03-colouring.png` · `:width: 246px`
+- **File:** `session-lifecycle-03-coloring.png` · `:width: 246px`
 
 ### Step 4 — add a filter (and show the "apply once" pattern in passing)
 
@@ -275,7 +275,7 @@ are browser chrome — Playwright cannot capture them, and both would expose
 1. `#glcanvas` layout — three panels in `Grid compare`, in the same order.
 2. The 3D camera pose in every panel (same azimuth, elevation, and zoom).
 3. `#categorical-field`'s selected value and the `#legend` category list, in the
-   same order with the same colours.
+   same order with the same colors.
 4. `#filter-count` text, verbatim, including the number.
 5. Every row of `#active-filters`, verbatim.
 6. `#highlight-count` text, the tab in `#highlight-pages-tabs`, and the
@@ -358,7 +358,7 @@ longer a reason to refuse it. Details under
   3. **ADD** a fingerprint capture for the "Dataset identity" subsection: crop
      `#dataset-facts` (the Dataset box: name, cells · genes, format · host,
      description, and **Details** opened: Source, Citation, Cells, Genes, Obs
-     fields, Neighbour graph and the rest) on pancreas, whose Details read
+     fields, Neighbor graph and the rest) on pancreas, whose Details read
      `3,696` cells / `3,753` genes. Cursor on the `Cells` row.
      `session-identity-dataset-info.png` · `:width: 246px`. This makes the
      abstract "five-part fingerprint" concrete: four of the five parts are
@@ -448,7 +448,7 @@ longer a reason to refuse it. Details under
   filters, no snapshots (confirmed: all five manifests carry the same five
   chunks and `cellOrder.dimension: 3`). Photographing them one at a time would
   produce five near-identical sidebar crops. What *is* worth showing is that one
-  click yields a **reviewed biological view rather than a grey blob**, and that
+  click yields a **reviewed biological view rather than a gray blob**, and that
   the five look different from each other because the biology differs.
 - **needs** —
   1. **A five-up contact sheet.** One scripted pass: for each of `suo`,
@@ -465,7 +465,7 @@ longer a reason to refuse it. Details under
      can be forced open there instead.
   3. **Do not** capture the rejection of a downloaded `default.cellucid-session`
      here — that image belongs on {doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases`, which is where the
-     behaviour is catalogued.
+     behavior is cataloged.
 - **notes** — ~~**Stale value.** The page quoted a Suo session digest literal
   that no longer matched the catalog.~~ **Done** — the page now shows the
   field's *shape*, `"sha256": "<64 lowercase hexadecimal characters>"` under a
@@ -527,7 +527,7 @@ longer a reason to refuse it. Details under
   `session-lifecycle-06-before.png` under best practice #5 ("send one screenshot
   that shows the expected view") rather than capturing anything new.
 - **notes** — Best practice #7's clean-tab check is the correct procedure and
-  matches the strict reader's behaviour. No stale prose found.
+  matches the strict reader's behavior. No stale prose found.
 
 ## {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_and_dataset_identity`
 
@@ -741,14 +741,14 @@ longer a reason to refuse it. Details under
 
 # Section N — `user_guide/web_app/n_benchmarking_performance/`
 
-**Constraint honoured:** no app run, no benchmark executed. Every capture below
+**Constraint honored:** no app run, no benchmark executed. Every capture below
 is *specified*, none is *taken*, and the whole section's capture work must be
 queued behind the sibling unit currently holding rendering measurements.
 
 **Honest triage — which of these topics are pictures and which are numbers.**
 Of the ten pages, four are fundamentally tabular or procedural and will not be
 improved by screenshots: `01` (a conceptual model), `04` (a methodology and a
-worksheet), `06` (a symptom catalogue, mostly), and `09` (a report template).
+worksheet), `06` (a symptom catalog, mostly), and `09` (a report template).
 The in-app benchmark panel is the only genuinely photogenic surface in the
 section, and it already has one image. The realistic upside here is **four or
 five new captures**, not thirty — and one of them (the Live filtering / FILTER
@@ -789,7 +789,7 @@ that instruction and none of them shows it.
   likely bottleneck", since the Analyze performance verdict is the app's own
   implementation of that step.
 - **notes** — "Turn Live filtering off and use **FILTER**" (lines 113, 116, 237)
-  matches the control: `legend-renderer.js` renders a toggle labelled `Live
+  matches the control: `legend-renderer.js` renders a toggle labeled `Live
   filtering`, enabled by default (`liveFilteringEnabled = true`), beside a
   `FILTER` button, with the hint `Adjust limits; click FILTER or enable Live
   filtering.` Accurate — but see `03` for the missing image.
@@ -841,7 +841,7 @@ that instruction and none of them shows it.
   cannot currently find.
   - Optionally add item 3's control: `perf-view-controls.png` beside "Keep views
     (snapshots) lean".
-- **notes** — The "< 100k / 100k–500k / 500k–2M+" bands are explicitly labelled
+- **notes** — The "< 100k / 100k–500k / 500k–2M+" bands are explicitly labeled
   "very rough intuition"; that hedging is appropriate and should not be
   hardened into a screenshot caption.
 
@@ -889,8 +889,8 @@ that instruction and none of them shows it.
   2. **Running it.** Cursor on `#benchmark-run` (`Load synthetic data`).
      Same crop. `benchmark-run-button.png` · `:width: 246px`.
   3. **The live stats.** Crop `#benchmark-stats` — the six-cell grid (`Points`,
-     `FPS`, `Frame Time`, `GPU Memory`, `LOD Level`, `Visible Points`), the
-     `#bench-timing-details` block (`min:` / `p95:` / `max:`), and
+     `FPS`, `Frame time`, `GPU memory`, `LOD level`, `Visible points`), the
+     `#bench-timing-details` block (`min` / `p95` / `max`), and
      `#bench-gen-info` (`Generated in N ms`). No cursor.
      `benchmark-live-stats.png` · `:width: 246px`. The page's "How to interpret
      the stats" section walks these fields one by one and shows none of them.
@@ -931,21 +931,22 @@ that instruction and none of them shows it.
 - **needs** — Nine of the eleven cliffs are *sensations* (choppy, hot, throttled)
   or *configurations* already described in text. Exactly two produce a distinct
   on-screen artifact worth photographing:
-  1. **Graphics reset by the browser.** The viewer builds a dialog with the
+  1. **Graphics reset by the browser.** The app shows a dialog with the
      title `Graphics reset by the browser`, a body saying the graphics are
      being restored, and a `Save session` button; `Reload` appears beside it
-     only if restoring fails (the notice in `assets/js/rendering/viewer.js`,
-     "Lost and restored graphics"). Provoke it in a
+     only if restoring fails (`#graphics-reset-dialog`,
+     `assets/js/app/graphics-reset-session.js`; the renderer reports the
+     phases, "Lost and restored graphics" in `rendering/viewer.js`). Provoke it in a
      scripted run with the WebGL debug extension
      `WEBGL_lose_context.loseContext()` on `#glcanvas` — `render-failure-state.spec.mjs`
      already reaches into `document.querySelector('#glcanvas')` for a comparable
-     purpose, so the technique is established. Crop the overlay panel only.
+     purpose, so the technique is established. Crop the dialog only.
      Cursor on the `Reload` button.
      `perf-webgl-context-lost.png` · `:width: 520px`. Serves this page **and**
      {doc}`/user_guide/web_app/n_benchmarking_performance/07_troubleshooting_performance`, where the same symptom has its own
      section. Do **not** provoke context loss by loading 20M points — that
      collides with the rendering-measurement unit's work.
-  2. **Category explosion.** Colour by a categorical field with a very large
+  2. **Category explosion.** Color by a categorical field with a very large
      category count and crop `#legend` showing the unusable legend, with
      `#coloring-filtering-section` framing it. No shipped sample has such a
      field; a scratch prepared fixture derived from

@@ -3,7 +3,7 @@
    The web app's design principles (cellucid/assets/css/README.md, "Site
    Design Principles") hold here too, through the theme's own CSS variables
    rather than a fork: the app's type (Inter, self-hosted), its ink and cyan
-   link colours in light and dark, square surfaces with quiet edges, and the
+   link colors in light and dark, square surfaces with quiet edges, and the
    wordmark inverted in the dark theme as the app inverts it. The values are
    the app's tokens (cellucid/assets/css/tokens/_colors.css, themes/). */
 
@@ -62,7 +62,7 @@ html[data-theme="dark"] {
     --pst-color-shadow: rgba(0, 0, 0, 0.4);
 }
 
-/* The wordmark is grey-scale ink drawn for a light surface; the dark theme
+/* The wordmark is gray-scale ink drawn for a light surface; the dark theme
    inverts it, as the app does. */
 html[data-theme="dark"] .navbar-brand img {
     filter: invert(1) hue-rotate(180deg);

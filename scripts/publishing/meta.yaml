@@ -1,5 +1,5 @@
 {% set name = "cellucid" %}
-{% set version = "0.9.7" %}
+{% set version = "0.9.8" %}
 # CELLUCID_VERSION
 
 package:

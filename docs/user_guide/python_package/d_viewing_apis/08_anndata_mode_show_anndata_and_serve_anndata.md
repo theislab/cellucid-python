@@ -127,9 +127,9 @@ Sessions and community annotations are keyed by the dataset id.
 Cellucid shows one embedding per dimension slot (1D, 2D, 3D) and fills the
 slots from `adata.obsm`, in this order:
 
-1. **The slots you name.** `embedding_keys={"2d": "X_tsne"}` (or
+1. **The slots you name.** `embedding_defaults={"2d": "X_tsne"}` (or
    `--embedding-2d X_tsne`) shows `obsm['X_tsne']` in 2D. A wider array is read at
-   the 0-based columns you name: `embedding_keys={"2d": ("X_pca", [0, 1])}`, or
+   the 0-based columns you name: `embedding_defaults={"2d": ("X_pca", [0, 1])}`, or
    `--embedding-2d X_pca:0,1`.
 2. **The default rule, for every slot you did not name.** `X_umap_1d`,
    `X_umap_2d`, and `X_umap_3d` each fill their own slot. When none of them is
@@ -199,9 +199,9 @@ before it binds, listing the columns `obs` holds.
 
 ## Which `obsm` keys are read (detailed, for debugging)
 
-### Slots you name: `embedding_keys` and `--embedding-<n>d`
+### Slots you name: `embedding_defaults` and `--embedding-<n>d`
 
-`embedding_keys` maps a slot — `"1d"`, `"2d"`, or `"3d"` — to an `obsm` key, or
+`embedding_defaults` maps a slot — `"1d"`, `"2d"`, or `"3d"` — to an `obsm` key, or
 to a `(key, columns)` pair whose columns are 0-based and one per axis:
 
 ```python
@@ -209,7 +209,7 @@ viewer = show_anndata(
     "data.h5ad",
     dataset_name="My study",
     dataset_id="my-study-v1",
-    embedding_keys={"2d": "X_tsne", "3d": ("X_pca", [0, 1, 2])},
+    embedding_defaults={"2d": "X_tsne", "3d": ("X_pca", [0, 1, 2])},
 )
 ```
 
@@ -248,7 +248,7 @@ key says the array was meant to be drawn.
 
 ### The best guess
 
-When neither `embedding_keys` nor the default rule fills any slot, every usable
+When neither `embedding_defaults` nor the default rule fills any slot, every usable
 `obsm` array — dense, numeric, one row per cell, at least one column — is a
 candidate, except vector fields (`<field>_<basis>` beside an `X_<basis>`, such
 as `velocity_umap` beside `X_umap`) and the `latent_key` array.
@@ -293,7 +293,7 @@ Each entry says what the array is and, for a dense array, why it was not used:
 the first non-finite cell, a row count that is not the cell count, a dtype that
 is not numeric, or its role (`a vector field`, `the latent space`). `obsm holds:
 nothing.` means `obsm` is empty. Compute an embedding, or name one with
-`embedding_keys`.
+`embedding_defaults`.
 
 ### Where the same rule applies
 
@@ -307,7 +307,7 @@ rule only, because it computes drift in a UMAP.
 ```{important}
 A file written by `prepare()` is read by this same resolution. Its
 `embedding_defaults` are stored as `uns['cellucid']['defaults']`, which the
-viewer applies before its default rule, and an `embedding_keys` you pass here
+viewer applies before its default rule, and an `embedding_defaults` you pass here
 overrides them for this server. See
 {doc}`../c_data_preparation_api/03_embeddings_and_coordinates`.
 ```
@@ -319,7 +319,7 @@ overrides them for this server. See
 The server reads the store's metadata once, before it binds (cell and gene
 counts and the names of the stored elements — never an array), and then only
 serves bytes. It holds no matrix in memory. The browser reads what each view
-needs: an embedding, an `obs` column, a gene, the neighbour graph when a view
+needs: an embedding, an `obs` column, a gene, the neighbor graph when a view
 draws it. A row-major (CSR) expression matrix is indexed by gene once, in the
 browser, the first time a gene is read; a column-major (CSC) matrix needs no
 index.
@@ -369,14 +369,14 @@ the store does not have stops the server before it binds. The viewer can switch 
 other matrix or gene-name column afterwards, under **Session › Data mapping ›
 Genes** (see {doc}`../../web_app/b_data_loading/13_data_mapping`).
 
-`gene_id_column` (`--gene-id-column`) names genes from a column of that gene
+`var_gene_id_column` (`--var-gene-id-column`) names genes from a column of that gene
 axis instead of its index. Any non-blank string names that exact column, so
-`gene_id_column="index"` selects a column literally named `"index"`:
+`var_gene_id_column="index"` selects a column literally named `"index"`:
 
 ```python
 viewer = show_anndata(
     "data.h5ad",
-    gene_id_column="gene_symbols",
+    var_gene_id_column="gene_symbols",
     expression_source="raw",
     dataset_name="My study",
     dataset_id="my-study-v1",
@@ -395,9 +395,9 @@ write a file; see
 `HLA-DRB1/2` and `Gene A` are ordinary names, and `Gene` and `gene` are two
 distinct genes.
 
-## Neighbour graph and vector fields: read when drawn
+## Neighbor graph and vector fields: read when drawn
 
-The neighbour graph and the vector-field overlay cost nothing at startup. The
+The neighbor graph and the vector-field overlay cost nothing at startup. The
 viewer reads the graph only when a view draws it, and a vector field only when
 the overlay shows it. The launch options choose what they open on:
 
@@ -478,7 +478,7 @@ viewer = show_anndata(
 
 The 3,696-cell Pancreas sample in 2D (**Planar**) with its velocity field
 drawn as particle trails; the **Vector field** controls (field, density,
-speed, trail, size, opacity, colour scheme, Sync with LOD) are open beside it. A `velocity_umap` key is the field
+speed, trail, size, opacity, color scheme, Sync with LOD) are open beside it. A `velocity_umap` key is the field
 `velocity`.
 ```
 
@@ -515,11 +515,11 @@ Naming a matrix the store does not have stops the server before it binds,
 rather than serving a dataset silently missing the thing you asked for:
 
 ```text
-Error: knn_key names obsp['connectivities'], which this store does not have. obsp holds: []. Compute the neighbour graph with sc.pp.neighbors(adata), or leave knn_key unset.
+Error: knn_key names obsp['connectivities'], which this store does not have. obsp holds: []. Compute the neighbor graph with sc.pp.neighbors(adata), or leave knn_key unset.
 ```
 
 The viewer checks the matrix when it reads it, and never transforms it.
-Scanpy's `obsp['distances']` is a directed k-nearest-neighbour matrix, so the
+Scanpy's `obsp['distances']` is a directed k-nearest-neighbor matrix, so the
 viewer refuses it with that reason:
 
 ```text
@@ -636,7 +636,7 @@ case where the tunnel has to terminate on a login node,
 
 **Fix**
 - compute an embedding (`sc.tl.umap(adata)`), repair the named array, or name a
-  usable one with `embedding_keys={"2d": "<key>"}` / `--embedding-2d <key>`
+  usable one with `embedding_defaults={"2d": "<key>"}` / `--embedding-2d <key>`
 
 ### The wrong embedding is shown
 
@@ -645,7 +645,7 @@ case where the tunnel has to terminate on a login node,
   mapping** marks it as guessed
 
 **Fix**
-- name the array you want with `embedding_keys` or `--embedding-<n>d`
+- name the array you want with `embedding_defaults` or `--embedding-<n>d`
 
 ### “knn_key names obsp[…], which this store does not have”
 
@@ -688,18 +688,18 @@ case where the tunnel has to terminate on a login node,
 
 **Likely causes**
 - you’re searching by gene symbol but `var.index` contains Ensembl IDs (or vice versa)
-- wrong `gene_id_column`, or a gene axis other than the one you expected
+- wrong `var_gene_id_column`, or a gene axis other than the one you expected
   (`expression_source="raw"` names genes from `raw.var`)
 - the name was repeated in `var` and is shown as `NAME-1`
 
 **Fix**
-- set `gene_id_column=...` (or `--gene-id-column`) to match your gene IDs
+- set `var_gene_id_column=...` (or `--var-gene-id-column`) to match your gene IDs
 
 ### `Gene cannot be shown` — the gene was found and refused
 
 **Likely cause**
-- the column holds an infinity. `NaN` is drawn as the neutral grey meaning “no
-  value here”, but `+Inf` or `-Inf` has no position on a colour scale, so the
+- the column holds an infinity. `NaN` is drawn as the neutral gray meaning “no
+  value here”, but `+Inf` or `-Inf` has no position on a color scale, so the
   viewer refuses the gene or continuous `obs` column with a counted diagnosis
   naming the first offending cells. It is refused one column at a time, as you
   select it.

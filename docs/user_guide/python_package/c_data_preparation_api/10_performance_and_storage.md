@@ -59,7 +59,7 @@ every gene in two cell types). Full method and the per-step numbers:
 ## Reading in the browser
 
 - One gene is one range of `X/data` and `X/indices` (chunks of 16,384 values),
-  so colouring by a gene costs a few requests whatever the dataset size; in
+  so coloring by a gene costs a few requests whatever the dataset size; in
   priority order a subsample reads only the first values of each gene.
 - Embeddings and `obs` columns are read by rows, in chunks of 65,536 values
   (the first rows only, for a subsample); the graph is read whole, in chunks

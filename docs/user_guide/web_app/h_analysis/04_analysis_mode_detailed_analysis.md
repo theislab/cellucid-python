@@ -181,8 +181,14 @@ If you see significance with tiny effect sizes:
 
 ### Gene expression scale matters
 
-Detailed mode uses whatever expression values are in your dataset:
-- raw counts, log1p, normalized, etc.
+Detailed mode reads a gene in the values **Session › Data mapping ›
+Expression values** shows it in: as stored (the default; raw counts, or
+whatever the matrix holds), normalized to 10,000 counts per cell, `log1p`, or
+both (see {doc}`../b_data_loading/13_data_mapping`). When they are not as
+stored, everything that names the gene names them too — the axis title, the
+expanded view's heading (`Comparing: Ins1 · log1p(norm.)`), its Summary
+statistics and the CSV's value column (`Ins1 · log1p(norm.)`). An obs field is
+never transformed and keeps its bare name.
 
 This affects:
 - the magnitude of mean/median differences,
@@ -247,7 +253,7 @@ Fix:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/analysis/detailed-categorical.png
-:alt: The Detailed panel with Variable set to Categorical obs then cell_type, a Compare pages block with Page 1 and Rest of Page 1 both selected, a Plot Type select reading Bar Plot under a pointer, and a grouped bar plot of cell-type counts beneath it whose horizontal axis carries two category names, Ductal and Delta, at its two ends.
+:alt: The Detailed panel with Variable set to Categorical obs then cell_type, a Compare pages block with Page 1 and Rest of Page 1 both selected, a Plot type select reading Bar plot under a pointer, and a grouped bar plot of cell-type counts beneath it whose horizontal axis carries two category names, Ductal and Delta, at its two ends.
 :width: 488px
 
 Detailed with one variable (`cell_type`) across two pages. The plot-type choice
@@ -270,7 +276,7 @@ names in the full view, and read every name in the exported CSV.
 The full view is where the numbers are:
 
 ```{figure} ../../../_static/screenshots/analysis/detailed-expanded.png
-:alt: The expanded Detailed modal headed COMPARING: CELL_TYPE with a grouped bar plot top-left whose horizontal axis prints five of the eight category names, an Export row and PLOT OPTIONS column on the right, a SUMMARY STATISTICS table bottom-left, and a STATISTICAL ANALYSIS panel bottom-right holding a chi-squared card reading N/A, with a pointer on the CSV button.
+:alt: The expanded Detailed modal headed Comparing: cell_type with a grouped bar plot top-left whose horizontal axis prints five of the eight category names, an Export row and Plot options column on the right, a Summary statistics table bottom-left, and a Statistical analysis panel bottom-right holding a chi-squared card reading N/A, with a pointer on the CSV button.
 :width: 1440px
 
 Expanded Detailed. **Summary statistics** is a per-page table — category counts
@@ -283,7 +289,7 @@ axis had room to. **Statistical analysis** runs the tests below it.
 The chi-squared card in that capture reads **N/A**, with the explanation
 *“Pearson chi-squared inference is unavailable because an expected count is below
 5; use an exact test or combine sparse categories.”* That is the intended
-behaviour, not a failure: the comparison is one pure cell type against seven
+behavior, not a failure: the comparison is one pure cell type against seven
 others, so most cells of the contingency table are expected to be empty and a
 chi-squared p-value would be meaningless. The app declines to print one rather
 than printing a wrong one.

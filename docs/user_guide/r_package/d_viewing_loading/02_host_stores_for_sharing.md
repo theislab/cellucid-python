@@ -70,7 +70,7 @@ Every accepted form, and what each opens, is listed in
 ## Share the link
 
 After the store opens, the page address carries it in `?data=…`. Copy that
-address (or use **Share**) and send it: whoever opens it sees the same dataset,
+address (or use **Share…**) and send it: whoever opens it sees the same dataset,
 with the launch defaults you stored in `uns['cellucid']`.
 
 ## Checklist before you share

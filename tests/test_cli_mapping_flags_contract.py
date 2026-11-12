@@ -1,7 +1,7 @@
 """The ``cellucid serve`` flags that choose what an AnnData source plots and reads.
 
 ``--embedding-1d/2d/3d KEY[:c0,c1]`` names a slot's obsm array and optionally
-its 0-based columns, ``--knn KEY`` the obsp neighbour graph, ``--gene-id-column``
+its 0-based columns, ``--knn KEY`` the obsp neighbor graph, ``--var-gene-id-column``
 the var column that names genes, and ``--expression X|raw|layer:NAME`` the
 matrix values are read from. Each overrides the store's own
 ``uns['cellucid']['defaults']`` for that choice.
@@ -69,22 +69,22 @@ def test_every_mapping_flag_reaches_serve_anndata(tmp_path: Path) -> None:
             "X_umap_3d",
             "--knn",
             "connectivities",
-            "--gene-id-column",
+            "--var-gene-id-column",
             "gene_symbols",
             "--expression",
             "layer:log1p",
         ]
     )
-    with mock.patch("cellucid.anndata_server.serve_anndata") as serve:
+    with mock.patch("cellucid.anndata_server._serve_viewer") as serve:
         _run_serve(args)
     kwargs = serve.call_args.kwargs
-    assert kwargs["embedding_keys"] == {
+    assert kwargs["embedding_defaults"] == {
         "1d": "X_line",
         "2d": ("X_pca", [3, 1]),
         "3d": "X_umap_3d",
     }
     assert kwargs["knn_key"] == "connectivities"
-    assert kwargs["gene_id_column"] == "gene_symbols"
+    assert kwargs["var_gene_id_column"] == "gene_symbols"
     assert kwargs["expression_source"] == "layer:log1p"
     assert "serve_connectivity" not in kwargs
 
@@ -94,12 +94,12 @@ def test_omitted_mapping_flags_select_the_defaults(tmp_path: Path) -> None:
     args = create_parser().parse_args(
         ["serve", str(store), "--quiet", "--dataset-name", "D", "--dataset-id", "d"]
     )
-    with mock.patch("cellucid.anndata_server.serve_anndata") as serve:
+    with mock.patch("cellucid.anndata_server._serve_viewer") as serve:
         _run_serve(args)
     kwargs = serve.call_args.kwargs
-    assert kwargs["embedding_keys"] is None
+    assert kwargs["embedding_defaults"] is None
     assert kwargs["knn_key"] is None
-    assert kwargs["gene_id_column"] is None
+    assert kwargs["var_gene_id_column"] is None
     # None: the viewer's default rule (raw when it holds more genes than X or X
     # is scaled, else X; without X, raw or a layer, reported as guessed).
     assert kwargs["expression_source"] is None

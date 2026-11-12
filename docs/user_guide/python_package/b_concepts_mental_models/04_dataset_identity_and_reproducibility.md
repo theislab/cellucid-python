@@ -91,6 +91,10 @@ viewer = show_anndata("data.h5ad", dataset_name="My study (raw)", dataset_id="my
 ```
 
 An explicit `dataset_name` / `dataset_id` overrides what the file declares.
+A store whose declared id or name is present but cannot be read (a damaged
+chunk) is refused with that sentence, unless you name that field yourself:
+you said which dataset it is, so the damaged value is not needed. Python and
+R (`cellucid_serve()`, `cellucid_view()` of a Zarr store) decide this alike.
 
 Sessions and community annotations are keyed by this dataset ID.
 

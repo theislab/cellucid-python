@@ -17,13 +17,13 @@
 ## What this filter is (and is not)
 
 For a categorical field, each cell gets a number in `[0, 1]`: how far it lies
-from the centre of its category **in a latent space** — an `obsm` array such as
+from the center of its category **in a latent space** — an `obsm` array such as
 `X_scVI`, `X_scANVI` or `X_pca` — expressed as the share of its category that
 lies at that distance or closer. The rule, for every category with at least
 `centroid_min_points` cells (10 by default):
 
-- the category's centre is the mean of its cells' latent coordinates;
-- a cell's distance is its Euclidean distance to that centre;
+- the category's center is the mean of its cells' latent coordinates;
+- a cell's distance is its Euclidean distance to that center;
 - its quantile is the number of the category's cells at that distance or
   closer, divided by the category's size.
 
@@ -73,19 +73,19 @@ at `100%`, which means no outlier filtering at all.
 ### What success looks like
 
 ```{figure} ../../../_static/screenshots/filtering/window-outlier-100-off.png
-:alt: The whole window coloured by clusters with the Outlier filter at its default 100 percent: scattered cells sit between and around the clusters, and the Filters block reads Showing all 3,696 cells.
+:alt: The whole window colored by clusters with the Outlier filter at its default 100 percent: scattered cells sit between and around the clusters, and the Filters block reads Showing all 3,696 cells.
 :width: 1440px
 
 **At `100%`** — no filtering. Note the loose points drifting between the
-coloured groups, and the legend counts: Alpha 481, Ductal 916, Pre-endocrine
+colored groups, and the legend counts: Alpha 481, Ductal 916, Pre-endocrine
 592.
 ```
 
 ```{figure} ../../../_static/screenshots/filtering/window-outlier-95-applied.png
-:alt: The same window with the Outlier filter at 95 percent: fewer scattered cells between the clusters, every legend count reduced, and a clusters: outlier ≤ 95% row in the Filters block above Showing 3,506 of 3,696 cells.
+:alt: The same window with the Outlier filter at 95 percent: fewer scattered cells between the clusters, every legend count reduced, and the Filters block reading Showing 3,506 of 3,696 cells, its clusters: outlier ≤ 95% row cut off at the bottom edge.
 :width: 1440px
 
-**At `95%`** — the same camera, the same colouring, 190 fewer cells drawn.
+**At `95%`** — the same camera, the same coloring, 190 fewer cells drawn.
 Every category has lost roughly its own top 5%: Alpha 481 → 456, Ductal
 916 → 870, Pre-endocrine 592 → 562. That per-category proportionality is the
 signature of this filter, and it is what distinguishes it from a global
@@ -169,7 +169,7 @@ latent space in use and the same `centroid_min_points`, and matching the
 field's categories as the file holds them now. A file whose obs was edited
 after it was prepared (categories renamed, cells subset) gets its quantiles
 computed instead, and the console says why. The check holds for a category
-of any size: above 2^24 (16,777,216) cells float32 stores neighbouring ranks
+of any size: above 2^24 (16,777,216) cells float32 stores neighboring ranks
 as one quantile, and the check reads each quantile as the range of ranks it
 names, so a 50-million-cell atlas's stored quantiles are used, not recomputed
 from its whole latent space.
@@ -243,9 +243,9 @@ the line under it says whether it can filter and why not.
 - A field you create by merging or deleting categories has no outlier
   quantiles, so the control is hidden for it.
 - Switching to another field keeps the first field's outlier filter applying:
-  every filter applies until it is removed, whatever is coloured. **Filters**
+  every filter applies until it is removed, whatever is colored. **Filters**
   lists it (`cell_type: outlier ≤ 90%`), where it can be disabled or removed;
-  colour by the field again to move its slider.
+  color by the field again to move its slider.
 
 ### Sessions
 

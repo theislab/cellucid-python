@@ -59,7 +59,7 @@ unless they start with `cellucid/`.
      round trip (under `TRANSFER_BOUND`, three round trips) can raise it,
      never lower it (BBR's application-limited samples).
    - `connectionBytesPerMs`: what one connection carries, from requests
-     alone on the link and mostly transfer. Under 80 % of the link
+     alone on the link and mostly transfer. Under 80% of the link
      (`CONNECTION_BOUND_SHARE`) the link is per-connection (S3) and
      `connectionRoundTripBytes` is set; the link here is the fourth fastest
      transfer-bound request end ever measured (`LINK_EVIDENCE`), never a
@@ -104,7 +104,7 @@ unless they start with `cellucid/`.
    worst ratio to the best under each is smallest; no gap is merged across kept bytes or bytes in flight;
    long requests are split by `requestPieceBytes` (down to one connection's
    round trip of bytes where a connection carries only part of the link);
-   queued neighbours ride along with a request about to start while round
+   queued neighbors ride along with a request about to start while round
    trips outweigh bytes (`companionsOf`, coalescing to the link); beyond six
    requests on a host not known to multiplex, more go out only while those
    in flight carry under two round trips of bytes (`slotFree`). Gap bytes no
@@ -112,7 +112,7 @@ unless they start with `cellucid/`.
    read that fetched them runs, and let go after `SURPLUS_IDLE_MS` (1 s)
    with nothing in flight. Reads marked `cache: true` go through 16 KiB
    aligned metadata blocks in an LRU cache; where a host budget binds,
-   neighbouring blocks come along (`metadataReach`). `whenRoom` lets a
+   neighboring blocks come along (`metadataReach`). `whenRoom` lets a
    reader gather its own small reads while requests queue.
 6. **The host book** (`formats/io/hosts.js`, `realmHosts`, one per realm,
    told to the other realms of the site over a `BroadcastChannel`):
@@ -121,7 +121,7 @@ unless they start with `cellucid/`.
    anything for a whole timeout), request budgets from `X-RateLimit-*`, the
    IETF `RateLimit-*` fields and their structured form, and `Retry-After`,
    halving the requests at once after a limit answer (`slowDown`: additive
-   increase, multiplicative decrease), a learnt pace after a block, and an
+   increase, multiplicative decrease), a learned pace after a block, and an
    address left unasked after two lost rounds (RFC 6298 back-off to 60 s,
    one probe at a time).
 7. **Every request** goes through `fetchOnce` (admission by the host book,
@@ -132,11 +132,22 @@ unless they start with `cellucid/`.
    three repeats (R1 alone) for a busy answer before anything was
    delivered; a host-named wait waited exactly and not counted; a host
    that answered before and now refuses this network waited out for as
-   long as the read is wanted).
+   long as the read is wanted). A request asked once (a person's "Try
+   again" of a catalog, a Cellucid server's health, info and catalog, whose
+   failures are terminal) goes through `fetchOnce` too (`data-source.js`
+   `fetchAnswer`). A raw `fetch` is left only where it has its own
+   semantics, each named with its reason in
+   `tests/one-implementation-contract.test.mjs` (`RAW_FETCH`): probes whose
+   answer must not count in the host book (the no-cors reachability probe,
+   Drive's one-byte held-back probe), OAuth token requests and keepalive
+   revocations, the model APIs, and the page's own files. A raw `fetch`
+   that fails rejects with a bare `TypeError`, which the app reads as a
+   problem inside Cellucid (`isInternalFailure`); a failure that got no
+   answer is told by `isUnanswered`, never by an error's message.
 8. **Memory across readers and visits.** `formats/io/range-cache.js` (worker)
    and `data/byte-range-cache.js` (page) share fetched ranges between reader
    workers of the same file version; a page-held piece smaller than the gap
-   the link would merge is fetched again with its neighbours instead of
+   the link would merge is fetched again with its neighbors instead of
    splitting the request. `formats/io/kept-parts.js` writes every fetched
    byte of a versioned remote file to the origin-private file system as
    journals (manifest first, CRC-framed records, 16 KiB page checks from
@@ -174,7 +185,7 @@ unless they start with `cellucid/`.
 | 2026-10-28 | Retries from the link's RTO, RFC 1122 R1/R2 (3 repeats, 100 s) | The link's own measure, not a schedule | A fixed retry-delay list (replaced) |
 | 2026-10-31 | A busy answer before the host delivered anything to the read: R1 alone (3 repeats), then reported | A catalog answering 503 was asked for 100 s and outlived startup's 60 s step bound, which then said it "did not answer"; the person sees the server's error with Try again | R2's 100 s for requests a person waits on with nothing on screen |
 | 2026-10-28 | An address that loses two rounds is left unasked (1 s doubling to 60 s), one probe at a time | A refusing host was asked twice by every read (40 reads, 74 requests) | Every waiting read asking a host that refuses this network |
-| 2026-10-28 | Page-held pieces under the merge gap are fetched again with their neighbours (`withRangeCache`) | Holding pieces split one 8 MiB plan into ~190 requests | Splitting a request around every held piece |
+| 2026-10-28 | Page-held pieces under the merge gap are fetched again with their neighbors (`withRangeCache`) | Holding pieces split one 8 MiB plan into ~190 requests | Splitting a request around every held piece |
 | 2026-10-29 | Price reads at the round trip under load (`loadedRoundTripMs`); shape with the shortest | S3 answers in 230 ms idle and 0.35-0.5 s with 42 in flight | Pricing at the idle round trip |
 | 2026-10-29 | Kept parts as journals: manifest first, each piece appended with a CRC-framed record | Parts kept in 15 s batches with the manifest last kept nothing from a short visit | Batches written at the end |
 | Decision (2026-10-30) | Do not assume a stable connection | The owner's links vary and drop | A link measured once and trusted; whole downloads that restart from byte 0 |
@@ -185,7 +196,9 @@ unless they start with `cellucid/`.
 | 2026-10-30 | Surplus pinned to the running read, let go 1 s after the reader goes idle | 64 MiB of surplus dropped 1.4-2.6 s before a heap read asked for it; held, a share's scattered reads kept 65 MB after they ended | Unpinned surplus; surplus kept indefinitely |
 | 2026-10-30 | A block (no readable answer after most of a minute's requests were answered) sets a pace: half that minute's rate; a `429` sets none | Zenodo refused this network after ~550 range reads in minutes, inside its stated 133 a minute | Trusting stated budgets alone; learning paces from one `429` (gave 60-120 s paces) |
 | Decision (2026-10-30) | A pace loosens by 1.25x per visit after a day without refusals (`PACE_RECOVERY_AFTER_MS`); a block at a loosened pace snaps back and the host stays paced | A transient refusal on a fast host would otherwise slow it for every later visit | A pace that never relaxes; one that relaxes within a day |
-| 2026-10-31 | A source on this machine (a loopback origin: `cellucid serve`, Python's and R's served stores; a local file) is priced as this machine at rest whatever its link measured: at no less than a disk's rate, at its shortest round trip, no time a request beyond it; a local file's snapshot carries its priced rate (never below its prior's) | An opening's metadata reads measure a fraction of a loopback host (9-45 MB/s in Chromium); priced at that, a 10M-cell store's first gene was read for 32-68 % of its cells where the last pushed commit read every cell in about 6 s. Floored only until a delivery bounded by transfer, a busy machine still sampled: 5 of 6 openings with ten CPU-bound processes beside the browser measured 0.1-13 MB/s from a slowed read or an 863 ms round trip under load, and read the first gene for 19,779-1,947,096 of 10M cells | Sampling genes on this machine from the opening's lower bound; pricing it as measured once a slowed read counts as filling the link (a transient load switched the first gene into a sample); a notebook kernel priced as this machine (it may run across the internet); a tunnel to a remote server (`ssh -L`) told apart from a server here (both are loopback origins: priced as this machine) |
+| Decision (2026-11-10) | A host on this machine (`utils/loopback.js`: localhost, 127.0.0.0/8, ::1, 0.0.0.0) learns no pace and keeps none (`hosts.js` `learnPace`, `host-link-memory.js` `rememberedHostPace`) | It blocks no network: its silence is a server restarting or down. Measured: lost answers from the local catalog server taught a pace that, kept for a day, read Suo at 5–60 KB/s for 95 s on every visit (3.1 s unpaced, measured the same day) | Pacing it as any host |
+| Decision (2026-11-11) | Requests lost on this side of the link teach a host no pace (`hosts.js` `lostOnThisSide`): this computer offline (`navigator.onLine`), or a request failing in less than half the quickest answer the host gave — a host's refusal (an "unusual traffic" page read as no answer for its missing CORS headers) is an answer and comes no sooner than its answers | A link that drops for a moment is no block. Measured: a 3 s drop while Suo opened from GitHub Pages (requests failing at once, `ERR_INTERNET_DISCONNECTED`) taught `theislab.github.io` a 2.4 s pace; the rest of the opening grew at 70 KB/s over a fast link (two steps: 24 s and 17 s), and the pace was kept for a day. Without it: 0.2–0.3 s a step | Pacing every lost round; a pace that relaxes on its own (it could meet a real block again) |
+| 2026-10-31 | A source on this machine (a loopback origin: `cellucid serve`, Python's and R's served stores; a local file) is priced as this machine at rest whatever its link measured: at no less than a disk's rate, at its shortest round trip, no time a request beyond it; a local file's snapshot carries its priced rate (never below its prior's) | An opening's metadata reads measure a fraction of a loopback host (9-45 MB/s in Chromium); priced at that, a 10M-cell store's first gene was read for 32-68% of its cells where the last pushed commit read every cell in about 6 s. Floored only until a delivery bounded by transfer, a busy machine still sampled: 5 of 6 openings with ten CPU-bound processes beside the browser measured 0.1-13 MB/s from a slowed read or an 863 ms round trip under load, and read the first gene for 19,779-1,947,096 of 10M cells | Sampling genes on this machine from the opening's lower bound; pricing it as measured once a slowed read counts as filling the link (a transient load switched the first gene into a sample); a notebook kernel priced as this machine (it may run across the internet); a tunnel to a remote server (`ssh -L`) told apart from a server here (both are loopback origins: priced as this machine) |
 | Decision (2026-10-31) | A host that does not give what was asked for is said by **whose** problem it is, at one layer every source goes through (`HOST_FAULTS`, `hostFaultSentence` in `formats/io/byte-source.js`; `hostFaultFailure`, `hostFaultOf`, `hostFaultOfResponse` in `data/data-source.js`): `failing` (5xx, 408), `limiting` (429, a rate limit; the wait the host names is said), `refusing` (401/403 from a provider whose files are all public, `capabilities.public`: GEO, the Census, or from a host that answered this site before), `refused` (the link's permissions), `missing` (404, 410), `offline`; the link source names the provider (`providerFault`, "NCBI GEO (ftp.ncbi.nlm.nih.gov)"); a read that outlasts its repeats on a host-side status is said so by `withRetries` itself, so an opening, a gene and an analysis say the same; the faults that may pass are never settled (Try again first) | NCBI's GEO file service answered 500 (and 403) for every file under `/geo/` on 2026-10-31 while its folder listings answered with no files: the live app said "GEO GSE327505 has no supplementary file Cellucid opens" (**Open without this link** first) and "`<host>` failed to give `<file>`. Try again later." — read as a wrong link or Cellucid's failure. Each layer wrote its own sentence, most without the status or the provider | A sentence per provider; a status-only message; a listing taken at its word while its host fails (GEO asks `filelist.txt`, else one byte of `geo/README.txt`, before saying a file is missing) |
 | Decision (2026-10-31) | Every surface says a host's answer the same way (`describeHostFault`, `data/data-source.js`): the link source and every read, the sample catalog's notice, a served source's (`cellucid serve`) and a notebook or R viewer's connection (their requests now carry `url` and `status`), the panel over the empty viewer, and a link's notification, which offers **Try again** for a fault that may pass | One sentence per class, wherever the person meets it; a status in the sentence is what tells a person the host is at fault | Per-surface wording ("the server reported a problem of its own" without the host or status) |
 | Decision (2026-10-31) | "Every host failing at once" is this computer's connection (`connection`): at least two unrelated sites (`siteOf`: the last two labels of a name, so one operator's addresses count once) that had answered this site before lost a request within one maximum retransmission timeout (60 s, RFC 6298 2.5), and no host answered since the earliest of those losses (`hosts.js` `connectionDown`) | A request is lost by TCP's own measure once its longest retransmission timeout passes; one host's outage leaves the others answering, a dropped connection silences them all within that time. A host that never answered this site is no witness: its silence may be CORS or a mistyped name | A count of failed requests; any silence within an arbitrary window; treating a new host's CORS refusal as the connection |
@@ -197,16 +210,16 @@ unless they start with `cellucid/`.
 | S3 round trip under load | CELLxGENE Census, us-west-2, from Europe, 2026-10-29 | 230 ms shortest, 0.35-0.5 s per small request with 42 in flight; an HLCA export priced 198 s at the shortest took 271-386 s |
 | S3 request rate | same, 2026-10-30 | 70-88 requests/s with 42 in flight (14 ms each) |
 | S3 per-connection throughput | full HLCA edges (703.5 MB), 2026-10-30 | ~2,300 requests of 64-256 KB: 172 s; 320-600 requests of several MB: 252-296 s (about 7 of 42 connections busy) |
-| Shared-link samples taken as a connection's | 10M-cell export, emulated 30 MB/s HTTP/2, 2026-10-30 | 255 → 7,556 requests, +18 % time, +45 % CPU, same bytes (fixed by `CONNECTION_BOUND_SHARE` and alone-only samples) |
-| One fast delivery taken for the link | 10M-cell CSR `.h5ad`, 1 % share, `.h5ad` export, local web host, Chromium, 2026-10-30 | 473 → 3,135 requests, 6.2 → 18.2 s, same bytes, flipping between runs (fixed by `LINK_EVIDENCE`) |
+| Shared-link samples taken as a connection's | 10M-cell export, emulated 30 MB/s HTTP/2, 2026-10-30 | 255 → 7,556 requests, +18% time, +45% CPU, same bytes (fixed by `CONNECTION_BOUND_SHARE` and alone-only samples) |
+| One fast delivery taken for the link | 10M-cell CSR `.h5ad`, 1% share, `.h5ad` export, local web host, Chromium, 2026-10-30 | 473 → 3,135 requests, 6.2 → 18.2 s, same bytes, flipping between runs (fixed by `LINK_EVIDENCE`) |
 | Zenodo budget pricing | 868 MB `.h5ad`, 2026-10-28 | open + first view 224 s (496 requests, median 16 KB) → 36 s |
 | Zenodo budget pacing | live, 2026-10-28 | 150 reads at once from a window with 133 left: all read in 62 s, 0 failed |
 | Refusing host | Zenodo refusing this network (HTML 403 without CORS), and an emulated host refusing after 12 answers, 2026-10-28 | Zenodo, 40 reads: 74 → 8 requests; emulated: 23 → 14 requests, the open fails in 1.3 s with the reason |
 | First answer time | 2026-10-28 | Dropbox 2.1-2.2 s, S3 us-west-2 0.7-2.4 s, EBI over 1 s (all healthy) |
 | Held pieces | dense `.h5ad`, 100 genes, 150 ms / 5 MB/s HTTP/1.1, 2026-10-28 | 208 → 22 requests, 6.09 → 2.92 s (floor 3.01 s) |
 | Metadata block size | 1M-cell `.h5ad` over 30 ms/5 MB/s, 80 ms/2 MB/s, 20 ms/50 MB/s | 16 KiB opened in 0.3-0.4x the time of 256 KiB on the slow links (4.2 → 1.4 s; 7.5 → 1.8 MB) |
-| Varying link | Node, 10M CSR `.h5ad`, cycling 20 ms/50 MB/s, 300 ms/1 MB/s and a 4 s stall, 2026-10-30 | every cell 42.6 s / 393 MB; 1 % uniform 31.9 s / 393 MB; 10 % blocks 2.4 s / 64 MB; nothing failed |
-| Local file prior | 1 % of 40,000 cells, every gene | 4,004 reads in 270 ms → 534 reads in 150 ms with the disk priced at no less than its prior |
+| Varying link | Node, 10M CSR `.h5ad`, cycling 20 ms/50 MB/s, 300 ms/1 MB/s and a 4 s stall, 2026-10-30 | every cell 42.6 s / 393 MB; 1% uniform 31.9 s / 393 MB; 10% blocks 2.4 s / 64 MB; nothing failed |
+| Local file prior | 1% of 40,000 cells, every gene | 4,004 reads in 270 ms → 534 reads in 150 ms with the disk priced at no less than its prior |
 | Revisits from kept parts | Chromium, CELLxGENE atlases (HLCA core, full HLCA, 11.4M embryo), 2026-10-30 | open + whole map: 0 requests beyond the version check |
 | Public hosts measured | 2026-10-28 to 2026-10-30 | CELLxGENE S3: HTTP/1.1, 7 addresses; GitHub: HTTP/2, 100 streams, no `Timing-Allow-Origin`; Zenodo: 133 requests/min stated; GitHub API: 60/hour signed out; Hugging Face: 500 API requests and 3,000 file resolutions per five minutes stated |
 | Loopback opening rate | 10M-cell `.h5ad` CSR / Zarr v3 sharded on a loopback web host (HTTP/1.1), Chromium, 2026-10-31 | the opening (before the gene sample is priced) measured 45 MB/s over 0.9 MB / 9.3 MB/s over 51 KB, 2.5-5 ms round trips, no delivery bounded by transfer; every cell's first gene then read in 5.1-5.2 s / 4.4 s |
@@ -225,12 +238,12 @@ request's round trip; 360 of that round's time misses were the model's.
 | Warm the file's own host before cold S3 mirrors | 2026-10-30 | liver 6.35 → 6.0 s, soundlife 8.0-8.3 → 8.9-9.5 s (Node) | Only a browser A/B (browsers keep idle sockets longer than Node's 4 s) |
 | Probe the shipped CELLxGENE release beside the release list | 2026-10-30 | the probe ended 0.2 s later (three cold connections instead of one warm) | — |
 | Strict "never re-fetch a gap byte fetched before" | 2026-10-30 | duplicates 0, but HDF5 gene test 5 → 8 requests, ~1,000 more requests over HTTP/1.1 at 10M | A merge price that knows a dependent read will want the gap |
-| Price every request at the budget interval from the first answer | 2026-10-28 | Zenodo: half the requests, 50 % more bytes, 7 % slower | Knowing the window's demand early |
+| Price every request at the budget interval from the first answer | 2026-10-28 | Zenodo: half the requests, 50% more bytes, 7% slower | Knowing the window's demand early |
 | Halve a host's concurrency on a lost request too | 2026-10-28 | no fewer requests reached the refusing host; a new file probed in two round trips | — |
 | 64 KiB first head | 2026-10-28 | CELLxGENE/Hugging Face within noise; a Cellucid-ready file 1-2 round trips slower (294 → 451/529 ms at 150 ms / 5 MB/s) | — |
 | Metadata reach priced by round trips on every link | 2026-10-28 | opening bytes x2, requests unchanged; kept only where a budget binds | — |
 | Sampling `loadedRequestMs` from sequential reads | 2026-10-30 | blocks merged and the cache budget test failed; saturation now also requires requests waiting | — |
-| Fixed batches, then a union, then streamed batches for HDF5 string heaps | 2026-10-28 to 2026-10-29 | 100M at 20 ms HTTP/2 71.8 → 87.1 s; replaced by the link's room (`whenRoom`): 10M 1 % at 150 ms HTTP/1.1 77.0 s | — |
+| Fixed batches, then a union, then streamed batches for HDF5 string heaps | 2026-10-28 to 2026-10-29 | 100M at 20 ms HTTP/2 71.8 → 87.1 s; replaced by the link's room (`whenRoom`): 10M 1% at 150 ms HTTP/1.1 77.0 s | — |
 
 ## Known limits and open items
 

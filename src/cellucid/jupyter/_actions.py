@@ -1,13 +1,13 @@
 """
-The action catalogue, as the viewer API sends actions.
+The action catalog, as the viewer API sends actions.
 
 Everything a person can do in the viewer, and everything an agent or a
-notebook reads from it, is an action of one catalogue, defined once in the web
+notebook reads from it, is an action of one catalog, defined once in the web
 app (``assets/js/app/actions/``). ``cellucid/action_catalog.json`` is that
-catalogue's document byte for byte (pinned in ``tests/test_action_catalog.py``);
+catalog's document byte for byte (pinned in ``tests/test_action_catalog.py``);
 :class:`cellucid.jupyter.AnnDataViewer` has one generated method per action
 (``_actions_generated.py``) and the generic :meth:`~AnnDataViewer.act`, both of
-which check and convert parameters here, by the catalogue, the same way for
+which check and convert parameters here, by the catalog, the same way for
 every action:
 
 - a parameter the action does not have, or a required one missing, is refused
@@ -40,7 +40,10 @@ from ._wire import _MAX_CELL_INDEX
 #: Cells an action names: 0-based rows of the viewer's ``obs`` (ints, a NumPy
 #: integer array), a boolean mask of every cell, or obs names (a list of
 #: names, a ``pandas.Index``); a boolean ``pandas.Series`` names the cells of
-#: its index that are True.
+#: its index that are True. Rows and masks are original positions (the order
+#: the data was given): a file ``prepare()`` wrote, read with anndata as
+#: stored, is in priority order, so name its cells by obs name or a boolean
+#: ``pandas.Series`` (or ``cellucid.restore_original_order`` it first).
 CellsLike: TypeAlias = Sequence[int] | Sequence[bool] | Sequence[str] | np.ndarray | pd.Index | pd.Series
 
 #: One number per cell: a NumPy array (``uint8``/``uint16``/``uint32`` codes or
@@ -73,11 +76,11 @@ OMIT: Final = Omit()
 
 @cache
 def action_catalog() -> dict[str, dict[str, Any]]:
-    """Every action of the catalogue this package was made with, by type."""
+    """Every action of the catalog this package was made with, by type."""
     text = resources.files("cellucid").joinpath("action_catalog.json").read_text(encoding="utf-8")
     document = json.loads(text)
     if document.get("schema") != 1:
-        raise RuntimeError("cellucid/action_catalog.json is not an action catalogue this package reads")
+        raise RuntimeError("cellucid/action_catalog.json is not an action catalog this package reads")
     return {entry["type"]: entry for entry in document["actions"]}
 
 
@@ -88,7 +91,7 @@ def tool_name(action: str) -> str:
 
 
 def require_action(action: object) -> dict[str, Any]:
-    """The catalogue's entry of ``action`` (its dotted type), or a refusal that
+    """The catalog's entry of ``action`` (its dotted type), or a refusal that
     names the nearest ones."""
     if type(action) is not str:
         raise TypeError(f"An action is named by its dotted type, such as 'color.by', not {action!r}")

@@ -92,12 +92,14 @@ Exact behavior:
   that does not change when the file is renamed.
 - The server's id and name are the dataset's: a server that names an id the
   file does not state serves the file under the server's id.
-- `dataset_name`, `dataset_description`, and the `source_*` strings are shown
-  to the reader exactly as stored, so none of them may carry a control
-  character, a zero-width character (`U+200B`, `U+2060`, `U+FEFF`), or leading
-  or trailing whitespace of any kind. Category labels obey the same rule. Both
-  writers reject the value and name the offending character rather than
-  trimming it, because trimming rewrites text nobody asked to change.
+- `dataset_name`, `dataset_description`, the citation text and `source_name`
+  are shown to the reader as stored, with white space at either end removed
+  (the writers write them so, and the web app reads a file's so, never
+  refusing it for a space typed at the end of a paragraph). None may carry a
+  control character or a zero-width character (`U+200B`, `U+2060`, `U+FEFF`)
+  inside: both writers reject such a value and name the character. Category
+  labels, identifiers and URLs keep the strict rule: white space at either end
+  is refused, not removed.
 
 Use the same exact `dataset_id` whenever you reopen the same dataset
 generation. Changing it intentionally creates a different dataset identity,

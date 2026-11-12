@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cellucid"
-version = "0.9.7"  # CELLUCID_VERSION
+version = "0.9.8"  # CELLUCID_VERSION
 description = "Interactive Single-Cell Data Visualization"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
@@ -93,7 +93,10 @@ docs = [
     "myst-nb>=1.1.0",
     "sphinx-autodoc-typehints>=1.25",
     "pydata-sphinx-theme>=0.15",
-    "sphinx-design>=0.5",
+    # 0.8 has the card-header/card-footer directives docs/index.md uses, and
+    # warns on the ^^^/+++ separators (an error under -W). A minor release can
+    # warn on more markup: the bound moves together with a migration.
+    "sphinx-design>=0.8,<0.9",
     "sphinx-copybutton>=0.5",
     "sphinx-sitemap==2.9.0",
     "sphinxext-opengraph==0.13.0",

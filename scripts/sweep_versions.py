@@ -284,7 +284,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
     Declaration(
         "cellucid-python",
         "docs/user_guide/python_package/installation.md",
-        rf"Version {VERSION} is the current PyPI",
+        rf"Version {VERSION} is the PyPI submission",
         RELEASE,
         "status line on the Python installation page",
     ),

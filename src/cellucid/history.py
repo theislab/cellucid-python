@@ -29,7 +29,7 @@ than hold their fields:
 
 A step shows its pseudocode as it was recorded (``code``): parameters of an
 earlier version (``v`` below the action's version in this package's
-catalogue) are shown and applied as they were; the web app upgrades them only
+catalog) are shown and applied as they were; the web app upgrades them only
 to replay them. No picture of a step is ever stored.
 
 The session reader (:class:`cellucid.CellucidSession`) builds them; a live
@@ -148,6 +148,7 @@ NOTE_COLUMNS = ("id", "on", "target", "text", "origin", "agent", "at", "edited_a
 DOMAIN_NAMES: Mapping[str, str] = {
     "cells": "Open cells",
     "mapping": "Data mapping",
+    "expression": "Expression values",
     "field-overlays": "Fields and labels",
     "gene-sets": "Gene sets",
     "views": "Views",
@@ -322,7 +323,7 @@ def _describe_highlights(a: Any, b: Any) -> list[str]:
         if was["name"] != page["name"]:
             lines.append(f'Highlight page "{was["name"]}" renamed "{page["name"]}"')
         if was["color"] != page["color"]:
-            lines.append(f'Highlight page "{page["name"]}" recoloured')
+            lines.append(f'Highlight page "{page["name"]}" recolored')
         groups_a = {group["id"]: group for group in was["groups"]}
         groups_b = {group["id"]: group for group in page["groups"]}
         for group_id, group in groups_b.items():
@@ -370,9 +371,9 @@ def describe_domain(domain: str, a: Any, b: Any) -> list[str]:
 _AGENT_KEYS = {"claude": "claude", "chatgpt": "chatgpt"}
 _HOST_NAMES = {"python": "Python", "r": "R"}
 #: Domains whose change a methods section reports (``METHOD_DOMAINS``).
-METHOD_DOMAINS = frozenset({"mapping", "field-overlays", "gene-sets", "active-field", "filters", "visibility", "highlights", "analysis"})
+METHOD_DOMAINS = frozenset({"mapping", "expression", "field-overlays", "gene-sets", "active-field", "filters", "visibility", "highlights", "analysis"})
 _SUBSAMPLE_METHODS = {
-    "blocks": "in blocks of neighbouring cells",
+    "blocks": "in blocks of neighboring cells",
     "uniform": "uniformly at random",
     "stratified": "stratified by a field",
     "spatial": "spatially",
@@ -508,7 +509,9 @@ def _dataset_sentence(dataset: Mapping[str, Any]) -> str:
     how = "was opened in full"
     if open_cells is not None and open_cells["open"] < open_cells["of"]:
         percent = 100 * open_cells["open"] / open_cells["of"]
-        share = f"{_js_round(percent)}%" if percent >= 1 else f"{_js_number(float(f'{percent:.2g}'))}%"
+        # The web app's formatShare: whole from 10 (never 100 short of every
+        # cell), two significant figures below.
+        share = f"{min(99, _js_round(percent))}%" if percent >= 10 else f"{_js_number(float(f'{percent:.2g}'))}%"
         method = _SUBSAMPLE_METHODS.get(open_cells.get("method") or "")
         seed = f" with seed {open_cells['seed']}" if isinstance(open_cells.get("seed"), int) else ""
         how = (

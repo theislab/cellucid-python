@@ -69,7 +69,7 @@ def test_smoke_and_multiview_docs_publish_current_exact_limits() -> None:
         "50 / `1.00×`",
         "`Still`",
         "approximately 300 ms debounce",
-        "Volumetric smoke requires a single view. Clear snapshots first.",
+        "volumetric smoke draws one view; remove the kept views first (Clear, beside Layout)",
     ):
         assert exact in smoke
     assert "currently visible" in smoke
@@ -83,7 +83,8 @@ def test_smoke_and_multiview_docs_publish_current_exact_limits() -> None:
         "`Link cameras`",
         "`Layout: Grid compare`",
         "`Layout: Edit selected view`",
-        "`Orbit`, `Pan` or `Fly`",
+        "`Orbit`, `Planar` or `Free-fly`",
+        "### Name a view",
         "**Link cameras** is on by default",
         "Views that show different embeddings always keep their\nown cameras",
     ):
@@ -102,8 +103,10 @@ def test_velocity_docs_use_real_pancreas_captures_and_current_controls() -> None
     assert "real\nPancreas velocity field" in index
     assert "synthetic" not in (index + captures).lower()
     assert "off by default" in enable
-    assert "does not silently choose the first field" in enable
-    assert "Failed to load vector field." in enable
+    # One field bound to the embedding is selected; among several none is guessed (R9V-4).
+    assert "When exactly one is, it is selected" in enable
+    assert "Cellucid does not guess" in enable
+    assert "the status reads `The vector field could not be shown.`" in enable
     assert "Loading or replacing a dataset always" in enable
     assert "For the same loaded dataset, a `.cellucid-session` captures" in enable
 
@@ -330,7 +333,10 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         "Cellucid applies the verified static starting view",
         "`cell_type` observation field",
         "3-D **Orbit** camera",
-        "**Studio (light)** background",
+        # The background is the person's look, as the theme is: held in the
+        # file's settings, never put back (2026-11-10, F46).
+        "It does not set the theme or the viewer background",
+        "but it is not put back; a background you never picked follows the theme",
         # Session format 4: a starting view is one tracker of one root, with
         # neither the cells to open nor the layout (so no theme).
         "one tracker of one root and no step",

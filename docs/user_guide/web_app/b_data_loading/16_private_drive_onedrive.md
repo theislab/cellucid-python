@@ -25,7 +25,7 @@ configured on this site yet"; open the link on www.cellucid.com instead.
 | | Google Drive | OneDrive and SharePoint |
 |---|---|---|
 | Shared with anyone who has the link | Opens with no sign-in | Opens after a Microsoft sign-in (OneDrive serves nothing anonymously) |
-| Shared privately with you | Opens after **Sign in to Google** and one click on **Select** in Google's file picker | Opens after **Sign in with Microsoft**; a colleague's file in an organisation may need your administrator's approval once |
+| Shared privately with you | Opens after **Sign in to Google** and one click on **Select** in Google's file picker | Opens after **Sign in with Microsoft**; a colleague's file in an organization may need your administrator's approval once |
 | Accounts | Any Google account | Personal Microsoft accounts, and work or school accounts |
 | What Cellucid can open | One file: an `.h5ad`, a `.zarr.zip`, or another file Cellucid reads | One file: an `.h5ad`, a `.zarr.zip`, or another file Cellucid reads |
 | Folders | Refused ([why](#why-folders-are-refused)) | Refused ([why](#why-folders-are-refused)) |
@@ -151,7 +151,7 @@ time spent there never counts as a stalled download.
 
 ### Google Workspace accounts: administrator approval
 
-A Google Workspace organisation can restrict which apps its accounts may
+A Google Workspace organization can restrict which apps its accounts may
 sign in to. Google's window then says **"Access blocked"**, or Cellucid says
 "Your Google Workspace administrator does not allow Cellucid for this
 account", offers **Use another account** (a personal Google account works)
@@ -179,10 +179,10 @@ OneDrive no longer serves files to anonymous visitors, not even files shared
 with "Anyone with the link", so every OneDrive file opens after you sign in
 with a Microsoft account:
 
-> OneDrive file: sign in with Microsoft to open it. **[Sign in with Microsoft]** ⓘ
+> OneDrive files open after a sign-in. **[Sign in with Microsoft]** ⓘ
 
 ```{figure} ../../../_static/screenshots/data_loading/onedrive-sign-in.png
-:alt: The Link or server bar holding a OneDrive share link, with one line under it reading "OneDrive file: sign in with Microsoft to open it.", a Sign in with Microsoft button and an (i).
+:alt: The Link or server bar holding a OneDrive share link, with one line under it reading "OneDrive files open after a sign-in.", a Sign in with Microsoft button and an (i).
 :width: 496px
 
 A OneDrive share link: every OneDrive file opens after a Microsoft sign-in,
@@ -205,20 +205,20 @@ With a work or school account, `Files.Read` covers your own files. A file a
 colleague shared with you needs one more permission, `Files.Read.All` ("read all
 files that you can access"). Cellucid asks for it only then:
 
-> This file may belong to someone else in your organisation. … **[Ask for access]**
+> This file may belong to someone else in your organization. … **[Ask for access]**
 
 Microsoft's default policy lets only an administrator grant that permission, so
-in many organisations Microsoft's window says that **approval is required**,
-and may offer to send your administrator a request. Some organisations let
+in many organizations Microsoft's window says that **approval is required**,
+and may offer to send your administrator a request. Some organizations let
 only an administrator approve any app, or any app from an unverified
 publisher: their accounts see **"Need admin approval"** (`AADSTS90094`) at the
 first sign-in already, with Cellucid named "unverified" (Cellucid's publisher
-is not verified with Microsoft yet; once it is, organisations that let users
+is not verified with Microsoft yet; once it is, organizations that let users
 approve verified publishers' apps with low-risk permissions let their users
-approve it themselves, which depends on each organisation's policy). Cellucid
+approve it themselves, which depends on each organization's policy). Cellucid
 then says:
 
-> OneDrive file: sign in with Microsoft to open it. Your organisation
+> OneDrive files open after a sign-in. Your organization
 > (*its name*) lets only an administrator approve Cellucid. …
 > **How an administrator approves Cellucid** **[Use another account]**
 
@@ -227,20 +227,20 @@ Microsoft account works. "Return to the application without granting consent"
 on Microsoft's page comes back to Cellucid exactly as declining does, so then
 Cellucid says both: sign in again and accept, or, if Microsoft said "Need admin
 approval", ask your administrator. Once an administrator approves Cellucid, it
-works for everyone in the organisation.
+works for everyone in the organization.
 
 For administrators: Cellucid is a single-page application; for OneDrive it
 has no server, stores nothing and receives no data (see [What Cellucid sees and
 keeps](#what-cellucid-sees-and-keeps)). It asks for the delegated Microsoft
 Graph permissions `Files.Read`, `openid` and `offline_access`, and
 `Files.Read.All` when a person opens a colleague's file. To approve it for the
-organisation, open the Microsoft Entra admin center, **Enterprise applications
+organization, open the Microsoft Entra admin center, **Enterprise applications
 → Cellucid → Permissions → Grant admin consent** (Cellucid's application ID is
 `18aa2a4e-6431-4ef0-858d-fb6fdcab528e`; it is listed there once someone in the
-organisation has tried to sign in). Not tested yet with real work or school
+organization has tried to sign in). Not tested yet with real work or school
 accounts (the one tried, at Helmholtz Zentrum München, requires an
 administrator's approval, `AADSTS90094`): a colleague's file, sharing across
-organisations (a guest opening another organisation's file), and the
+organizations (a guest opening another organization's file), and the
 SharePoint download host.
 
 Checked with real personal accounts on 2026-10-25: a second personal account

@@ -11,7 +11,7 @@ third recipe):
 - the embeddings (UMAP, t-SNE, PCA, …) — each becomes `obsm[<key>]`;
 - the cell metadata, a `data.frame` — `obs`;
 - optionally gene expression, **cells x genes**, and gene metadata — `X`, `var`;
-- optionally a symmetric neighbour graph — `obsp['connectivities']`;
+- optionally a symmetric neighbor graph — `obsp['connectivities']`;
 - optionally vector fields — `obsm['<field>_<basis>']` for an embedding `X_<basis>` (`velocity_umap`).
 
 Then one `cellucid_prepare()` call writes a Cellucid-ready AnnData store.

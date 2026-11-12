@@ -70,7 +70,7 @@ If you’re a wet lab scientist or a non-technical collaborator, it helps to thi
 4) Compare groups / export a figure / save a session
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
-:alt: The whole Cellucid window with the Pancreas sample coloured by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colours.
+:alt: The whole Cellucid window with the Pancreas sample colored by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colors.
 :width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.

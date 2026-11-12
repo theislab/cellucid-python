@@ -16,6 +16,7 @@ All navigation/camera controls are in:
 
 - **Navigation** accordion
 - **Camera path** accordion → saved positions, timing, and interpolation
+  ({doc}`08_camera_path`)
 
 The controls shown depend on the current navigation **Mode**:
 
@@ -25,32 +26,10 @@ The controls shown depend on the current navigation **Mode**:
 
 ---
 
-## Camera Path playback is opt-in
+## Camera path
 
-Camera Path animates between camera positions that you save explicitly:
-
-1) Frame the view and choose **Save position**.
-2) Move to a second view and save it.
-3) After two valid positions exist, the playback bar becomes available at the
-   top of the viewport.
-4) Select **Play** in that bar to start movement, or enable **Autoplay** directly
-   below **Loop playback**.
-
-Autoplay is off by default. Enabling it starts a ready path immediately. A
-saved session records the setting; after a complete successful load,
-an enabled ready path starts without another Play action. **Loop playback**
-controls whether it repeats or stops at the final keyframe. With zero or one
-saved position, the top playback bar is not available and Autoplay waits until
-the path becomes ready. Loading another dataset clears the current path so
-positions from one dataset cannot move the camera over another. The camera
-itself starts over too: a dataset opens at the default framing of the
-dimension it opens in, never at the pose the dataset before it was left in
-(its session or published preset, when it has one, then moves it).
-
-:::{note}
-The playback bar auto-hides when idle. Move the pointer over the viewport or
-press `Tab` to reveal it when a valid path exists.
-:::
+Saved camera positions played as a film are the **Camera path** section, a
+page of its own: {doc}`08_camera_path`.
 
 ---
 
@@ -105,21 +84,24 @@ uses.
 
 ## Keyboard shortcuts that affect camera/navigation
 
-These work unless you’re typing in an input/select.
+{doc}`../o_accessibility_privacy_security/03_keyboard_shortcuts` lists every
+key, from the same table as the in-app **Keyboard shortcuts** panel
+({kbd}`?`). The camera's: {kbd}`R` resets the camera (framing only, below),
+{kbd}`O` / {kbd}`P` / {kbd}`G` choose Orbit / Planar / Free-fly, {kbd}`W`
+{kbd}`A` {kbd}`S` {kbd}`D` orbit, pan or move (by mode), {kbd}`=` {kbd}`]`
+and {kbd}`-` {kbd}`[` zoom in Orbit and Planar, {kbd}`E` {kbd}`Q` move up and
+down in Free-fly, and {kbd}`Shift` speeds any of them up.
 
-- `R`: reset camera (camera framing only)
-- `O` / `P` / `G`: orbit / planar / free-fly
-- `W A S D`: move/rotate/pan (depends on mode)
-- `=` or `]`: zoom in (orbit/planar)
-- `-` or `[`: zoom out (orbit/planar)
-- `Shift`: move faster (all modes)
-- `F`: fullscreen
-- `H`: toggle sidebar
-- `?`: open the in-app “Keyboard shortcuts” section
+They act on the focused view (linked views follow it). A text field or a
+dropdown keeps the keys typed in it; a slider, a checkbox or a button does
+not, so after moving **Keyboard speed** {kbd}`W` moves the camera at once.
+A mode chosen from the Mode dropdown with the pointer hands the keys back to
+the plot at once; chosen from the keyboard, focus stays on the dropdown, whose
+letters choose its options (press {kbd}`G`, {kbd}`O` or {kbd}`P` instead).
 
-:::{note}
-If you press keys and nothing happens, click the canvas once (focus issues are the #1 cause). For more, see {doc}`06_troubleshooting_core_interactions`.
-:::
+A key moves the camera for the time it is held, measured from the key's own
+press and release: a tap shorter than a frame still moves it, and on a slow
+frame (a large dataset on a modest GPU) equal presses move it equally.
 
 ---
 
@@ -190,18 +172,6 @@ This section is for readers who want repeatable “feel” across machines and s
 
 - UI slider range: 1–100 (default 100)
 - Internal mapping: maps to a small pan-speed factor in approximately `[0.001, 0.0075]` (higher = faster).
-
----
-
-## Interface reference
-
-```{figure} ../../../_static/screenshots/web_app/camera-path-configured-panel.png
-:alt: The Camera path panel after two positions were saved: keyframes KF 1 and KF 2 with the KF 1 → KF 2 duration on auto, End with a return to the first keyframe, Set all with Apply, and Playback with Default speed, Position interpolation Catmull-Rom spline, Rotation interpolation SLERP (smooth), Easing Linear, Loop playback and Autoplay.
-:width: 532px
-
-Two valid keyframes expose camera-path timing and interpolation settings.
-Autoplay remains off until the user explicitly enables it.
-```
 
 ---
 

@@ -34,7 +34,7 @@ Filtering is about **visibility**:
 | Keep only N cells of a large category | Filter by cell count | Click the category's count in the categorical legend, type N | A seeded random sample; type `all` to show every cell again |
 | Gate by QC / score ranges | Numeric range filter | Continuous legend Min/Max sliders | Turn Live filtering off for large datasets |
 | Hide “fringe” cells within clusters | Outlier filter | Legend box, for a categorical field, once a latent space is chosen | `95%` is a common starting point |
-| Show only gene-expressing cells | Gene expression range filter | Gene legend Min/Max sliders | Keeps applying after you colour by another field, until removed |
+| Show only gene-expressing cells | Gene expression range filter | Gene legend Min/Max sliders | Keeps applying after you color by another field, until removed |
 
 ---
 
@@ -48,7 +48,7 @@ Everything on this page happens inside one sidebar accordion,
 :width: 532px
 
 The panel in its resting state on the Pancreas sample. The three selectors at
-the top decide **what colours the points**. The **Legend** group (with the
+the top decide **what colors the points**. The **Legend** group (with the
 **Outlier filter**) and everything below it decide **which points are
 drawn**. The last two lines —
 the count, and the filter list — are the only place the app tells you the truth
@@ -58,7 +58,7 @@ about what is hidden.
 Once you actually filter something, that last block fills up:
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-three-rows.png
-:alt: The Filters block holding three rows of different kinds at once: an S_score range row ending in its cell count, cut off with an ellipsis, a clusters hiding row, and a clusters: outlier ≤ 95% row with no count.
+:alt: The Filters block reading Showing 768 of 3,696 cells above three rows of different kinds: S_score: -0.146 – 1.… and clusters: hiding Du…, each cut off with an ellipsis and followed by the cell count 768, and clusters: outlier ≤ 95% with no count.
 :width: 496px
 
 Three kinds of filter active at once on the same 3,696 cells. Filters
@@ -95,7 +95,7 @@ What filtering means (visibility, not deletion), how stacking works, and how fil
 :link: 02_outlier_filtering_per_active_field
 :link-type: doc
 
-How to hide cells far from their category's centre in a latent space, choosing that latent space, and where the distances come from (stored in the file or computed once).
+How to hide cells far from their category's center in a latent space, choosing that latent space, and where the distances come from (stored in the file or computed once).
 :::
 
 :::{grid-item-card} {octicon}`list-unordered;1.5em;sd-mr-1` Filter stack UI

@@ -66,6 +66,15 @@ If you want “long, cinematic” trails:
 
 These controls add film-like glow and tone mapping. They can dramatically change the look.
 
+The overlay's light is summed in high dynamic range and mapped to the screen
+by its luminance, keeping each color's hue: a brighter flow is a brighter
+version of its colors, and only where the display cannot show it any brighter
+does it turn toward white, along its own hue. With every glow control at its
+maximum the flow is mostly white, ringed by its own colors at full brightness
+(viridis's slow end is a deep purple, so the ring of a slow flow is a vivid
+purple); lower `Exposure`, `Intensity` or `Bloom strength` to see the colors
+again.
+
 | Setting (UI label) | Range (UI) | Default | What it does | Performance impact | Guidance |
 |---|---:|---:|---|---|---|
 | `Exposure` | 0.10–2.00 | 0.50 | Global brightness of the overlay’s HDR composite. | Medium | If everything is too dark, raise exposure slightly before raising opacity. |
@@ -87,13 +96,14 @@ configure.
 
 ## Color grading (exact UI labels)
 
-These controls change the final color/contrast of the overlay layer.
+These controls change the final color/contrast of the overlay layer. They
+apply after the tone mapping, to the colors the screen shows.
 
 | Setting (UI label) | Range (UI) | Default | What it does | Performance impact | Guidance |
 |---|---:|---:|---|---|---|
 | `Saturation` | 0.50–2.00 | 1.15 | Makes colors more/less vivid. | Low | Avoid extreme saturation in scientific figures (can imply stronger magnitude differences than real). |
 | `Contrast` | 0.50–2.00 | 1.05 | Expands or compresses intensity range. | Low | Too much contrast makes trails “clip” and hide subtle structure. |
-| `Highlights:` | 0.50–1.50 | 0.85 | Scales the bright end of the tone mapping. | Low | Lower highlights if bloom/opacity cause washout. |
+| `Highlights` | 0.50–1.50 | 0.85 | Scales the bright end of the tone mapping. | Low | Lower highlights if bloom/opacity cause washout. |
 | `Shadows` | 0.50–1.50 | 1.05 | Scales the dark end of the tone mapping. | Low | Increase slightly if trails disappear into a dark background. |
 
 ---

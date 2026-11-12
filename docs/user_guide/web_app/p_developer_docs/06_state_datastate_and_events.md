@@ -48,7 +48,7 @@ Code:
   embedding, and read by smoke
   density and the session fingerprint
 - `colorsArray`: RGBA color buffer (uint8 packed); smoke density reads it too,
-  so the cloud carries the active field's colours
+  so the cloud carries the active field's colors
 - `categoryTransparency`: per-point visibility, a `Uint8Array` holding exactly 0
   or 1 (every filter keeps or drops a cell; highlight dimming and fog are done
   in the shaders), validated by `requirePointTransparency`
@@ -69,7 +69,7 @@ is `residencyBudgetBytes('inactiveFields')` (`data/memory-budget.js`): an
 eighth of what the working set leaves of the allowance (see
 {ref}`memory-budgets`). The active field, any field with filter state (a
 range, hidden categories or an outlier threshold: every filter applies
-whatever is coloured), and fields still loading are always kept. Release runs
+whatever is colored), and fields still loading are always kept. Release runs
 when the active field changes, when a `.h5ad` export has written a field's
 column, and when the memory model trims the share (the allowance or the
 working set changed, the page is hidden) -- except while the state is in a
@@ -106,8 +106,8 @@ to disk or read again, never what can be opened or shown.
   a page that is not a secure context counts only itself.
 - **The working set** is what is drawn: 77 bytes a cell of the shown
   dataset's open cells (`CELL_WORKING_SET_BYTES`, measured: positions,
-  colours, visibility, the spatial tree and draw order on the page and the
-  GPU, the coloured field), a neighbour graph while a view shows its edges or
+  colors, visibility, the spatial tree and draw order on the page and the
+  GPU, the colored field), a neighbor graph while a view shows its edges or
   the k-NN tool uses it, which cells of the file the open cells are (the
   page's cell identity, `'cell identity'`: the kept cells, their open order
   and its lookups, 4 to 16 bytes an open cell), the reader worker's rows of
@@ -132,7 +132,7 @@ to disk or read again, never what can be opened or shown.
   every analysis worker, kept marker runs), the values analysis windows keep
   for their pages with the page cell lists made for them (`analysisPages`,
   `app/analysis/data/data-layer.js`) 1/16, the AnnData adapter's cached copies
-  (obs payloads not handed to a view, coordinates, the neighbour graph while
+  (obs payloads not handed to a view, coordinates, the neighbor graph while
   nothing draws it) 1/16, a latent space held for outlier quantiles 1/16,
   decoded chunks of every open store 1/32, bytes of remote files the page
   keeps for its reader workers 1/32 (`data/byte-range-cache.js`), decode
@@ -192,7 +192,7 @@ Before any cell is drawn (the working set takes its part first: 77 MB for
 | 16 GiB | 8 GiB | 3 GiB | 1 GiB | 512 MiB | 6 |
 
 Not counted: GPU objects beyond the working set's measured share (kept
-views' colour stores, highlights, edge geometry), the shard indexes of
+views' color stores, highlights, edge geometry), the shard indexes of
 sharded Zarr arrays (a store's structure, 16 MiB a store), and the
 operations of the read activity log under way (ended ones are counted into
 its totals and dropped).
@@ -204,7 +204,7 @@ Cellucid supports:
 - any number of snapshot views (“Keep view”)
 
 There is no count cap: GPU memory decides what stays resident. When an
-allocation is refused, the colour stores and alpha textures of kept views that
+allocation is refused, the color stores and alpha textures of kept views that
 are not presented are released first and rebuilt when they are shown again
 (`tests/browser/kept-views-memory.spec.mjs`). The grid layout fits any number
 of panes. `createSnapshotView` refuses only in smoke render mode.
@@ -228,17 +228,17 @@ transparency array and visibility mask with the view it was kept from, copy on
 write (`state/managers/per-cell-array-ownership.js`): every writer goes through
 `writableTransparency`, `writableCellVisibilityMask` or `writableColors`, which
 copy first if another view still holds the array. A kept view shares the
-colours array too: the viewer and renderer keep it by reference, and once
-published it is never written again, so whichever view recolours first writes
-a copy. A filter writes the transparency alone: colours carry no visibility
-(their alpha byte layers a field's no-value grey beneath the coloured cells,
+colors array too: the viewer and renderer keep it by reference, and once
+published it is never written again, so whichever view recolors first writes
+a copy. A filter writes the transparency alone: colors carry no visibility
+(their alpha byte layers a field's no-value gray beneath the colored cells,
 `BENEATH_ALPHA_BYTE`, and a gene sample's cells not read beneath both,
 `UNREAD_ALPHA_BYTE`). A context handed
 to `restoreContext` is copied, because its caller may still hold it. So never
 write a per-cell array directly — always take it through a `writable*` helper.
 A kept view added about 6–7.4 bytes per cell instead of 26, measured while it
-still copied the colours (4 bytes a cell on the CPU, now shared until a view
-recolours).
+still copied the colors (4 bytes a cell on the CPU, now shared until a view
+recolors).
 
 ### Field switch cost
 
@@ -382,6 +382,10 @@ redo reads the share again.
 
 `DataState` extends a small `EventEmitter` (`cellucid/assets/js/app/utils/event-emitter.js`).
 Events are the main way UI modules stay decoupled from state internals.
+Each event's listeners are one listener set (`cellucid/assets/js/utils/listener-set.js`, the
+only way any module tells listeners of a change): every listener hears the event, a listener
+that throws is reported once on the console ("[cellucid] A listener of DataState
+"field:changed" failed: …") and never stops the others or fails the change that emitted it.
 
 ### Core events (stable names)
 

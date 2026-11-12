@@ -277,9 +277,14 @@ def test_the_channel_runs_over_the_comm_commands_first_then_events_in_order(widg
         time.sleep(0.01)
     assert widget.state.ready is not None
 
-    # A selection, sent in pieces as the front end splits a binary frame.
+    # A selection, sent in pieces as the front end splits a binary frame:
+    # the protocol's example header, with cells of the four this widget
+    # serves (a cell beyond them closes the channel, R9Z-3).
     example = next(e for e in PROTOCOL["examples"]["binaryEvents"] if e["header"]["type"] == "selection")
-    frame = bytes.fromhex(example["hex"])
+    header = json.dumps(example["header"], separators=(",", ":")).encode("utf-8")
+    cells = [0, 2, 3]
+    frame = struct.pack("<I", len(header)) + header + struct.pack("<3I", *cells)
+    example = {**example, "cells": cells}
     seen = []
     widget.on_selection(seen.append)
     front.post({"t": "binary", "s": 0, "last": False}, [frame[:3]])

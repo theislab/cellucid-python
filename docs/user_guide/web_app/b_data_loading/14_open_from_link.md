@@ -48,12 +48,12 @@ becomes `gdrive:<id>`), also for a link the page was opened with, and never a
 sign-in token or a download address. A key the link itself carries to grant
 access (a pre-signed URL's signature, a Dropbox `rlkey`, a Drive resource key,
 a token) stays in the address, so a reload opens the same file, and goes
-nowhere else: **Share**, sessions, figures, notifications and the console get
+nowhere else: **Share…**, sessions, figures, notifications and the console get
 the link without it ({ref}`link-access-keys`). With a share of the cells you
 chose open, the address also names how they were chosen
 (`&cells=228245&sample=blocks&seed=0`; never the cells themselves), and a link
 may name one itself (`&cells=10%`), so whoever follows it opens the same cells
-({ref}`in-a-link`). So **Share** gives others the same view, of a file they
+({ref}`in-a-link`). So **Share…** gives others the same view, of a file they
 can read without your key. The same bar connects to a Cellucid server
 ({doc}`04_server_tutorial`): see [The address bar](#the-address-bar).
 
@@ -75,7 +75,7 @@ decides which, by the same rules every time:
 | You type | It opens |
 |---|---|
 | A port number: `8765` | The server on this computer, `http://localhost:8765` |
-| `localhost:8765`, `127.0.0.1:8765`, or `host:port` without `http://` | The server at that address, over `http://` |
+| `localhost:8765`, `127.0.0.1:8765`, or `host:port` without `http://` | The server at that address, over `http://`; with a path naming a file, store or catalog (`127.0.0.1:8000/atlas.h5ad`), that data, over `http://` |
 | A provider's form: `hf:user/repo`, `GSE123456`, a DOI, `zenodo:<record>`, `owner/repo/path`, a CELLxGENE, Zenodo, Figshare, Google Drive, OneDrive, Dropbox, Hugging Face or GitHub link | That provider's data ([What you can paste](#what-you-can-paste)) |
 | A web address ending in a file or store name Cellucid reads (`.h5ad`, `.h5mu`, `.loom`, `.h5`, `.rds`, `.rda`, `.zip`, `.zarr`) or `datasets.json`, or one with a `?query` or `#fragment` | That file, store or catalog |
 | `http://localhost:8765` (this computer, no path) | The server |
@@ -104,10 +104,10 @@ opens it, and the page's address then carries `?data=zenodo:23288289`.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/connect-data-link.png
-:alt: The Open data group connected to a dataset catalog folder: the dropdown labelled "Dataset from" the catalog's host and holding its datasets, Open…, and the Link or server bar holding the address, with one line under it reading Link, the address and a compact Disconnect button.
+:alt: The Open data group connected to a dataset catalog folder: the dropdown labeled "Dataset from" the catalog's host and naming the open dataset, My datasets, Open…, and the Link or server bar holding the address, with one line under it reading Link, the host and a compact Disconnect button.
 :width: 496px
 
-A dataset catalog folder opened from a link: the dataset list is labelled with
+A dataset catalog folder opened from a link: the dataset list is labeled with
 the catalog's host and lists its datasets, and the line under the bar reads
 **Link**, the host and **Disconnect**, which brings the samples back.
 ```
@@ -119,21 +119,27 @@ the catalog's host and lists its datasets, and the line under the bar reads
 | A CELLxGENE dataset id, or its **Explore** link (`cellxgene.cziscience.com/e/<dataset id>.cxg/`) | That dataset's `.h5ad` | `cellxgene:<dataset id>` |
 | A Census copy's own address (`s3://cellxgene-census-public-us-west-2/cell-census/<build>/h5ads/<dataset id>.h5ad`, as the Census documentation gives it, or any HTTPS address of it) | That copy, at the build it names; the same dataset as `cellxgene:<dataset id>`, so sessions, annotations and what this browser keeps of it carry over | `cellxgene:census/<build>/<dataset id>` |
 | A GEO series (`GSE123456`) or sample (`GSM1234567`), its accession page, or a supplementary file link | The one dataset among its supplementary files: an `.h5ad`, a gzipped `.h5ad` (`.h5ad.gz`, read whole once: see *What to expect* below), a gzipped R object (`.rds.gz`, `.rda.gz`, `.RData.gz`) or another file Cellucid opens, or a MatrixMarket sample (`GSM…_matrix.mtx.gz` with its `_features`/`_genes` and `_barcodes` files), named by its matrix | `geo:GSE123456`, `geo:GSE123456/<file>` or `geo:GSE123456/<GSM…_matrix.mtx.gz>` |
-| A Zenodo record link, file link, DOI (`10.5281/zenodo.<id>`) or `zenodo:<record>` | The record's one file Cellucid opens (`.h5ad`, `.zip`, `.rds`, `.h5mu`, …) or the file the link names; a concept DOI opens the latest version | `zenodo:<record>[/<file>]` |
+| A Zenodo record link, file link or file preview page, DOI (`10.5281/zenodo.<id>`) or `zenodo:<record>` | The record's one file Cellucid opens (`.h5ad`, `.zip`, `.rds`, `.h5mu`, …) or the file the link names; a concept DOI opens the latest version | `zenodo:<record>[/<file>]` |
 | A Figshare item page (`figshare.com/articles/<type>/<name>/<id>[/<version>]`, also on an institution's `*.figshare.com` portal), a Figshare DOI (`10.6084/m9.figshare.<id>[.v<n>]`), any DOI that resolves to a Figshare item, or `figshare:<id>` | The item's one file Cellucid opens (or the file the link names, by name or by `?file=<file id>`); a link without a version opens the latest | `figshare:<id>[v<version>][/<file>]` |
 | A Google Drive file link (`drive.google.com/file/d/<id>/…`, `…/open?id=<id>`, `…/uc?id=<id>`) | That file, read through Google's Drive API; a private file after **Sign in to Google** ({doc}`16_private_drive_onedrive`); folder links are refused | `gdrive:<id>` |
 | A OneDrive or SharePoint file share link (`1drv.ms/…`, `onedrive.live.com/…`, `<tenant>-my.sharepoint.com/:u:/…`) | That file, after **Sign in with Microsoft** ({doc}`16_private_drive_onedrive`); folder links are refused | `onedrive:<drive>/<item>` once opened |
-| A Hugging Face dataset link (`huggingface.co/datasets/<user>/<repo>/…`) or `hf:<user>/<repo>[@<revision>][/<path>]` | A dataset catalog folder, or one file Cellucid opens; pinned to the commit that last wrote it on the branch | `hf:<user>/<repo>[@<revision>][/<path>]` |
+| A Hugging Face dataset link (`huggingface.co/datasets/<user>/<repo>/…`, or `hf.co/…`) or `hf:<user>/<repo>[@<revision>][/<path>]` | A dataset catalog folder, or one file Cellucid opens; pinned to the commit that last wrote it on the branch | `hf:<user>/<repo>[@<revision>][/<path>]` |
 | A Dropbox file link | That file, read from Dropbox's content host (folder links need a Dropbox sign-in and are refused) | `dropbox:<share link>` (`https://www.dropbox.com/…`, without `dl=`) |
-| A GitHub repository path (`owner/repo/folder`, read from the default branch, or `owner/repo@branch/folder`), a `github.com/.../tree/...`, `.../blob/...` or `.../raw/...` link, or a `raw.githubusercontent.com` link (the **Raw** button's `refs/heads/<branch>` form included) | The dataset catalog in that folder ({doc}`11_custom_dataset_repository`), the Zarr store folder (`….zarr`) or the one file the path names ({doc}`15_host_on_github`); a file stored with Git LFS is read from GitHub's media host | `gh:owner/repo/folder`, `gh:owner/repo/path/atlas.zarr`, `gh:owner/repo/path/file.h5ad` |
+| A GitHub repository path (`owner/repo/folder`, read from the default branch, or `owner/repo@branch/folder`), the repository's own page or clone address (`github.com/owner/repo`, `….git`, `git@github.com:owner/repo.git`: its top folder), a `github.com/.../tree/...`, `.../blob/...` (`?raw=true` included) or `.../raw/...` link, or a `raw.githubusercontent.com` link (the **Raw** button's `refs/heads/<branch>` form included) | The dataset catalog in that folder ({doc}`11_custom_dataset_repository`), the Zarr store folder (`….zarr`) or the one file the path names ({doc}`15_host_on_github`); a file stored with Git LFS is read from GitHub's media host | `gh:owner/repo/folder`, `gh:owner/repo/path/atlas.zarr`, `gh:owner/repo/path/file.h5ad` |
 | A web address ending in `/`, or its `datasets.json` | The dataset catalog in that folder ({doc}`07_file_format_expectations`) | the address itself |
 | A web address of a Zarr store folder (`…/name.zarr/`, Zarr v2 or v3, with consolidated metadata as anndata writes it): a bucket, a lab server, GitHub raw or a Hugging Face `resolve` folder | That store, its chunks read as views need them | the address itself |
 | An object storage address, `s3://<bucket>/<key>` or `gs://<bucket>/<key>` | The same object at its HTTPS address (Amazon S3's `https://<bucket>.s3.amazonaws.com/<key>`, Google Cloud Storage's `https://storage.googleapis.com/<bucket>/<key>`); the bucket must allow other sites to read it (CORS) | the HTTPS address |
 | A web address of a file Cellucid opens (an `.h5ad`, a Zarr `.zip`, an `.rds`, …): a bucket, a lab server, a Hugging Face file link (`huggingface.co/datasets/<user>/<repo>/resolve/main/<file>`), or a Zenodo API file link (`zenodo.org/api/records/<id>/files/<file>/content`; Zenodo's ordinary download link cannot be read by other sites) | That file | the address itself |
 
+A link is read as it is usually pasted: one without `https://`
+(`zenodo.org/records/123`, `example.org/data/atlas.h5ad`; this computer's
+`127.0.0.1:8765/…` at `http://`), between quotes, angle brackets or backticks,
+and one to something inside a Zarr store folder (its `.zmetadata`, a group, as
+a host's file listing gives it) opens the store.
+
 A link that holds several datasets (a catalog) opens on the dataset its
 `datasets.json` names as default and lists all of them in the dataset list
-(labelled "Dataset from <host>" while the catalog is connected); a share link
+(labeled "Dataset from <host>" while the catalog is connected); a share link
 adds `&dataset=<id>` to pick one. The list
 reads each dataset's name and cell count from its file's metadata; a dataset's
 file is opened when you choose it. A catalog that names a default session for a
@@ -182,7 +188,7 @@ A CELLxGENE file lists its genes by Ensembl id, with the symbols in
 `feature_name` under **Data mapping › Gene names** names them by their
 symbols (see [Gene names](13_data_mapping.md)). Its matrix is stored cell by cell (CSR),
 so the first gene reads every cell's entries; its notification says how much
-before it starts, and can be cancelled. For an atlas such as the Human Lung
+before it starts, and can be canceled. For an atlas such as the Human Lung
 Cell Atlas
 ([`cellxgene:9f222629-9e39-47d0-b83f-e08d610c7479`](https://www.cellucid.com/?data=cellxgene:9f222629-9e39-47d0-b83f-e08d610c7479):
 2,282,447 cells, 4.0 billion stored values, 21.9 GB) that is several
@@ -423,7 +429,7 @@ catalog.
   per minute, so the record listing supplies each file's size and checksum
   and no request is spent probing.
 - **Figshare.** The item from Figshare's API, which names each file's size,
-  checksum and licence; each file from Amazon S3, through the signed link
+  checksum and license; each file from Amazon S3, through the signed link
   Figshare's file host (`ndownloader.figshare.com`) redirects to, which works
   for ten seconds. The page asks the file host for that link, because the file
   host's bot check refuses requests from a browser's background reader in some
@@ -589,19 +595,24 @@ the dataset holds.
 ## Why a link can be refused
 
 ```{figure} ../../../_static/screenshots/data_loading/fail-data-link-unrecognised.png
-:alt: A Cellucid notification reading "Cellucid does not recognise "not a link"", followed by the kinds of link it opens.
+:alt: A Cellucid notification reading "Cellucid does not recognize "not a link"", followed by the kinds of link it opens.
 :width: 760px
 
-Text Cellucid does not recognise is refused before anything is requested,
+Text Cellucid does not recognize is refused before anything is requested,
 with the kinds of link it opens.
 ```
 
 | Message | Cause | What to do |
 |---|---|---|
-| Cellucid does not recognise … | The text is not a link or id it knows | Paste one of the forms in the table above |
+| Cellucid does not recognize … | The text is not a link or id it knows | Paste one of the forms in the table above |
+| … is a file on a computer, not a web address … | A path (`/Users/…`, `C:\…`, `~/…`) or a `file:` address | Open it with **Open… › File…**, or drop it on the page |
+| A web page cannot read ftp:// addresses … | An `ftp://` (or other non-web) address; GEO's FTP address is read at its HTTPS one | Paste the file's `https://` address, or download it and open it with **Open… › File…** |
 | `<host>` does not let other websites read its files, so this site cannot read … | The host answers, but without the headers (CORS) that let another website read what it sends | Download the file and open it with **Open… › File…**, or use a host that allows it. A 10x `.h5` says both at once: downloaded alone it would be refused too (it holds no embedding), so the message points to the `outs/` folder beside it (**Open… › Folder…**) or says how to make one |
+| `<host>` does not let other websites read `<file>`, though it lets them read other files of its … | The host sends CORS headers for some of its files (a folder, an API) and not for this one | As above: download it, or ask its owner to allow it for this file too |
+| `<host>` does not let other websites read its files, so this site cannot read `<name>.zarr` … (Open… › Folder…) / … `datasets.json` … | The same for a Zarr store folder (download the folder and open it with **Open… › Folder…**) or a dataset catalog (ask its owner to allow it, or download a dataset it lists) | As the message says |
+| `<host>` started sending `<file>` and stopped (no more bytes for …), also when asked again … / gave no answer for `<file>` … | The host (or the connection to it) stalls: it answered and stopped sending, or never answered, within the read's patience, each time it was asked again (about 100 s in all) | **Try again** later |
 | `<host>` could not be reached … | The address is mistyped, this computer is offline, or a network in between blocks the host | Check the address and the connection |
-| `<host>` refused … (HTTP 403, forbidden): it is private or deleted, or the link has expired. This is the link's permissions … | The host refused (HTTP 401 or 403) before it ever answered this site | Ask the owner for a public link |
+| `<host>` refused … (HTTP 403, forbidden): it is private or deleted, or the link has expired. This is the link's permissions … | The host asked for a sign-in (HTTP 401), or refused (403) before it ever answered this site | Ask the owner for a public link |
 | `<provider>` (`<host>`) is refusing requests from this network for now (HTTP 403, forbidden) for …, which it gives everyone: a problem on `<provider>`'s side … | A host that answered this site refuses it now (often after many requests from one network), or a provider whose files are all public (NCBI GEO, the CELLxGENE Census) refuses one: an outage or a block, not the link's permissions | **Try again** later |
 | `<provider>` (`<host>`) is not answering (HTTP 500, a server error) for …: a problem on `<provider>`'s side, not with the link or with Cellucid … / … is limiting requests from this network (HTTP 429, too many requests) …: `<provider>`'s own limit … Try again in 30 s, as `<provider>` asks | The host failed on its own side (any HTTP 5xx, or 408), or limits your network (429; the wait it names is said), after Cellucid asked again (NCBI's GEO file service failed so on 2026-10-31) | **Try again** later. To tell an outage, open the host's address in a tab: for GEO, `ftp.ncbi.nlm.nih.gov/geo/README.txt` ({ref}`troubleshooting-host-failing`) |
 | … was not found at `<provider>` (`<host>`) (HTTP 404, not found): the link or record does not exist, or it moved … | Nothing is published at that address (HTTP 404 or 410) | Check the link, or ask its owner whether it moved |
@@ -626,7 +637,7 @@ with the kinds of link it opens.
 | Google Drive works on a local cellucid serve only on its default port, 8765 … / in a notebook viewer only on port 8765 … / on www.cellucid.com, not on … | Google answers only registered addresses, port included, for public and private files | Start `cellucid serve` without `--port`; for a browser-tab viewer from Python (`AnnDataViewer`, which the message calls a notebook viewer), stop the server holding 8765 (an earlier viewer, a `cellucid serve`) and open it again; or use www.cellucid.com |
 | Microsoft sign-in needs https:// … / cannot reach Cellucid inside another site's page … | A plain `http://` page on another computer, or a viewer embedded in another site | Open Cellucid in its own tab, such as www.cellucid.com |
 | Your Google account cannot open this file / Your Microsoft account cannot open this file … | The file is not shared with the account you signed in with | Ask its owner to share it with that account |
-| Your organisation must approve Cellucid … | A work or school account opening a colleague's file, in an organisation that lets only administrators grant `Files.Read.All` | Ask your administrator ({doc}`16_private_drive_onedrive`) |
+| Your organization must approve Cellucid … | A work or school account opening a colleague's file, in an organization that lets only administrators grant `Files.Read.All` | Ask your administrator ({doc}`16_private_drive_onedrive`) |
 | Google has limited downloads of this file for now … | Google's per-file download quota | Try later, or ask the owner to share a copy |
 | … has 2 files Cellucid opens. Open one of them: … | A record, series or repository holds several openable files | Paste one of the links the message lists |
 | … holds no datasets.json, so it is not a dataset catalog | A folder link that points at a web page or the wrong folder | Link to the folder that holds `datasets.json`, to a Zarr store folder, or to one file |

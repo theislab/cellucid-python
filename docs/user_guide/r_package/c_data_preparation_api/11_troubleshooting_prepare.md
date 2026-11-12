@@ -120,7 +120,7 @@ Reorder one input to match the other (for example
 
 **`obs column 'day' is a Date column, which has no AnnData encoding Cellucid writes. Convert it first, for example with as.character() or as.numeric().`**
 
-**`obs column 'score' holds 1 infinite value (first at row 2). A colour scale has no position for an infinity; replace it with NA, which is written as a missing value.`**
+**`obs column 'score' holds 1 infinite value (first at row 2). A color scale has no position for an infinity; replace it with NA, which is written as a missing value.`**
 
 **`obs column '_index' is reserved: AnnData stores the row names under that name. Rename the column.`**
 
@@ -157,7 +157,7 @@ A repeated gene is addressed by its unique name (`"CD3E-1"`); see
 
 **`connectivities must be 3 x 3 (one row and one column per cell), got 2 x 2.`**
 
-**`Connectivity matrix must be exactly symmetric: a directed neighbour graph ...`**
+**`Connectivity matrix must be exactly symmetric: a directed neighbor graph ...`**
 Pass a symmetric graph (Seurat's `RNA_snn`, not `RNA_nn`), or symmetrize it,
 for example `(knn + Matrix::t(knn)) / 2`. A diagonal is left out, never
 refused.

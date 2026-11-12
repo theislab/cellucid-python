@@ -53,7 +53,7 @@ A MuData (`data=mdata`) follows the same table with `"h5mu"` in place of
 Measured on the Suo atlas (561,947 cells × 8,192 genes, written by
 `prepare()`) with the web app's own reader (`scripts/benchmark-anndata.mjs` in
 the web repository): open the file, read every `obs` field and the embeddings,
-a first and a next gene, 99 genes at once, 1,000 cells, the neighbour graph,
+a first and a next gene, 99 genes at once, 1,000 cells, the neighbor graph,
 and every gene in the cells of the two largest cell types (what a differential
 expression test reads). Remote links are simulated: HTTP/2 with 100 requests
 at a time as GitHub answers, HTTP/1.1 with six as most web servers do. Local

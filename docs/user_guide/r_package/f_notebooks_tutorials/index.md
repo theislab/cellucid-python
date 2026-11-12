@@ -17,7 +17,7 @@ computed into the viewer. Each opens in Google Colab from its badge.
 | Push clusters, refine, pull back (`FindClusters`) | {doc}`09_push_clusters_refine_and_pull` | {doc}`../../python_package/f_notebooks_tutorials/43_push_clusters_refine_and_pull` |
 | No notebook: the web app's exports in one call | {doc}`10_round_trip_without_a_notebook` | {doc}`../../python_package/f_notebooks_tutorials/44_round_trip_without_a_notebook` |
 | Gene sets: GMT in, signature scores out | {doc}`11_gene_sets_round_trip` | {doc}`../../python_package/f_notebooks_tutorials/45_gene_sets_round_trip` |
-| A selection, re-analysed | {doc}`12_subset_and_reanalyse` | {doc}`../../python_package/f_notebooks_tutorials/46_export_an_h5ad_subset_and_reanalyse` |
+| A selection, re-analyzed | {doc}`12_subset_and_reanalyze` | {doc}`../../python_package/f_notebooks_tutorials/46_export_an_h5ad_subset_and_reanalyze` |
 | Subsampled views | {doc}`13_subsampled_views` | {doc}`../../python_package/f_notebooks_tutorials/47_subsampled_views` |
 
 In a Jupyter notebook R hears the viewer between cells: show the viewer in one
@@ -38,7 +38,7 @@ and Advanced).
 :link: 04_explore_a_seurat_object_from_r
 :link-type: doc
 
-`cellucid_view(seu)`, colour and highlight from the console, and the cells you
+`cellucid_view(seu)`, color and highlight from the console, and the cells you
 lasso back in R.
 :::
 
@@ -76,7 +76,7 @@ Gene expression, gene symbols, a gene panel, launch defaults, and citation metad
 :link: 03_advanced_notebooks_expert_developer
 :link-type: doc
 
-Vector fields, a neighbour graph, and reading the store back value for value.
+Vector fields, a neighbor graph, and reading the store back value for value.
 :::
 
 ::::

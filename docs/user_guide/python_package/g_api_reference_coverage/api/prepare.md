@@ -26,7 +26,7 @@ contract: {doc}`../../c_data_preparation_api/09_cellucid_ready_anndata_specifica
 ```python
 from cellucid import prepare
 
-# Everything the AnnData holds (obs, X with var, obsm, obsp['connectivities']):
+# Everything the AnnData holds (obs with its colors, X with var, obsm, obsp['connectivities']):
 path = prepare("my_study.h5ad", format="h5ad", data=adata, dataset_id="my-study-v1", dataset_name="My study")
 
 # The same, component by component; an argument given with data= replaces that component.
@@ -38,6 +38,7 @@ path = prepare(
     dataset_id="my-study-v1",
     dataset_name="My study",
     obs=adata.obs,
+    obs_colors={column: adata.uns[f"{column}_colors"] for column in adata.obs if f"{column}_colors" in adata.uns},
     var=adata.var,
     gene_expression=adata.X,
     connectivities=adata.obsp["connectivities"],
@@ -61,12 +62,15 @@ prepare(
     dataset_id=None,
     dataset_name=None,
     obs=None,
+    obs_colors=None,
     var=None,
     gene_expression=None,
     connectivities=None,
     vector_fields=None,
     modalities=None,
     gene_identifiers=None,
+    total_counts=None,
+    total_counts_over=None,
     dataset_description=None,
     citation_text=None,
     citation_url=None,
@@ -114,11 +118,14 @@ path to write instead.
 | `embeddings` | `obsm[key]`, float32, every column |
 | `dataset_id`, `dataset_name` | `uns['cellucid']['id']`, `['name']`; `uns['title']` |
 | `obs`, `var` | `obs`, `var` (repeated text as categorical) |
+| `obs_colors` | `uns['<column>_colors']`, Scanpy's colors of each categorical `obs` column written (one a category, in its order; a MuData modality's own column `<modality>:<column>`, in that modality's `uns`); from `data`, the colors it holds for the columns written, those that cannot color them left out with a message; given, checked; `{}` writes none |
 | `gene_expression` | `X`: CSC when sparse, float32 (float64 for counts above 2^24) |
 | `connectivities` | `obsp['connectivities']`, symmetric CSR float32 |
 | `vector_fields` | `obsm['<field>_<basis>']` for each embedding `X_<basis>` (`velocity_umap`) |
 | `modalities` | with a MuData, the modalities written, in order: several as a MuData of those, one as an AnnData |
 | `gene_identifiers` | keeps those genes, in that order |
+| `total_counts` | names the `obs` column of each cell's total count over all genes, recorded in `uns['cellucid']['totalCounts']` (`"over": "all genes"`); unnamed, a counts `X`'s row sums are written as `obs['total_counts']` (`"stored genes"`) ({ref}`total-counts-spec`) |
+| `total_counts_over` | what that column covers: `"all genes"` (None) or `"source panel"`, every gene of the source's gene panel, more than are stored but not the whole transcriptome (with a MuData, one value or `{"rna": "source panel"}`); refused without `total_counts` |
 | `dataset_description`, `citation_text`/`citation_url`, `source_name`/`source_url` | `uns['cellucid']['description']`, `['citation']`, `['source']` |
 | `embedding_defaults` … `centroid_min_points`, `modality` | `uns['cellucid']['defaults']` (only the ones given); `modality` (a MuData's) is the modality the viewer opens on |
 | `latent_key` | also `uns['cellucid']['outlierQuantiles']`: every categorical `obs` column's outlier quantiles in that latent space |
@@ -131,7 +138,7 @@ path to write instead.
 ## Interface reference
 
 ```{figure} ../../../../_static/screenshots/web_app/app-overview-cell-type.png
-:alt: The whole Cellucid window with the Pancreas sample coloured by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colours.
+:alt: The whole Cellucid window with the Pancreas sample colored by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colors.
 :width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.

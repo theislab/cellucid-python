@@ -1,6 +1,6 @@
-"""The action catalogue and the viewer methods generated from it.
+"""The action catalog and the viewer methods generated from it.
 
-``src/cellucid/action_catalog.json`` is the web app's action catalogue
+``src/cellucid/action_catalog.json`` is the web app's action catalog
 document byte for byte (written by the web repository's
 ``node scripts/generate-action-catalog.mjs``, which also writes cellucid-r's
 copy); the web app (``tests/action-catalog-document-contract.test.mjs``) and
@@ -8,7 +8,7 @@ cellucid-r (``tests/testthat/test-actions.R``) pin the same SHA-256.
 ``src/cellucid/jupyter/_actions_generated.py`` is one viewer method per
 action, written from it by ``python scripts/generate_actions.py``; every
 method sends the action through ``AnnDataViewer.act``, which checks and
-converts parameters by the catalogue, the same way for every action.
+converts parameters by the catalog, the same way for every action.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ import json
 import keyword
 import struct
 import threading
+import warnings
 from importlib import resources
 from pathlib import Path
 from types import ModuleType
@@ -29,16 +30,23 @@ import numpy as np
 import pandas as pd
 import pytest
 from _serverless_viewer import serverless_viewer
+from _web_root import rendered_by_web
 
 import cellucid.jupyter as jupyter
 import cellucid.jupyter._actions_generated as generated
 import cellucid.jupyter._wire as wire
-from cellucid.jupyter import OMIT, ActionError, AnnDataViewer, action_catalog
+from cellucid.jupyter import (
+    OMIT,
+    ActionError,
+    ActionNotRecordedWarning,
+    AnnDataViewer,
+    action_catalog,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
 #: The digest of ``action_catalog.json``; the web app and cellucid-r pin the same one.
-ACTION_CATALOG_SHA256 = "a805685f10d2625d649d61f7c516f811c624cfd751566267f3cd0bed0cded688"
+ACTION_CATALOG_SHA256 = "725d32e5357cebbcff332be5a599667cf42ebb63ce55bd73e39ce4a1469556c4"
 
 REGENERATE = (
     "regenerate it: node scripts/generate-action-catalog.mjs in the web repository (it writes the three "
@@ -240,9 +248,11 @@ def test_parameters_are_checked_by_the_catalogue_before_anything_is_sent(viewer:
     assert len(sent.messages) == count
 
 
-def _answer(shown: AnnDataViewer, request_id: str, outcome: Any, step: dict[str, str] | None) -> None:
+def _answer(
+    shown: AnnDataViewer, request_id: str, outcome: Any, step: dict[str, str] | None, unrecorded: str | None = None
+) -> None:
     shown._handle_frontend_message({
-        "type": "action_result", "requestId": request_id, "step": step,
+        "type": "action_result", "requestId": request_id, "step": step, "unrecorded": unrecorded,
         "body": bytearray(json.dumps(outcome).encode("utf-8")),
     })
 
@@ -252,9 +262,9 @@ def test_a_request_is_answered_once_with_its_outcome_or_its_refusal(viewer: tupl
     request = shown.color_by(field={"source": "obs", "key": "cell_type"})
     assert not request.done and request.step is None
     assert repr(request) == "ActionRequest('color.by', waiting)"
-    _answer(shown, request.request_id, {"shown": "cell_type"}, {"id": "s3", "label": "Coloured by cell_type"})
+    _answer(shown, request.request_id, {"shown": "cell_type"}, {"id": "s3", "label": "Colored by cell_type"})
     assert request.done and request.result(timeout=0) == {"shown": "cell_type"}
-    assert request.step == {"id": "s3", "label": "Coloured by cell_type"}
+    assert request.step == {"id": "s3", "label": "Colored by cell_type"}
     # The outcome handed out is a copy.
     request.result()["shown"] = "changed"
     assert request.result() == {"shown": "cell_type"}
@@ -276,11 +286,59 @@ def test_a_request_is_answered_once_with_its_outcome_or_its_refusal(viewer: tupl
         waiting.result(timeout=0.01)
     waiting.cancel()
     assert shown._action_waiters == {}
-    with pytest.raises(RuntimeError, match="cancelled"):
+    with pytest.raises(RuntimeError, match="canceled"):
         waiting.result()
     # An answer to a request nobody awaits any more is dropped.
     _answer(shown, waiting.request_id, None, None)
-    assert repr(waiting) == "ActionRequest('history.get', cancelled)"
+    assert repr(waiting) == "ActionRequest('history.get', canceled)"
+
+
+def test_a_change_that_made_no_step_says_why_and_warns_when_collected(viewer: tuple[AnnDataViewer, _Sent]) -> None:
+    """The viewer says why a change made no step (``unrecorded``): the request
+    keeps it, and collecting the outcome warns with the sentence the shared
+    protocol fixture gives for it; a step, or a read, warns nothing."""
+    shown, _sent = viewer
+    sentences = json.loads((ROOT / "tests" / "fixtures" / "viewer_protocol.json").read_text(encoding="utf-8"))["action"][
+        "unrecorded"
+    ]
+    assert sentences == wire._ACTION_UNRECORDED
+    for reason, sentence in sentences.items():
+        request = shown.color_by(field={"source": "obs", "key": "cell_type"})
+        assert request.unrecorded is None, "not answered yet"
+        _answer(shown, request.request_id, {"field": "cell_type"}, None, reason)
+        assert request.step is None and request.unrecorded == reason
+        with pytest.warns(ActionNotRecordedWarning) as caught:
+            assert request.result(timeout=0) == {"field": "cell_type"}
+        assert [str(warning.message) for warning in caught] == [f"viewer.color_by(...): {sentence}"]
+        notice = caught[0].message
+        assert isinstance(notice, ActionNotRecordedWarning)
+        assert (notice.action, notice.request_id, notice.unrecorded) == ("color.by", request.request_id, reason)
+        assert caught[0].filename == __file__, "the warning names the line that collected it"
+    assert issubclass(ActionNotRecordedWarning, UserWarning)
+
+    made = shown.color_by(field={"source": "obs", "key": "cell_type"})
+    _answer(shown, made.request_id, None, {"id": "s3", "label": "Colored by cell_type"})
+    read = shown.fields_list()
+    _answer(shown, read.request_id, {"fields": []}, None)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert made.result(timeout=0) is None and made.unrecorded is None
+        assert read.result(timeout=0) == {"fields": []} and read.unrecorded is None
+
+
+def test_why_no_step_is_one_of_the_closed_set_and_never_beside_a_step() -> None:
+    def event(step: dict[str, str] | None, unrecorded: object) -> dict[str, Any]:
+        return {"type": "action_result", "requestId": "r1", "step": step, "unrecorded": unrecorded, "body": bytearray(b"null")}
+
+    for reason in wire._ACTION_UNRECORDED:
+        _kind, payload = wire._require_inbound_jupyter_event(event(None, reason))
+        assert payload["unrecorded"] == reason
+    with pytest.raises(ValueError, match="unrecorded must be one of unchanged, retracted"):
+        wire._require_inbound_jupyter_event(event(None, "forgotten"))
+    with pytest.raises(ValueError, match="unrecorded must be None when the action made a step"):
+        wire._require_inbound_jupyter_event(event({"id": "s3", "label": "Colored by leiden"}, "unchanged"))
+    with pytest.raises(ValueError, match="unrecorded must be one of"):
+        wire._require_inbound_jupyter_event(event(None, 3))
 
 
 def test_another_thread_waits_for_the_answer_and_a_stopped_viewer_ends_the_wait(
@@ -334,3 +392,14 @@ def test_cells_by_row_never_read_the_obs_names() -> None:
     assert mask.tolist() == [0, 2]
     named = cell_positions(["c2", "c0"], label="cells", n_obs=3, obs_names=lambda: pd.Index(["c0", "c1", "c2"]))
     assert named.tolist() == [2, 0]
+
+
+def test_the_catalog_is_the_one_the_web_apps_definitions_make_now() -> None:
+    """Against the action definitions themselves (``renderActionCatalog``),
+    not only a pinned digest: a definition changed without regenerating the
+    copies fails here, as it fails the web suite."""
+    shipped = resources.files("cellucid").joinpath("action_catalog.json").read_text(encoding="utf-8")
+    assert rendered_by_web("scripts/generate-action-catalog.mjs", "renderActionCatalog") == shipped, (
+        "src/cellucid/action_catalog.json is not what the web app's definitions make: run "
+        "node scripts/generate-action-catalog.mjs in the web app, then python scripts/generate_actions.py here."
+    )

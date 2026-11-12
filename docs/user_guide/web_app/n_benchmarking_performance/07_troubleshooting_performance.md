@@ -113,7 +113,7 @@ Related docs:
 ## Symptom: “Loading a dataset freezes / takes forever / tab crashes”
 
 ### Likely causes (ordered)
-1) A large cell-major (CSR) `.h5ad` opened in the browser is still being reorganised by gene (watch its progress notice).
+1) A large cell-major (CSR) `.h5ad` opened in the browser is still being reorganized by gene (watch its progress notice).
 2) Disk/network I/O is slow (network drive, remote mount, throttled server).
 3) The dataset is too large for the current machine/GPU (VRAM pressure during initialization).
 4) Browser extensions or corporate policies interfere with file APIs or GPU acceleration.
@@ -165,7 +165,7 @@ Related docs:
 
 ---
 
-## Symptom: “WebGL context lost” or “the canvas goes blank”
+## Symptom: “Graphics reset by the browser” or “the canvas goes blank”
 
 ### Likely causes (ordered)
 1) GPU out of memory or a frame past the GPU watchdog (too many points/views, smoke render resolution or ray quality too high, overlay too heavy).
@@ -180,7 +180,7 @@ Related docs:
 1) Wait: Cellucid restores the graphics when the browser gives the context
    back, keeping filters, selections, kept views and analyses. If its dialog
    says they could not be restored, keep the session it saved and reload.
-2) After reload, reduce GPU load:
+2) Then reduce GPU load:
    - points mode (avoid smoke),
    - fewer views,
    - disable overlays or reduce density/bloom,
@@ -236,7 +236,7 @@ Related docs:
   cost should now fall visibly as you hide cells.
 
 ### Background
-Filtered-out cells are rejected before rasterisation, so they genuinely cost
+Filtered-out cells are rejected before rasterization, so they genuinely cost
 nothing to draw. If hiding most of the dataset changes nothing, the points were
 not what was slow.
 
@@ -246,7 +246,7 @@ not what was slow.
 
 ---
 
-## Symptom: “The benchmark or renderer controls are greyed out”
+## Symptom: “The benchmark or renderer controls are grayed out”
 
 ### Likely cause
 The data-source, renderer and benchmark controls ship disabled and are enabled
@@ -262,7 +262,7 @@ that load.
 - If it has changed, the controls are live.
 
 ### Fix
-- Wait. This is deliberate: it replaced an older behaviour where a control could
+- Wait. This is deliberate: it replaced an older behavior where a control could
   be clicked before anything was listening and the click did nothing at all.
 - If they never enable, that is a startup failure — see
   {doc}`../q_troubleshooting_index/index`.

@@ -47,7 +47,7 @@ are shared, and the genes are one modality's at a time. The viewer opens on
 the active assay, `RNA`, on the UMAP. Under **Session › Data mapping ›
 Genes**, a **Modality** select lists `RNA` (8 features) and `ADT` (4).
 
-Switch to the proteins from R, and colour by cell type:
+Switch to the proteins from R, and color by cell type:
 
 ```r
 cellucid_mapping_set(viewer, modality = "ADT")
@@ -59,7 +59,7 @@ names and waits for nothing: the mapping the viewer then shows becomes
 `viewer$data_mapping`, and a refusal fails its request
 (`cellucid_action_result()` stops with the viewer's reason; uncollected, a
 warning unless a hook handles it). Gene search,
-colouring by a feature, marker genes and the dot plot now read the proteins:
+coloring by a feature, marker genes and the dot plot now read the proteins:
 search `CD19-ADT` to see the B cells. `cellucid_stop(viewer)` when you are
 done.
 

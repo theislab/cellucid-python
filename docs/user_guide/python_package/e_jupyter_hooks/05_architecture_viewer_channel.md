@@ -120,7 +120,11 @@ that origin only.
    `allowed_hosts` (403 otherwise).
 3. The first frame is `{"type": "hello", "viewerId": …, "viewerToken": …}`.
    The server compares the token in constant time and answers
-   `{"type": "welcome"}`, or closes with 4401.
+   `{"type": "welcome"}`, or closes with 4401. Anything else first (a binary
+   frame, refused from its header and never read; JSON that is not exactly
+   the hello) closes with 1008, and so does a socket that says nothing for
+   60 seconds (`HELLO_SECONDS`, R's `.viewer_hello_seconds`), so a socket
+   that never says who it is holds nothing of the server.
 4. From then on the socket is that viewer's; no later frame carries
    credentials.
 
@@ -155,7 +159,7 @@ that origin only.
 - Binary frames for `selection`, `result`, `action_result` and
   `session_bundle`: a little-endian uint32 header length, a UTF-8 JSON header
   (`{"type": "selection", "source": …}`, a result's header,
-  `{"type": "action_result", "requestId": …, "step": …}`, or
+  `{"type": "action_result", "requestId": …, "step": …, "unrecorded": …}`, or
   `{"type": "session_bundle", "requestId": …}`), then the body. A result's
   body is its cells and then its values ({doc}`../g_api_reference_coverage/api/round_trip`). A selection's
   body is the cell indices as little-endian uint32, strictly ascending; an

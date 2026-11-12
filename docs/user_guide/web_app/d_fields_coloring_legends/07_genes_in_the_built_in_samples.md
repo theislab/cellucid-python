@@ -43,11 +43,11 @@ result list with three lines:
   {doc}`05_troubleshooting_fields_legends`.
 
 ```{figure} ../../../_static/screenshots/web_app/gene-search-no-match.png
-:alt: The Gene expression list after typing a symbol this sample does not publish: No gene matches "CD19", a sentence giving the 3,753 gene names the dataset publishes, and a link Why a gene may be missing.
+:alt: The Gene expression list after typing a symbol this sample does not publish: No gene matches "CD19", a sentence saying it searched the 3,753 genes of this dataset named by its var index and that another var column (symbols) can name them instead, a Choose gene names… button, and a link Why a gene may be missing.
 :width: 496px
 
 The empty state on the Pancreas sample, searching for a human B-cell marker in
-a mouse dataset. The number in the middle line is **this** dataset's own
+a mouse dataset. The number in the sentence under the heading is **this** dataset's own
 published gene count, so it is the fastest way to tell a typo apart from an
 absent gene.
 ```

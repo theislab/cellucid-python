@@ -58,7 +58,7 @@ For a browser-tab viewer (`AnnDataViewer`) it also probes its server:
 - `client_server_url` — the exact HTTP(S) base the browser must reach.
 
 ```{tip}
-When asking for help, paste the `report` (redacting private paths/dataset names) instead of describing symptoms loosely.
+When asking for help, paste the `report` (redacting private paths/dataset names) instead of describing symptoms loosely. It holds no credential: its `viewer_url` is the page's address without the viewer token (`viewer.viewer_url` is the address to open), as is the page's own snapshot (R's `cellucid_debug_connection()` reports the same).
 ```
 
 ---
@@ -262,7 +262,7 @@ To bring results onto AnnData you need no session: `viewer.pull(adata)`.
 
 `viewer.request_session().result(timeout=60)` waits. A “Dropped a
 session file nobody is waiting for” log means the session arrived after its
-request was cancelled; request again.
+request was canceled; request again.
 
 For more: {doc}`05_sessions_to_anndata_bridge`
 

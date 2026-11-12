@@ -81,11 +81,14 @@ taken. Everything works there except opening Google Drive files, which Google
 accepts only on `localhost:8765`. Stop the other viewers with
 `cellucid_stop_all()` and view again.
 
-## Symptom: “The Cellucid web app could not be downloaded … and no verified copy is cached”
+## Symptom: “The Cellucid web app could not be downloaded … and no copy of it is cached …” (or “… the copy cached in … does not check out …”)
 
-The first viewer downloads the web app from www.cellucid.com. Connect once, or
+The first viewer downloads the web app from www.cellucid.com; later ones use
+the cached build when the site cannot be reached, saying *Could not reach … ;
+serving the cached web app (build …)*. With no cache, or a cache whose files no
+longer match their checksums (the message names the file), connect once, or
 copy a cache folder from another machine and pass `web_cache_dir =` with
-`web_source_url = NULL`.
+`web_source_url = NULL`. cellucid-python says the same words.
 
 ## Symptom: the viewer pane or browser answers “Host header does not name this server” (421)
 

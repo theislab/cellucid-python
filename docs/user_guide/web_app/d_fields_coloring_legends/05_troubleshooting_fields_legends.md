@@ -45,12 +45,12 @@ Most “bugs” are one of these.
   - Gene expression input (is a gene selected?)
 - If you are in multiview:
   - click a view panel, then re-check the sidebar (legend follows active view)
-- Read the notification centre before the console. A selection that failed says
+- Read the notification center before the console. A selection that failed says
   so there, and says why:
   - a gene raises a multi-line notification titled `Gene cannot be shown`,
     naming the gene, counting the offending values and giving the first affected
     cell indices;
-  - a field raises the same text after the prefix `Failed to load field:`.
+  - a field raises the same text after the prefix `Could not load the field:`.
 - The console carries the thrown error object for the same failure, which is
   what to copy into a bug report — not a different sentence to search for.
 
@@ -75,12 +75,12 @@ Most “bugs” are one of these.
 
 1) No active field selected (Cellucid renders the “no-field” state as neutral gray).
 2) **Log color scale** enabled on a sparse field, where most cells are zero and
-   therefore drop to the “None” grey.
+   therefore drop to the “None” gray.
 3) **Gray for zero** is on for a sparse gene: its zeros (most cells) are drawn
    gray, on purpose ({ref}`gray-for-zero`).
 4) The gene or column you picked **cannot be drawn** — it contains an infinity,
    or it has no value at all — so it was refused and the active field never
-   changed. What you are looking at is still the previous (or no-field) grey.
+   changed. What you are looking at is still the previous (or no-field) gray.
 5) The field did not load correctly (transport failure).
 
 ### How to confirm
@@ -89,7 +89,7 @@ Most “bugs” are one of these.
 - If **Log color scale** is on and you’re coloring by a sparse gene → it’s often (2).
 - If **Gray for zero** is on in the gene's legend → it’s (3).
 - If a notification titled `Gene cannot be shown` (or one beginning
-  `Failed to load field:`) counts `+Infinity` / `-Infinity` / `NaN` values and
+  `Could not load the field:`) counts `+Infinity` / `-Infinity` / `NaN` values and
   lists the first affected cells → it’s (4). Note that the selector snaps back:
   the field was never activated.
 - If you see a load failure that names a status code or a URL instead → it’s (5).
@@ -98,8 +98,8 @@ Most “bugs” are one of these.
 
 - For (1): pick a categorical/continuous field or gene.
 - For (2): turn off **Log color scale**, or choose a gene/field with positive values.
-- For (3): turn **Gray for zero** off: the zeros take the colour scale's
-  lowest colour again (the default).
+- For (3): turn **Gray for zero** off: the zeros take the color scale's
+  lowest color again (the default).
 - For (4): repair the values at the source — reloading cannot change the
   outcome. See {ref}`undrawable-continuous-payload`.
 - For (5): reload the dataset; if it persists, check the column in the AnnData file itself.
@@ -107,8 +107,8 @@ Most “bugs” are one of these.
 :::{note}
 “The field has **no** positive values at all” is not a possible cause here:
 in that case the toggle refuses to turn on
-(`Log color scale requires at least one positive field value.`) and the colours
-never change. Only a field with *some* positives can produce a mostly-grey
+(`Log color scale requires at least one positive field value.`) and the colors
+never change. Only a field with *some* positives can produce a mostly-gray
 picture this way.
 :::
 
@@ -121,12 +121,12 @@ picture this way.
 ---
 
 (undrawable-continuous-payload)=
-## Symptom: “Gene cannot be shown” / a field that will not colour
+## Symptom: “Gene cannot be shown” / a field that will not color
 
 ### Likely causes (ordered)
 
 1) The gene or continuous column contains `+Infinity` or `-Infinity`. An
-   infinity has no position on a colour scale, so the payload is refused.
+   infinity has no position on a color scale, so the payload is refused.
 2) Every value in the payload is `NaN`. There is no range to scale, so it is
    refused too — usually a column that was never computed, or an empty
    expression layer served instead of the normalized one.
@@ -140,11 +140,11 @@ Read the notification. It answers each question in turn:
 
 - **A gene** raises a multi-line notification titled `Gene cannot be shown`.
 - **A continuous obs field** raises the same body after the prefix
-  `Failed to load field:`.
+  `Could not load the field:`.
 
 For an infinity the body reads like:
 
-> Gene "GATA3" contains 3 infinite values, so it has no colour scale.  
+> Gene "GATA3" contains 3 infinite values, so it has no color scale.  
 > Of 18,142,044 cells: 3 +Infinity, 12 NaN.  
 > First affected cells: 4,118,237, 9,002,551, 17,441,908.  
 > NaN is drawn as missing; an infinity is not a value on any scale.  
@@ -152,7 +152,7 @@ For an infinity the body reads like:
 
 For a payload with nothing in it:
 
-> Field "leiden_score" has no value in any of 18,142,044 cells, so it has no colour scale.  
+> Field "leiden_score" has no value in any of 18,142,044 cells, so it has no color scale.  
 > Every value is NaN, which Cellucid reads as "not measured here".
 
 A file served by `cellucid serve`, `serve_anndata` or `show_anndata` is read
@@ -163,7 +163,7 @@ messages.
 
 Repair the values at the source. Reloading, re-picking the gene or clearing the
 cache cannot change the outcome — nothing in the viewer can place an infinity on
-a colour scale.
+a color scale.
 
 1) For an expression matrix:
    - sparse: `adata.X.data[~np.isfinite(adata.X.data)] = 0`
@@ -174,8 +174,8 @@ a colour scale.
    `cellucid serve` / `serve_anndata` / `show_anndata`) and reload the dataset.
 
 If you meant the infinities as “missing”, replace them with `NaN` rather than
-with `0`: Cellucid draws `NaN` as the neutral grey meaning “not measured here”,
-whereas `0` is a real measurement and will be coloured as one.
+with `0`: Cellucid draws `NaN` as the neutral gray meaning “not measured here”,
+whereas `0` is a real measurement and will be colored as one.
 
 ### Prevention
 
@@ -353,7 +353,7 @@ counts, and what to do instead are in
 
 ---
 
-## Symptom: “A category is greyed out / checkbox is disabled”
+## Symptom: “A category is grayed out / checkbox is disabled”
 
 ### Likely causes (ordered)
 
@@ -361,7 +361,7 @@ counts, and what to do instead are in
 
 ### How to confirm
 
-- Hover the greyed-out row; it typically indicates “No cells available in this category after other filters”.
+- Hover the grayed-out row; it typically indicates “No cells available in this category after other filters”.
 - The count may read `0 cells`.
 
 ### Fix
@@ -411,7 +411,7 @@ counts, and what to do instead are in
 
 1) The field has mostly zeros (common for sparse gene expression).
 2) The field has negative values (some normalized/scaled outputs).
-3) Only a handful of cells are positive, so almost everything else is grey. A
+3) Only a handful of cells are positive, so almost everything else is gray. A
    field with *no* positive value cannot produce this: the toggle refuses to
    turn on (`Log color scale requires at least one positive field value.`).
 
@@ -490,7 +490,8 @@ counts, and what to do instead are in
 
 ### How to confirm
 
-- The error reads `Cannot restore "X" while that visible field name exists`.
+- The error reads `A field named "X" is shown already; rename it before
+  restoring the deleted one.`
 - The row is still listed under **Deleted fields**.
 
 ### Fix
@@ -515,21 +516,23 @@ refused.
 
 ### Likely causes (ordered)
 
-1) You clicked **Confirm** in Deleted fields (purged restore capability).
+1) You clicked **Delete for good…** in Deleted fields.
 
 ### How to confirm
 
-- The Deleted fields row may no longer appear, or restore may do nothing.
-- Session restores will also not bring it back if it was confirmed.
+- The field's row is gone from **Deleted fields**, and the history's last step
+  reads `Deleted X for good`.
+- A session saved after that does not bring it back.
 
 ### Fix
 
-- There is no in-app undo for confirmed deletion.
-- Reload the dataset if you need the original column again.
+- **Undo** (`Ctrl+Z` / `⌘Z`), or going back past that step in the history,
+  brings it back to **Deleted fields**; restore it from there.
+- A field of the file also comes back when the dataset is opened again.
 
 ### Prevention
 
-- Only use **Confirm deletion** when you are truly done with a field.
+- Only use **Delete for good…** when you are truly done with a field.
 
 ---
 

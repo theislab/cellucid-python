@@ -28,18 +28,18 @@ This is the “no excuses” workflow that works for most people.
 
 3) **Open** the **Figure export** panel (left sidebar).
 
-4) **Choose plot size**
-   - Start with **Screen (half)** or **1200 × 900**.
-   - If you want a larger, “final” export, increase plot size (but note PNG + high DPI can get huge; see below).
+4) **Choose the figure's width**
+   - Pick the journal column it will be printed in — **Single column · 89 mm**, **1.5 column · 120 mm**, **Double column · 183 mm** *(default)* — or type a width in millimetres.
+   - The figure is exactly that wide at every resolution; its height follows from the view's shape, and its text keeps its point size (see below).
 
 5) **Choose download format**
-   - **PNG (300 DPI)** is a strong default for slides and manuscripts.
+   - **PNG** at **300** DPI (the DPI it starts at) is a strong default for slides and manuscripts.
    - **SVG** is the right choice if you want to edit labels/legend layout in Illustrator/Inkscape.
 
 6) **(Optional) Crop without changing camera**
    - Enable **Show preview** → enable **Frame export** → drag the frame → click **Confirm** to apply.
 
-7) Click **Export**. While the export runs, the button reads **Cancel export**: press it to stop the export where it is (nothing is downloaded, and nothing is reported as failed).
+7) Click **Export**. While the export runs, the button reads **Cancel export**: press it to stop the export where it is (nothing is downloaded, and nothing is reported as failed). A double click on **Export** (or a held Enter) exports once: its second click never presses **Cancel export**.
 
 8) **Open the file outside Cellucid** and do a 10-second sanity check:
    - correct view (live vs snapshot),
@@ -95,10 +95,10 @@ expecting to see them side by side.
   matrices for PNG or Hybrid, a visible connectivity layer that the current
   exporter does not include, or a render mode other than **Points** (figure
   export draws the point layer only, so a volumetric smoke view would export as
-  a different image, not a degraded one). When the only blockers are the
-  connectivity edges or the velocity overlay, the dialog unblocks it in one
-  step: **Turn off edges and export** (or **vector field**, or both) turns
-  those layers off, as their switches would, and exports.
+  a different image, not a degraded one). When the only blocker is the
+  connectivity edges, the dialog unblocks it in one step: **Turn off edges and
+  export** turns them off, as their switch would, and exports. The velocity
+  overlay does not block: the figure draws its field as arrows on a grid.
 
 :::{tip}
 If your preview looks wrong, click **Refresh** in the preview controls (especially after changing views, fields, or filters).
@@ -106,72 +106,119 @@ If your preview looks wrong, click **Refresh** in the preview controls (especial
 
 ---
 
-## Setting size and aspect ratio
+## Setting the figure's size
 
-Cellucid exposes **Plot size** controls as width × height in pixels. In the UI you’ll see:
+A figure is sized as it will be printed: you give its **width**, and the
+figure fills it exactly, at the height its plots make it; its text is set in
+**points** and keeps that size at any width and resolution. In the UI you'll
+see, under **Figure width**:
 
-- A size preset dropdown:
-  - **Screen (half)** *(default)*
-  - **Screen (current)**
-  - **1200 × 900**
-  - **1600 × 1200**
-  - **1920 × 1080**
-- Editable numeric inputs for **W** and **H**.
+- A width preset — the column widths journals print figures at (Nature's;
+  Cell, Science and PLOS print within a few millimetres of them):
+  - **Single column · 89 mm**
+  - **1.5 column · 120 mm**
+  - **Double column · 183 mm** *(default)*
+  - **Custom width** — any other width, typed in the **W** box (millimetres; a
+    point or a comma, at least 10). Typing a preset's width selects the preset.
+- One line under it with the figure's printed size and, when Export writes a
+  PNG, its pixels at the chosen DPI: `183 × 130 mm · 2163 × 1541 px` (its pointer says the DPI). It reads the preview's layout; with the preview off, or with
+  **Export all views**, it says the width and that the plots (or the panels)
+  make the height.
 
 ```{figure} ../../../_static/screenshots/figure_export/framing.png
-:alt: The Framing group open: Plot size on Screen (half) with its W and H boxes, and Preview with its Show preview checkbox, above the Export button.
+:alt: The Framing group open: Figure width on its default, Double column · 183 mm, with its W box at 183 mm and the printed size under it (183 mm wide · height from its plot), and Preview with its Show preview checkbox, above the Export button.
 :width: 532px
 
-The **Framing** group. The preset writes into the same two boxes you can type
-into; **Screen (half)** fills them from the current window on open, which is why
-they may not read `1600 × 1200` when you first look.
+The **Framing** group. The preset writes its width into the **W** box you can
+type into; the line under it says the figure's printed size.
 ```
 
-### Plot size vs exported file size
+An agent, a notebook or a replay sets the same two settings with
+`figure-export.set` (`size_preset`, `width` in millimetres, `font_sizes` in
+points): "180 mm wide" is `width: 180`, never a conversion to pixels.
 
-The numbers you enter represent the desired **plot content size**, not the entire exported figure.
+### The figure's height
 
-- If you include axes/legend/title, the final file will be **larger** because those elements are laid out *around* the plot (the plot is not shrunk to make room).
+- Each plot takes the **shape of the view on screen** — the pane's width to
+  height, or the frame's when **Frame export** is on — and the figure is as wide
+  as asked, so its height follows: a 16:10 pane in a double column gives a
+  plot about 130 × 81 mm. The view fills its plot exactly, with the screen's
+  own projection: there is no blank band inside or beside the plot, no cell
+  the screen shows is cut off, and points keep the size they have relative to
+  the view. To change the figure's shape, frame it (**Frame export**; **Lock
+  aspect** keeps the frame's shape while you resize it) or use **Fit the
+  cells**, which frames the cells.
+- Axes, title and legend stand **inside** the width: the plot is as wide as the
+  width leaves it, never shrunk below a readable 80 figure pixels (21 mm).
+- The legend is as large as its entries need. Beside the plot (**Legend:
+  Right**) it fills the plot's height in as many columns as its entries take,
+  each column as wide as its longest name, and it is at least 10 ems of its
+  text wide (25 mm at 7 pt, a color bar's length); below the plot (**Legend:
+  Bottom**) it fills the plot's width in as many rows as they take. No category
+  name is ever shortened with "…". A legend asked beside the plot that would
+  make the figure wider than asked (eight long names, or the vector field's
+  key, beside a short plot in a single column) stands below the plot instead,
+  as a grid's legends do, and the export picture (`view.picture` with source
+  "export") says so. A figure still wider than asked (a title, or text this
+  large) is said there too. A title wider than the figure widens it.
+- With **Export all views**, the panels keep the arrangement they have on
+  screen (columns and rows, see
+  {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`)
+  and the figure fills the width: every panel's plot has one height and its
+  own view's shape (views of one shape give panels of one size), the plots of a
+  row and of a column line up, and the figure is its panels, labels and legends
+  at the tallest plots that keep to the width. Legends take their room from the
+  plots down to half the size the plots have without legends; past that the
+  figure grows for them (see {ref}`legends-in-a-multi-panel-export`).
+- When a plot is far from the shape of the cells it draws — a tall pane of a
+  wide embedding (several views side by side, or the chat's side panel beside
+  them) gives a tall figure with the cells in a band — the preview says so
+  under the picture (`Plot narrower than the cells:`, why under its pointer) and
+  offers **Fit the cells** (below), which frames the cells so each plot takes
+  their shape.
 
-Each accepts a whole number between **100 and 20000**. Anything outside that
-range is refused by the field itself before the export starts, with
-`Width must be between 100 and 20000.` or the matching height message.
+A width below 10 mm is refused by its box before the export starts, with
+`Figure width (mm) must be at least 10.`; a text size is a whole or half point
+from 1 to 375.
 
 ### How big the file actually comes out
 
-Worked example, single view, title on, axes on, legend on the right:
+Worked example, single view of a 4:3 pane, title on, axes on, a short legend
+(four categories) on the right, Auto text:
 
-| Stage | Width | Height |
-|---|---:|---:|
-| What you typed (plot content) | 400 | 300 |
-| Plus axis space, title, legend and outer padding | 768 | 446 |
-| PNG at 300 DPI (`× 300/96` = `× 3.125`) | 2400 | 1394 |
+| Width | Figure (printed) | PNG at 300 DPI | The plot |
+|---|---:|---:|---:|
+| Single column, 89 mm | 89 × 60 mm | 1050 × 706 px | 35 × 27 mm |
+| Double column, 183 mm | 183 × 130 mm | 2163 × 1541 px | 130 × 97 mm |
 
-The padding is fixed, not proportional, so it matters most at small plot sizes:
-the same 368 px of chrome is 92% of a 400 px plot and 23% of a 1600 px one. SVG
-skips the DPI stage entirely — it is written in the unscaled units of row two.
+Around the plot stand its axis space (what the axes' text needs: here about 16
+mm left of the plot, for two-digit ticks at 6 pt and 7 pt axis labels; see
+{ref}`figure-export-axes`), the title row, the legend and the outer padding.
+They are the same size at every width — they are text and its room — so they
+take most of a single column and a third of a double one. An SVG is the same
+size, written in millimetres (its `viewBox` in figure pixels, 1/96 inch), so
+Illustrator, Inkscape and a journal's checks open it at its printed size.
 
-### PNG DPI scaling (the part that surprises people)
+A longer legend adds its own width: beside the plot, its entries take one row
+per line of the plot's height and as many columns as that leaves them, each
+column as wide as its longest name in the export's font.
 
-For PNG export, Cellucid scales the final pixel dimensions by DPI:
+### PNG DPI
 
-`output_pixels ≈ plot_pixels × (DPI / 96)` (plus annotation padding)
+A PNG is the figure's width in inches times the DPI:
 
-Example:
-- Plot width 1200 at 300 DPI → roughly `1200 × (300/96) ≈ 3750` pixels wide for the plot area.
+`PNG width (px) = width (mm) / 25.4 × DPI` — 183 mm at 300 DPI is 2163 px.
 
-Practical advice:
-- If PNG exports are “too huge”, either:
-  - reduce plot size, or
-  - export at 150 DPI for drafts/slides.
+Its `pHYs` chunk says the DPI, so a layout program places it at its printed
+size. For drafts and slides, 150 DPI halves each side; 600 DPI doubles it.
 
 ### Auto text sizing
 
-By default, **Auto text** is enabled:
-- text sizes are automatically scaled to the plot size,
-- and you can still override by disabling Auto text and setting sizes manually.
-
-This is usually what you want for multi-panel figures: pick a plot size first, then let the UI scale labels/legend appropriately.
+By default, **Auto text** is on: the text is set at the sizes journals print
+figure text at — 7 pt (panel titles, legend, axis labels), ticks and centroid
+labels 6 pt, the figure's title 8 pt — at any width. Turn it off to set your
+own sizes, in points (whole or half points). Points keep their printed size:
+the same 7 pt is 7 pt in a single column and in a double one, at 150 or 600 DPI.
 
 ---
 
@@ -179,7 +226,8 @@ This is usually what you want for multi-panel figures: pick a plot size first, t
 
 ### Title
 
-- The **Title** field auto-fills based on your dataset name and active field/visible categories (when available).
+- The **Title** field auto-fills with your dataset name and active field, and, when you have hidden some of its categories, which ones (as the Filters list says it). For one view it then names the filters on other fields as the view's label does ("Developing human lung (He) • LVL2 • LVL0: showing only Epithelial"): the legend lists no category those filters leave without cells. In a grid, each panel's label names its own filters.
+- A view you have named (double-click its row in **Compare views**) is titled by its name instead: "Developing human lung (He) • Early epithelium" (see {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`).
 - If you type your own title, auto-fill turns off.
 - To return to auto-fill behavior, clear the title field completely.
 
@@ -195,27 +243,66 @@ Legend contents are sourced from the same legend model as the viewer, so categor
 Two things the exported legend spells out that the on-screen legend does not
 have to, because a figure travels without the app around it:
 
-- **Hidden categories keep their entry and are marked `(hidden)`**, with a
-  hollow gray outline instead of their color. This includes a ticked category
-  that other filters leave with no cells (the row the on-screen legend shows
-  disabled). The entry stays so a filtered
+- **Categories you hid keep their entry and are marked `(hidden)`**, with a
+  hollow gray outline instead of their color. The entry stays so a filtered
   figure cannot be mistaken for a complete one; the color goes so nobody hunts
-  the plot for points that were never drawn.
+  the plot for points that were never drawn. A category that a filter on
+  another field leaves with no cells (the row the on-screen legend shows
+  disabled, "No cells available in this category after other filters") is
+  not listed at all, ticked or not: the figure has none of its cells, and the
+  title (a grid panel's label) names that filter ("LVL2 • LVL0: showing only
+  Epithelial").
 - **A logarithmic colorbar is labeled `Log10 color scale`** together with its
   true midpoint (the geometric mean of the two endpoints), so a reader cannot
   interpolate the endpoint labels linearly and quote a value that is wrong by
   orders of magnitude.
+- **Highlighted cells get an entry.** The figure draws the cells of the
+  highlight page you are on over the coloring in the highlight's color (cyan),
+  each dot inside a black ring, as the screen does (in every format: PNG,
+  Hybrid and the vector SVGs), so the legend lists them: a cyan swatch and
+  `Highlighted: <page> (<N> cells)`, the page's name and its highlighted cell
+  count. Without it, a reader of the figure takes that color for the coloring's
+  (cyan cells over a gene's colormap read as "high expression"). The entry is
+  one more row under the categories or the color bar, and the legend is laid
+  out with it; a view colored by no field gets a legend of the entry alone. It
+  appears only where highlighted cells are drawn: a panel whose filters hide
+  them all has none, and with **Legend** off there is none. In a multi-panel
+  export the shared legend carries it once, or each panel's own legend where
+  that panel draws highlighted cells. To leave the highlight out of a figure,
+  clear the page or switch to an empty one before exporting.
 
+(figure-export-axes)=
 ### Axes
 
-- **Axes** is enabled by default.
-- Axes ticks are computed from the **currently visible region** (after filtering and cropping).
+- **Axes** is enabled by default, and draws axes only where they are
+  rulers: on a 1-D or 2-D view seen flat (planar navigation, the default for
+  1-D and 2-D). A 3-D view, or a flat view tilted by orbiting, has no axes
+  and no axis margins, whatever the checkbox says (its tooltip says so): a
+  perspective picture shows cells at many depths, so one length on the plot
+  is a different distance at every depth, and ticks would invite reading
+  coordinates the picture does not have. Keep **3D orientation** on to show
+  a 3-D view's directions.
+- The axes are **rulers of the plot**: their ends are the coordinates the plot's
+  edges show (the view's, or the frame's), so a tick sits over the cells at its
+  value and the axes frame exactly what is drawn. Only the round values that
+  fall between the ends get a tick, and a short axis (a small grid panel) gets
+  fewer of them at a coarser round step, so its labels, measured in the
+  figure's font, never run into each other.
+- The axes' room follows their text: the tick labels are measured, the y-axis
+  label stands past the widest of them and the x-axis label under them, and the
+  margins grow with the **Ticks** and **Axis** sizes (any size from 1 to 375
+  pt), so an axis label never runs into a tick label and nothing is cut at the
+  figure's edge or covered by the legend or a panel's title. An axis label
+  longer than its side starts at the plot's corner and runs on past the far
+  end. The PNG and the SVG place every tick and label at the same place: both
+  draw one layout of the axes.
+- A plot with no visible cell shows "No visible cells" instead of axes.
 - Axis labels default to **X** and **Y**.
   - Clear X and/or Y to hide axis labels entirely.
 
-How to interpret axes:
-- In 2D/planar views, axes aim to correspond to embedding coordinates (when available).
-- In 3D orbit views, axes show **camera-space** coordinates (useful for orientation, but not the same as “UMAP_1/UMAP_2” in a strict sense). If you want an explicit 3D orientation cue, keep **3D orientation** enabled.
+How to interpret axes: they are embedding coordinates, measured on the
+embedding's plane, which the camera looks straight down at; every cell lies on
+it, so a tick sits over the cells at its value.
 
 ### Reference grid
 
@@ -229,27 +316,30 @@ How to interpret axes:
   view exports a dark floor. Nothing is hard-coded.
 - In SVG the layer arrives as ordinary vector elements — `<line>` rules (the
   studio floor's with gradient strokes), `<circle>` dots and gradient fills —
-  so you can recolour, thin, or delete it in Illustrator or Inkscape. PNG
+  so you can recolor, thin, or delete it in Illustrator or Inkscape. PNG
   carries the identical geometry.
 - The checkbox is disabled when the viewer background (**White** or **Black**)
   draws no reference layer.
 
 ### 3D orientation + depth sort
 
-- **3D orientation** adds a small orientation widget in 3D orbit mode.
+- **3D orientation** adds a small orientation widget in 3D orbit mode. It
+  takes the same share of the plot as it would of the on-screen view: its size
+  is scaled by the plot's pixels over the view's, as the points are, so a small
+  grid panel is not covered by it (its angle text shrinks with it).
 - **Depth sort** is enabled by default and helps 3D point clouds export with the correct near/far ordering.
   - Turning it off can be faster, but may reduce fidelity in dense 3D views.
 
 ### Style controls that affect export readability
 
 In the **Style** section you can choose:
-- Background: **Match viewer**, **White BG**, **Transparent**, **Custom…**
+- Background: **Match viewer**, **White**, **Transparent**, **Custom…**
   - Annotation ink follows the background you choose: a dark figure gets light
     titles, ticks, axis labels, and frame instead of near-black ones.
 - Font family: Arial / Helvetica / Times (safe cross-platform defaults)
 - Text sizing:
   - Auto text on/off
-  - Base / Legend / Ticks / Axis / Title / Centroids font sizes
+  - Base / Legend / Ticks / Axis / Title / Centroids text sizes, in points
 
 :::{tip}
 If you plan to edit the SVG in Illustrator/Inkscape, choose a common font (Arial/Helvetica) to minimize font-substitution surprises.
@@ -285,13 +375,12 @@ Emphasize selection does nothing if there are no highlighted/selected cells.
 ## Download options and large dataset strategies
 
 ```{figure} ../../../_static/screenshots/figure_export/download.png
-:alt: The Download group open with the format set to SVG: the SVG point strategy select on its placeholder, shortened to "Choose S…", and Export all views (split-view) with the pointer on its checkbox, above the Export button.
+:alt: The Download group open with the format set to SVG: the SVG point strategy select on Full vector, and Export all views (split-view) with the pointer on its checkbox, above the Export button.
 :width: 532px
 
-The **Download** group. The strategy selector opens on the placeholder
-`Choose SVG strategy…`, which is not a valid choice: Cellucid never picks one
-for you, and pressing **Export** without choosing says
-`Choose an SVG point strategy.`
+The **Download** group. The SVG point strategy opens on **Full vector**
+(every point an editable circle); choose **Optimized vector** or **Hybrid** for
+a large dataset. Cellucid never changes the strategy you chose.
 ```
 
 ### Download format options
@@ -320,7 +409,9 @@ Higher DPI means:
 ### Explicit SVG point strategy
 
 SVG export can become impractical when you have tens/hundreds of thousands of visible points.
-When the selected download includes SVG, choose exactly one strategy:
+When the selected download includes SVG, one strategy draws its points:
+**Full vector** until you choose another (an agent's `svg_strategy` is the
+same setting):
 
 - **Full vector**  
   Exports every point as an SVG circle (maximum editability; can be huge/slow).
@@ -359,11 +450,13 @@ This is useful when:
 3) Drag the frame in the preview:
    - drag inside the frame to move it,
    - drag edges/corners to resize.
-4) (Optional) Click **Lock aspect** to keep the crop aspect synced to the plot size.
+4) (Optional) Click **Lock aspect** to keep the frame's shape while you resize it.
 5) Click **Confirm** to apply the crop (the preview will switch to a framed preview).
 6) Export.
 
-When the frame's aspect differs from the plot's, the frame is fitted inside the plot without distortion (empty bands on two sides), identically in PNG, every SVG mode, and the preview. Use **Lock aspect** or **Fit plot** to make the frame fill the plot exactly.
+The plot takes the frame's shape, filled by the frame exactly, and the figure
+keeps its width, so the frame decides the figure's height — identically in
+PNG, every SVG mode, and the preview.
 
 A frame is drawn at the export's full resolution, not enlarged from the
 whole view: its points are rasterized at the pixels they land on, so a
@@ -375,8 +468,18 @@ there: the points are then rasterized at that largest zoom and the frame is
 scaled the rest of the way.
 
 Useful actions:
+- **Fit the cells** (beside **Frame export**) frames every cell the figure
+  draws, with a small margin (3% of their extent, and a point's radius): the
+  plot takes the cells' shape instead of the pane's, so a narrow pane — the
+  chat open, a grid of views — no longer gives a narrow plot with empty bands
+  above and below a wide embedding. It turns the preview and **Frame export**
+  on, leaves **Lock aspect** off, and never widens the view (only cells the
+  pane shows count). With **Export all views**, one frame holds every panel's
+  cells. When a plot is far (1.5 times or more) from the shape of the cells
+  it draws, the preview says so in one line under the picture, with the same
+  button. An agent does the same with `figure_export_set` and
+  `frame: "cells"`; `figure_export_get` reads back the frame it made.
 - **Reset** resets the crop to the full frame.
-- **Fit plot** adjusts your plot height to match the current crop aspect.
 - Double-clicking the preview resets the crop.
 
 :::{important}
@@ -412,7 +515,11 @@ If you have snapshots and want a multi-panel figure:
 
 What to expect:
 - The export is arranged as an automatically computed grid.
-- Panels are labeled (e.g., A, B, C…) and include per-panel view labels.
+- Panels are labeled (e.g., A, B, C…) and titled by their view: a view you
+  named is titled by its name (`A. Early`, `B. Mid`, `C. Late`), any other by
+  its field and filters (`A. LVL2 • LVL0: showing only Epithelial`). To label
+  the panels of a time course or a comparison, name each view first
+  (double-click its row in **Compare views**).
 - Every colored panel is explained by a legend — one shared legend beside the
   grid when the panels agree, otherwise a legend inside each panel (see below).
 - With **Emphasize selection** on, each panel carries its own `n = N selected`
@@ -420,6 +527,7 @@ What to expect:
 - Embedded metadata describes **every** panel, one record each (see
   {doc}`05_metadata_and_provenance`).
 
+(legends-in-a-multi-panel-export)=
 #### Legends in a multi-panel export
 
 Cellucid draws **one shared legend beside the grid** only when every panel
@@ -430,25 +538,45 @@ legend would tell the reader both panels draw the same set of categories, which
 is exactly the claim the `(hidden)` marking exists to prevent.
 
 Whenever the panels do not qualify, **each panel gets its own legend drawn
-inside its cell**, on the side you chose with **Legend: Right / Bottom**. The
-panel legend is carved out of the cell before the plot is placed, so the plot
-shrinks rather than being overlapped: a panel legend never covers the plot, the
-axes, or the `A. Live` panel label.
+inside its cell**. A panel legend never covers the plot, the axes, or the
+`A. Live` panel label, and it never shortens a name.
 
-Two things to plan for when you size a grid:
+Each panel is titled by its letter and its view's name (`B. Sox9 (ductal)`;
+a view without a name by its field and filters). The letters come from the
+figure, in panel order, so a view's name needs no letter of its own. A title
+wider than its column widens that column, and the plots shrink to keep the
+figure to its width: a title is never cut off.
 
-- **Panel legends cost plot area, and tiny cells get none.** A panel legend may
-  claim at most half its cell. Cellucid draws one only when that half, minus an
-  8 px gap, is at least **96 px wide** (Legend: Right) or **44 px tall**
-  (Legend: Bottom) — roughly 208 px of usable cell width, or 104 px of usable
-  cell height below the panel label. Below that the panel is drawn without its
-  legend, because no legend text would be legible at that size. This is a
-  readability limit, not a failure: increase the plot size or export fewer
-  panels at a time.
-- **The shared legend needs room too.** If the grid leaves less than 96 px of
-  spare width beside it (Legend: Right) or 72 px of spare height below it
-  (Legend: Bottom), Cellucid drops the shared legend and gives every panel its
-  own instead — never no legend at all.
+How a grid is sized:
+
+- **The figure fills its width, and the figure is its composition.** The
+  panels are arranged as on screen; every panel's plot has one height and its
+  view's shape; the figure is its panels, labels and legends at the tallest
+  plots whose composition keeps to the width, and its height is theirs. Every
+  legend — shared or per panel — is as large as its entries need, every entry
+  whole, and takes its room from the plots down to half the height they have
+  without legends; past that, or to keep every plot at least 80 × 64 figure
+  pixels (21 × 17 mm), the figure comes out wider than asked rather than
+  dropping or cutting anything.
+- **The shared legend** stands beside the grid, its top level with the first
+  row's plots (**Legend: Right**, at least 10 ems of its text wide, in as many columns as
+  its entries take), or below it (**Legend: Bottom**, in as many rows as they
+  take).
+- **A panel legend stands beside its plot when it is no wider than the
+  plot.** With **Legend: Right**, a panel legend fills its plot's height in as
+  many columns as its entries take. One that would be wider than its plot (at
+  the plot size the width gives the grid without legends) — a long list of long
+  names, such as 69 cell types — stands **below its plot**, at its column's
+  width, in as many rows as its entries take. When that arrangement would not
+  fit the width (the legends would take more than half the plots' height, or
+  widen the figure past it), every legend beside its plot is
+  tried, then every legend below its plot, and the first that fits is drawn:
+  two wide views with long legends in a narrow figure get their legends below
+  their plots rather than plots shrunk to strips beside many-columned
+  legends. With **Legend: Bottom**, every panel legend stands below its plot.
+- **The plots line up.** The plots of a row start at one height and those of
+  a column at one x; a column has axis margins only when one of its panels
+  draws axes. A legend's frame is the box its entries need.
 
 :::{tip}
 If you want all panels to be directly comparable, show the same embedding in them and keep **Link cameras** on, so they share one camera (see {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`). Matching fields, filters, and hidden categories is also what buys you a single shared legend instead of one legend per panel.

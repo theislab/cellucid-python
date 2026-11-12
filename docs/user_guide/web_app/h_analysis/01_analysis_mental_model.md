@@ -124,7 +124,7 @@ Cellucid analysis uses caching at multiple levels:
 - **Gene read-ahead**: a gene-heavy run reads genes ahead of its workers, as far as it measures it needs, within the analysis memory budget (see {doc}`06_analysis_mode_differential_expression_de`, How Cellucid sizes a run).
 - **Marker genes cache**: the same marker run is answered from memory and marked **Cached**, with **Recompute** beside it.
 - **Gene moments**: each gene's mean and spread over all cells, read once per dataset for Gene signature's Mean z-score and Module score.
-- **Page data cache**: the per-cell values of each page and variable, kept in their own numeric type with the page cell lists made for them, bounded at 100 entries and by its share of the memory the app's caches may hold (a sixteenth), least recently used first out.
+- **Page data cache**: the per-cell values of each page and variable, kept in their own numeric type with the page cell lists made for them, bounded only by its share of the memory the app's caches may hold (a sixteenth; no entry count, no age), least recently used first out.
 - **Density curves**: a density plot's curve is reused across cosmetic option changes and CSV export, and recomputed only when the data or the bandwidth changes.
 
 Quick and Detailed recompute when their inputs change. Every other mode computes

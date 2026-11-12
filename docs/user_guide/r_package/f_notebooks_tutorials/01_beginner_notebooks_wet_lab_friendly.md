@@ -20,10 +20,10 @@ set.seed(7)
 
 n <- 600
 cluster <- sample(c("Alpha", "Beta", "Gamma"), n, replace = TRUE)
-centres <- c(Alpha = 0, Beta = 4, Gamma = 8)
+centers <- c(Alpha = 0, Beta = 4, Gamma = 8)
 umap <- cbind(
-  rnorm(n, mean = centres[cluster]),
-  rnorm(n, mean = centres[cluster] / 2)
+  rnorm(n, mean = centers[cluster]),
+  rnorm(n, mean = centers[cluster] / 2)
 )
 
 cells <- data.frame(
@@ -66,7 +66,7 @@ file.size(path)
    **File…**.
 3. Choose the file printed in Step 2.
 
-Colour the cells by `cluster`, `condition` or `quality` from the field list.
+Color the cells by `cluster`, `condition` or `quality` from the field list.
 
 ## If something goes wrong
 

@@ -32,6 +32,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from .._exact_integers import as_exact_text, holds_unsafe_integers
 from ._primitives import (
     _category_identity,
     _require_bool,
@@ -133,8 +134,10 @@ def _absent_column(column: str, obs: pd.DataFrame, modality_columns: set[str]) -
     return None
 
 
-def _renamed_categorical(column: pd.Series, renames: list[tuple[Any, Any]]) -> pd.Series:
-    """A categorical column with categories renamed (merged where two read alike)."""
+def _renamed_categorical(column: pd.Series, renames: list[tuple[Any, Any]]) -> tuple[pd.Series, tuple[int, ...]]:
+    """A categorical column with categories renamed (merged where two read
+    alike, in the place of the first), and for each category after the place
+    of the first category before it was made from (its colors follow it)."""
     categories = list(column.cat.categories)
     labels = list(categories)
     for category, name in renames:
@@ -143,6 +146,7 @@ def _renamed_categorical(column: pd.Series, renames: list[tuple[Any, Any]]) -> p
             if _category_identity(value) == identity:
                 labels[index] = name
     merged: list[Any] = []
+    first: list[int] = []
     position: dict[tuple[str, Any], int] = {}
     remap = np.empty(len(labels) + 1, dtype=np.int64)
     remap[-1] = -1
@@ -151,10 +155,11 @@ def _renamed_categorical(column: pd.Series, renames: list[tuple[Any, Any]]) -> p
         if identity not in position:
             position[identity] = len(merged)
             merged.append(label)
+            first.append(index)
         remap[index] = position[identity]
     codes = remap[column.cat.codes.to_numpy().astype(np.int64)]
     values = pd.Categorical.from_codes(codes, categories=pd.Index(merged, dtype=object), ordered=bool(column.cat.ordered))
-    return pd.Series(values, index=column.index)
+    return pd.Series(values, index=column.index), tuple(first)
 
 
 def _renamed_text(column: pd.Series, renames: list[tuple[Any, Any]]) -> pd.Series:
@@ -169,8 +174,22 @@ def _renamed_text(column: pd.Series, renames: list[tuple[Any, Any]]) -> pd.Serie
     return out
 
 
+def _shown_column(column: pd.Series) -> pd.Series:
+    """A column as the viewer reads its labels: a boolean one's values are
+    its categories (``false``, ``true``), and an integer one holding
+    identifiers past 2^53 is their exact decimal text (``_exact_integers``);
+    any other column as it is. A label renamed in either is written as text."""
+    if column.dtype.kind == "b" or isinstance(column.dtype, pd.BooleanDtype):
+        return column.astype(object).where(column.notna(), None)
+    if holds_unsafe_integers(column):
+        return as_exact_text(column)
+    return column
+
+
 def _labels_of(column: pd.Series) -> list[Any] | None:
-    """A column's categories (a categorical's, a text column's values), or None for numbers."""
+    """A column's categories (a categorical's, a text or boolean column's values,
+    identifiers past 2^53 as text: ``_shown_column``), or None for numbers."""
+    column = _shown_column(column)
     if isinstance(column.dtype, pd.CategoricalDtype):
         return list(column.cat.categories)
     if column.dtype.kind in "OSU" or pd.api.types.is_string_dtype(column.dtype):
@@ -180,7 +199,7 @@ def _labels_of(column: pd.Series) -> list[Any] | None:
 
 def _count(column: pd.Series, category: Any) -> int:
     identity = _category_identity(category)
-    values = column.to_numpy(dtype=object)
+    values = _shown_column(column).to_numpy(dtype=object)
     return int(sum(1 for value in values if value is not None and not (isinstance(value, float) and np.isnan(value))
                    and _category_identity(value) == identity))
 
@@ -300,11 +319,15 @@ def _plan_labels(
     replaced: list[_ColumnPlan] = []
     for column_name, renames in by_column.items():
         column = obs[column_name]
-        values = (
-            _renamed_categorical(column, renames) if isinstance(column.dtype, pd.CategoricalDtype)
-            else _renamed_text(column, renames)
-        )
-        replaced.append(_ColumnPlan(name=column_name, values=values, metadata={}))
+        if isinstance(column.dtype, pd.CategoricalDtype):
+            values, first = _renamed_categorical(column, renames)
+            replaced.append(_ColumnPlan(name=column_name, values=values, metadata={}, sources=first))
+        else:
+            values = _renamed_text(_shown_column(column), renames)
+            if column.dtype.kind == "b" or isinstance(column.dtype, pd.BooleanDtype):
+                # A boolean column with a label renamed is text: the others as the viewer names them.
+                values = values.map(lambda value: label_text(value) if isinstance(value, bool | np.bool_) else value)
+            replaced.append(_ColumnPlan(name=column_name, values=values, metadata={}))
 
     for entry in deleted_fields:
         rows.append(_row("field-deleted", entry["key"], "not-applied", note=DELETION_NOTE))

@@ -1,17 +1,23 @@
 # Agents
 
-An AI agent can work in Cellucid with you: read the dataset shown, colour,
+An AI agent can work in Cellucid with you: read the dataset shown, color,
 filter, highlight, make annotation fields, run analyses, move through the
 history and explain what it finds. It acts only through the same actions the
 interface uses, so **every change it makes is a step of your history**,
-labelled with its name, and one click takes its whole turn back.
+labeled with its name, and one click takes its whole turn back.
 
 It can also do what lies outside the history: play and stop the guided tour,
-make the printable report (as a file or as text for itself), export the
-figure, the highlighted cells (CSV or `.h5ad`) or a field (CSV), list or
+make the printable report (as a file or as text for itself), look at the
+figure exactly as **Export** would write it with your Figure export settings
+(a picture for itself, nothing written) and export it, the highlighted cells (CSV or `.h5ad`), a field (CSV) or an
+analysis's result table (CSV, the file its expanded view's CSV button writes;
+marker genes also every gene of every group), list or
 remove what this browser keeps (the **Stored** dialog) and forget a dataset
 of **My datasets**, give Share's public link of the dataset, and read and
-vote on community annotation suggestions. None of these is a step, and
+vote on and suggest community annotation labels (all of a turn as one
+commit; a read of them pulls the
+repository first when this browser has not pulled it yet, as **Pull
+latest** does, and again when the agent asks). None of these is a step, and
 Undo does not take it back, so writing a file, removing what is kept and
 publishing ask you first by default
 ({doc}`03_permissions_and_what_agents_see`). Voting publishes to the

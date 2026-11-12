@@ -116,8 +116,15 @@ Startup runs **four numbered steps**.
       ✓ Launch choices checked
 
 [4/4] Starting server...
+      Viewer UI generation: establishing exact configured source
+      ✓ Viewer UI generation established
       ✓ Server ready
 ```
+
+The first start on a computer downloads the web app into this user's cache
+(about 1,200 files, 40 MB, with a progress bar: under a minute on a typical
+connection); later starts read only its inventory and reuse the cache, and a
+new release downloads only the files it changed.
 
 Step 2 lists what the store holds, from its metadata; no array is read. Step 3
 checks each launch choice you set (`--embedding-2d`, `--knn`, `--expression`,
@@ -144,7 +151,8 @@ store's `uns['cellucid']['defaults']`, else the viewer's default rule — see
   file, whatever its name, such as `GSM4567_matrix.mtx.gz`, with its lists).
 - A directory name ending in `.zarr` is not sufficient by itself, and a valid
   Zarr store does not need that suffix.
-- Anything else → error: `Unable to detect format for: <path>`.
+- Anything else → error: `<path> is not a file Cellucid opens (an .h5ad file,
+  …)`, or `<path> is not a folder Cellucid reads: …`.
 
 If detection fails, the error message will tell you what it expected.
 
@@ -217,7 +225,7 @@ to an IPv6 literal is bracketed as a URL requires, so `--host ::` prints
   filter to measure it (10 when neither this nor the store says otherwise)
 - `--knn KEY`: the `obsp` neighbor graph the viewer draws, read only when a view
   draws it
-- `--gene-id-column COLUMN`, `--expression X|raw|layer:NAME`: gene names and
+- `--var-gene-id-column COLUMN`, `--expression X|raw|layer:NAME`: gene names and
   the expression matrix
 
 A flag overrides the store's own `uns['cellucid']['defaults']` for this
@@ -241,10 +249,10 @@ Keep the default host (`127.0.0.1`). Leave this running.
 ssh -L 8765:localhost:8765 user@remote-host
 ```
 
-Then open:
+Then open the Viewer URL the banner printed:
 
 ```text
-http://127.0.0.1:8765/?anndata=true
+http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 ```
 
 ### Serving from an HPC compute node
@@ -269,7 +277,7 @@ Then open the **loopback** Viewer URL the banner printed, not the `Machine URL`
 block:
 
 ```text
-http://127.0.0.1:8765/?anndata=true
+http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 ```
 
 ```{important}
@@ -306,8 +314,9 @@ If something looks wrong, open these in a browser (replace `<port>`):
   naming `obsp['connectivities']` instead of serving a dataset with no edges.
 - **No `uns['cellucid']` identity and no `--dataset-name`/`--dataset-id`**:
   startup fails asking for both.
-- **Viewer source blocked**: startup fails instead of substituting a local
-  generation; see {doc}`15_troubleshooting_viewing`.
+- **Viewer source blocked**: a start serves the verified cached build and
+  says so; with none (or one that does not check out) it stops and says how to
+  get the app; see {doc}`15_troubleshooting_viewing`.
 
 ## Troubleshooting
 

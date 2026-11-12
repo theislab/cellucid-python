@@ -13,7 +13,7 @@ its badge, and runs in JupyterLab, Jupyter Notebook 7 and VS Code as it is.
 | Push clusters, refine them in the viewer, pull them back | {doc}`43_push_clusters_refine_and_pull` (Scanpy Leiden) | {doc}`../../r_package/f_notebooks_tutorials/09_push_clusters_refine_and_pull` (Seurat `FindClusters`) |
 | No notebook: the web app's exports, read in one call | {doc}`44_round_trip_without_a_notebook` | {doc}`../../r_package/f_notebooks_tutorials/10_round_trip_without_a_notebook` |
 | Gene sets: GMT in, signature scores out | {doc}`45_gene_sets_round_trip` | {doc}`../../r_package/f_notebooks_tutorials/11_gene_sets_round_trip` |
-| A selection as an `.h5ad` subset, re-analysed | {doc}`46_export_an_h5ad_subset_and_reanalyse` | {doc}`../../r_package/f_notebooks_tutorials/12_subset_and_reanalyse` |
+| A selection as an `.h5ad` subset, re-analyzed | {doc}`46_export_an_h5ad_subset_and_reanalyze` | {doc}`../../r_package/f_notebooks_tutorials/12_subset_and_reanalyze` |
 | Subsampled views: unknown cells, the exact subsample | {doc}`47_subsampled_views` | {doc}`../../r_package/f_notebooks_tutorials/13_subsampled_views` |
 
 The calls, side by side:
@@ -79,6 +79,6 @@ by the web app's own exporters. The docs build does not execute notebooks.
 43_push_clusters_refine_and_pull
 44_round_trip_without_a_notebook
 45_gene_sets_round_trip
-46_export_an_h5ad_subset_and_reanalyse
+46_export_an_h5ad_subset_and_reanalyze
 47_subsampled_views
 ```

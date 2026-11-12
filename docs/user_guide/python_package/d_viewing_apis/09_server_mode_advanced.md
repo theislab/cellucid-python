@@ -55,8 +55,12 @@ it, through the widget instead of a socket
 - viewer URL includes:
 
 ```text
-http://127.0.0.1:<port>/?anndata=true
+http://127.0.0.1:<port>/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 ```
+
+(`cellucid serve` and {func}`~cellucid.serve_anndata` hold a viewer channel,
+named by `viewerId` and `viewerToken`; a server without one, and the address
+without them, read `/?anndata=true`.)
 
 The exact `anndata=true` marker declares the user-served launch before the
 first paint. Open `server.viewer_url` rather than constructing a bare URL;
@@ -94,7 +98,7 @@ The same three properties are readable from Python on the server:
 | Property | Value |
 | --- | --- |
 | `server.url` | the origin this machine can open — the loopback origin for a wildcard bind, the bound host otherwise |
-| `server.viewer_url` | `server.url` plus the launch query (`/?anndata=true`) |
+| `server.viewer_url` | `server.url` plus the launch query: `/?viewer=true&viewerId=…&viewerToken=…&anndata=true` when the server holds a viewer channel (`cellucid serve`, `serve_anndata`), else `/?anndata=true` |
 | `server.network_urls` | `(label, origin)` pairs for the **Bound to every network interface** block; empty for a loopback bind, and empty for a wildcard bind on a machine with no non-loopback name |
 
 Reading the block:
@@ -110,7 +114,7 @@ Reading the block:
 :::{note}
 A viewer reached through an SSH tunnel always uses the **loopback** origin. The
 tunnel terminates on your own machine, so the URL you open there is
-`http://127.0.0.1:<port>/?anndata=true`, whatever host the far-side server
+`http://127.0.0.1:<port>/?viewer=true&viewerId=…&viewerToken=…&anndata=true`, whatever host the far-side server
 bound to. The wildcard bind exists so
 that a second hop — a login node forwarding into a compute node — can connect at
 all; it is not the address you type. See
@@ -121,17 +125,25 @@ all; it is not the address you type. See
 
 By default, the server publishes one verified local UI generation:
 
-- before binding the public server, Cellucid establishes every file declared by
-  the configured source's `cellucid-web-assets.json`;
+- before binding the public server, Cellucid reads the configured source's
+  `cellucid-web-assets.json` and establishes every file it declares;
 - this includes `index.html`, root browser metadata, and `/assets/*`;
-- the complete staged generation is byte-verified and then published atomically.
+- when the cache already holds that build, every file verified, nothing else
+  is downloaded; otherwise a new generation is staged, byte-verified and then
+  published atomically.
 
 This keeps the viewer UI and dataset API on the same origin, which avoids mixed content and cross-origin problems.
-Source or inventory failure stops startup; an older cache is not substituted.
+When the source cannot be read, a cached build whose every file matches its
+checksums is served offline (the start says *Could not reach … ; serving the
+cached web app (build …)*); with none, or one that does not check out, startup
+stops and says which, and how to get the app.
 
 ### Cache directory
 
-Default: a temporary directory (platform-dependent).
+Default: this user's own cache folder, `get_web_cache_dir()`:
+`~/.cache/cellucid/web` on Linux (`$XDG_CACHE_HOME` when set),
+`~/Library/Caches/cellucid/web` on macOS, `%LOCALAPPDATA%\cellucid\web` on
+Windows.
 
 Override with:
 
@@ -149,10 +161,14 @@ serve_anndata("/path/to/data.h5ad", web_cache_dir="/path/to/cache")
 ### Generation publication
 
 The inventory declares the build ID, every path, exact MIME type, byte length,
-and SHA-256 hash. Cellucid downloads the complete declared generation to a
-sibling staging directory and verifies it before atomic publication. If
-download, verification, or publication fails, startup propagates the error and
-does not serve another generation.
+and SHA-256 hash. A new build is staged in a sibling directory: each file the
+cache holds with the declared length and hash is copied from it, every other
+one downloaded (six at once) and verified, and the complete generation is
+checked before atomic publication. The first download is the whole build
+(about 1,200 files, 40 MB: under a minute on a typical connection); a new
+release downloads only the files it changed. If a download, the verification
+or the publication of a new build fails, startup stops with the error and the
+cache keeps the build it held.
 
 ### Clearing the cache (manual)
 
@@ -197,8 +213,11 @@ types, and a file's own id
 `prepare()` wrote), or `rds`, `rda`, `mtx`. `n_cells` and `n_genes` are `null`
 only for a format the browser alone reads (an R object, a MatrixMarket folder).
 `/_cellucid/info` carries `version`, `type`, `format`, `n_cells`, `n_genes`,
-plus `host`, `port`, and `runtime`: the program serving the viewer (`python`,
-or `jupyter` for a notebook viewer), which the viewer names.
+plus `host`, `port`, and `runtime`: what opened the viewer (`cellucid-serve`
+for `cellucid serve`, `python` for `serve_anndata()` or an `AnnDataViewer` in
+a script, `jupyter` in a notebook kernel, `cellucid-mcp` for `cellucid mcp
+--open`), which every sentence of the viewer names ("the cellucid serve
+command stopped this viewer").
 
 ### Example: what datasets are visible?
 

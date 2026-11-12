@@ -1,6 +1,6 @@
 # Decision record: graph edges at scale
 
-This page answers: **"How does the web app turn a neighbour graph (`obsp`)
+This page answers: **"How does the web app turn a neighbor graph (`obsp`)
 into the edges a pane draws and the rows the k-NN tool expands through, at
 10M–50M cells and on a subsample, and why is it built that way?"** It records
 the current design, the decisions behind it with their dates, the
@@ -64,7 +64,7 @@ Paths are under `cellucid/assets/js/`.
    arrives, its upper entries are its forward edges; each lower entry must
    equal the next due edge of its partner's line. That one pass checks bounds,
    order, finite non-negative weights and **exact** symmetry of topology and
-   weight. A diagonal entry (Seurat's self-neighbour) and a stored zero are
+   weight. A diagonal entry (Seurat's self-neighbor) and a stored zero are
    not edges.
 4. **What leaves the worker is the forward adjacency** (`ConnectivityEdges`):
    `forwardOffsets` (`Uint32Array`, 4 bytes a cell), `partners` (`Uint32Array`)
@@ -114,20 +114,20 @@ Paths are under `cellucid/assets/js/`.
 |---|---|---|---|
 | before 2026-10-29 | Shown edges follow a stateless keyed bijection (Feistel, cycle walking), not a stored shuffle | O(√E) memory at any size; every K-prefix is a uniform sample, the same in every session | A per-edge permutation array (4 bytes an edge) |
 | 2026-10-28 | A build that cannot fit is refused before any array is allocated, naming its bytes | At 50M an earlier version allocated gigabytes and then failed at its last array with "Array buffer allocation failed" and no size | Partial builds; a fixed edge-count cap (there is none) |
-| 2026-10-29 | Hold only the forward adjacency: 8 B/edge + 4 B/cell | The edges in draw order (12 B/edge) and every cell's neighbour list (8 B/edge) were removed; at 50M × k = 15 the earlier layout needed 10.4 GB to build and 7.4 GB to hold | Any per-edge array beyond partners and strengths on either thread |
-| 2026-10-29 | The k-NN tool reads frontier rows from the file in the reader worker | No thread holds every cell's neighbour list; works for every format and source (`.h5ad` CSR/CSC/dense, Zarr, Loom, MuData, `.rds`, served stores, links, providers, subsamples) | A page-side neighbour index |
+| 2026-10-29 | Hold only the forward adjacency: 8 B/edge + 4 B/cell | The edges in draw order (12 B/edge) and every cell's neighbor list (8 B/edge) were removed; at 50M × k = 15 the earlier layout needed 10.4 GB to build and 7.4 GB to hold | Any per-edge array beyond partners and strengths on either thread |
+| 2026-10-29 | The k-NN tool reads frontier rows from the file in the reader worker | No thread holds every cell's neighbor list; works for every format and source (`.h5ad` CSR/CSC/dense, Zarr, Loom, MuData, `.rds`, served stores, links, providers, subsamples) | A page-side neighbor index |
 | 2026-10-29 | A subsample's induced subgraph streams into the builder | On the full Human Lung Cell Atlas (2.3M cells, 102.9M stored entries), 1.3 GB was held before the build began | Gathering the induced subgraph first |
 | 2026-10-29 | 100M graphs: symmetry checked by exact per-cell counts plus a keyed 128-bit hash summed order-independently in both directions (designed, not built) | A disk-backed build cannot afford the random access of the exact check; a false pass has probability 2^-128 | Holding 700M edges in RAM at 100M |
-| 2026-10-30 | Read a share's graph in **stored** order, by the cheaper of `rows` and `stream`, and build over ranks before relabelling | In open order, a uniform share was scattered through the file, so every slab spanned the whole graph and decoded its chunks again | Reading in open order; an extra builder that sorts lines |
+| 2026-10-30 | Read a share's graph in **stored** order, by the cheaper of `rows` and `stream`, and build over ranks before relabeling | In open order, a uniform share was scattered through the file, so every slab spanned the whole graph and decoded its chunks again | Reading in open order; an extra builder that sorts lines |
 | 2026-10-30 | Keep the ordered, exact builder for shares too | An order-free builder (keyed pair-hash symmetry) was measured 3–4× slower per edge | The hash builder below 100M |
 | 2026-10-30 | Answer a k-NN frontier from the edges held when that is faster, by rates measured on the page | A 65,536-cell frontier took 1.7 s from a 10M-cell file but 0.18 s from 20M held edges | A fixed rule or size threshold |
-| 2026-10-30 (owner) | A share never costs more than a larger share or every cell, in any measure; a cost of about s/n (share s of n cells) is the target to work towards | Partial reading has to be a speed gain on every source | Share plans priced above the whole |
+| 2026-10-30 (owner) | A share never costs more than a larger share or every cell, in any measure; a cost of about s/n (share s of n cells) is the target to work toward | Partial reading has to be a speed gain on every source | Share plans priced above the whole |
 | 2026-10-30 (owner) | Speed comes before memory, as long as memory is counted and explained | Placing a share's edges holds about 1.5× the edges' bytes for a faster, exact build | Trading speed for an unexplained memory saving |
 
 ## Measurements that justify it
 
 All measurements were taken on a 16 GB Apple Silicon laptop shared with
-other work (±15 % run to run). "Node" means the reader worker's handler run
+other work (±15% run to run). "Node" means the reader worker's handler run
 in Node on a local file; "browser" means the whole app in Chromium on the
 Metal GPU.
 
@@ -159,10 +159,10 @@ against the induced subgraph computed from the stored arrays).**
 | 10M CSR `.h5ad` | uniform 5M | 35.2 s, 860 MB | 3.8 s, 66 MB | 3.2–3.3 s, 66 MB |
 | 5M Zarr v3 | uniform 2.5M | 21.1 s, 19,319 req | 2.88 s, 2,215 req | 2.81 s, 2,215 req |
 | 2M `.h5mu` (MuData graph) | uniform 1M | 4.7 s | 0.93 s | 0.89 s |
-| Full HLCA over S3 | blocks 1 % | | 41.9 s, 107 MB | 296 s, 703.5 MB |
+| Full HLCA over S3 | blocks 1% | | 41.9 s, 107 MB | 296 s, 703.5 MB |
 
 A uniform share's open rows lie in every chunk of the graph (a 65,536-entry
-chunk holds about 4,700 cells, so even a 1 % share has about 47 open rows in
+chunk holds about 4,700 cells, so even a 1% share has about 47 open rows in
 each chunk). That makes the whole graph's bytes the floor for any uniform
 share, and the read streams it. Block shares read about s/n of the bytes.
 
@@ -191,7 +191,7 @@ page holds nothing more afterwards.
   of forward adjacency next to the points, more than a 16 GB machine holds.
   The design: stream the build to an origin-private file, check symmetry with
   counts plus the hash above, and select the shown edges in the worker.
-- **Half shares on fast links.** A uniform 50 % share streams every cell's
+- **Half shares on fast links.** A uniform 50% share streams every cell's
   bytes and then places its edges on its cells after the last line (the
   relabel); every cell's build overlaps decoding. With the counting moved
   into the build, typed walks and one walk where memory allows, a 5M-cell
@@ -218,7 +218,7 @@ page holds nothing more afterwards.
 
 ## Known issues (pre-commit)
 
-Defects, regressions and unverified behaviour known when this version was
+Defects, regressions and unverified behavior known when this version was
 committed (2026-10-30), each with where it is recorded above. An item is
 removed in the change that fixes or verifies it.
 

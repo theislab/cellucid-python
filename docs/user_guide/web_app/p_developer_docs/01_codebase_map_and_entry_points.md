@@ -41,7 +41,7 @@ Cellucid is intentionally organized into layers so performance-critical code sta
     colors, highlights, views); the owners of the state domains
     (`app/state/domains/`).
   - **Actions** (`app/actions/`): the one way state changes. Every change and
-    read is an action of one catalogue; controls, agents, Python and R hosts
+    read is an action of one catalog; controls, agents, Python and R hosts
     and the history all dispatch them ({doc}`29_action_layer_domains_and_history`).
   - **History** (`app/history/`): trackers of step trees, undo, redo,
     branches, the autosave and saved states, the history in words.
@@ -67,7 +67,7 @@ cellucid/
     ├── external/                  # Vendored third-party libraries, served from
     │                              #   this origin (plotly, gl-matrix, and
     │                              #   fflate-0.8.2/, the ES module the readers'
-    │                              #   inflater imports, unchanged, licence and
+    │                              #   inflater imports, unchanged, license and
     │                              #   digest pinned: tests/wasm-codecs-contract).
     │                              #   Nothing is loaded from a CDN; the page CSP
     │                              #   would block it. plotly.min.js carries one
@@ -88,7 +88,7 @@ cellucid/
         │                          #   (the GA4 event dictionary and admin setup).
         ├── app/                   # App layer (state + actions + history + UI + sessions + analysis)
         │   ├── main.js            # App entry point (bootstrap + dataset load orchestration)
-        │   ├── actions/           # The action catalogue (catalog.js, schema.js,
+        │   ├── actions/           # The action catalog (catalog.js, schema.js,
         │   │                      #   definitions/<area>.js, definitions/params.js),
         │   │                      #   the dispatcher, the state domain list (domains.js),
         │   │                      #   a control's dispatch (control-dispatch.js),
@@ -192,7 +192,11 @@ It is the bootstrap orchestrator and intentionally contains *no* per-frame logic
 - Early “must not throw” bootstraps, classic scripts (not modules) that run
   before the module graph: `ui/core/preconnect-init.js`, `ui/core/ga-init.js`,
   `ui/core/theme-init.js`, `ui/core/viewport-init.js`,
-  `ui/core/code-load-watch.js` and `ui/core/file-drop-guard.js`.
+  `ui/core/code-load-watch.js`, `ui/core/file-drop-guard.js` and
+  `ui/core/press-guard.js` (a double click or a held Enter presses a button
+  that commits work or starts and stops it once: `.btn-primary` and
+  `[data-single-press]`, every button that turns into its own Stop, Cancel or
+  Run again).
 - The import map that gives every module the URL naming its bytes
   (`CELLUCID_MODULE_VERSIONS`, written by
   `scripts/generate-web-asset-inventory.mjs`; see
@@ -282,7 +286,7 @@ say why each subsystem is built the way it is.
 | “Where is My datasets?” | `cellucid/assets/js/app/library/my-datasets.js` | `app/library/local-file-handles.js`, `app/ui/modules/my-datasets/` |
 | “Where are filters implemented?” | `cellucid/assets/js/app/state/managers/filter-manager.js` | `cellucid/assets/js/app/ui/modules/filter-controls.js` |
 | “Where does color-by happen?” | `cellucid/assets/js/app/state/managers/color-manager.js` | `cellucid/assets/js/app/ui/modules/legend-renderer.js` |
-| “How are unread, zero and coloured cells drawn?” | `cellucid/assets/js/rendering/alpha-visibility.js` | `rendering/read-cell-layer.js`, `rendering/high-perf-renderer.js` |
+| “How are unread, zero and colored cells drawn?” | `cellucid/assets/js/rendering/alpha-visibility.js` | `rendering/read-cell-layer.js`, `rendering/high-perf-renderer.js` |
 | “Where do highlights live?” | `cellucid/assets/js/app/state/managers/highlight-manager.js` | `cellucid/assets/js/app/ui/modules/highlight-controls.js` |
 | “Where is multi-view (‘Keep view’) handled?” | `cellucid/assets/js/app/state/managers/view-manager.js` | `cellucid/assets/js/app/ui/modules/view-controls.js` |
 | “Where are sessions saved/loaded?” | `cellucid/assets/js/app/session/session-serializer.js` | `app/session/history-file.js` (format 4), `app/session/README.md`, {doc}`10_sessions_persistence_and_serialization` |
@@ -301,9 +305,9 @@ These show up everywhere (state, UI, analysis, sessions):
 - **View**: the **live** view or a **kept** view (created by “Keep view”; the
   code calls it a snapshot view). An action names a view `"live"` or
   `"View N"`, its row in the Compare views list.
-- **Action**: a named, parameterised change or read of the catalogue
+- **Action**: a named, parameterized change or read of the catalog
   (`color.by`, `filter.category.visibility`); every state change is one.
-- **State domain**: one of the fifteen units state is captured, undone and
+- **State domain**: one of the sixteen units state is captured, undone and
   saved in (`cells`, `mapping`, … `layout`).
 - **Step**, **tracker**: one recorded action in the history; a tree of
   steps of one dataset.

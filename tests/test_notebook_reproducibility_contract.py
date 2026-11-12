@@ -21,7 +21,7 @@ ROUND_TRIP_PYTHON = (
     "43_push_clusters_refine_and_pull.ipynb",
     "44_round_trip_without_a_notebook.ipynb",
     "45_gene_sets_round_trip.ipynb",
-    "46_export_an_h5ad_subset_and_reanalyse.ipynb",
+    "46_export_an_h5ad_subset_and_reanalyze.ipynb",
     "47_subsampled_views.ipynb",
 )
 ROUND_TRIP_R = (
@@ -30,7 +30,7 @@ ROUND_TRIP_R = (
     "09_push_clusters_refine_and_pull.ipynb",
     "10_round_trip_without_a_notebook.ipynb",
     "11_gene_sets_round_trip.ipynb",
-    "12_subset_and_reanalyse.ipynb",
+    "12_subset_and_reanalyze.ipynb",
     "13_subsampled_views.ipynb",
 )
 READER_NOTEBOOKS = (

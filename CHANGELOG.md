@@ -5,8 +5,2936 @@ All notable changes to Cellucid will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.9.7]
+## [0.9.8]
 <!-- CELLUCID_VERSION -->
+
+Version 0.9.8 is a patch release on 0.9.7. Files prepared, sessions saved
+(format 4) and dataset catalogs written by 0.9.7 are read as before. The
+viewer protocol is still schema 5: use the Python and R packages of this
+release with the web app of this release. The main changes are:
+
+### Web app
+
+#### Opening and reading data
+
+- **Every request to a data host goes through the one transport; a network
+  failure is one only when no answer came.** A person's "Try again" of a
+  dataset catalog, the requests to a Cellucid server (health, info,
+  catalog) and GEO's check of whether NCBI is failing were sent with a plain
+  `fetch`: outside the host's request budget and `Retry-After`, left
+  hanging forever by a host that stopped answering, and, when no answer
+  came, failed with the browser's bare `TypeError`, said as a problem inside
+  Cellucid instead of who is at fault (a "Try again" of a catalog on a host
+  without CORS said a different sentence from its first opening). They now
+  go through `fetchOnce` (asked once where they were: a server's failures
+  stay terminal). A link's opening called any `TypeError` whose message
+  named "fetch" or "network" a network failure; it now asks the transport
+  (`isUnanswered`). The raw `fetch` calls left (probes that must not count
+  in the book of hosts, OAuth token requests, keepalive revocations, the
+  model APIs, the page's own files) are each named with their reason, and a
+  new one fails the test suite.
+- **A Python or R viewer's connection lets go of what ran when its channel
+  reopened.** Disconnecting a viewer host kept the callbacks run when its
+  dropped channel opened again (it let go of those run at its end), so a
+  viewer connected again would also run the old connection's.
+- **A sample's start says its name and no download that is none.** Every
+  sample's start showed "↓ Loading Starting view 0 B/s Cancel": a starting
+  view is a part of its dataset's opening, already in the page, not a
+  transfer. It now has no line of its own (its opening card says the
+  opening), and a load's line names a speed only once bytes were measured
+  arriving, never "0 B/s" before the first bytes or during work that reads
+  none. The opening card said the id ("Opening garcia") until it closed; it
+  now says the name the catalog gives the dataset as soon as the catalog has
+  answered, and the dataset's own name once it is read. A dataset catalog
+  (`datasets.json`) entry may carry its dataset's `name`; the samples' catalog
+  does, and the picker lists it before the files are read.
+- **Cellucid starts where the browser keeps nothing for the site.** With
+  site data or cookies blocked (and in some private windows) Cellucid did not
+  start at all ("Cellucid could not start"): the theme read `localStorage`,
+  whose very read throws there. Every part now reaches the browser's storage
+  through one helper (`utils/web-storage.js`); without it, a setting you
+  change (theme, background, antialiasing, history settings) holds until the
+  page closes, and Cellucid says once, after the welcome, **Nothing is kept**.
+  A full store no longer refuses a background or antialiasing change, and a
+  stored preference this version does not know starts the page on its
+  defaults instead of stopping it.
+- **A link Cellucid cannot read is said as the link's.** A parameter given
+  twice or empty (`?dataset=a&dataset=b`, `?dataset=`), spaces around a
+  value, `anndata=1`, an unknown `source`, a server and data at once, a viewer
+  address Python or R did not write, or `source=remote` on a page no server
+  serves stopped Cellucid on "Cellucid could not start — Something went wrong
+  while starting", **Try again** first (which met the same refusal). Cellucid
+  now starts without the link, and the card over the empty viewer names the
+  parameter and what is wrong ("This link names "dataset" 2 times; a link
+  names it once."), **Open without this link** first; `?source=foo` alone,
+  which opened nothing and said nothing, is refused the same way.
+- A `dataset` the link names that its source does not hold is named, with
+  what the source holds ("This link names the dataset "x", which the server
+  this link names does not hold; it holds "a" and "b"."), and a link to a
+  source of several datasets says which ones to choose from; both lead with
+  **Open without this link**.
+- `?remote=http://localhost:8765/` (a trailing slash, an upper-case scheme)
+  opens the server, as the address bar does; a `remote` that is no web
+  address is refused as the link's.
+- A link's `sampleCatalog` that is no folder address, or given twice, is said
+  as such; it was "what is published there is not in a format Cellucid can
+  read. Write it again with anndata". **Open without this link** drops it.
+- A browser with WebGL2 that would not give the viewer a context (a reset
+  graphics process, too many pages drawing) is told **The browser's graphics
+  stopped working**, close other tabs and reload; it was "Something went
+  wrong while starting".
+- A link's `annotations=owner/repo` is said in **Community annotation** until
+  you are signed in ("This link names the repository …: Connect repo connects
+  it, signing in with GitHub first."); it was silent. A value that is no
+  repository, and the errors of applying one, name the parameter as the link
+  writes it (`annotations`), not `annotation_repo`, which no link has.
+- A request asked again after a failure says so on the line that shows its
+  progress, in one sentence for every transport: "GitHub is answering with
+  errors (HTTP 502, a gateway error); trying again in 1.4 s (attempt 2)…". A
+  community annotation Pull against repeated 502s read "Checking the
+  repository… 5%" while it retried in silence.
+- **A stopped community annotation Pull or Publish is no failure.** Its
+  **Cancel** was reported as a failed Pull ("Pull canceled; …" in red), and a
+  Pull or Publish stopped because the dataset, repository or GitHub user
+  changed, the repository was disconnected or annotation moved to another tab
+  failed its card beside the message that said why. The stop is now a
+  cancellation wherever it is caught (`community-annotation/sync-stop.js`):
+  your Cancel ends the card with its words, any other stop withdraws the card
+  (unless GitHub had already accepted part of a Publish: the card then names
+  the files it accepted and asks for a Pull before publishing again), and only
+  a connection lost mid-sync is reported as failed. An agent's
+  **Read the community annotation** is told the Pull was stopped.
+- **Checking your role on an unreachable GitHub is asked once, not forever.**
+  Each request was already asked again while that could help; on top of that,
+  the whole check was asked again on a timer of its own without end ("Cellucid
+  asks again in 37 s"). It now says GitHub could not be reached and checks
+  again with the next Pull (yours or an automatic one) and as soon as this
+  computer is back online. A fault in Cellucid's own code during the check (a
+  `TypeError`) was read as "GitHub unreachable" and retried; it is now
+  reported as what it is.
+- While a large dataset opens progressively (Suo, the default sample: a
+  first view, then the rest of its 561,947 cells in a few steps), the
+  collapsed Subsampling header says the share it grows to and the cells read
+  so far ("100 % cells · reading 197K"), as the Subsampling control does; it
+  said the share open so far ("35 % cells"), which read as a subsample
+  someone had chosen.
+- **Opening another share of the cells with connectivity edges shown works.**
+  With **Show connectivity edges** on, **Open data › a share of the cells**
+  (or every cell again) failed half done: "could not be read again with these
+  cells", the highlights out of step with the cells on every frame, and every
+  later opening failing the same way. The neighbor graph shown belongs to the
+  earlier cells; it is now let go in the same step the cells change, and read
+  again on the new ones, with the edges still shown and your **Max edges**
+  kept (it also went back to its default on every re-read of the graph).
+- The newest dataset you ask for is the one that opens. A link typed while
+  the default sample was still being chosen lost to the sample, and one typed
+  while a large sample (Suo) was still growing in place failed with "Could
+  not open the dataset" ("Dataset selection stage was superseded before
+  publication") while the sample stayed: the startup's own opening counted as
+  a choice of yours, and each growth step of the dataset shown counted as
+  another dataset chosen.
+- A category with no name is shown as *(empty)* (an empty name) or *(blank)*
+  (spaces alone), quietly, and a name with spaces at an end in quotes, by one
+  rule everywhere a category is named: legend, hover card, filters, menus,
+  Group categories, figure legends, analysis groups and agent reads (R9D-8).
+  Two such rows were indistinguishable blanks. The stored value is unchanged,
+  and a step can name the category as shown.
+- The hover card says *Missing* for a cell with no value, as the legend and
+  the filters do, for a number too (it said `NaN`, and *missing* in lower
+  case for a category) (R9D-9).
+- Every CSV the app writes leaves a missing value as an empty cell: the
+  composition and dot plot tables wrote `NA` where every other table writes
+  nothing, and one quoting rule now serves every CSV (a carriage return in a
+  label is quoted too).
+- **A notice about what was open goes when the next dataset opens.** A file
+  refused before it could open ("Cannot open this file"), a sample view that
+  could not be applied and a control's failure (a field that could not be
+  read) were kept until dismissed, so they stayed beside the next datasets as
+  if about them (two samples in a row left two "Sample view unavailable"
+  cards). They are now withdrawn when the next opening begins, as an
+  opening's own failure already was: one list of such notices
+  (`untilNextOpening`) for the whole page.
+- A gene read waiting (offline, a host's request budget) is said once, by the
+  gene's own notification with its Cancel: a second "Reading genes · waiting:
+  This computer is offline" card no longer said it again beside it.
+- An action still running when another dataset opens ends as its cancellation
+  ("… was canceled before it finished; nothing was kept."): a markers run
+  stopped by opening Pancreas ended with "The history has no value
+  c7be2ab0cc2b", because its change was put back through the new dataset's
+  history instead of the one that recorded it; a change ending after the
+  switch records nothing in the new dataset's history.
+- An opening says what opened: a file "Opened <name>: 1.2K cells" (it said
+  "User data ready: 1.2K cells", naming nothing, so two files opened in a row
+  left two identical cards), a server's one dataset "Opened <name>", and
+  "Connected: 3 datasets found…" (no hyphen as a dash). The Dataset box's
+  Kept row of a file read whole names the control that removes it, **Session ›
+  Stored › Manage…** (it named a Clear button that no longer exists).
+- An obs column of 64-bit integers holding whole numbers past 2^53 (database
+  ids, barcodes hashed to integers) is read as the exact text of each value,
+  a text column, in every format (AnnData `.h5ad` and Zarr, plain or
+  nullable, MuData modalities, Loom); it was rounded to the nearest double
+  without a word (F116). The column is text or numbers by every cell it
+  stores, whatever cells are open (a subsample scans the stored column once
+  when the field is first shown). Listed with the numbers until its first
+  load finds such a value, it then moves to the categorical fields, and its legend says
+  so in one line ("IDs past 2^53, read as text."), the reason on the line's
+  tooltip. Columns whose integers are all within 2^53 stay exact numbers. A
+  text table beside a matrix holding such a number is a text column too, and
+  an R `bit64::integer64` column is kept as 64-bit integers instead of
+  doubles.
+- The portable element-name rule (obs/var columns, obsm keys) takes the
+  longest file name every platform takes: at most 255 bytes in UTF-8. A
+  longer name was written into a Zarr folder that failed with
+  `OSError: File name too long` (or into a `.zarr.zip` that cannot be
+  unpacked on Linux); it is refused with the rule's sentence.
+- A name a writer of the web app did not choose is written in its portable
+  form and said, never dropped or nested: a converted MatrixMarket folder's
+  metadata column `CD4/CD8` (and a column its table repeats) was left out
+  without a word, and is now `CD4_CD8` (`dup_2`), a column an earlier table
+  already gave is noted; a copy of an `.h5ad` whose obs column is `a/b`
+  ("Save AnnData with this state") wrote a nested group anndata could not
+  read, and now writes `a_b`; the highlighted cells' `.h5ad` follows the same
+  rule (letter case and length included). One rule, `portableElementName`.
+
+- The five built-in samples are rebuilt by their pinned builds with the 0.9.8
+  writer: their stores now hold every chunk, so a web host no longer answers
+  404 for the priority seed and single-category columns at every opening.
+  Each records its cells' total counts (`obs['total_counts']`, summed over
+  the whole source before any gene was selected: Pancreas's 27,998 genes, the
+  atlases' 8,192 integration genes; `uns['cellucid']['totalCounts']`), so
+  normalizing a sample's genes reads one column instead of every gene.
+- The opening's transfer rate leaves out the time it waits on you (an `.rda`
+  asking which object to open, a sign-in): beside the question it fell for as
+  long as you read it, and it stayed low after you chose. No rate is shown
+  while you are asked.
+- A host that stops answering is said for what it is, without its address: "…
+  stopped answering this site, which it answered before: it may be refusing
+  requests from this network for now, or failing, or this computer lost its
+  connection" (a sample's listing said only "Try again").
+- **A web page in place of data is said for what it is.** A Zarr folder on a
+  host that answers a path it has nothing at with its site's page (`200
+  text/html`: Cloudflare Pages without a `404.html`, Netlify or Vercel
+  rewrites) opens: each chunk zarr-python left out reads as its fill value, as
+  a 404 says, where every field, gene or embedding with one failed as "may be
+  incomplete or damaged". A link answered with a sign-in or preview page, or a
+  page saved under a data file's name, is said to be a web page, with "open
+  the file's direct download link" (it was "not a valid HDF5 file … save it
+  again with anndata"); a catalog's `datasets.json` answered with a page is
+  not found, not a network failure to try again.
+- **A link is read in the form it is pasted.** An address without `https://`
+  (`example.org/atlas.h5ad`, `zenodo.org/records/1`; this computer's
+  `127.0.0.1:8765/…` and `lab-server:8080/…` at `http://`; the address bar
+  took `127.0.0.1:8000/atlas.h5ad` for a server), one between quotes, angle brackets or
+  backticks, a GitHub repository's own page or clone address
+  (`github.com/owner/repo`, `….git`, `git@github.com:owner/repo.git`), a file
+  page's `?raw=true`, a Zenodo file's preview page, `hf.co`, and an address
+  inside a Zarr store folder (its `.zmetadata`, a group) open what they name.
+  `example.org/atlas.h5ad` was read as the GitHub repository `example.org`, a
+  repository's page was refused as "not a file Cellucid opens", and a preview
+  page as private. A path on this computer (`/Users/…`, `C:\…`, `file:`) is
+  refused saying to use Open… › File…, and an `ftp://` address saying no page
+  can read one, both where "does not recognize" was said.
+- Each growth step of a Zarr folder on a web host reads at once: the check
+  that the folder is unchanged (a `HEAD` of its `.zmetadata`) is asked beside
+  the step's reads, and a step read from a folder found changed is discarded
+  and the folder opened anew. Each step waited one round trip for the check
+  first (about 4 % of an opening on a 3G link).
+- A viewer stopped from Python or R (`viewer.stop()`, `cellucid_stop()`, a
+  notebook cell run again) says **Viewer stopped** on its frozen last view, as
+  a viewer whose server went away now does too; it froze without a word (and
+  the notice of a server gone was drawn under the frozen picture). Offers the
+  frozen page can no longer take (Continue where you left off) go. A failed
+  notebook command no longer ends its reason twice (`"sample".. The viewer is
+  unchanged`).
+- A Zarr folder or a dataset catalog on a host that does not let other
+  websites read it is said so, as a file on it is ("… does not let other
+  websites read its files … Download the folder and open it (Open… ›
+  Folder…)"); it said "could not be opened. Try again; check the address",
+  and a catalog that the host "stopped answering". A host that lets this site
+  read one file and not another (CORS set per folder) is said to refuse that
+  file, not to refuse this network for now.
+- My datasets forgets a kept file or folder only when it is gone (moved,
+  renamed, deleted) or changed: one in use by another program, or a cloud
+  folder's file not downloaded yet, is said to be unreadable for now and kept
+  for the next try (any read failure said "moved, renamed or deleted" and
+  forgot it).
+- A Zenodo record, or the CELLxGENE Census release list, refused with 401 or
+  403 is said as the host refusing this network for now (both are public to
+  everyone); a Zenodo record said "could not be read (HTTP 403). Check the
+  record number".
+- A link whose host sends part of a file and stops is said so ("… started
+  sending atlas.h5ad and stopped (no more bytes for 3.0 s), also when asked
+  again: the host, or the connection to it, is failing or very slow"): it was
+  taken for a host that content-codes its files and downloaded whole, which
+  stalled again, or said not to let other websites read it.
+- A host that asks for a sign-in (HTTP 401) for one file is said to refuse
+  that file (private, or an expired link), also after it answered this site
+  for another; it was said to refuse "this network for now".
+- **A file whose AnnData parts break the format is explained**, at opening and
+  at the read of the field or gene concerned: "This .h5ad file breaks the
+  AnnData format: Categorical code 5 for 'cell_type' is outside
+  missing-or-category bounds. Save it again with anndata …" (obs without its
+  index, codes past their categories, sparse pointers past the stored values,
+  a matrix whose shape disagrees with obs and var, …). It said only "Could not
+  open …", with the rule under Details.
+- **A file is refused for what it is, not for an embedding.** A Loom file
+  without a two-dimensional `/matrix`, or a 10x matrix missing `data`,
+  `indices` or `indptr`, was read as AnnData and refused as "has no cell
+  embedding"; it is now refused as a Loom (10x) file not laid out as its
+  format requires, naming the missing part, whatever its name. An HDF5 file
+  or Zarr store of none of the formats Cellucid reads is said to be that,
+  listing them, and an AnnData store without obs or var is refused for them
+  before its embedding is looked for.
+- A damaged or truncated R file (`.rds`, `.rda`; gzip, bzip2, xz) is explained
+  with what to do, as an `.h5ad` or Zarr store is; it said only "Could not
+  open …". A truncated HDF5 file names both sizes in bytes.
+- **A dataset with no starting view** (your own file, a link, a served
+  object) opens colored by its best categorical field, in a ranked order: a
+  cell type, another annotation, a lineage, clusters, the tissue, a
+  condition, the cell-cycle phase; never a sample, batch, id or quality flag;
+  else the first field with 2 to 72 categories. The same ranks pick the
+  default field of Composition, Dot plot, Marker genes (**Group by**) and
+  Differential expression (**Field**), the field a subsample is judged by,
+  and the agent chat's starters (on Suo they offered "Annotate the clusters
+  of sample_ID"; now cell_type) (`app/utils/field-roles.js`).
+- Opening a sample while **Volumetric smoke** is on applies its starting
+  view: it failed with "Sample view unavailable" and the dataset opened
+  uncolored. A dataset whose starting view fails still opens colored by its
+  best field.
+- The Suo sample opens on a view of its whole cloud: its starting view had
+  the camera inside the cloud, a close-up of giant points.
+- A Zarr store on a web host is asked for an object it answered as absent (a
+  chunk holding only the fill value, which zarr-python leaves out) once per
+  version of the store in a tab, not at every read: the default sample asked
+  for its priority seed 6 to 11 times at start, once per growth step.
+- The sample picker reads the samples' files for their names and counts only
+  once the startup dataset has opened: the listing began a moment before the
+  opening and read every sample's file, the one being opened too, against its
+  first view. Closed, the picker names the open dataset alone (the Dataset box
+  says its cells); opened, it shows the counts.
+- When a sample cannot be listed, the notice names it and says why
+  ("Sample datasets could not be loaded: “garcia” could not be listed. Try
+  again; …"), not "could not be opened" with the store's address; the
+  address stays under **Details**.
+- Choosing another dataset while a Subsampling **Apply** reads stops that
+  reading at once (on a slow link it read the whole first-view embedding
+  first), and the new opening is shown on its own.
+- A server on this machine (`cellucid serve`, a local web server) is never
+  paced as a host that blocks networks: a restart of it no longer slowed every
+  later visit for a day.
+- Nor is a host paced when your own connection drops for a moment: requests
+  lost on this side (this computer offline, or failing sooner than the host
+  ever answers) teach it nothing. A 3-second drop while Suo opened from GitHub
+  Pages slowed the rest of the opening to 70 KB/s over a fast link ("limits how
+  many requests it answers: the next go in 2.4 s") and kept that pace for a
+  day; each step now reads in under a second once the link is back.
+- While this computer is offline, an opening or read in progress says "This
+  computer is offline: reading goes on as soon as it is back; what was read is
+  kept." (it said the host "may be refusing requests from this network") and
+  goes on the moment the connection returns: after an 18-second outage Suo
+  waited up to 20 s more for a back-off meant for a refusing host.
+- A refused file's notice goes when the next opening begins; it stayed
+  through every later opening, reading as if the dataset shown had failed.
+- **A file with a sparse `obsm` array can be subsampled** (R9M-8): every
+  share of such a file (an scvi-tools or converter output with a CSR array
+  in `obsm`) failed with "could not be read again with these cells", because
+  listing the array as one that cannot be drawn read row pointers of the
+  share that were not read yet.
+- **A reading of the cells that fails is a failure** (R9M-9): Subsampling's
+  Apply, an agent's `cells_open` or a notebook's `open_cells()` whose reading
+  failed was recorded in the history as done ("Opened 50% of the cells") and
+  answered as such; it now fails, said once, and records no step. The agent
+  or notebook gets the sentence the person read, with its reason (R9M-12),
+  not a generic one.
+- **A subsample the dataset cannot be read with is a refusal, not a
+  connection problem** (R9M-12): a stratified field or spatial embedding the
+  dataset lacks (or one that is not numeric, or a column past its width) said
+  "Try again; if it keeps failing, check the address and your connection".
+  Each is now a refusal written for the person ("A spatial subsample needs
+  the embedding obsm['X_sparse'], which this dataset does not have as a dense
+  array."), settled (asking again meets it again), by the same classification
+  of read failures every notice uses; whether a failure may pass now lives in
+  that one table.
+- **Spatial's Embedding menu offers what Data mapping shows** (R9M-13): it
+  listed every `obsm` array, vector fields (`velocity_umap`) and arrays the
+  mapping leaves off included. It now lists the embeddings Data mapping shows
+  in 2D or 3D, its 2D default first, and follows the mapping when it changes;
+  an agent's `cells_open` naming another is refused with the ones it shows,
+  and one naming none thins the 2D default. Opened before any mapping (a link
+  naming `sample=spatial`), the reader thins the best-ranked array of two
+  columns or more, never a vector field.
+
+#### Sessions and sharing
+
+- **Opening a section is no work to lose.** In a browser that keeps nothing
+  for the site, opening the Agents section (a step) made the next dataset
+  ask *Your work is not kept*. Steps that only arrange the page (the layout)
+  are no longer counted as unkept work.
+- **A session file dropped on the page loads.** Dropping a `.cellucid-session`
+  file (or choosing it in **Open… › File…**) was refused with "Open its
+  dataset, then load it with State › Session › Load…"; it now loads as
+  **Load… › Open a session file…** does, its dataset opened first when
+  another is shown. The sentence Python and R say for a session file given to
+  `cellucid serve` names the web app's way in (`input_formats.json`).
+- **Every saved state of an earlier version reads, whatever key was added
+  since.** A new key in one record of the state (the Camera Path's captions)
+  refused every older session and every sample's starting view. Every state
+  domain now reads its records through one declaration of their keys
+  (`app/state/domains/records.js`): a key added since is filled with the value
+  its absence means, a key dropped since (the analyses' remembered sizes,
+  moved to the layout) is left out, and only a truly wrong record is refused,
+  naming where. Each sample's starting view and saved states written by
+  0.9.7 and during this release are read by every domain in the tests.
+- **A saved state written before a part of it gained a key still opens.**
+  Adding the camera path's **Captions** made every sample's starting view and
+  every older session fail to restore the camera path ("Camera Path state
+  must contain exactly …"). A key added to a part of the state after files
+  were written is now read as the value its absence means and written only
+  when it differs, so a record of before reads, and is saved again, byte for
+  byte; only a truly wrong record is refused (as F181 did for the settings).
+- **A setting saved by another version never fails the others.** Saved
+  settings are read one at a time: a value this version cannot use (a control
+  removed since, a choice no longer offered, a Figure Export value no version
+  has) keeps the setting as shown and one notice names it, with its reason
+  under Details; everything else is restored. Before, one such value failed
+  every setting: the Figure Export record's earlier version (an SVG strategy
+  left unchosen) lost an hour-old session's settings and a dataset's starting
+  view. Figure Export records of the earlier version are read in today's terms
+  (record version 2: unchosen is Full vector).
+- **A saved state is restored part by part** (F155): **Continue** on a history
+  kept minutes before the Expression values were renamed (`normalise` →
+  `normalize`) failed with "a problem inside Cellucid stopped it" and dropped
+  everything, the views, the steps and the conversation with the one part it
+  could not read. Each part of the state (views, fields, filters, highlights,
+  the Expression values, …), each tracker's steps and each conversation is
+  now restored on its own: a part that cannot be put back is left as it was
+  shown, the rest is restored, and **Session restored but for N parts** names
+  each in a sentence of its own, its words under **Details**. A part saved by
+  an earlier or a newer version of Cellucid that this one cannot read says
+  so ("Expression values could not be restored: it was saved by an earlier
+  version of Cellucid (0.9.7), and this version cannot read this part"),
+  never "a problem inside Cellucid", and so does a load that fails whole on
+  such a file. The history records the parts left as shown as a step of its
+  own ("Not restored from the saved state: … (kept as shown)"); a tracker
+  this version cannot read is left out and named, and when it was the one
+  shown, what it showed starts a new tracker of its name with its
+  conversations. The saved state continued is then not written into, and the
+  work goes on as a new saved state beside it. A kept conversation the chat
+  cannot show is said instead of dropped, and an agent's
+  `history_saved_open` returns the same sentences (`not_restored`).
+- **The welcome comes first.** On a start that shows the welcome, "Continue
+  where you left off?", a sample view's notices and an opening's question
+  (which object of an R file to open) were shown on top of it at once; they
+  now come once it is closed, in that order (R9U-14).
+- **A session file or saved history from another version is restored part by
+  part too** (F164): a file holding a part of the state this version does not
+  have, or one tracker whose records it cannot read, was refused whole ("This
+  history holds state this version of Cellucid does not have … Open it in the
+  version of Cellucid it was saved with"). That part is now left out of every
+  step and named ("A part of the state this version of Cellucid does not have
+  ("…") is left out: it was saved by a newer version of Cellucid (…)"), such a
+  tracker is left out and named, and everything else is restored: Load…,
+  **Continue**, a saved state, an agent's `history_saved_open` and a dataset's
+  starting view alike.
+- **A load says when it sums the cells' totals** (F167): restoring normalized
+  values (or a mapping, or a replayed step, that needs them) reads every gene
+  of the matrix once for each cell's total, with nothing on the load's
+  progress line but the file it had read. The line now says "Summing each
+  cell's counts for normalized values…" while it does, with **Cancel**, on
+  every load: a session file, a saved state, a file of steps replayed, an
+  agent's load (asked first, as before).
+- Loading a session file names its dataset as the Dataset box does ("the
+  session's dataset "Developing human immune system (Suo)" from the
+  samples"), not by its id. It ends in one notice ("Loaded "Tracker 1
+  (shared)" beside yours — Session fully restored.", with **Undo**), not two
+  saying the same, and the dataset it opens no longer offers "Continue where
+  you left off?" in the middle of the load.
+- A dataset opened whole is shared whole: **Share** (link, badge, embed),
+  Subsampling's **Copy link** and the page address no longer name the first
+  cells a progressive opening shows while it grows
+  (`cells=131072&sample=uniform`), which reopened a quarter of Suo. A session
+  or autosave saved while such an opening grew names the cells it grows to,
+  so it no longer reopens only its first cells.
+
+#### Data mapping
+
+- **Gene names and highly variable genes are checked on their own matrix's
+  var axis** (R9M-1, R9M-2): a session saved on `X` or a layer with Highly
+  variable genes `highly_variable` was refused on the same file ("… which this
+  dataset does not have"), because the file opens on `raw.X` (it holds more
+  genes) and the column was looked up in `raw.var`; and a change naming only
+  the matrix (an agent's `mapping_set`, a notebook's
+  `set_data_mapping(expression="raw")`) applied a mapping that kept a column
+  `raw.var` does not have. Each value is now checked in the context of the
+  mapping it belongs to: its matrix's var axis (`var` for `X` and every
+  layer, `raw.var` for `raw.X`) and its modality.
+- **The genes groups follow the matrix by one rule, in the panel and in
+  `mapping.set`** (R9M-2, R9M-3): a change of Expression keeps the gene-name
+  and highly-variable column when the new matrix's var axis has one of that
+  name, else takes that axis's default (its var index; `highly_variable`
+  when it is true/false there, as opening on that matrix does). Moving from
+  `raw.X` to `X` now starts Highly variable genes on `highly_variable`
+  instead of leaving it None. A change of Modality takes the modality's
+  defaults. A change naming those groups itself keeps what it names.
+- **A MuData opens with its modality's neighbor graph** (R9M-7): a MuData
+  whose graph lives in a modality (`mdata.mod['rna'].obsp['connectivities']`,
+  where scanpy writes it and where `prepare()` writes each modality's graph)
+  opened with Neighbor graph None, so `prepare()`'s own MuData drew no edges
+  until the graph was chosen by hand. Without a global
+  `obsp['connectivities']` the dataset now opens with the graph of the
+  modality it opens on (`rna:connectivities`). The rule (`defaultGraph`,
+  `default_graph()`, R's `.default_graph`) is pinned by the shared conformance
+  fixture, version 8, in all three repositories.
+- **Every width gets its default by one ranked order** (R9M-11): a file's
+  UMAP named only its own width, while a file without one got a guessed
+  default for every width, so `X_umap` beside `X_umap_3d` opened with no 2D
+  default and `X_umap` beside a 3-column `X_phate` with no 3D one. Now every
+  slot the UMAP (or a launch) leaves empty takes the best-ranked array of
+  exactly its width, marked guessed; the best-guess notice is kept for a file
+  that names no default at all. The rule is pinned in the shared conformance
+  fixture (version 9) and now applied by `cellucid.data_mapping.resolve_embedding_slots()`
+  and the R package too, each checked against every `embeddingSlots` case.
+- **Default marks what keys 1–3 show first** (R9M-5): a dimension the mapping
+  names no default for (a file with `X_umap` and a 3-column `X_phate` named
+  only the 2D one, before R9M-11; a session or an agent's mapping can still)
+  showed no **Default** although key 3 showed its first embedding, and any
+  later edit of the checklist wrote a default for it that nobody chose. The checklist now marks that embedding, and Apply names a
+  default only when one is pressed or a dimension gets its first embedding.
+- **A MuData modality's embeddings have readable names** (R9M-10): they were
+  listed by their keys (`rna:X_phate3`, `prot:X_umap`) beside `UMAP` and
+  `t-SNE`; they are named as the dataset's own, their modality after them
+  (`UMAP (prot)`, `PCA 3,4 (rna)`), and a Seurat key with dots is split at
+  them (`X_wnn.umap` is `WNN UMAP`).
+- **Two embeddings are never named alike** (R9U-6): Garcia, He and Kanemaru
+  listed `X_umap` and `X_umap_2d` both as "UMAP · 2D". Arrays a menu would
+  list the same way (the same short name, namespace and width) are named by
+  their keys, "UMAP (X_umap)" and "UMAP (X_umap_2d)", by the one naming
+  function every menu, the Data mapping checklist, the Dataset box, the
+  agents' reads and a figure's title use (`representationNameOf`); arrays the
+  dimension tells apart (`X_umap_1d`, `X_umap_3d`) keep the short name.
+- **A data-mapping change stops on Stop** (F147): an agent's `mapping_set`
+  (or an undo or a jump putting a mapping back) ran on until every embedding,
+  gene list and cells' total it read was done, minutes on an atlas, holding
+  the history. The action's signal now reaches every wait and read of the
+  change: stopped, it ends at once, publishes nothing (or puts back what it
+  had), and the next change runs.
+- **Every way into the sidebar opens it before its sections** (R9K-2's
+  siblings): Data mapping's **Show** (the best-guess notice) and the "Genes
+  read for" link opened their Session section in the moment the sidebar's
+  own step started, which left a "Changed outside the history" step when the
+  sidebar was hidden. They and `?` now take one path (`revealInSidebar`): the
+  sidebar first, then the sections and the focus.
+- The Expression values line for a matrix stored as `log1p` names its place
+  as every other message does: "raw.X holds log1p values already (Data mapping
+  › Genes › Values)." (it said "raw holds … (Data mapping, Genes: Values)").
+- **`raw.X` is named `raw.X` everywhere** (R9M-14): messages, analyses (the
+  result line, a CSV's `expression_matrix`, Details), the Expression values
+  line, the Scanpy reason under Genes and the session messages said `raw`
+  where the Expression menu says `raw.X`. One name, the menu's, is now given
+  by one function (`expressionMatrixName`).
+
+#### Legend, filters, highlights and the view
+
+- **A double-click names a view in Safari too.** A click on a view's row in
+  **Compare views** selects it, and the selection rebuilt every row: the
+  second press of a double-click on a row not yet selected could land on a
+  row already replaced, and WebKit then sent no double-click, so the name
+  field never opened. A selection now sets the rows' state in place; a row
+  is rebuilt only when what it says changes.
+- **Point size ends at what can be drawn.** The slider ran to 200 while the
+  largest cell drawn is 160 pixels, so its last 3.4 % drew the same sprite
+  while the readout climbed. Position 100 is now 160 (the curve keeps 0.25
+  at position 0, so a stored position means a size at most 3.4 % smaller);
+  the reachable sizes run from 0.053 to 160.
+- **A kept view no longer crops a wide map.** Every pane of a grid took the
+  field of view of the whole area beside the sidebar, which is landscape, so
+  two views side by side (upright panes) cut Pancreas's 2-D UMAP off at both
+  sides. Each pane now takes its own shape's (45° across an upright pane, as
+  on a phone), and is drawn, picked, zoomed at the cursor, framed for an
+  agent and exported with it.
+- **Grid compare keeps its panes a usable size.** Two or three views always
+  stood side by side, so on a 390 px phone held upright three panes were about
+  120 px wide each. The grid now takes the arrangement whose panes are largest
+  along their shorter side, in the area the sidebar leaves: side by side on a
+  wide window, two rows of two for three views beside an open sidebar on a
+  1440 × 900 screen, one above the other on an upright phone. A figure of
+  every view (**Export all views**) keeps the arrangement on screen.
+- **A phone turned sideways with the sidebar closed uses the whole width.**
+  The closed sidebar slides to its new place when the window widens past the
+  phone layout; the area beside it was measured during that slide (counted as
+  shown) and never again, so the panes stood in 574 of 844 px with an empty
+  band at the left. Any measure taken while the sidebar slides is taken again
+  once it stops.
+- **A category label you give is one line.** A rename by an agent or a
+  notebook made "Alpha\nnewline" (two lines in the legend, a category the
+  community annotation cannot key), and Create categorical's actions took a
+  page label with spaces at its ends that its panel refused. Every label given
+  now (a rename, a merged category's label, a group, a page's, an overlap's
+  or the uncovered cells' label in Create categorical) follows one rule, the
+  field names': no leading or trailing whitespace and no control or
+  zero-width character ("… cannot be a category label: it holds the control
+  character U+000A …"). Labels a dataset brings are read as they are.
+- **Smoke while views are kept is dimmed, and says why.** Choosing Volumetric
+  smoke with a view kept was taken back afterwards with "Volumetric smoke
+  requires a single view. Clear snapshots first." (the app calls them kept
+  views), and an agent was refused "cannot be changed now: it keeps its value
+  until what it needs is there". The choice is now off while views are kept,
+  its tooltip and an agent's refusal say "volumetric smoke draws one view;
+  remove the kept views first (Clear, beside Layout)", as Keep view is off in
+  smoke. A select's choice turned off says its reason like any control.
+- **A highlight reads against any coloring.** Garcia colored by `LVL1`, its
+  10,993 germ cells highlighted, looked exactly as before: a highlighted cell
+  was a cyan dot in a cyan ring, and the germ cells are sky blue. A
+  highlighted cell is now a cyan dot inside a black ring (the ring is black or
+  white, whichever contrasts with the dot, `highlightRingColorFor`), so any
+  cell or background color is far from one of the two. One rule for every
+  shader quality, 2-D and 3-D, every view of a grid, and every figure format:
+  the vector SVGs, which drew the cell's own color in a cyan ring wider than
+  the screen's, now draw the dot and ring the screen draws, at its radii.
+- **Colors the app picks are told apart.** A grouped field's group took the
+  color of its first category even when another group's looked the same
+  (Kanemaru's atrial cardiomyocytes and the rest: amber and bright orange); a
+  new `Unassigned` took the palette color of its place, which a kept category
+  could already have; a new highlight page took the default of the page count,
+  so after a deletion it repeated a remaining page's color (and the ninth,
+  rose, read as the second, red). One rule now gives every such color: kept
+  when it is at least 0.08 from the others in OKLab, else the next palette
+  color that is (`distinct-colors.js`). Colors a person or a file chose are
+  never changed, and a file's categories keep the color of their place.
+- **The cell card shows a long label whole.** A category label, a field name
+  or another field's row longer than the card's column was cut with "…", and
+  the card (which follows the pointer and takes no clicks) offered no way to
+  read the rest; each now wraps inside the column, and a card with many rows
+  keeps inside the window, naming the rows it leaves out.
+- **A clustering of numbers colors the cells.** Coloring by a field whose
+  categories are numbers or booleans (a Loom `ClusterID`, as velocyto and
+  loompy write it) failed in every dataset: "Could not load the field:
+  [CommunityAnnotationSession] category at index 0 must be nonblank …". The
+  legend handed community annotation the numbers themselves; it now keys
+  categories by their text, as the legend shows them ("0", "1", …), and a
+  field whose categories a repository cannot key (a blank one, one with
+  spaces at its ends) is shown and colored as any other, just not open to
+  voting (an agent's read of it says why).
+- **Views can be named.** Double-click a view's row in Compare views (or
+  press `F2` on it) and type a name: `Early`, `Day 7, treated`. The name
+  shows beside the view's number in its row, its pane's title chip, the
+  Navigation panel's Applies to row and the embedding picker, and in every
+  history step on that view (`Moved the camera of View 2 "Early"`). Naming is
+  one step (`view.rename`, undoable), kept in sessions (the `views` value's
+  view entry carries `name` only when the view has one, so sessions and
+  starting views without names are unchanged); `view.keep` takes a `name` to
+  keep and name a view in one step. The number stays the view's address in
+  actions, so a name never has to be unique; a name is one line and cannot
+  be of the form `View 3`. An agent reads each view's name in `views.state`
+  (`label`) and `view.picture` (`label`). An agent building a multi-panel
+  figure of a time course named no panel and put the ages in the caption
+  instead (bug hunt F130).
+- **A redraw of the legend keeps the list where you scrolled it.** Every
+  redraw of the field shown (a rename, a vote, a count arriving) built the
+  list anew from its top: in a long legend a rename far down threw you back
+  to the first row. The list keeps its place while the field stays the same.
+- **The outlier filter's slider keeps the value you gave while it is
+  applied.** A redraw of the control between your change and the filter
+  taking effect (its action waits behind a coloring still under way) put the
+  thumb back at the old threshold for a moment, and a second commit then
+  filtered by that one. The thumb stays where you put it until the change is
+  in effect, and a value given but not committed yet is left alone too.
+- **What stands above a dialog goes back to its own place.** The
+  notification center and the agents' dock are lifted into an open dialog
+  and put back when it closes; side by side, the first to go back found the
+  other away and landed at the end of the page, so the two swapped places
+  (and which is drawn over the other). Each goes back where it stood,
+  whichever goes first.
+- **The sidebar legend lists a field's categories in the field's own order**
+  (the file's, Scanpy's), as the Group dialog, the figure export's legend and
+  the analysis plots do: Pancreas `clusters` reads Ductal → Ngn3 low EP → …,
+  its trajectory, where the legend sorted alphabetically and hid it; a
+  renamed category keeps its place, groups stay in the order they were typed.
+- **A page's category takes its page's color in Create categorical**: one
+  color for one page in the builder's page row, its preview, the legend and
+  every view (the preview showed the palette's color beside the page's own).
+  The field keeps these colors as its own (its `palette`), in a session too
+  (`field-overlays` user fields gain `palette`: one `#rrggbb` a category, or
+  null), and a category kept through a merge or a delete keeps its color.
+- **"Unassigned" is the one spelling of cells without a label**: deleting a
+  category moves its cells into `Unassigned` (it was `unassigned`; the
+  action `category.delete` is version 2, and a version 1 step that named no
+  label still moves them into `unassigned`), as Create categorical names the
+  cells on no page.
+- No floating window covers the sidebar's toggle: windows are placed, moved,
+  resized and maximized below it (on a phone, a tall floated panel covered the
+  open panel's close button).
+- **Dock all**: while any sidebar section floats, a button at the top of the
+  sidebar ("Dock all 3 panels"; "Dock Navigation" for one) docks every
+  floating section back into its place, as one step
+  (`layout.panel.dock-all`; `layout_panel_dock_all()` in Python,
+  `cellucid_layout_panel_dock_all()` in R). With every section undocked the
+  sidebar was a column of logo and footer, and the way back was each window's
+  own button.
+- Floating windows fit the visible screen: their height cap and their place
+  are taken from one measure, the visual viewport (a phone's on-screen
+  keyboard no longer hides a window behind it), and an analysis's expanded
+  view sized on a large window is cut to a smaller one and moved inside it
+  (it ran past the edges, its close button out of reach); widening gives the
+  size back.
+- A category name cut short in its legend row shows whole on a click or a tap
+  (and leads its hover text).
+- The **Filters** list names the smaller side of a legend ("cell_type:
+  showing only CD4 T, CD8 T" after **Hide all** and two ticked, not the 67
+  hidden), says "hiding every category" when none is shown, and counts
+  Missing only when some open cell has no category, as the legend lists it.
+  Figure captions and view labels read the same.
+- A highlight group is named by what it holds, its count once beside it: an
+  Annotation selection by its categories, most cells first ("NK + ILCP",
+  "A, B, C +2 more"), or by its field and range ("n_genes 120 – 340"); a
+  Lasso, Proximity or KNN group by its tool ("Lasso", "Lasso (2)"); one made
+  without a label from Python, R or an agent "Highlight". It read
+  "Annotation (2 steps) (36,214 cells) (36,214)", cut short. In the
+  Highlights and Filters lists the count stands in a column of its own,
+  never pushed out by a long name, and **Create categorical** names its
+  categories the same way.
+- **Group categories**, a new button of the Categorical obs row (after
+  **Duplicate**), makes a coarser annotation in one step: type the group each
+  category joins (on Pancreas, *Ductal* and *Ngn3 low EP* as *Progenitor*,
+  *Alpha*, *Beta*, *Delta* and *Epsilon* as *Endocrine*), and a new field of
+  those groups is made and shown, the field it comes from untouched. A
+  category left empty keeps its name, or joins **Others into** (*Other*). One
+  **Undo** removes it (it took nine steps and nine undos: duplicate, merge one
+  pair at a time, rename). It is the action `field.group`. The Categorical
+  obs menu names the grouped field at once (it kept naming the field grouped
+  from while the legend showed the groups).
+- **Create categorical's Each intersection takes any number of pages.** It
+  refused a 33rd page ("Each intersection supports at most 32 pages"), as did
+  `field.create-from-pages` (an agent's 47 pages): a cell's pages were one bit
+  each of a 32-bit number. Each cell's set of pages is now interned however
+  many pages there are (`utils/page-membership.js`), and an intersection is
+  named by its pages' positions (`0+2`) in the session
+  (`userFields[].intersectionLabels`, no other key read: the field's step
+  names its pages by name and replays as before). The intersection categories
+  come in order of how many pages they combine, then by their pages (a field
+  of three or more pages may list them in another order than 0.9.7's), and
+  one combination labeled twice in `intersection_labels` is refused instead
+  of keeping the last label.
+- **Create categorical** shows the field it makes at once, as **Group** and
+  **Duplicate** do (`field.create-from-pages` now changes the coloring, and
+  one Undo restores it). Its preview is the field made: the uncovered cells'
+  category in the color it takes (it was drawn gray, then colored from the
+  palette), and no `Unassigned` category of 0 cells when the pages hold every
+  cell (the preview said one category, two were made). Its column name follows
+  the one rule of every field name: `:` is allowed (it was refused, though a
+  rename took it) and a zero-width character is refused in the builder (it
+  was accepted, then refused by a notification after **Create**). What it
+  still waits for ("Name the new column.") is a gray hint, no longer a red
+  "Column name must be a valid non-empty trimmed field name" before anything
+  was typed; its other refusals are plain sentences. A page row shows the
+  page it comes from only when its label was changed, and its label box has
+  the room.
+- Highlight page tabs are as wide as their names, up to the row: three pages
+  read "Pa…", "Pa…", "P…" beside empty space.
+- The legend's alphabetical order is the one a person reads: case aside and
+  numbers as numbers (`merged Beta + Alpha` sorted after every capitalised
+  label, `Cluster 10` before `Cluster 2`).
+- The merge and delete-category confirmations say **Undo** takes the change
+  back; they told the person to restore "the original column from Deleted
+  fields", which an edit of a field of one's own never puts there.
+- The gene box names the gene shown after Escape or a click elsewhere, never
+  a name typed that chose no gene.
+- **A gene colors a kept view.** After **Keep view**, choosing a gene on the
+  kept view (the gene search, or `color.by` from an agent, Python or R) did
+  nothing and the action answered null: every view holds its own copies of
+  the fields, and the gene search chose the gene as the field object of the
+  view it was listed in, which the kept view's list does not hold ("no longer
+  on the gene list"). The gene is now read from the list of the view in
+  focus, so every kind of field (a column, a gene, a copy of either) colors
+  any view. A coloring that ends without being shown (something else holds
+  the fields, a newer choice, Cancel) is refused with the sentence the person
+  is told, never answered with null as if done.
+- **A view's × removes that view.** With exactly one kept view, the × on the
+  live view's row removed the kept view instead (and with it the kept view's
+  name), and `view.remove` of View 1 did the same. Removing the live view now
+  hides it, however many kept views there are; the kept view left shows alone,
+  as the last view it has no ×, and **Clear** brings the live view back.
+- A viewer background you never picked follows the theme (Studio (light) ↔
+  Studio (dark), Atelier ↔ Nebula, …); one you pick stays. A sample's
+  starting view no longer sets the background (it had stored Studio (light)
+  as your pick on the first visit).
+- A message naming a long link breaks inside the sidebar. The **Stored** line
+  names the datasets kept and what they take; the other kinds are in its
+  title and in **Manage…**.
+- **The palette menu marks the palette shown.** After an Undo (or an agent)
+  changed a continuous field's palette, the color bar's menu still marked the
+  one chosen before, and choosing that one did nothing. The menu is drawn as
+  it opens, and choosing a palette changes only the palette: it no longer
+  rebuilt the legend, which turned **Live filtering** back on and dropped
+  bounds moved but not yet filtered (R9F-1).
+- **Live filtering stays as you set it.** Turned off, it stays off for every
+  continuous field, gene, view and palette of the page; it turned itself back
+  on at every field or view change, which the docs warned about (R9F-2).
+- **Renaming in place keeps what you typed.** A field's, a category's and a
+  saved state's name are taken when you leave the box, as Enter does (as a
+  view's and a highlight page's already were); leaving it dropped the name.
+  A name refused ("A field with this name already exists") is said on the box
+  until you change it; it was only a hover title on a red border (R9F-6).
+- **Two deleted fields of one name can each be restored.** Delete a field,
+  rename another to its name and delete that too: both rows of **Deleted
+  fields** refused Restore and Delete for good ("Two deleted fields are
+  named …; restore or purge one from Deleted fields"). The rows read
+  `score (1 of 2)` and `score (2 of 2)` and act on their own field; the
+  actions `field.restore` and `field.purge` take `which` for it (R9F-4).
+- **Delete for good says what it does.** Its confirmation said the field
+  "can no longer be restored, in this session or from a saved state", but
+  Undo brings it back; it now says so, the history names the step `Deleted
+  <field> for good` (it read `Purged …`), and the row's button is a bin, so
+  a deleted field's name is no longer cut to `S_s…`.
+- History steps name a palette as the legend does (`Drew Ins1 in Plasma`,
+  not `plasma`) and write a range's bounds as the Filters list does
+  (`-0.448703`, not `-0.44870302081108093`) (R9F-5, R9F-11). A view name of
+  the form "View 3" is refused with "…, or none to number it again" (it said
+  "no name (null)").
+
+#### The history
+
+- **Work that is not kept is never dropped without a question.** With
+  Autosave in this browser off (or a browser that keeps nothing, or no room
+  left), opening another dataset threw away every step on the one shown
+  without a word, and so did a reload. Now, while the history shown holds
+  steps made since it was last saved and they are not kept, every way of
+  replacing the dataset (the sample list, My datasets, a file, a link, a
+  server, a saved state or session file of another dataset, None, the
+  benchmark) asks first: **Save…** (Save file), **Open anyway** or
+  **Cancel**; an agent's `dataset.open` / `history.saved.open` asks through
+  its permission card, under a new kind **Replacing work that is not kept**
+  (`replaces-unkept`, asked by default); a reload or a closed tab gets the
+  browser's leave-page question — in that case only. Canceling a dataset
+  change yourself (the opening's Cancel, or keeping the dataset here) no
+  longer says "A newer dataset selection is now active.", and the Dataset box
+  no longer keeps saying "Loading …" after a change begun outside the list
+  (an agent's opening you denied) was stopped.
+- **Every slider names its values in its own words.** The velocity sliders,
+  the navigation speeds, the forced level of detail, the outlier filter, the
+  camera path's Default speed and every slider of a panel built from the
+  shared slider now define their readout (`ui/core/control-readout.js`), so
+  no comparison of steps names a slider by its position; a page test checks
+  every slider with a readout.
+- **Comparing two steps names each setting as the sidebar reads it.**
+  `history.diff` (and every comparison built on it) said "Grid density: 37",
+  "Point size: 16.5" and "Render mode: smoke": the slider's position and the
+  option's value, while the sidebar and the step's own label read "48³",
+  "0.75" and "Volumetric smoke cloud (beta)". A slider's owner now defines
+  the readout of any value (`ui/core/control-readout.js`) and writes its own
+  readout with it, so the readout and the history say one thing: Point size,
+  the depth cues, every smoke slider and the connectivity sliders. A choice
+  is named by its option; a slider without a readout of its own by its value
+  when its readout is the value, else as a position ("slider at 37 of
+  0–100").
+- **Stale results name each input with its own cause, and follow the view
+  they were made in** (F156): a test went "stale since step 4 ("Showed UMAP ·
+  2D in View 1"): Filters changed … Hidden cells changed … Views changed"
+  when step 4 only kept a view. Every reason cited the first change of any
+  input, and keeping a view changes each per-view value. A step's inputs held
+  per view (filters, hidden cells, the field colored by, the views) are now
+  compared at the view it acted in, so keeping another view, focusing one or
+  changing another view's filters marks nothing stale, and each reason names
+  the step that changed that input ("Filters changed at step 7 ("Hid Alpha of
+  cell_type in View 1")."), in `history_stale`, `history_step` and the step's
+  details.
+- **With several views, a step says which view it changed** (F157): "Colored
+  by gene Sox9" went to the view in focus and named none, in the history and
+  in the methods text. A step that changed some views, not all, now names
+  them as the Compare views list does, with a view's name ("Colored by gene
+  Sox9 in View 2 "Early"").
+- **Save AnnData with this state…** keeps a field's colors: a categorical
+  field you or an agent made is written with the colors it is shown in, as
+  Scanpy keeps them (`uns['<key>_colors']`) -- in the view in focus, the
+  colors given to its categories, the rest as it opens (a field made from
+  highlight pages in its pages' colors, any other in Cellucid's own) -- so
+  the copy opens, and plots in Scanpy, as the view showed it; the Colors row
+  of its plan says the fields' colors went with their columns. Every column
+  the copy writes, renames or relabels takes
+  its colors along by the packages' rule: none for a column written without
+  colors of its own (stale ones removed), carried by a rename, a merged
+  category keeping its first category's color. Before, no colors were
+  written, and a rename or a merge left colors that described another
+  column.
+- **Save AnnData with this state…** also writes the colors of a column of the
+  dataset you or an agent recolored in the view in focus (`uns['<column>_colors']`,
+  under its name and labels after the save's renames: the categories recolored
+  in their new colors, the rest as the column opens), one `column-colors` row
+  of the plan each (`write`, `unchanged`, or why not), as Python and R apply
+  it; and a live viewer's categorical results (viewer protocol `result`,
+  `categorical` meta) carry `colors`, one lowercase `#rrggbb` a category in
+  its order, the colors it is shown in, in the view in focus, sent again on a
+  recolor or a change of the view in focus, so a pull writes them (protocol
+  fixture `c117822a…`). Before, recoloring a dataset column reached no file,
+  and a pull wrote no colors.
+- Reopening a saved analysis whose live view was removed (three kept views
+  only) no longer throws "A hidden live view cannot be the active view": a
+  restore applies each view's coloring and filters with that view focused,
+  the removed live view too, and awaits field reads between them; the view
+  list and the sidebar drawn in a frame between them read the restore's
+  cursor as the person's focus. They now wait for the visit to end.
+- The methods paragraph, the history report, a figure's provenance and the
+  agents' dataset summary name the dataset's citation (its `uns['cellucid']`
+  `citation`): they looked for it in the dataset's source, where it never is,
+  so none of them cited any dataset, and an agent writing methods said the
+  sample "has no citation recorded". A figure's provenance JSON now carries it
+  as `dataset.citation`, beside `dataset.source`.
+- **Continue** opens the history kept in this browser after a group was made,
+  extended, removed or restored: the grouped steps were not written again, so
+  Continue refused the whole history ("a group cuts the run of turn …"). An
+  edit restored from Recently deleted is no longer listed there again after a
+  reload.
+- **Verify** of a branch that makes a field (a grouping, a new annotation) and
+  colors or filters it says it reproduced: the field made again under a new
+  id is the same field (it said "not reproduced: Colors").
+- An agent's turn goes on through its own **Verify**, a tracker it starts,
+  uses or replays: the chat stopped the turn and said its call was lost ("The
+  page closed before this call finished"). An agent (or a notebook) starting
+  another tracker no longer fails. A squash or a branch delete the history
+  would refuse is refused before the person is asked, never after they
+  allowed it.
+- A named save or a session file made during an agent's turn (its own
+  `history_save` or `history_share`, "with our conversations") keeps that turn
+  as it was when saved, said so: opened, it said "The page closed before this
+  call finished; nothing was applied" of the very save.
+- The card for an agent's delete, squash or tracker removal no longer says
+  "the history cannot bring back" what goes to Recently deleted.
+- A step whose name wraps differently at a new width (the sidebar resized,
+  the tree's scrollbar shown or gone) is measured again: such a row overlapped
+  the step under it, and the last step was cut off by the tree's own height.
+- Closing a progress notice while its work runs no longer fails that work (a
+  field read failed, and a dataset could open uncolored).
+- A theme change that moves a background you never picked is one step (it left a
+  "Changed outside the history" step after it), and undoing it no longer keeps
+  that background as your pick: only a background you pick yourself is kept.
+- **Verify** says why a branch got no verdict in a sentence: a problem inside
+  Cellucid keeps its words under Details, and a first state that cannot be
+  shown no longer reports the raw read error.
+- A drag (a slider, a camera move) brought back to where it began leaves no
+  step: it left one that changed nothing, and Undo then seemed to do nothing.
+- Steps name what they changed as the app names it: an analysis option as
+  its form does ("Dot plot: Color set to Mean, scaled 0–1 per gene", "Showed
+  Values, Layout options of Dot plot"), an option of the expanded view as its
+  options column does ("Composition: Plot set to Per sample"), and what a
+  view shows as the picker does ("Showed UMAP · 2D in View 2"). Several
+  options set at once are named by the values they changed to, the first
+  five ("Marker genes: Group by clusters; top genes per group 5"), not by
+  their labels alone ("Marker genes: Group by, Compare against, Groups to
+  test, Direction, Top genes per group set"), and only those that changed (an
+  agent sending five options of which one differs: "Opened Marker genes: Top
+  genes per group set to 5"); **Score as signature** and the other sends
+  likewise ("Opened Gene signature: Gene sets set to T cell (2 genes), …").
+- A camera path keyframe is never marked stale when the camera moves on. An
+  action may now declare what it captures (`captures`, in the shared action
+  catalog).
+- **Load…** names an autosave by its latest step ("Colored by gene CD33",
+  with its **Auto** badge), not "Autosave" on every row. An autosave written
+  before this release reads "Autosave" until it is written again. Opening one
+  names it the same way ("Opening the autosave at “Colored by gene CD33”…").
+- **Stop reaches the history's moves.** An agent's undo, redo, jump, branch
+  switch or history edit that waits for work under way (an analysis running)
+  never runs once you press Stop; it used to run when that work ended. A move
+  stopped while it puts a state back (re-reading cells) puts back what was
+  shown.
+- **Stop reaches a replay's read and a share's wait.** An agent's
+  `history_replay` stopped while it read the saved state, and a
+  `history_share` or `history_anndata_save` stopped while it waited for the
+  actions running or for the session operation before it, ended only when
+  that wait did; each now ends at once (a read and a wait change nothing),
+  and the next move runs. The agent's replay now reads the saved state as
+  Replay… does, every record checked and with the step parameters only its
+  later part holds (it read the first part alone).
+- **The guided tour ends where you act.** A change, an undo or a jump made
+  while the tour plays (by you or an agent) ends the tour there; its next step
+  used to move away from what you just did, and its end jumped back over it. A
+  note or bookmark added meanwhile lets it play on.
+- **A field you made has no original name** (R9F-8): renamed, a copy or a
+  group of yours showed `S score *` with **Put name back**, and lost both
+  once the session was saved and opened again. It now shows neither, in the
+  page and after a round trip; a dataset's own field keeps both.
+- **An agent's question is answered over an open dialog.** An agent that
+  asked something (opening a link not seen in this tab, a large download)
+  while a confirmation or settings dialog was open put its question under
+  the dialog, where it could not be answered, and waited for good. While a
+  question waits, the agent's dock now stays over any dialog.
+- **One way of saying how long ago.** Comments of the annotation voting
+  ("5m ago") and Stored ("used today") now say it as every other list does
+  ("5 minutes ago", "used 1 minute ago"); a step's details say how long it
+  took as every other duration does ("took 1.3 s", "about 1 min 30 s").
+- **A folded run says what it did.** Consecutive steps that only present
+  the analysis folded into a row named by their kind ("Colors ×2" for two
+  legend switches); the row now reads as its steps do ("Hid T cells of
+  cell_type · Showed T cells of cell_type", "Moved the camera of View 1
+  ×6"), naming the first two changes and counting the rest.
+- **What you do while an action runs stands when it is stopped** (R9W-5):
+  closing an analysis window with **×** while its run ran stopped the run,
+  whose rollback then put the window back, and no "Closed" step was kept.
+  A stopped action now puts back only what it changed itself: a change of
+  your own made meanwhile (a window closed or moved, a panel docked, a
+  setting, the sidebar's width) stays, as its own step.
+- **An agent's replay is priced before it starts** (F166): `history_replay`
+  had no estimate, so a replay of a step that summed the cells' totals for
+  normalized values ran that pass without asking, though applying a branch or
+  verifying one asked. It is now priced by the time its steps took when
+  recorded, so it is heavy work when they were, and heavy work a replayed step
+  (or a step a delete applies again) finds is its replay's to ask about.
+- A notebook command naming a language other than Python or R is refused
+  before it runs (the history would have refused its step after it changed
+  the view).
+
+#### Analyses
+
+- **Expression values: normalized and log1p, one setting for the whole app.**
+  **Session › Data mapping › Expression values** (collapsed, after Genes) has
+  two switches, both off by default: **Normalize to library size** (each
+  cell's values scaled to 10,000 counts, `x · 10,000 / cell total`, scanpy's
+  `normalize_total(target_sum=1e4)`) and **Log transform (log1p)** (`ln(1 + x)`;
+  both: Seurat's `LogNormalize`). Coloring by a gene, the legend (its units:
+  `Values: log1p(norm.)`; a figure's legend titles `Ins1 · log1p(norm.)`), a
+  gene's color range and range filter, highlights by value, the cell card,
+  an agent's `cells.values`, `field.summary` and `dataset.summary` (each names
+  the values), and Marker genes, Differential expression with cells as
+  observations, Dot plot, Gene signature, Detailed and Correlation all
+  use these values (Quick reads obs fields only); obs fields never change,
+  and pseudobulk always sums raw counts. A cell's total is the obs column the file names
+  (`uns['cellucid']['totalCounts']`, `total_counts` as `prepare()` writes it),
+  else one named like a total (`n_counts`, `nCount_RNA`, `nUMI`), else every
+  gene summed once — the section's line says which and what that reads at the
+  link, and an agent is asked first (heavy work); the totals are kept and
+  shared, and cells added later are summed alone. Offered for a mapped matrix
+  of counts whose values are as stored (otherwise disabled, saying why). A
+  view colored by a gene keeps it, read again; its color range and filter
+  are dropped (they were in the old units). It is one history step, saved in
+  sessions (a session or saved state without it means as stored, also when
+  restored onto an open dataset), the action
+  `expression.transform.set {normalize, log1p}`, and every result says the
+  values it computed from (`about.values`) and goes **Stale** when the values
+  it read change. Before, means, fold changes, tests and scores were of the values as
+  stored only — on a matrix of raw counts, confounded by each cell's
+  sequencing depth — and no view could show normalized values. Held to scanpy 1.11.5's `normalize_total`, `log1p` and both, and
+  `rank_genes_groups` (Wilcoxon, t-test) and per-group means on them, to
+  10⁻⁶.
+- **Summing the cells' totals is asked for wherever it happens.** With
+  normalized values on, a change of the data mapping onto another counts
+  matrix (or modality), genes read for more cells, the cells opened again,
+  and an undo, redo, jump or saved state restoring normalized values each
+  sum that matrix's totals when no obs column holds them: the change reads
+  them first, priced at the link, before anything shown changes. A person
+  sees the price before acting (Data mapping's status line: "Apply sums all
+  27,998 genes of layers['counts'] once for each cell's total (normalized
+  values): ~74 MB, ~12 s."; Genes read for counts them in its price); an
+  agent's action is asked as heavy work (`mapping.set` and `cells.open`
+  estimate them; work an action finds only while it runs is asked then,
+  through the dispatcher's new `ctx.heavy`). Before, a mapping change, a
+  growth or a restore summed the whole matrix unasked, at whatever read came
+  first. Each matrix keeps its totals for the open dataset, so mapping back
+  onto it reads nothing again; rows read for added cells by every loaded gene
+  at once sum the matrix in those cells once (they were summed once per gene);
+  a mapping restored with its Expression values shows its matrix in them at
+  once, never summing it for values the restore does not end on. The source
+  line's time no longer reads "~~12 s".
+- **Gene values are named with their units everywhere.** With Expression
+  values on, every label of a gene's values carries its units
+  (`Ins1 · log1p(norm.)`, `· norm.`, `· log1p`): Detailed's axes, heading,
+  summary statistics and CSV column; Correlation's axes, hover and CSV (new
+  `x_label`, `y_label` columns); the dot plot's color bar and CSV `mean`
+  column; the DE CSV's `mean_a`/`mean_b`; the marker heatmap's color bar; a
+  gene's range filter; a range highlight or annotation group drawn on a gene;
+  the legend, figure legend and cell card. An analysis names the values its
+  run read, so a stale result keeps its own; obs fields and genes made in the
+  app stay bare. One helper (`geneValueLabel`) builds every label, and a
+  contract test finds any built without it.
+- **A result records the values it read, not the setting.** Each analysis
+  declares the expression values its genes are read in (the matrix's shown
+  transform; raw counts for pseudobulk and UCell, whatever the setting; none
+  for Composition), and its provenance (`computed_on.values`, now `null` for
+  an analysis that reads no gene values), values line and staleness follow
+  it. A pseudobulk result said "normalized · log1p" and went stale when the
+  person switched normalization on, though it sums raw counts (an agent re-ran
+  it to the same numbers).
+- **A saved state restores its Expression values.** Loading a session file or
+  a saved state (Load…, an agent's `history.saved.open`) onto the dataset
+  open puts back the values it holds, and a state saved without them (written
+  before them, or by hand) means the values as stored: they kept whatever was
+  shown before, so one file showed other values depending on what was open.
+  A state domain says what its absence means (`absent()`); the others keep
+  what is shown.
+- An analysis's **Expression matrix** takes the matrix as the dataset names
+  it: `analysis_differential_set {matrix: "X"}` on a dataset mapped to `X` is
+  the mapped choice (it was refused, "Expression matrix has no choice X", and
+  an agent retried).
+- **Gene signature → Group by.** A signature is scored per category of a
+  field in one run (with **Groups to score** and **Cells**), compared across
+  the categories as across pages; scoring a program per cell type needed a
+  highlight page per type (8 pages in one agent turn on He). Its CSV names
+  the rows' category column `group` (`group,set,cell_index,score`), as its
+  result table does, not `page`.
+- **Pseudobulk with edgeR's TMM and limma's moderation.** Differential
+  expression with Replicates sums every gene of the matrix per sample from the
+  raw stored values (whatever the expression transform), and fits the samples
+  as the limma-trend pipeline does: for a matrix of counts, TMM factors as
+  `edgeR::calcNormFactors(method = "TMM")` on the samples' library sizes (their
+  cells' stored `total_counts` summed, else their summed counts over every
+  gene) and log-CPM as `cpm(log = TRUE, prior.count = 2)`; then `lmFit`
+  (`~ group`, or `~ donor + group` paired) and `eBayes(trend = TRUE)`, the
+  prior df and variance estimated from every expressed gene; the score is the
+  moderated t, `log2FC` the group coefficient. A matrix that is not counts is
+  fit on each sample's mean. Genes no compared cell expresses are left out of
+  the fit and reported untested. The result names the library sizes' source,
+  the TMM factors, the design and the prior (`about.values`,
+  `about.model`). Every number is held to R edgeR 4.10.7 / limma 3.68.5 at
+  10⁻⁶. Before, the samples were compared by Welch's t without TMM or
+  variance moderation: with a few samples a side, a gene whose values
+  happened to agree had a tiny variance and was called significant.
+- **Paired samples.** Differential expression with Replicates (**Pair samples
+  across groups**) and Composition (**Pair samples across conditions**) take
+  the donors that gave cells to both groups paired: Differential expression
+  blocks by donor in the linear model (`~ donor + group`, above); Composition
+  takes Student's t of each donor's difference (`scipy.stats.ttest_rel`), and
+  for its ranks the Wilcoxon signed-rank test (R `wilcox.test(paired =
+  TRUE)`). Donors on one side only are left out, and a cell type whose cells
+  are all in such donors is not tested (one Langerhans cell from a spleen-only
+  donor read as "significant" from seven pairs without it). Each cell type is
+  tested over the pairs holding any of its cells, and not below 3 of them
+  (`too few pairs`, a chip, out of the multiple-testing correction): in a pair
+  without the type on either side its two values are the samples' sizes, so
+  myelocytes with cells in one donor's spleen read as adjusted p 0.03. A
+  paired run needs 3 donors in both;
+  every result says how many donors are in both, paired or not, so an agent
+  learns when a paired test is possible (Suo: 6 donors gave liver and bone
+  marrow).
+- Composition's results CSV is the table an agent reads whole, from one
+  builder: each type's cells and pooled proportion and its proportion in every
+  sample beside the tests, with `n_samples_<condition>` (the samples each mean
+  is over) and, paired, `n_pairs` (the pairs holding each type's cells, which
+  its test took). Before, a paired
+  run's file gave `n_samples_Liver 14` beside a paired t over 7 donors and left
+  out the per-sample proportions; the p columns are `p_value` and `p_adjusted`
+  as in the result.
+- The dot plot names every gene and group without one on another in every
+  browser: a name's room is the box the browser draws it in (in Firefox the
+  names overlapped).
+- The volcano plot labels, and its CSV lists, genes in the order its table
+  ranks them when p-values tie (on hundreds of thousands of cells many
+  underflow to 0): the stronger test statistic first. Its y axis reads round
+  values beside the +∞ band.
+- A dot plot names every gene and group, with no name drawn over another, at
+  any count: the panel's preview grows to the rows' needs and the expanded
+  view scrolls (the generic tick thinner overrode the dot plot's own naming).
+- The expanded view of every analysis lists its display options beside the
+  plot's (Dot plot, Composition and Gene signature had none there), and they
+  stay through a change of the plot's options.
+- An analysis's **Expand** opens once its result is drawn; a click as the
+  preview appeared failed with "Expanded analysis view requires a completed
+  analysis result".
+- Detailed, Correlation and Gene signature draw each page in its swatch's
+  color, whatever order the pages were picked in (they followed the pick
+  order).
+- Quick insights summarizes integer fields kept exactly (such as `n_genes`);
+  it failed on them.
+- A dot plot draws a gene that is in two gene sets in each set's column, as
+  scanpy does: the second column was folded into the first (the plot showed
+  23 columns for 24 genes and the second set's bracket and dots sat on the
+  wrong genes).
+
+#### Vector field
+
+- **A field chosen while the overlay turned on no longer leaves it "loading"
+  for good.** A session or an undo that put back an overlay showing another
+  field than the page's, or an agent that switched the overlay on and then
+  chose a field, left `Show overlay` and `Vector field` dimmed ("the vector
+  field is loading"), no particle drawn and the switch refused. The newest
+  choice now takes the load over and is the one shown; a restore puts the
+  field back before the switch that shows it, so the switch loads it once.
+- The only field bound to the embedding a view shows is selected; with
+  several, Cellucid still asks (the dataset's default aside) instead of
+  offering a one-item list to pick from.
+- The block names embeddings as **View N shows** does ("Vector fields are
+  bound to UMAP · 3D, UMAP · 2D. Show one of them in this view to enable."),
+  not by their `obsm` keys.
+- A field with no motion at all says so when it loads ("No particle moves in
+  velocity on UMAP · 2D: every vector is zero."); it turned on silently and
+  drew nothing.
+- A field that cannot be read says so once; the loading notice failed with the
+  same words beside the error.
+- Cells left out for an infinite value read "(NaN or infinite in the file)",
+  for vectors and positions alike; it said NaN.
+- Particle size reads every half step apart (11.5, 12); a rejected Trail
+  persistence value names it as the control does (it said "Trail fade").
+- **A figure of a view with the vector field shown draws the field** (PNG,
+  SVG, the export preview and an agent's export picture): a still picture of
+  the flow, arrows on a grid as scVelo's `velocity_embedding_grid` (the
+  Gaussian-weighted mean of nearby cells' vectors at 40 nodes across the
+  plot), from the cells, vectors, camera and filters the panel shows, colored
+  by speed with the overlay's color scheme, with a key naming the field and
+  the speed range in the embedding's units. The export no longer refuses
+  with "Velocity overlay not exported"; the figure's description and JSON
+  record name the field each panel draws.
+- The vector field's HDR composite keeps each color's hue: it tone-mapped
+  channel by channel, so a bright purple flow (viridis's slow end) passed
+  through magenta, and a teal one through cyan, on its way to white. The
+  luminance is mapped now, the color scaled with it and desaturated toward
+  white along its own hue only past the display's range; the contrast curve
+  (which assumes display values) runs after the tone mapping, and the bloom's
+  screen blend no longer flips sign on values past 1. Every pass reading the
+  trail or the bloom also clamps it to a finite ceiling (a half-float sum can
+  overflow at the dials' far ends), and both bloom blurs take their weights
+  from one normalized Gaussian: the bloom's hand-typed kernel summed to
+  1.0008, brightening the bloom 0.08 % each pass, peaked off its center and
+  read two texels at weight zero. At every dial's maximum the flow is mostly
+  white, ringed by its own colors at full brightness.
+- `vector-field.summary` with no field named reads the one the overlay shows,
+  else the dataset's default, else the only one bound to the view's
+  embedding; with several and none of those it asks for one (it took the
+  first by name). A field the overlay cannot draw is refused as unavailable.
+
+#### Figure export
+
+- **A figure is sized as it is printed.** You set its **width** — a journal
+  column (**Single column · 89 mm**, **1.5 column · 120 mm**, **Double column
+  · 183 mm**, the default) or millimetres of your own — and the figure fills
+  it exactly, at the height its plots make it, with its legend, axes and title
+  inside the width. Text is set in **points** (Auto text: 7 pt, ticks and
+  centroid labels 6 pt, the title 8 pt, as journals ask) and keeps its printed
+  size at any width and DPI. The line under the width says the printed size
+  and a PNG's pixels (`183 × 130 mm · 2163 × 1541 px` (its pointer says the DPI)); an
+  SVG states its size in millimetres, so editors open it at that size; the
+  export picture (`view.picture` with source "export") says it too, and when
+  a legend makes the figure wider than asked. Before, the size was a box in
+  CSS pixels the figure was fitted in, and text in pixels: an agent set 1800
+  for "180 mm" and got a figure 476 mm wide at 300 dpi, then did
+  pixel-to-point arithmetic wrong twice (live-7 L25-10).
+  `figure_export_set` takes `size_preset` and `width` in millimetres and
+  `font_sizes` in points (version 3; a version-2 step's pixels are converted,
+  as are the settings of a session saved by 0.9.7, except a size that followed
+  the window — **Screen**, **Screen (half)**, 0.9.7's default — which was
+  nobody's choice and opens at the default, double column). **Fit plot** is gone (the
+  figure always takes the frame's shape); **Lock aspect** keeps the frame's
+  own shape. A legend beside the plot is at least 10 ems of its text wide (it
+  was a fixed 240 px, 63 mm, which left a single column's plot 15 mm wide),
+  and a title or legend font is drawn at the size asked (it was floored at
+  14 px and rounded to whole pixels). The preview's **Fit the cells** line
+  now says when a plot is far from the shape of its cells
+  (`Plot narrower than the cells:`).
+- **The vector field's key is part of the legend.** It stood in the plot's
+  corner whatever the plot's size: in a single-column figure its line ran off
+  the figure's left edge, and wrapped it covered the cells. With **Legend** on
+  it is now two rows of the legend (an arrow and what the arrows are, the
+  colors' ramp and their speed range), laid out with it in the PNG, the SVG,
+  the preview and the export picture; panels of one key share it, panels
+  whose keys differ each carry theirs. Only a figure without a legend draws it
+  in the plot, wrapped to a narrow plot's width. A single view's legend asked
+  beside the plot that would widen the figure past its width (a single column
+  with the key or long names beside a short plot: 101 mm for 89) stands below
+  the plot instead, as a grid's legends do, and the export picture says so.
+- **Fit the cells.** A figure keeps the screen's framing, so a narrow pane
+  (the chat open, a grid of views) gave a narrow plot of a wide embedding,
+  with empty bands above and below; an agent once hid the person's sidebar to
+  widen the panes. **Fit the cells** (beside **Frame export**) frames every
+  cell the figure draws with a small margin, so each plot takes the cells'
+  shape; with **Export all views** one frame holds every panel's cells. An
+  agent asks for it with `figure_export_set(frame = "cells")`
+  (`figure-export.set` version 2). The preview says in one line when a plot
+  is far (1.5 times or more) from its share of the size asked for, and offers
+  the button.
+- **An SVG is Full vector until you choose another strategy.** The first
+  Export of an SVG was always refused ("Choose an SVG point strategy") and
+  people and agents then chose Full vector every time; the strategy select
+  now opens on it. `svg_strategy` is never null: a recorded step that left it
+  unchosen replays as Full vector.
+- **Each panel of an all-views figure is titled by its view's name**
+  (`A. Early`, `B. Mid`, `C. Late`; a view without a name keeps its field and
+  filters), and a named view exported alone is titled `<dataset> • <name>`
+  until you write a title. The provenance names it too: each `views` record
+  of the embedded JSON carries `name` (null when the view has none), the
+  description's clause and the file name use it.
+- **A figure's legend lists what the figure shows.** A category that a filter
+  on another field leaves without cells is no longer listed as "(hidden)": He
+  colored by LVL2 with only the epithelial cells kept listed 30 of its 41
+  types as hidden when you had hidden none. Categories you hid keep their
+  marked entry. A single view's automatic title names the filters on other
+  fields as the view's label does ("Developing human lung (He) • LVL2 • LVL0:
+  showing only Epithelial"); a grid panel's label already did.
+- **Grid panel legends no longer shrink the plots to strips.** Each panel
+  legend's side was decided against the plot the grid has without legends;
+  kept beside a plot the legends then shrank, it was planned again in more
+  columns, and two wide views in an 800 × 600 figure came out as 182 × 114
+  strips beside 862 px legends, 1550 px wide. When the legends beside their
+  plots do not fit the size, they stand below them (363 × 227 plots, within
+  800 × 600).
+- An exported view is framed exactly as on screen: the plot takes the view's
+  shape inside the size you ask for, the cells reach its edges and the axes end
+  where the drawn view ends (cells were missing in bands inside the axes). Axis
+  ticks never collide on a narrow plot, and the orientation badge keeps its
+  on-screen share of the plot.
+- PNG figures record their DPI (`pHYs`): a 300 DPI export opens at its size
+  in Word, Illustrator or Inkscape instead of at 72 dpi.
+- A Hybrid SVG draws its points at 300 dpi at the figure's size (it was a
+  fixed 2×, about 192 dpi).
+- A figure's legend names every category whole: it is as large as its
+  entries need and the figure grows around it (Suo's 69 `cell_type` names
+  were cut with "…" at 720 × 500). In an **Export all views** grid, a panel
+  legend that cannot name its entries beside its plot moves below it, rows
+  grow to hold it, and the shared legend is sized to its entries (a grid
+  panel's 69 entries were drawn as swatches and "…"). A legend below a
+  single plot no longer covers the x axis. A PNG larger than the browser can
+  draw is refused before rendering, with one sentence naming its size and
+  the remedy, instead of a legend capped at the plot's size.
+- A figure's default title names the categories only when some are hidden,
+  as the Filters list says it ("cell_type: hiding B1 cells"); with every
+  category shown it is the dataset and the field. A grid figure whose panels
+  show different fields is titled by the dataset alone, and each panel names
+  its own field.
+- A view's label and a figure's filename name the colored field once
+  ("cell_type: hiding B1 cells", not "cell_type • cell_type: hiding B1
+  cells").
+- The preview's status line is one short count (how the preview sample was
+  drawn is in its title); the background choice reads "White".
+- **An Export all views figure is a composed figure.** Every panel's plot has
+  one height and its view's shape, the plots of a row and of a column line
+  up, and the figure is exactly its panels, labels and legends at the largest
+  size that fits the width × height asked for: one side reaches it, nothing
+  pads the other. A figure of two tall views was the full 1400 × 800 with the
+  panels as narrow strips in its corner, of different heights when their
+  legends differed. Legends take room from the plots down to half the size
+  they have without legends; past that the figure grows. A panel legend that
+  would be wider than its plot stands below it. A legend's frame hugs its
+  entries (it was stretched to the plot's height).
+- **Axes only where they are rulers**: on a 1-D or 2-D view seen flat
+  (planar). A 3-D view, or a flat view tilted by orbiting, has no axes and no
+  axis margins: its ticks were camera units on one depth plane, read as UMAP
+  coordinates. Its directions are in the **3D orientation** badge.
+- Full Vector and Optimized Vector SVGs draw each 3-D cell at the size the
+  screen draws it, near cells larger than far ones (size attenuation): they
+  were a third to a quarter of the screen's spheres, all the same size.
+  Centroid discs (every format) and the preview follow the same rule.
+- A legend's entries stand at the same place in SVG and PNG, each label
+  centered on its swatch; in a larger legend font the first entry rose into
+  the legend's title.
+- **A figure's legend lists the highlighted cells it draws.** The cells of
+  the highlight page you are on are drawn over the coloring in the
+  highlight's cyan, and nothing in the figure said so: the germ cells'
+  highlight over NANOS3's colormap was read as "the cells with high NANOS3".
+  The legend now carries a cyan swatch and `Highlighted: <page> (<N> cells)`
+  wherever highlighted cells are drawn (each panel's own legend, or the
+  shared one once), in PNG and SVG alike, and the layout makes room for it;
+  a view colored by no field gets a legend of the highlight alone. Legend
+  off, or no highlighted cell drawn, no entry.
+- **The axis labels never run into the tick labels.** The y-axis label stood
+  a fixed distance from the axis, so at 17 px ticks and a 20 px label
+  "UMAP 2" touched "-0.5", and larger text ran over the ticks; the axis
+  margins were 62 px whatever the text size, so large text was cut at the
+  figure's edge. The axes are now laid out from their measured text: the
+  y label past the widest tick label, the margins as large as the tick and
+  axis-label sizes need (1 to 500 px), a corner tick label or an axis label
+  longer than its side kept clear of the title, the legend and the other
+  axis. The PNG put the y tick labels 2 px from their ticks and the SVG 8 px:
+  both formats now draw one layout of the axes, and the selection badge's
+  corners (rounded in SVG only) and the legend swatches' outline match too.
+
+#### Reduced motion
+
+- With reduced motion asked for, nothing transitions. Every element was given
+  a 0.01 ms transition of every property, so each change held its old value
+  for a frame: an open menu drew a frame at the window's corner before its
+  place under its button, and the history tree a frame at its old height.
+- With reduced motion asked for, nothing in the viewer moves by itself. The
+  vector field overlay draws a still picture of the flow: every particle
+  starts from a seeded cell and is traced 48 fixed steps at once, each faded
+  as the moving trail would have left it, so each streak shows its cell's
+  direction and speed; it is traced again only when the camera, the visible
+  cells, the field or a setting changes, the same picture every time, and a
+  still scene then asks for no frames (the particles animated without end).
+  Highlighted cells keep a steady ring instead of pulsing, volumetric smoke
+  stops drifting at any `Animation speed`, and the camera moves only while it
+  is moved: a drag let go fast no longer glides on, a zoom arrives at once,
+  and free-fly stops with its keys. Changing the system setting
+  while the app is open switches at once, both ways. Every mover drawn by
+  script reads the one preference (`utils/reduced-motion.js`; the camera
+  path, the tour, the viewer and the backdrop looks each read it on their
+  own).
+- An agent is told when reduced motion is on. A camera path went to its last
+  keyframe at once, but `camera_path_play` answered `{seconds: 18.3, ended:
+  "end"}` as for a path that played, and an agent told the person "the film
+  ran all 18.3 s". It now answers `ended: "reduced-motion"` with the seconds
+  the camera moved (0; the seconds it played when the setting is turned on
+  mid-path), and its step reads "Went to the end of the camera path at once
+  (reduced motion)"; `views_state` says `reduced_motion` with what it changes.
+- The documentation's velocity images are captured as that still picture and
+  so repeat byte for byte (they were pinned to a number of frames and never
+  did), and "Canceled after 1.5 s" in the canceled analysis image is the
+  screenshot tool's held page clock, not the capture host's speed. The
+  tool's own uniform pin for the highlight pulse is gone: the app draws the
+  steady ring itself.
+
+#### Camera path
+
+- **Captions: a camera path shows its keyframes' names as titles** (owner,
+  F110). While a path plays, the label of the keyframe the film is at
+  appears as a compact caption low over the plot, from halfway into the move
+  to that keyframe until halfway out of it, fading in and out (shown and
+  hidden at once under reduced motion). Only names someone gave are captions
+  (not the automatic "KF 3", not the return to start). **Captions** is a new
+  playback setting, on by default and saved with the path in sessions
+  (`camera-path.playback.set` `captions`; `camera-path.get` reads it); a
+  picture of the screen draws the caption, a figure says which was up. The
+  agent knows a label becomes a caption, the director's use. A path saved
+  before captions existed plays with them.
+- **The playback bar shows where the film stopped, and Play goes on from
+  there.** After a film played to its end, an agent's **Stop the camera
+  path** or **Stop** on the agent's turn, the camera stayed where the film
+  stopped but the bar read 0:00. The bar now shows that place, and **Play**
+  goes on from it (from the end it starts again), as it already did after a
+  pause or a drag of the timeline. The bar's own **Stop** still returns to
+  the first keyframe; an agent's **Play the camera path** still starts there.
+- **Stop on an agent's turn stops a loop it started.** A path the agent set
+  looping answered at once and played on after **Stop** on its turn. Work an
+  action leaves going now belongs to the turn that started it (the action
+  layer's `ongoing`), so the turn's Stop stops the loop where it is; a loop
+  the turn left playing when it ended plays on until you pause or stop it.
+- **A parameter refused for its form says the form.** A keyframe label with a
+  space at its end, a view not named "View N" or a malformed color was
+  refused "… does not have the expected form"; it now says "must be a name
+  with no space at its start or end", "must be a view name such as "View 2"",
+  "must be a color as #rrggbb", or the form by an example ("must be like
+  "s3"") — for every parameter of every action.
+- **Stopping an agent leaves its film where it stopped.** **Stop** on an
+  agent's turn while it played a camera path put the camera back where the
+  path had started (a stopped change is rolled back). The camera now stays
+  where the film stopped, as a pause and **Stop the camera path** leave it,
+  and the play's one step holds that camera, so **Undo** or **Undo turn**
+  still puts it back. An action declares this exception in its definition
+  (`keepsWhenStopped`); every other change stopped is still rolled back.
+- **A cell near the camera is drawn up to 160 pixels across** (it was 128),
+  or the GPU's own largest point where that is smaller. Near cells are not
+  faded or shrunk: however near the camera comes (a camera path's close-up,
+  **Frame cells with the camera**), every cell is drawn whole and opaque and
+  can be picked, on screen and in every figure format. Every shader quality,
+  the highlight rings, the category markers, picking and the figure export
+  size a cell by the one rule (`rendering/point-sprite.js`), where four shader
+  copies of the clamp and the highlight ring's own could drift apart.
+- **Stop the camera path** stops a path that **Play the camera path** is
+  still playing, at once: it waited behind the play (both changed the
+  camera, so the stop queued until the path had ended) and was then refused
+  "The camera path is not playing". A stop is now a control of work under way
+  (a new effect, `control`, also of **Stop an analysis**): it records no
+  step, the play answers `ended: "stopped"` with one step holding the camera
+  where the path stopped, and a stop with nothing playing answers
+  `{"stopped": false}` instead of a refusal.
+- The camera path's bar says the path's length as soon as it is ready (it
+  read 0:00 / 0:00 until played).
+- **A path plays as it is timed.** Each keyframe is reached at its own time:
+  easing is now how the path starts and ends (from rest, to rest), never a
+  warp of the whole timeline. An eased path with 5 s transitions played its
+  middle ones in 2.6 s and its first in twice its time, and the bar's marks
+  were not where the keyframes were reached.
+- The Catmull-Rom spline is timed by the keyframes and clamped where a
+  coordinate turns: the speed no longer jolts at a keyframe between a short
+  and a long transition, the camera never comes closer to the cells than the
+  keyframes it moves between nor tilts past one over the top (a flip), and a
+  position saved twice is a hold (the camera eases in, rests, eases out); it
+  drifted away and back.
+- A looping path that returns to its start at a constant pace (Linear) loops
+  seamlessly: its last transition flows into its first (the speed jumped at
+  the seam).
+- **A keyframe holds.** Under each keyframe of the Camera path list a hold
+  field sets the seconds the camera rests there before moving on (empty for
+  none; the last keyframe's holds the end); the playback bar draws each rest
+  after its keyframe's mark, and every transition keeps its time. Actions:
+  `camera-path.keyframe.add` takes `hold` (version 2), **Set a camera path
+  hold** (`camera-path.hold.set`) sets one keyframe's or every keyframe's,
+  and **Read the camera path** reports each `hold`. A hold took a second
+  keyframe of the same camera and a timing call (an agent's tour of 7 holds
+  made 25 calls). Sessions keep holds; a keyframe without one is saved as
+  before, so format 4 sessions of 0.9.7 load unchanged.
+
+#### Agents
+
+- **Every call of a reply shows how it ended while the turn runs.** The
+  results of a reply's calls are kept in one message as each comes; the chat
+  redrew only when a message was added, so a result after the first (a
+  refused call beside a step) stayed "running" in the row and in the summary
+  ("5 actions so far · 1 step", without "· 1 refused") until something else
+  changed.
+- **The agent is told what you did between its turns, also after a reload
+  and when another history is shown.** The chat told the model only of steps
+  on the same tracker, forgot it on a reload, and said nothing when you
+  loaded a session file beside yours (an agent then took "same questions
+  please" for a first look at a new dataset). Each message now carries a
+  compact account from the history: your steps and its undone ones by label,
+  or which history is shown now, where it came from, and its latest steps;
+  what the agent last saw is kept with the conversation (a reload, a saved
+  state or a shared session keeps it). Agents connected through Claude,
+  ChatGPT or `cellucid mcp` are told the same with their next result.
+- **Splitting one label is one call.** `field.create-from-pages` (version 2)
+  takes `rest`, a categorical column whose category the cells on no page
+  keep, and **Create categorical** offers **Keep their `<column>` category**
+  for the cells on no page: an agent had made 45 temporary pages, a field of
+  48 pages and deleted 56 pages (101 calls) to split one cell type.
+  `highlight.page.delete` (version 2) deletes several pages in one step
+  (`pages`).
+- **The agent tool list no longer changes with your settings** (bug hunt
+  live-8, L26-9): a connector's and a local `cellucid mcp` agent's tool list
+  said per tool what your permissions made of it ("asks", "runs without
+  asking", "refused") and what History settings leave out, so every change
+  of a setting changed the list: the page sent `agent_tools_changed`, and
+  `cellucid mcp` (Python and R) sent MCP `notifications/tools/list_changed`,
+  also whenever a page took the viewer again. For Claude 5.5 models that
+  rewrote the client's cached prompt (about 55k tokens) and dropped the
+  conversation's earlier reasoning: measured on Opus 5.5, the connector's
+  next turn after a permission change cost $0.41 against about $0.10
+  cached, about 4×. The list is now the same whatever the settings, for
+  every way in; the agent is told your settings ("[Cellucid: the person's
+  settings for you now. …]") after its connection's first tool result and
+  after any result once they changed, and the local instructions say so.
+  The viewer channel's `agent_tools_changed` event is gone (viewer protocol
+  fixture and endpoint events in all three repositories), and both packages'
+  `cellucid mcp` advertise `tools.listChanged: false` and never send a list
+  change.
+- **Removing a connection stops its agent's call** (bug hunt live-8, L26-1):
+  **Manage… › Remove** (and **Forget this browser**) while Claude or ChatGPT
+  waited on a call left the call running in the tab: the removed agent's
+  change was still recorded as its step and what the call read was still
+  sent to it, up to the relay's 225 s wait. The relay now ends a
+  connection's calls in flight with the connection (removed, forgotten,
+  closed after a refresh token was used twice, expired): the tab is told to
+  stop each, and the agent reads at once that the connection was removed
+  during the call.
+- **A tab reloaded during an agent's turn no longer ends the turn** (bug hunt
+  live-8, L26-5): a call in flight when the tab reloads is answered at once
+  (whether it was done is not known; read the history), but the agent's next
+  call was told "No Cellucid tab is connected" 4 ms later, and Claude ended
+  its turn asking the person to reopen Cellucid while the page was 2 s from
+  being back. The relay now waits for a reloaded tab (up to 20 s after its
+  last tab closed) and runs the call there.
+- **An agent's change names its turn** (bug hunt live-8, L26-3): an agent
+  told to end its turn with a note on the turn could not name the turn
+  without reading the history first (Claude through the connector guessed
+  `{"turn": "current"}`, was refused, read the summary, tried again). Each
+  change an agent makes now answers with its step's turn (`step.turn`), the
+  id a note on the turn or Undo turn takes.
+- **A ratio of log-scale means is not an "X-fold" change** (F159): two live
+  passes saw an agent call a ratio of means of log1p values "16-fold". The
+  agent instructions now say that a difference of log-scale means is a log
+  fold change and a ratio of them is none, and to compute a fold change on
+  the original scale before saying "X-fold". A differential expression or
+  marker result whose fold change is "of the means as stored" says that, on
+  log-scale values, the ratio is no fold change of expression.
+- **Claude's notes between its calls show in the chat** (bug hunt
+  agent-loop lane): Claude Opus 5.5 and Sonnet 5.5 (and the Fable models)
+  write their short notes between tool calls ("the clusters are read;
+  coloring by cell_type next") as `thinking` blocks that come back empty
+  unless asked for, so a long turn showed nothing but "Thinking…". The chat
+  now asks those models for them (`thinking.display: "updates"`, Anthropic's
+  beta `thinking-display-updates-2026-08-18`) and shows each note as a quiet
+  line before the call it introduces, folded with that call's row when the
+  turn ends and kept in the saved and exported chat. The notes are written
+  and billed the same whether shown or not, so showing them costs nothing
+  more (measured 2026-11-11 on a live 10-call annotation turn, the setting
+  off then on: Sonnet 5.5 728k/1,333 and 725k/1,187 prompt/output tokens,
+  Opus 5.5 803k/1,555 and 802k/1,555; the request is accepted from the
+  browser, beta header included). Other
+  models are asked nothing (a setting that comes with adaptive thinking would
+  turn thinking on for a model that runs without it); a request refused for
+  the setting is sent again without it.
+- **An agent's question about heavy work no longer says "about 88 h" for a
+  one-second analysis** (bug hunt live-7 L25-1): after the small live-agents
+  fixture (6 genes, 120 cells), Marker genes on Kanemaru (131,636 cells,
+  3,691 genes) was asked about as "about 88 h 36 min on this device" and
+  Differential expression would have said about 102 h; both took about a
+  second. What a run measured was scaled per gene and, from a single run, all
+  per cell, so the fixed cost of a tiny run grew 600 × 1,100-fold. A run's
+  measured cost now counts only for runs over the same genes, and one run
+  measured on fewer cells than are open gives no estimate (two sizes give
+  the line). The measurements kept in this browser start afresh.
+- **A field made, renamed or deleted is at once a choice of every
+  analysis** (bug hunt live-7 L25-6): the analysis forms never heard of
+  field changes, so a field an agent had just made was "no choice" of
+  Differential expression (and missing from a person's Field select) until
+  another change redrew the form. Every analysis, in the panel and in each
+  window, now reads the fields and their categories again on any field
+  change.
+- **Verify reproduces a branch with marker genes** (bug hunt live-7 L25-16):
+  a marker genes result records when it was computed, how long it took and
+  how this device's reads were tuned (`computedAt`, `computeDuration`,
+  `tuning`), so every replay of it differed and Verify said "not reproduced".
+  These are now run records, left out of the comparison as durations and the
+  cache flag already were.
+- **A parameter of the wrong kind is shown as it was sent** (bug hunt live-7
+  L25-15): an object where text was asked for read "not [object Object];
+  field is optional: leave it out", so a model that sent a field as
+  `{source, key}` where an analysis option takes its name was told to drop
+  it. The refusal now shows the object and, for a field, the name to give.
+- **A conversation shared by the agent's own call no longer says that call
+  did not finish** (bug hunt live-7 L25-14): a session file written by the
+  agent's `history_share` (or a state saved by `history_save`) holds the
+  conversation as it stood while that call ran, and answered the call "still
+  running … what it did is not in this save"; the colleague's agent read it
+  as "the session-file export didn't finish" of the file it was reading. The
+  saving call is now answered as the save the conversation is kept in.
+- **Summarize a field per category over a subset, the view left as it is**
+  (bug hunt live-7 L25-13): `field.summary` (Python `field_summary()`, R
+  `cellucid_field_summary()`) takes `within`: the cells of some categories of
+  another categorical field, or in a range of a continuous field or gene.
+  Agents hid the person's cells with filters to read donors within one cell
+  type or cell types per age range, and put the view back after.
+- **Paired Composition: the mean proportions and log2 ratio are over the
+  pairs** (bug hunt live-7 L25-12): they were over every sample, so on Suo
+  (fetal liver vs bone marrow, 6 donors with both) one donor with 2 liver
+  cells turned LYVE1+ macrophages' ratio toward the liver while the paired
+  test found more in the marrow in all six. They are now over the samples in
+  both conditions, as the test reads them; each sample's own column still
+  shows the rest.
+- **A list of groups keeps one form** (L25-2): groups an agent named in its
+  own order were rewritten into the field's order by the form's next
+  refresh, which the history recorded as "Changed outside the history".
+  Every list of groups (Marker genes, Differential expression, Gene
+  signature, Dot plot, Composition) is kept in the picker's order.
+- **Read the history's summary gives the notes in full** (L25-9): the
+  tracker's, each branch's, group's and turn's notes, not their counts
+  (`history_summary` / Python `history_summary()` / R
+  `cellucid_history_summary()`; a turn's `summary` is now the first of its
+  `notes`). A colleague's agent opening a shared session could not read the
+  branch notes its sender had left.
+- **Exclude genes says its values** (L25-5): gene families (mito, ribo,
+  hemo); a gene by name goes in Exclude pattern, a regular expression.
+- **The chat's agent says what it is about to do, and keeps you posted**
+  (bug hunt F169): the chat's instructions now carry Anthropic's suggested
+  line for a person watching: a line before the work starts, brief updates
+  while it runs, a recap that stands on its own at the end. Measured on the
+  four showcase tasks with Claude Opus 5.5 (two passes each way): every turn
+  opened with a line (6 of 8 before), the longest stretch of calls with
+  nothing to read on the annotation task fell from 4–6 calls to 2, and the
+  cost did not change ($0.99 against $1.02 for the four tasks). Connector
+  and notebook connections keep their instructions (their clients show
+  their own progress).
+- **An agent can name every embedding** (bug hunt agent-loop lane, L21-6):
+  **Read the dataset summary** (`dataset.summary`, Python
+  `dataset_summary`, R `cellucid_dataset_summary()`) lists every embedding the
+  data mapping offers, on or off, with the obsm `key`, the `columns`, the
+  array's `width` and whether it is `enabled` (and usable), the names
+  **Show an embedding** and **Change the data mapping** take. Asked for a 1D
+  embedding, an agent saw only "UMAP, 2" and guessed `X_umap`.
+- **A refused embedding of the data mapping says what is missing** (L21-7):
+  "This mapping enables obsm['X_gone'] columns [0, 1], which this dataset does
+  not have."; it said "X_gone is enabled, but this dataset does not have."
+- **Add steps to a group** (`history.group.extend`) to a step the group
+  holds already says so (L21-8): a turn's later steps join its group by
+  themselves, and extending the group to one was refused "Steps 2 to 4 are
+  not consecutive steps of one branch", which they were.
+- **Pause recording** no longer tells an agent to ask the person itself
+  (L21-3): Cellucid asks, as the person's Permissions say; a chat model asked
+  in its own words and never called it. The action reference's examples no
+  longer merge a category into itself or rename to the same name (L21-5:
+  `into`, the new `name` and a page's new name have examples of their own).
+- **Where cells are heading, as numbers** (bug hunt live pass 5):
+  **Summarize where cells are heading** (`vector-field.summary`, new; Python
+  `vector_field_summary`, R `cellucid_vector_field_summary()`) reads a vector
+  field (RNA velocity) per category of a field in the embedding a view
+  shows: the speed against the average cell, how aligned the arrows are,
+  their mean direction (in words on a 2-D view), and the categories the
+  arrows lead into (each cell's arrow shared among its 30 nearest cells by
+  how directly it points at them, as scVelo's velocity graph, here in the
+  embedding). Asked "where are the cells heading, evidence from the data",
+  an agent had answered "the tools don't give me the velocity numbers".
+- **An agent sees the modalities of a MuData.** **Read the dataset
+  summary** (`dataset.summary`) names the modality the genes are read from
+  and every modality as Data mapping › Modality lists them ("prot · 5
+  features · 36 of 44 cells"); opening a CITE-seq `.h5mu`, an agent had said
+  it had "no tool that lists the modalities" and missed the proteins.
+- **An agent continuing a shared conversation knows whose it was** (bug hunt
+  live pass 6). A conversation received with a session file or a saved state
+  is sent to the model with each received message marked as another
+  person's, answered by their agent in their browser (and so summarized).
+  Asked "what did my colleague find?", an agent had answered "all 37 steps
+  were taken by me at your request" and told the colleague it was their own
+  session. A received turn's **Sent** says nothing of it left this browser
+  and names what the sender's browser sent, where it had said "your message
+  … left this browser".
+- **An agent sees the figure it is about to export** (bug hunt live pass 6):
+  **Take a picture of a view** (`view.picture`) takes `source: "export"`, the
+  figure exactly as **Export** would download it now with the Figure export
+  settings (size, frame, background, fonts, title, panel titles, legends,
+  every view while Export all views is on), scaled into the size asked for;
+  nothing is written. Preparing a paper's Figure 2, an agent had told the
+  person three times "my previews don't show the export settings, please
+  check the file", and never saw a cut-off panel title.
+- **A panel title is never cut off.** A multi-panel figure's panel title
+  (its letter and its view's name) wider than its column widens the column,
+  and the plots shrink to keep the figure in its box; "C. Neurog3 (endocrine
+  pro" had been clipped at the panel's edge. A view's name is described to
+  agents as printed after the panel's letter ("B. Early"), so names carry no
+  letters of their own (a figure had read "A. A · Lineage"), and each Figure
+  export text size says what it sizes (`base`: the panel titles; `title`: the
+  figure's title).
+- **An agent sees the flow it tunes** (bug hunt live pass 5): **Take a
+  picture of a view** (`view.picture`) takes `source: "screen"`, the view as
+  the screen shows it now, the vector field overlay and the connectivity
+  edges included (a figure picture leaves them out and now says how to see
+  them). Asked where the cells are heading, an agent tuned six overlay
+  settings blind and left the flow a white glare; with screen pictures it
+  checked each change.
+- **A slider set by an agent, a session or a jump reads back the value it
+  was set to, and applies it.** The vector field's sliders answered
+  `setting.set` with the value before ("Intensity: set to 0.25" for 0.9, in
+  the step and in what the agent was told), and Particle density never
+  reached the viewer (the readout said 60K, 15K particles were drawn): a
+  restore sent `input` alone, and those sliders apply on release. It now
+  ends as a person's change ends, `input` then `change`.
+- **Reading the community annotation reads the repository.** Connected but
+  never pulled, **Read the community annotation**
+  (`annotation.suggestions`) answered "no suggestions" for a repository full
+  of them, and the agent had no way to pull. It now pulls first when this
+  browser has not pulled the repository yet, and whenever it is asked
+  (`pull`); `pull: false` reads what this browser has. Nothing is
+  published. It also gives the repository's rule for the field
+  (`consensus_rule`: the voters needed and the net share), which an agent
+  had guessed for a methods sentence.
+- **An agent's votes and suggestions of a turn are one commit.**
+  `annotation.publish` (new) takes the votes and the new labels together and
+  writes the person's file once, as published now plus all of them (one
+  pull request update when they cannot write to the repository), asked once
+  ("It publishes 3 votes and 2 suggestions (each with your upvote) to … as
+  one commit"); the tool asks an agent to put everything of a turn in one
+  call. Eight votes of one turn were eight commits ("Update annotations for
+  @…" ×8) and eight questions. Every change is checked before the person is
+  asked: one refused (a label already suggested, a suggestion that is not
+  there, a vote given twice differently), none is published and the refusal
+  names each. `annotation.vote` and `annotation.suggest` are removed.
+- **The leader is listed first.** The voting dialog listed suggestions by net
+  votes alone and the legend named every label of the top net vote, while the
+  consensus line ranks by net votes, then upvotes: "Alpha (immature)" (net 1,
+  ▲1) was listed above "Alpha cell" (net 1, ▲2), and the legend called them a
+  tie the banner did not. One rank everywhere (the session's order): the
+  dialog, the legend and an agent's read follow the consensus.
+- **Publish after publishing from another device just works.** When your own
+  file changed on GitHub since your last Pull, Publish stopped with "Remote
+  user file changed since your last Pull. Pull first…"; it now pulls (your
+  file there and what is here are merged) and publishes again by itself, as
+  an agent's publication did. An author with repository settings or merges
+  not yet published is still told to Pull first, since a Pull brings the
+  repository's settings over theirs.
+- **A failure of Pull or Publish is said once, in words.** A refused sign-in
+  showed "GitHub PUT /repos/…/ghid_….json failed with HTTP 401" beside
+  "Your GitHub sign-in expired or was revoked…", and a Pull's failure showed
+  the same sentence twice; the card of a failure said in its own sentence is
+  now dismissed. A write whose outcome is not known says "The connection
+  dropped while GitHub was writing, so whether the write was made is not
+  known." (not "GitHub mutation outcome is unknown after a transport
+  failure").
+- The voting dialog's text boxes no longer show "0 characters" under every
+  suggestion; the count shows while a box holds text.
+- The consensus rule is stated whole: no voter yet is Pending too, and a
+  tie is equal net votes and equal upvotes (docs, the reference repository's
+  README and the agent's `consensus_rule`).
+- **An agent continues your saved work** (`history.saved.open`, new): it
+  opens a saved state of this browser by its id as Load…'s **Open** does,
+  its dataset first when another is shown, then its history, which goes on
+  where it left off. Asked to "continue my saved work", an agent could only
+  replay the autosave into a new tracker (He, live). A whole-file download of
+  its dataset is asked about as `dataset_open`'s is; a saved state it cannot
+  open is refused with why (a file of your computer the page offers you to
+  **Reopen**, a state another version kept, what failed), and the chat turn
+  goes on with the history it opened instead of stopping as for a load by
+  someone else. Load…'s **Open** no longer says "Opened …" when nothing
+  opened (a newer choice, a failure, a file to reopen).
+- **Highlight categories** (`highlight.category`, version 2) takes
+  `categories`, one or more labels of one field, each made a group of the page
+  in one step: one act, one undo, one step named for them ("Highlighted 10
+  categories of donor (48,210 cells) on page …"). A page of ten donors took
+  ten calls, ten steps and ten undos (He, live). Nothing is added when one of
+  them has no cell visible; one already on the page is brought up to date in
+  its place. A history of version 1 replays (`category` becomes
+  `categories: [category]`); the Python and R wrappers
+  (`highlight_category(field=..., categories=[...])`) follow.
+- A permission card names what would be done, never as done: "Claude asks
+  to export an analysis table: markers." (the action and the names it is
+  given), where it quoted the step's past-tense sentence ("asks to export
+  …: “Exported …”") for an act not yet allowed. Every kind of asking reads
+  the same way, and so does the question a local app (Claude Desktop) asks.
+- The chat's **Token budget per chat** is a cap: the chat makes no call that
+  would pass it. Each call reads the whole prompt again, and the budget was
+  checked against what was spent alone, so a chat with a 150,000-token budget
+  ended at 209,751 (the third call, of 70,000, was made at 139,000). Before a
+  call the chat now adds what it will read (the last call's prompt and what
+  was added since) and stops before it, saying how much it would have read.
+- The legend's highlight button names a category by its label, as every
+  other legend action does: on a field of numbers or of true/false it sent the
+  raw value, and the highlight was refused ("There is no category "1" in …").
+  `highlight.category` takes labels only (text: "3", "true").
+- **Read the figure export settings** (`figure-export.get`, `figure_export_get`):
+  every Figure export setting as `figure-export.set` names it. An agent that
+  set up a three-panel figure and came back to it after a dataset switch said
+  "I can't read export settings back" and asked the person to check the panel.
+- An analysis result says what `top` counted: "the top 40 genes by score up in
+  A, then the top 40 up in B: top counts each direction" (Differential
+  expression), "each group's top 10 shown markers" (Marker genes). An agent
+  asked for 40 genes each way first read all 3,753.
+- A table in the chat breaks its cells between words, never inside one: a
+  six-column result table in the dock read "Adjuste|d p" and "0.04|%"; the
+  columns of numbers now keep their words whole and the long first column
+  wraps.
+- When a long answer ends, the chat shows it from its first line, not its
+  last; a person who scrolled during the turn keeps their place, and a new
+  question is followed to the end.
+- `dataset_open` takes the cells to open as `cells_open` does (`count`, or
+  `fraction`, new in both, with the method, seed and the method's settings):
+  "open Suo at 10%" reads Suo once at 10%, where it opened the default view
+  and read again. Its `total_cells` is the dataset's, not the cells open.
+- A column made from one whose groups an agent drew by naming cells (grouped,
+  or a file's column edited by a merge or a deleted category into a new one)
+  counts as such a column, as a copy and a rename did, so "names and
+  summaries only" covers it too.
+- The open chat is a side panel on a wide window: full height on the right,
+  and the plot moves over to make room for it, so the agent never covers the
+  cells it is changing (it opened over the foot of the plot). Its left edge
+  sets its width (drag, or ←/→; a double click resets it), remembered in this
+  browser; a narrow window keeps the chat over the plot's foot. The agent's
+  calls one after another read as one message, its name said once.
+- **A research answer is no longer buried under its calls** (bug hunt
+  L5-13: 30–90 rows above the answer, every read saying only its action's
+  title, "Read the categories of a field" four times). Each row now says what
+  it was about: a read by its action's own sentence from its arguments
+  ("Read the categories of cell_type", "Looked up 12 gene names: SOX9,
+  SFTPC, ETV5 +9"), a running, refused or stopped call by its title and what
+  it named ("Run an analysis: differential · refused"), a change asked for
+  what was so already "· already so". A turn with more than three calls
+  folds under one summary row ("Worked through 42 actions · 7 steps · 3
+  analyses", a disclosure); once it ends its answer is what shows, with its
+  refused or stopped calls (but not one the agent then made again and got
+  through) and its questions; while it runs, its latest three calls. Show, Sent, Undo turn, Copy and Export are unchanged, and the
+  exported chat names every call (`app/agent/chat/work.js`) by what became
+  of it: a step, a read, done (a file written, a note, a stop: no step, but
+  not a read), no change (so already), refused, or stopped by you (was
+  "refused").
+- A playing camera path is no longer recorded as your camera moves: an undo,
+  a jump or an agent's turn while a path played (a loop for a talk) recorded
+  the moving camera as **Moved the camera of View 1** by you, so an undo
+  undid that step and the next one branched the history. Nothing is recorded
+  while a path plays; it is one step where it comes to rest. An agent's
+  looping play is a step when it starts (it was answered "it was so
+  already").
+- On a narrow window the chat folds to its **Ask an agent** button while a
+  camera path plays (Play, or the agent's **Play the camera path**) and comes
+  back when the path stops or pauses, its message field focused again if it
+  was: it covered the lower part of every frame of the film. It stays open
+  while you are writing a message or a question of the agent waits, and
+  opening it during the play keeps it open until the path stops. The side
+  panel of a wide window stays.
+- Chat settings › **Prompt cache** (Claude): Kept 5 minutes (the default) or
+  Kept 1 hour, remembered in this browser. An hour costs more when a chat
+  starts and spares the full price of the instructions and tools after a
+  pause of more than five minutes.
+- The empty chat's first prompts name the right fields: labeling the
+  dataset's clustering with cell types (`Label each cluster in "leiden" with a
+  cell type`), or, with no clustering, the marker genes of its cell types —
+  never "annotate" a field that already names the cell types (Pancreas offered
+  "Annotate the clusters of cell_type" beside `clusters`).
+- The picture an agent asks of a view (`view.picture`) reports the plot's real
+  size: width × height is the box the plot fits in, keeping the view's shape
+  as framed on screen (it reported the size asked for).
+- A change an agent asks for that is so already (coloring by the field the
+  dataset opened colored by) is answered with why no step was made: "this
+  changed nothing: it was so already", or that the change is not recorded
+  (recording paused, a kind your History settings leave out, a merged change
+  put back). The agent said "I colored the cells by cell_type" for a change
+  that made no step and showed no **Undo turn**.
+- A turn that ends with no words for you (a model may end after its
+  reasoning alone) says so in a note with **Try again**, instead of leaving
+  the turn without an answer.
+- Undoing a turn that made no step (it only read, or changed nothing) says
+  so: "The tracker … has no record of the turn …: a turn is recorded with its
+  first step, so one that only read or changed nothing has nothing to undo";
+  it said "There is no turn" and listed every turn's id. Adding a note to
+  such a turn says the same.
+- Your next message tells the agent what changed in the history since its
+  last turn: its steps you undid (**Undo turn**, kept for redo) or removed
+  (only its steps, to Recently deleted), and the steps you, a notebook or
+  another agent took, by their labels. After **Undo turn** it said "The Ductal
+  cells are still hidden from the earlier step". A branch switch is said as one
+  ("the branch shown is now …"; its steps stay on their branch), not as an
+  undo. A step you take while its turn runs (coloring mid-turn) is told too,
+  as taken while that turn ran (bug hunt L18-4: it counted as already seen,
+  so neither that turn nor the next heard of it).
+- The **Undo turn** question counts the same chat's later turns as such ("9
+  from 3 later turns of this chat"); it said "9 from another Claude turn".
+- A reload between two tool calls of one reply keeps the result of the call
+  that finished; it was answered "The page closed before this call finished".
+- An agent's **Stop** of its looping camera path records where the camera
+  rests as a step of its turn (Undo turn takes it back), not as your move.
+- Each model call carries ~2,000 fewer prompt tokens (63,848 → 61,898 before
+  the conversation, measured with Anthropic's token count): a change that is
+  one undoable step no longer says so in its tool's description, since the
+  agent instructions state the rule once and every exception still says
+  itself. The same holds for agents connected through the connector and
+  `cellucid mcp`.
+- An agent can export an analysis's result table (`analysis.export`; Python
+  `analysis_export`, R `cellucid_analysis_export()`): the file the expanded
+  view's CSV button writes (differential expression every gene; marker genes
+  the shown markers or, with `all`, every gene of every group), after you
+  allow writing a file. Asked "export that table", it had to say it could
+  not. A result that is out of date is refused, saying why.
+- An agent merging a category into another can name the merged category
+  (`category.merge` `label`, version 2): "merge A into B" keeps B; it was
+  named "merged A + B" (the legend's drag naming), so grouping cell types
+  into a lineage took a rename after every merge.
+- An agent's run of an analysis the Analysis panel does not show (it shows
+  one at a time) shows it first, as you open an analysis to press its Run:
+  setting up Differential expression and then Composition and running both
+  was refused "not shown, open it first". Changing the options of an
+  analysis with a result does the same: after Marker genes, setting
+  Differential expression's groups was refused, `show: true` or not.
+- **An agent reads how an analysis was tested.** **Read an analysis result**
+  (`analysis.result`) gives `about` with the rows: for differential
+  expression the two groups and their cells (with **Replicates**, their
+  samples and those left out), the test, the correction, the expression
+  matrix (`· counts` when it is) and the values tested, the fold change and how many
+  genes pass the shown cutoffs each way; for marker genes each tested
+  group's cells and what it is compared with; for gene signature each set's
+  genes used and not found and the tests between the pages (t-test and
+  Mann–Whitney for two, ANOVA and Kruskal–Wallis for more). An agent
+  guessed the values were raw counts from their being whole numbers, and
+  could not say whether a score differed between pages.
+- The composition result an agent reads gives each cell type's cells, its
+  pooled proportion and its proportion in each sample (or condition), and,
+  tested, its test and p values, with the samples per condition: without a
+  condition it gave the cell types' names alone.
+- The count of significant genes in Differential expression's Statistics
+  applies **Min % expressing in either group**, as the status line's count
+  does: the two differed.
+- An agent checks a list of genes in one call (`genes.search` `names`: the
+  ones the dataset has, as it names them, and those it lacks): checking a
+  marker panel against a sample of 5,000 genes took one search per gene,
+  31 in one turn.
+- **Summarize a field per category** (`field.summary`) leaves out the
+  categories with no cells (counted in `empty`) and takes `categories` to
+  summarize only those: on a view filtered to the epithelium of the He
+  sample each summary by cell type listed about 100 empty groups.
+- An analysis option's parameter says what its values are where the label
+  does not: the cell scopes (`all`, `visible`, `page:<page name>`, now by the
+  page's name; Within also `category`), **Replicates** (pseudobulk),
+  Composition's **Samples**, **Condition** and **Test**, Gene signature's
+  **Method**, **Reference group**, **Expression matrix**. An agent guessed
+  Within's values twice ("Within has no choice categories").
+- **An agent can direct a camera path.** **Frame cells with the camera**
+  (`camera.framing`; Python `camera_framing`, R `cellucid_camera_framing()`)
+  says where the whole view, each category of a field and the categories
+  named together sit (center, extent) and gives a camera framing each from
+  an azimuth and elevation, filling a share of the view's frame; **Play the
+  camera path** / **Stop the camera path** (`camera-path.play`,
+  `camera-path.stop`) play it as Play does, the playback one step; **Read
+  the camera path** (`camera-path.get`) gives its keyframes, their times and
+  its length. The agent instructions teach the craft: the story from the
+  data, an establishing shot, close shots from changing directions, holds, a
+  two-shot between far close-ups so the camera rises over the cloud, a
+  pull-back. Asked for a documentary flythrough of Pancreas, Opus 5.5 took
+  15 pictures to triangulate where the cell types were, still put close-ups
+  inside the cloud, and could play only by turning Autoplay on (saved with
+  the session).
+- An optional parameter an agent sends as an empty stand-in (`camera:
+  "null"` or `{}` for "the current camera") is refused with how to fix it:
+  "camera is optional: leave it out (send no value at all, not null, "null"
+  or {}) for the selected view's camera now", for every optional parameter
+  of every action.
+- An agent names Differential expression's Group A and Group B by the
+  highlight page's name, as every other action names pages: the options read
+  gave the page's internal id ("restof__page_1") and a page's name was
+  refused ("Group A has no choice …"), so the agent had to guess "page_2".
+- An agent's dataset summary gives the dataset's own description (the
+  card's paragraph) and its vector fields (RNA velocity, drift): on the
+  scVelo pancreas sample an agent concluded "there is no RNA velocity in this
+  file" and gave the tissue from its own knowledge.
+- An analysis run an agent was waiting for that is stopped (Stop, or Cancel
+  in the panel) is told to the agent as stopped: it was told "this changed
+  nothing: it was so already", which stayed in the conversation.
+- A turn the page was reloaded in says "The page closed during this turn, so
+  it stopped here." with **Try again**: reloaded between two calls, it ended
+  with no word and no mark, its work half done.
+- The chat's selection chip attaches highlighted cells once: a selection
+  already sent with a message, or highlighted by the agent in its turn, is
+  not attached again (the agent was told with every message that "the person
+  attached their selection", its own highlight among them).
+- **Stop undoes what it stopped.** A change an agent's step was making when
+  you pressed Stop is put back and leaves no step, also when the change
+  finished regardless (an analysis's display option waiting for its redraw):
+  it was kept and recorded. A read stopped ends at once.
+- **Stop ends promptly, and the work stops with it** (bug hunt F147). A
+  stopped change is put back only once it has ended, so a step that waited
+  on work not tied to Stop held every later Undo, jump and action until that
+  work finished: an analysis's options, pages, view or new window waiting
+  for the update they set off (a re-run reading thousands of genes), a run
+  stopped before it had started, the cells read again for **Cells to open**
+  or for an Undo that puts other cells back, genes read for more cells, a
+  view switched to another embedding waiting for its coordinates, a field
+  copied while it was read, a view kept with a branch's state, and the
+  history report showing each step for its pictures. Each now stops its work
+  when you press Stop — the analysis's update or run is canceled, the
+  reading is canceled as its Cancel would and the cells open before stay,
+  the report comes back to the step shown — so Stop answers at once and the
+  history is free again.
+- The Cellucid relay (`mcp.cellucid.com`) no longer redirects a malformed
+  connection request of an app other than Claude or ChatGPT straight to that
+  app's address: it shows the error with a link back to the app. Anyone can
+  register an app with an address of their own, so the relay's address
+  could be used to bounce a browser to any site (RFC 9700 §4.11.2).
+- The relay keeps a digest of a connected app's id rather than the id
+  itself (a registered app's id is up to 8 KiB of its own choosing, kept a
+  month per connection); a tab names an approval only by a well-formed
+  connect code; and its `subscriptions/listen` answer carries the same
+  headers (CORS for a Cellucid page, `no-store`, `nosniff`) as its others.
+- **Connect Claude?** warns when you came by a link too: anyone can start a
+  connection from their own Claude or ChatGPT and send you its link, and
+  **Allow** would connect their agent to your browser. A Cellucid page inside
+  another site's frame drops a link's connect code and never asks.
+- **A chat's Markdown export runs nothing in any Markdown viewer.** Text the
+  export kept as code where a viewer does not (`` `<img …>`` `` closed by two
+  backticks, a code span opened on the line before, fences out of step, a
+  fence ended by its list) reached the viewer as live HTML, and link
+  definitions (`[a]: javascript:…`) and images were not looked at. The export
+  now writes the reply as the chat draws it — its code, bold, italic and web
+  links — with every other character that starts Markdown escaped, and each
+  fenced block closed by a fence no line of its code can match.
+- **Double underscores inside a word stay as written, in the chat and its
+  export.** The chat read `__` as bold anywhere (`snake__case__name`,
+  `window.__xss`), so a reply showed part of a name in bold and the export
+  wrote it back as `**`, changing what you and the agent had written; like a
+  single underscore, a double one marks bold only at a word's edge now, as
+  every CommonMark viewer reads it.
+
+#### Python and R viewers
+
+- **The viewer names what opened it.** Ending `cellucid mcp --open` froze the
+  page with "The notebook or R session that opened this viewer stopped", the
+  words every viewer said whatever served it (`cellucid serve` in a terminal,
+  a script's `AnnDataViewer`, an agent app's MCP server). `/_cellucid/info`'s
+  `runtime` now tells them apart -- `jupyter` (a notebook kernel), `python`
+  (a script or session), `cellucid-serve`, `cellucid-mcp` (`cellucid mcp
+  --open`), `r` (`cellucid_view()`, `cellucid_serve()`) and `r-mcp`
+  (`cellucid_mcp(open = …)`) -- and one table of the web app
+  (`VIEWER_HOST_RUNTIMES`) gives each one's words, label and language: every
+  sentence of the viewer channel ("The cellucid serve command, which opened
+  this viewer, stopped (its server no longer answers). … Run cellucid serve
+  again."), a failed host command ("Python command failed"), a selection
+  the host was not told of and the Dataset box ("cellucid serve") name the
+  host by it, and "the program serving this viewer" before it said. History
+  steps stay labeled `python` or `r`. The shared viewer protocol file lists
+  each runtime with its label and language (SHA `28dbb572…` in all three
+  repositories).
+
+#### Security
+
+- **GitHub sign-in takes only the answer to a sign-in started in this tab.**
+  A link carrying someone else's GitHub token in its address
+  (`#cellucid_github_token=…`) signed the tab in as them, so your votes and
+  annotations would have been written as their account. **Sign in** now keeps
+  a random state in the tab (`cellucid:github-app-auth:pending`) that the
+  answer must name, once.
+- A group, category or field named `__proto__` is kept as itself where results
+  and saved state are rebuilt (what an agent is sent with **Agents see names
+  and summaries only**, a saved analysis, a worker's result, a figure's
+  legend): it vanished, its fields read as the record's own.
+- A Details row links only to an http(s) address. A test lists every place the
+  app's code turns a string into HTML, code or an opened address, with why it
+  is safe; a new one fails until it is listed.
+- **Only the browser that shows a connection's waiting page can approve it.**
+  Anyone could start connecting their own Claude or ChatGPT, send you the
+  page's **Open Cellucid to approve** link (or its code), and one **Allow** in
+  your tab connected *their* agent to your Cellucid, which could then read
+  your dataset (R9Z-1, the remote phishing of a device code). The relay's
+  waiting page now leaves a cookie in its browser
+  (`__Host-cellucid-approver`: `HttpOnly`, `Secure`, `SameSite=Strict`, ten
+  minutes), and the tab claims a code with a request that carries it
+  (`POST /oauth/claim`, no longer on its socket; relay protocol 2): a link or
+  code from another browser is refused in your tab (*This connect code was
+  started in another browser…*). **Code from another device** is now
+  **Connect code**, for a tab of the same browser; a local relay (`wrangler
+  dev`) sets the same cookie, kept by Chromium and Firefox on loopback
+  addresses when the page and the relay share their host name.
+- **An app the relay cannot vouch for is named by its own site.** An app
+  that called itself "Claude" from `evil.example` asked as *Connect Claude?*
+  and its steps were Claude's in the history (R9Z-2). Only Claude and ChatGPT
+  are named so, when `claude.ai` or `chatgpt.com` vouches for them; any other
+  app is its site (or *an app on this computer*), with the name it gives
+  itself in quotes (*evil.example, which calls itself "Claude"*), on the
+  waiting page, in the approval, and by one name (**Manage…**'s, *evil.example
+  (calls itself "Claude")*) in its activity line, confirm cards and history
+  steps, so two such apps connected at once are told apart (L26-4).
+- **An agent asks before opening a link you have not seen in this tab.**
+  `dataset_open` with a link, an accession or a server ran as an ordinary
+  change, so an agent misled by text it read could make your tab request any
+  address, carrying what it read to any host (R9Z-4). A new permission kind,
+  **Opening links not seen in this tab** (Ask in both presets that let agents
+  change anything, refused in Read only), asks before anything of the address
+  is requested, unless you typed or pasted it into the address bar or the
+  chat, it is open now, or it is in **My datasets**. The card names the
+  address; the agent waits and is told why. A connected agent is told what
+  your setting makes of it with your other settings.
+
+- **Plain HTTP only on a loopback host a browser trusts.** Whether a host is
+  this computer was written twice with different answers: the Worker's
+  `ALLOWED_ORIGINS` rule (and the relay's copy) did not lower-case a host or
+  know a bare `::1`, the app's own rule also counts `0.0.0.0`. Both now come
+  from `utils/loopback.js`: `isSecureContextLoopbackHost` (`localhost`,
+  `*.localhost`, 127.0.0.0/8, `::1`, the hosts browsers make a secure context)
+  for where a secret may go over plain HTTP, `isLoopbackHostname` (also
+  `0.0.0.0`) for "this computer". A development relay address at
+  `http://0.0.0.0` was accepted for the tab's secret; it is refused, as the
+  Worker always refused it in `ALLOWED_ORIGINS`.
+
+#### Accessibility and keyboard
+
+- **A dialog under a confirmation is out of reach on every browser.** A
+  modal dialog opened over another makes the one below inert; Linux's WebKit
+  still let focus into a dialog under a confirmation. The app now marks a
+  dialog under the topmost `inert` itself and gives it back when it is the
+  topmost again.
+- **Focus moved after a dialog closes stays where it went.** A dialog closed
+  with Escape handed focus back to its opener a task later, taking it from a
+  control focused meanwhile: in the history, F2's rename closed by Escape and
+  then Delete on a step row acted on the branch row instead (an intermittent
+  test failure under load).
+- **Keys work after a slider, a checkbox or a button.** After moving
+  Navigation › Keyboard speed or ticking a box, W A S D, H, R, O, P, G and the
+  other shortcuts did nothing until the plot was clicked: six key listeners
+  each kept their own "is the person typing?" rule, five of them treating
+  every input as a text field. One rule now decides who a key belongs to
+  (`utils/key-ownership.js`): a text field, a dropdown (its letters choose its
+  options), a menu, a list or a dialog keeps its keys; every other control
+  leaves them to the page. The workarounds that took focus away after a
+  checkbox or the Mode dropdown changed (a keyboard user lost their place) are
+  gone; a mode chosen from the dropdown with the pointer still hands the keys
+  to the plot. A key a focused control already took (the History list's `[`)
+  no longer also zooms the camera.
+- **One table of every key.** The Keyboard shortcuts panel, the page's key
+  listener and the new docs page *Keyboard shortcuts* (accessibility section)
+  are made from one table (`ui/onboarding/shortcut-table.js`); the camera keys
+  come from the ones the viewer moves by (`rendering/navigation-keys.js`).
+  The panel gains what it left out: Ctrl+Y (redo, off a Mac), the History
+  list's keys (Home/End/Page keys, Backspace, the Menu key and Esc too) and
+  the keys that move a panel, a page or a category (pick up, aim, drop).
+- **A camera key moves the camera for as long as it was held.** The viewer
+  read "is the key down" at each frame, so on a slow frame (a large dataset
+  on a modest GPU) a quick tap could move nothing and equal presses moved the
+  camera by different amounts; each key is now credited with the time it was
+  held in each frame.
+- **`?` with the sidebar hidden records no "Changed outside the history"
+  step.** The panel opened in the same moment as the sidebar's action; it
+  now opens once the sidebar is shown.
+- **The graphics-reset notice is an app dialog**, as every other: the renderer
+  reports the lost context and the app shows it (`#graphics-reset-dialog`);
+  it keeps Escape and the backdrop while the graphics are restored. The
+  analysis panel's field picker is a non-modal popover (no `aria-modal`, no
+  Tab trap).
+
+- **The colorblind preview shows what a colorblind reader sees, and no page
+  claims more than that.** Figure export's Colorblind preview now applies the
+  full-severity model of Machado et al. (2009) in linear light; the old matrices
+  on encoded sRGB showed vivid cerulean and iris purple (the default palette's
+  categories 2 and 10) as plainly different to a deuteranope, who sees one
+  color, so an unreadable figure passed the preview. The accessibility page,
+  the accessibility guide and the palette said the first 24 category colors
+  stay distinct for red–green color blindness; measured with the same model,
+  several pairs look alike (blues and violets, orange and amber). They now say
+  the category colors are not chosen for color blindness, and how to check and
+  change them; a test holds the claim to the measurement.
+- **Tab leaves an open menu where you were.** In every menu (**Open…**, **My
+  datasets**, the History panel's ⋯, a history row's or branch's menu, the
+  history search's **Filter**, a highlight page's **Combine**), Tab sent focus
+  to the top of the page, the plot: an open menu sits above the page, at its
+  end. It now closes and goes on to the control after the menu's button
+  (Shift+Tab, the one before it). The highlight pages' **Combine** menu is the
+  shared menu now, with its look, its keys and its touch size.
+- A menu button says whether its menu is open: the history search's **Filter**
+  always said closed, and a branch's ⋯ and the tracker said nothing.
+- The color swatches in the legend, on highlight page chips, in **Create
+  categorical** and on an analysis's page chips show the focus ring: the
+  color input under them took focus invisibly.
+- `?` with the sidebar hidden shows it; `?` moves focus to the **Keyboard
+  shortcuts** panel, and its scroll no longer animates with reduced motion
+  asked for. A way into the sidebar from outside it focuses its control once
+  the sidebar is shown: with the sidebar hidden, a gene sample's **Genes read
+  for** link (from an analysis window) and Data mapping's way to its choices
+  opened the sidebar but focus reached nothing (it was still inert).
+- **Create categorical**'s rows name their controls by their page ("Category
+  label for Page 1", "Highlight color for Page 1", "Remove Page 1"): the label
+  field had no name, and every row's remove button was "Remove this page".
+- The welcome card's quote and its attribution are readable in the light
+  theme (2.87:1, now above 4.5:1); the welcome card, the dialogs and the
+  license are measured for contrast as the sidebar is.
+- The dataset's **Share** is **Share…**: it opens a dialog, as every other
+  button that does.
+- The × that removes a kept view, a highlight page or a gene from a set, and
+  a page's ⋈, are quiet by a readable gray instead of being faded (the view's
+  × read at 3.22:1).
+- A history row's buttons keep one line, the row's first, at its end, in the
+  same place on every kind of row: a turn's ↗ and details went onto a line of
+  their own under a long label.
+- **Every dialog is one kind of dialog.** The welcome card, the license, every
+  confirmation, the figure export's warnings and the community annotation
+  dialogs are now the browser's own modal dialog, as Cite, Share and the
+  history's dialogs already were: the page behind is out of reach for the
+  mouse, the keyboard and a screen reader alike, a dialog opened over another
+  (a confirmation over a community annotation dialog or over the branch map)
+  is the one in use and gives focus back into the one under it, Escape and a
+  click beside the card close it, and focus goes back where it was. Five
+  hand-built versions are gone, with their differences: Tab past a dialog's
+  last control now goes to the browser's own controls and back in, as on any
+  page (it went round inside before in some dialogs and not others); in
+  Safari, Tab reaches buttons and links with Option held or full keyboard
+  access on, as everywhere in Safari; a text selection dragged out of a card
+  no longer closes it; and a history question asked from the branch map or
+  Recently deleted opens over it instead of closing it and opening it again.
+- **Keys pressed in a dialog stay in it.** With a dialog open, W, A, S, D
+  moved the camera behind it, X cleared the highlight, H hid the sidebar, R
+  reset the camera, and Escape left a selection or a history tour instead of
+  closing the dialog. The notification cards stay above every dialog and
+  usable there.
+
+#### Controls
+
+- **One wording while no dataset is open**, from one module
+  (`app/ui/no-dataset.js`): "No dataset is open." and "Open a dataset to
+  keep views." everywhere, where panels said "No dataset selected", "No
+  dataset loaded", "Load a dataset to …" (Load is the session file's button),
+  "Open a dataset before …" and two wordings of the history's line. Every
+  analysis (and its copy into a window) says "No dataset is open. Open one in
+  Session › Open data to analyze it." where gene analyses said "Requires gene
+  expression data.", Composition "Requires a categorical field of cell
+  types.", and Quick, Detailed and Correlation opened empty forms; KNN drag
+  says there is no dataset instead of "No neighbor graph available for this
+  dataset", and a dataset without a graph now says what to use instead
+  (Proximity drag or Lasso).
+- Camera path **Clear all** is dimmed with no keyframe to clear; a click did
+  nothing.
+- **One read of the neighbor graph is one notice.** Choosing KNN drag (or
+  showing connectivity edges) showed "Loading neighbor graph for KNN mode"
+  (or "Loading connectivity data") beside the read's own "Reading the
+  neighbor graph · 27 MB read". The read now has one card, whoever asked for
+  it, with its progress and its end ("Neighbor graph read: N edges"); a
+  failure is said there once.
+- With **Select mode** on, each selection tool's step line says that
+  Intersect, Add or Subtract under the tools combines each gesture, instead
+  of the `Alt` keys, and follows the switch at once.
+- **Copying always says how it went.** Every Copy (the share link, badge and
+  embed, the citation, a chat answer, the connector address, the history's
+  text and code, a subsample link, the situation report, Marker genes' **Copy
+  genes**, the annotation share link) goes through one helper: copied, or why
+  not ("the browser did not allow it (the page must be in front and focused)")
+  and, where it helps, the text to select by hand. **Copy genes** said nothing
+  either way.
+- Whether this computer is online is read in one place (the book of hosts):
+  the chat bar, community annotation, the readers' faults, the renderer's
+  index build and the situation report all agree.
+- **The analyses' expanded view is a real modal dialog.** Its backdrop covers
+  and closes it, yet the page behind stayed reachable by keyboard and screen
+  reader (it said `aria-modal` over a hand-made Tab trap). It is now a
+  `<dialog>` opened as every dialog of the app: the page behind is inert, Tab
+  and Escape are the browser's, focus goes back to what opened it; a
+  multi-select list inside it is no longer cut off from it. Closed, it lets
+  the page go at once and fades out inert (it stayed a modal for its fade,
+  the page unusable and its own buttons in reach after you closed it).
+- A link's malformed subsample is said once: "The link's cell subsample was
+  left out: "seed" needs "cells" …" (the reason repeated its own "The link's
+  subsample:").
+- **The empty viewer says what it waits for.** With no dataset open (None
+  chosen, a link opened without, an opening canceled) the viewer was a blank
+  plane; it now reads "No dataset open — Choose a sample, open a file or
+  folder, or paste a link in Session › Open data; a file can also be dropped
+  here." with **Show Open data**, which opens the sidebar there. The chat's
+  empty state offers "Open a sample dataset and give me a first look at it"
+  instead of a first look at a dataset that is not there.
+- **A double click is one press.** A double click (or a held Enter) on a
+  button that turns into its own Stop or Cancel undid what its first click
+  started, silently: **Export** started the figure export and its second
+  click, on **Cancel export**, stopped it with nothing downloaded; the same
+  for **Read** / **Stop** (Genes read for), **Cancel** / **Run again**, the
+  chat's **Send** / **Stop** and an agent turn's **Stop** / **Undo turn**.
+  The further clicks of a double click and a held key's repeats no longer
+  press a primary button or one of these (`ui/core/press-guard.js`, from the
+  first paint), wherever the second click lands; other controls keep their
+  double clicks.
+- Every dimmed input and select says why it is off, on its tooltip and in the
+  reason a refused `setting.set` gives, with what to do: `Show overlay` (the
+  dataset has no vector field, none is bound to the embedding the view shows,
+  naming those that are, none is selected, or it is loading), the field and
+  gene pickers, Genes read for, Force LOD level, the embedding and layout
+  selects, a legend category with no cells left, the figure export's grid,
+  frame and text controls, the data mapping, the dataset list, the
+  outlier filter, the chat's provider and model, and the dialogs' fields. A
+  refused setting said "switched off by another setting" for any disabled
+  control — on a dataset without a vector field no setting had.
+- The **Keyboard shortcuts** panel lists `/` (**Open the chat**): the key
+  opened the chat, and the accessibility page listed it, but the panel that
+  page calls the authoritative list did not. A contract now fails for any key
+  the page answers everywhere that the panel leaves out.
+- **Actions inside a row are quiet.** Controls get quieter the deeper they
+  sit: an action inside a list item's row or details is plain text with no
+  border or fill, on one line, its main one in the accent color, never a
+  filled button. This covers a history step's details (**Show**, **Branch
+  here**, **Compare…**, **More…**, which was `⋯`; **Add note**, which was
+  "+ Note") and notes, the rows of **Load…** (**Open**, **Replay here**),
+  **Recently deleted** (**Restore**), the history's memory list, **My
+  datasets** (**Open**, **Continue**), **Stored data** (**Remove**,
+  **Show…**), **Deleted fields** (**Restore**, and **Delete for good…**,
+  which was **Confirm**, as **Load…** asks "Delete for good?"), the agent
+  connections and permissions, the chat's message and turn actions (**Edit**,
+  **Copy**, **Try again**, **Show**, **Sent**, **Undo turn**), an agent's
+  activity line (**Stop**, **Undo turn**), **Add columns** in Data mapping,
+  and a Community annotation suggestion's **Edit**, **Delete**, **Merge…**,
+  **Detach** and their forms. A view's × in Views is a muted glyph like a
+  highlight page's, no longer a bordered pill that filled red. Typed
+  characters became drawn icons with names: the branch menus' and Quick
+  insights' field pickers' ⋯, the ✕ that dismisses a history banner or an
+  agent's line, the ✕ that empties an entry of Recently deleted (now the
+  delete icon), the × that leaves out the chat's attached selection.
+- **No action looks like a link.** The analysis windows' inner actions
+  (**Copy genes**, **All genes CSV**, **GMT**, **Recompute**, **Score as
+  signature**, **Dot plot**, **Relax filters**, **Swap A and B**, **Counts
+  CSV**, **Reset to defaults**, **All** / **None** / **Invert**, a gene set's
+  **Clear**, **Remove not found**, **Add set**, **Import**, **Export**) and
+  Community annotation's comment **Edit** / **Delete**, **View merged**,
+  **View full evidence** and **View all comments** were underlined text, a
+  second quiet look; the comment actions were faded below readable contrast
+  and had no touch size. They are the quiet buttons of every other nested
+  area. An underline now marks only a link.
+- **A notification you are reading is no longer pushed aside by work that is
+  not on screen.** Work under way shows its card only after a second, but it
+  took a place among the cards at once: on a phone (two cards), a field read of
+  a few milliseconds sent the best-guess notice and its **Show** to "Show 1
+  earlier message" while no card was left on screen. A card now makes room only
+  when it appears. A card retired to make room keeps its follow-up (**Show**,
+  **Retry**) in the earlier messages, until it is taken or its owner withdraws
+  it.
+- A dataset picked while the sample list was still reading its files, which
+  then failed to open, kept its explanation and **Try again** beside the
+  selector only until the list finished: the list's arrival took them away.
+- **A failure is said in a sentence, its technical words under Details.**
+  Notifications and status lines quoted an error's own words: a history that
+  did not hold together failed as "Loading failed · Saved state: tracker
+  4f3c…: a group cuts the run of turn …", a renderer setting as "Culling and
+  the tree's draw order are off …(GPU permute could not allocate its source
+  texture (WebGL error 0x505))", a vector field as the overlay's own error.
+  Every failure (exports, analyses, the vector field, a session or saved
+  state, agents' connections, the benchmark, a control's change) now says
+  what failed in plain words — a broken invariant inside Cellucid as "a
+  problem inside Cellucid stopped it" — with the error itself under the
+  card's **Details**; a session file that breaks the format reads "the file
+  is damaged, so it was not opened; the history shown is unchanged". A
+  figure export that failed showed two cards for it; it shows one. Advice to
+  "try refreshing" (which loses the work open) is gone. The wording of
+  failures and the ellipsis "…" are held by a contract.
+- **One spelling: color.** The labels said "Color by" while step names,
+  notices, tips and the actions' titles said "Colored by …" in British
+  spelling (`Coloured`, `Colour cells by`). Every word a person or an agent
+  reads — step names (kept in saved histories and conversations), notices,
+  tips, the action catalog, the documentation, the Python and R packages'
+  messages and help — now says color, colored, coloring.
+- **One spelling: US English throughout.** The same mix stayed with
+  `neighbour`/"neighbor", `grey`/"gray", `normalised`/"normalized",
+  `centred`, `catalogue`, `labelled`, `summarise`, `recognise`,
+  `organisation` and the like: the page, notices, tips, step names, the action
+  catalog, the documentation and the packages' messages and help now use US
+  spelling ("neighbor graph", "Gray for zero", "Normalized · log1p").
+  `tests/failure-wording-contract.test.mjs` refuses the British spellings in
+  the page's prose and the action catalog. Names are US too (F149): the
+  parameter `normalize` of `expression.transform.set` (version 2 of its
+  parameters; a step recorded with `normalise` replays as `normalize`), the
+  expression values `{normalize, log1p}` saved in sessions, histories and
+  `uns['cellucid']['history_applied']` (and a result's values key
+  `normalized`, `normalized-log1p`), `neighbors` of `vector-field.summary`
+  (parameter and result), `center` of `camera.framing`'s groups, and the
+  setting kind `color` of `settings.list`. A contract holds every parameter,
+  result key and value of the catalog and every field of the history model to
+  US spelling.
+- **"Canceled", one l.** Notices, step names and job lines said both
+  (`Figure export was cancelled.`, `Pull cancelled`, "Canceled …"): every
+  one now says "canceled"/"canceling" ("Move canceled.", "Differential
+  expression canceled", "Canceling the new branch"). The spelling contract
+  now also reads a template's words and a one-word sentence ("Canceled."),
+  which it skipped, and the other British forms it missed (`travelled`,
+  `totalled`, `licence`, `defence`, `judgement`, `metre`, …). The answer key
+  `cancelled` of `history.branch.cancel` stays as it is (a name agents and
+  scripts hold).
+- **One spelling in the packages and the documentation too.** The US
+  spelling held only the web app's strings: this package's documentation
+  quoted "Compute the `neighbour` graph", its messages and docstrings said
+  `catalogue`, `recognise` and `cancelled` (a request's
+  `This session load was cancelled.`), and its documentation said
+  `neighbour`, `greyed`, `centred`, `labelled` in prose and in the
+  screenshots' alt texts; cellucid-r's code,
+  help and vignettes did the same. One British word list
+  (`tests/fixtures/spelling.json`, shared byte for byte by the web app, this
+  package and cellucid-r at one pinned digest) is now read by
+  `tests/test_spelling_contract.py` over every message, docstring, `#:`
+  attribute doc, the documentation, the notebooks, the screenshot
+  descriptions and this change log's unreleased section; by cellucid-r's
+  `test-spelling.R` over its messages, help pages, vignettes, README and
+  NEWS; and by the web app's contract over the app's strings and multi-line
+  templates, the relay's words, every README and guide of the repository,
+  and the expected text of the node tests as well as the browser specs (a
+  test still expected `your organisation's administrator`). The repr of a
+  waiting request says `canceled`. Words added to the list: `learnt`,
+  `honour`, `tumour`, `acknowledgement`, `lustre`, `foetal`, `spelt` and the
+  `un-`/`re-`/`de-` forms (`unrecognised`, `reorganised`, `deserialise`).
+- **One compact count, one p-value, one first-letter case.** Two compact
+  formatters wrote one count "4.0M" and "4M" (Benchmark notices, the
+  performance panel, plot labels and the plugin helpers beside the dataset
+  card, legends and the highlight pages); every one is now
+  `formatCompactCount` of `utils/format-units.js` ("4M", "2.5M", and "1M"
+  where 999,960 read "1000K"). Five rules wrote a p-value ("< 0.0001",
+  `4.12e-8`, `4.123e-8`, `4.1e-8`, `0.0000412` across the DE table, the genes
+  panel, correlation, composition, the hover card and the test summaries);
+  every shown p-value is now `formatPValue`: two significant figures, "< 1e-300"
+  where the double underflowed. A CSV keeps the number (the scatter plot's
+  statistics export wrote `p_value` rounded to four figures; it writes the
+  full number now). About thirty copies upper- or lower-cased a first letter,
+  some lowering an acronym ("pCA computed"); `upperFirst` and `lowerFirst`
+  (`utils/text-case.js`, a name in capitals kept) replace them, and the
+  filter-change lines and step details write numbers by `formatBound`.
+  `tests/one-implementation-contract.test.mjs` refuses a new copy of each.
+- **Names said with one spelling too.** The refusal code an agent, a
+  notebook or an R session reads when the person stops a dataset's or a
+  saved state's loading is `canceled` (it was `cancelled`); the read log's
+  line says "(canceled)". `history.branch.cancel` still answers `{cancelled}`
+  (a key agents and scripts hold). Files renamed: the screenshot
+  `analysis/de-canceled.png` (capture `analysis-de-canceled`), the tutorials
+  `46_export_an_h5ad_subset_and_reanalyze.ipynb` and
+  `12_subset_and_reanalyze.ipynb`, and the web app's tests
+  `history-catalog-contract` and `action-catalog-coverage`.
+- **A percent is written one way: "50%".** The app wrote both "50%" and
+  `50 %` ("100 % cells · genes 6 %" in Session › Subsampling, "Hid outliers
+  of x above 95 %" as a step name, "Reads about 12 % of the file" beside
+  "Loading fields… 40%"), from about thirty hand-built strings that each
+  rounded a share its own way ("5.0%", "5%" and "5.5%" for one share). Every
+  percent is now `formatPercent` or `formatShare` (`utils/format-units.js`,
+  beside the count nouns): the sign attached; a share whole from 10% (never
+  100% short of the whole), two significant figures below.
+  `tests/percent-format-contract.test.mjs` refuses `${n}%`, `n + '%'` and a
+  number followed by " %" in the app's text. The methods paragraph of this
+  package (`cellucid.history`) and cellucid-r writes a share of the cells by
+  the same rule ("5.5%", where it said "6%"; "99%", never "100%" short of
+  every cell).
+- **A full stop ends a sentence, never a fragment.** Status lines that are
+  sentences end with one ("Agents cannot connect on this page.", "Codes look
+  like ABCD-EFGH.", "Reload the page to reconnect."), status words do not
+  ("Repository disconnected"); "Missing dataset context." reads "No dataset
+  is open.". The rule is written in the copy guidance (`assets/css/README.md`).
+- **A failure is said once.** A refusal wrapped in another sentence no longer
+  says its verb twice ("“Beta” could not be opened: The linked data could not
+  be opened: …" reads "“Beta” could not be opened: …"): every wrapper of a
+  failure's sentence goes through one helper (`utils/errors.js`
+  `joinFailure`), held by the failure-wording contract.
+- **A problem inside Cellucid points to Details.** The sentence for a broken
+  invariant says, on a card that has Details, that its words for a bug report
+  are there ("a problem inside Cellucid stopped it; Details has its words for a
+  bug report."). The code's own failures (the vector field overlay's
+  "VelocityOverlay could not allocate transform-feedback ownership.", the
+  renderer's, the plot slots') are said as one, their words under Details.
+- **A damaged file says it is damaged.** A session file or a My datasets
+  library file whose framing breaks (truncated, trailing bytes, a manifest out
+  of the format) read raw "Invalid session file (manifest JSON parse
+  failed)." or "This library file is damaged: chunk 1 must be exactly …"; it
+  now says the file is damaged, with what breaks it under Details (the
+  library's Import and Export status lines on hover).
+- The chat's **Effort** menu says **Extra high** and **Maximum** (it showed
+  the provider's values, "Xhigh" and "Max"), and so does its status line.
+- A conversation saved during a turn ends on a **saved** note, which offers no
+  **Try again**: in a session file someone received, it would have sent the
+  sender's message to the reader's agent.
+- A conversation opened from a session file or a saved state is received: no
+  note of its turns offers **Try again** (the sender's failed or stopped turns
+  did, and acted again on what the history it came with holds), and a question
+  its agent asked offers no choices (it was put to the sender; you can still
+  write). Turns you send after opening it are yours. The saved conversation
+  names the turns it brought (`received`).
+- Counts and marks: "…and 3 more categories" in the Gene signature statistics
+  (it said "1 more categories"), counts grouped there and in "Loaded 12
+  fields"; the edge limit reads "250K" like every other count; the
+  performance panel's details lose their colons and Title Case ("GPU memory",
+  "Frame time"); notification titles are sentence case ("Generating data");
+  in-progress text ends in "…" everywhere ("Preparing projectiles…", which
+  was "Preparing projectile collision system...").
+
+#### Performance tools
+
+- **Analyze performance finishes again.** It stayed on "Measuring
+  performance…" for good, the button disabled and the viewer paused, after
+  the renderer began to require the sprite cap the analysis did not pass; a frame that fails now ends the analysis with a notice saying why
+  and resumes the viewer (it used to be an `alert`).
+- Its **Problems found** no longer names "Vertex Processing: LOD scaling
+  factor: 9921.55" on every run: the level-of-detail sweep read level 0 (the
+  smallest sample) as the most detailed, so a GPU with room to spare scored
+  as the most vertex-bound. Both sweeps now report how many times longer a
+  frame takes with the largest points, or the most points, and **What to do**
+  gives frame-time advice only below 55 frames a second.
+
+#### Development
+
+- **Each package's CI runs the cross-repository tests.** cellucid-python's
+  workflow checks out cellucid-r and the web app's code beside it, and
+  cellucid-r's fetches the web app and cellucid-python at the commit it
+  pins, both with Node and `CELLUCID_SIBLINGS_REQUIRED`: a sibling or Node
+  missing fails those tests instead of skipping them (a parity test that
+  read cellucid-r failed every job without it). Every sibling read goes
+  through one helper (`tests/_web_root.py`, `helper-repository.R`).
+- **The web contracts pass on Windows.** Seven read a file URL's `pathname`
+  as a path or compared `\`-separated names with `/`; the contracts that
+  walk the sources use `tests/helpers/source-files.mjs`, and a contract keeps
+  the `pathname` form out of every test and script.
+- **One implementation of hex colors and of the decoded-piece cache.** The
+  `#rrggbb` parse and format were written out a dozen times with as many
+  strictnesses (the legend, figure export's and the analysis' `color-utils`,
+  the colors and field-overlays domains, the field actions, the cell exports,
+  the palettes, the dataset reads, the dot plot, the Plot theme, the plots'
+  `hexToRgba`, the connectivity color input, eleven copies of the pattern);
+  they are one module, `assets/js/utils/hex-color.js`, held by
+  `tests/hex-color-contract.test.mjs`. The HDF5 file's `ByteCache` and the
+  Zarr store's `ByteLru` were the same class twice: one `ByteCache`
+  (`formats/io/byte-cache.js`).
+- **One part of the page that fails no longer stops the others hearing a
+  change.** 44 sets of listeners in 31 modules had five ways of meeting a
+  listener that throws: the rest went untold (`DataState`'s events, the camera
+  path, the memory budgets, a worker's failure, a sign-in revoked), the error
+  was swallowed, logged, or collected and thrown back at the change, so an
+  opening whose dataset was shown was said to have failed when one display of
+  it threw. They are one listener set (`assets/js/utils/listener-set.js`):
+  every listener hears every change, one that throws is reported once on the
+  console, naming what it listened to, and a listener removed while a change
+  is told is not called after (held by `tests/one-implementation-contract.test.mjs`).
+- **One way bytes become text, one SHA-256, one string hash.** Hex digests,
+  random hex states, base64 and base64url were written out in eighteen
+  modules (sign-in states, the community-annotation Worker's PKCE, the tab
+  secret, OneDrive share ids, pictures sent to a chat, kept stores, the cell
+  record of a session, GitHub contents, Zarr fill values); they are one
+  module, `assets/js/utils/byte-text.js`. Three modules called
+  `crypto.subtle.digest` themselves, which a plain-HTTP origin (the Python
+  package served on a LAN address) does not have: **Save AnnData with this
+  state…** failed there while digesting the state it saves, as did a kept
+  folder's identity and a kept store's directory name. Every digest now goes
+  through `utils/sha256.js` (WebCrypto, else the same digest in script),
+  which moved with `opaque-id.js` from `app/utils/` to `utils/`, where the
+  readers may import it. FNV-1a over text was written four times (the string
+  table, the retry spread, the figure seed, the pull-request branch name):
+  one `utils/fnv1a.js`, same values. Sweeps: `tests/byte-text-contract.test.mjs`,
+  `tests/one-implementation-contract.test.mjs`.
+- **Download names, one rule.** Every download leaves through `downloadBlob`,
+  which now makes its name safe for every file system (`safeFileName`): the
+  history report, a session file and an analysis table named after a dataset
+  such as `a/b` no longer carry a `/`. A figure keeps its dataset's name in
+  every script (an accented or CJK name was dropped to `untitled`). The time
+  stamp in a file name is one, local time `YYYYMMDD_HHMMSS` (`fileTimestamp`):
+  the session saved after a graphics reset, the My datasets library and the
+  exported chat wrote UTC `YYYY-MM-DDTHH-MM-SS`.
+- **Smaller copies made one.** "This computer" in the address box and the
+  Share dialog is `utils/loopback.js`'s (it missed `0.0.0.0`, `*.localhost`
+  and `127.0.0.2`); HTML escaping is `escapeHtml` (the report and the embed
+  code had their own); "1 repo available", "1 note, 1 bookmark" and "1
+  category label" agree (the count-noun contract knows those nouns now); the
+  level-of-detail and clustering refusals give sizes as every other message
+  does ("3.8 MB", never "4 MiB"); a superseded gene-sample read is said as
+  superseded, not as your Stop, and an abort's reason is always an error;
+  the next-task scheduler is one (`onNextMacrotask`; the history's own made a
+  channel per call, which WebKit can collect before it fires); `Retry-After`
+  is read once (`hosts.js`: an empty header no longer means "wait 0 ms").
+- **No cache keeps a count or an age limit; every one is bounded by memory.**
+  The analysis page-data cache kept at most 100 entries beside its share of
+  the memory budget, so a page × variable sweep of small results read again
+  while memory was free; its share is now its one bound (no entry cap, no
+  age), and the cleanup pass that only pruned expired entries is gone.
+- A remote file's access (Google Drive, OneDrive, Figshare: the provider's
+  closure holding its item and the token getter) is registered only once the
+  file is described (a refused file registered one) and let go with the
+  source that reads it: a dataset replaced or closed, an opening not adopted,
+  a link whose opening failed before a reader took it. They were kept for the
+  page's life, one per opening.
+- A DOM id minted on the page holds a reserved separator (`<prefix>--<n>`),
+  which no hand-written id holds (a contract test reads `index.html` and the
+  sources): it is recognized by its form, so the set of every id minted (kept
+  for the page's life) is gone, and an id made from a minted one
+  (`<minted>-trigger`) is left out of a session as the minted one is.
+- The page no longer deletes the IndexedDB database `cellucid-highlight-drafts`
+  that 0.9.6 left behind: a one-time cleanup of an earlier version is a
+  migration step, which the project does not keep.
+
+- **One debounce, one test of a signal, one wait in words.** Twenty
+  debounces written by hand (`clearTimeout(t); t = setTimeout(…)`: the
+  history search, figure export's preview, the wheel's rest, the history
+  graph's hint, Quick insights, the camera path's bar, idle workers, kept
+  parts' journal, …) are `utils/debounce.js` `debounce` (with `cancel`,
+  `flush`, `pending`). Eleven validators of an `AbortSignal` (several took any
+  object with an `aborted` boolean for one) are `isAbortSignal`,
+  `requireSignal` and `requireSignalOrNull` in `utils/abort.js`, by the
+  platform's brand check. The annotation lock's "Lease remaining: ~12 s" and
+  a gene sample's "a gene in ~20 s here" are written by `formatRemaining`.
+  `tests/one-implementation-contract.test.mjs` finds a new copy of each.
+- `npm run serve` runs the app locally with `Cache-Control: no-store`, so a
+  reload runs the module just edited; the docs no longer recommend
+  `python -m http.server`, under which a reload kept running the old code.
+  Its second port serves every file of a dataset (a `.loom`, an `.rds`, a
+  MatrixMarket folder) to open by link.
+- The documentation builds with sphinx-design 0.8 (`docs` extra:
+  `sphinx-design>=0.8,<0.9`): the home page's cards use the `card-header` and
+  `card-footer` directives in place of the `^^^`/`+++` separators 0.8
+  deprecates, which failed the `-W` build.
+
+### Python
+
+- **The viewer token stays out of errors and logs.** A browser that could not
+  be opened raised `Could not open the browser for <the address with its
+  viewerToken>`, which lands in tracebacks, CI logs and bug reports; and the
+  server's request log (at debug level) wrote the viewer page's request line,
+  token and all. Both now say the address without the token
+  (`public_viewer_url()`, one helper beside the banner, which the debug report
+  uses too); the address with it is said only where you are told to open it
+  (the banner, `display()`, `cellucid mcp --open` on stderr). A contract test
+  classifies every sentence that writes a viewer's address.
+- **A store whose declared id or name cannot be read is refused with that
+  sentence, unless you name that field.** `serve_anndata()`, `cellucid serve`
+  and the viewers read `uns['cellucid']['id']` and `['name']` even when
+  `dataset_id` / `dataset_name` were given (the declared id applies a session
+  back to the object read from the store), and a damaged one failed the view
+  with the raw decoder error. It now says `The store f.zarr holds
+  uns/cellucid/id and it cannot be read (…). Write the store again, or give
+  dataset_id= yourself.`, and a field you name is not needed from the store,
+  as in cellucid-r.
+- **`cellucid serve` says its Viewer URL at once into a file or a pipe.**
+  `cellucid serve data.h5ad --no-browser > serve.out` (a process manager,
+  `nohup`, an IDE's run panel) wrote its steps, but the Local URL / Viewer
+  URL box stayed in Python's output buffer while the server ran, so the
+  viewer could not be opened (`PYTHONUNBUFFERED=1` showed it). Every line the
+  command, `serve_anndata()`, the viewer and `prepare()` print now reaches
+  its reader at once (`console_print` flushes each one), and `cellucid mcp
+  --open` writes its address to stderr the same way.
+- Each way of opening a viewer names itself to it (`/_cellucid/info`'s
+  `runtime`): a notebook kernel's `jupyter`, a script's or session's
+  `python` (`serve_anndata()`, `AnnDataViewer`), `cellucid serve`'s
+  `cellucid-serve` (it was `python`) and `cellucid mcp --open`'s
+  `cellucid-mcp` (it was `python` or `jupyter`), which the viewer's
+  sentences name; the agents folder's records carry the same.
+- The viewer's `field_restore()` and `field_purge()` actions take `which`:
+  when two deleted fields have one name, which of them, in the order the web
+  app's **Deleted fields** lists them (named by the name alone, the request
+  was refused with no way to name either).
+- The viewer channel never allocates a body at the length a frame names
+  (R9Z-3): a selection, a result, an action's outcome or an agent's result
+  grows as its bytes arrive (a frame header naming 256 MiB, of which a few
+  bytes came, zeroed 256 MiB at once). A selection longer than the dataset's
+  cells, a cell beyond them (a selection's, a hover's, a click's) or a result
+  for a dataset of another size closes the channel (`1009`, `1008`), as
+  cellucid-r refuses them; before, the cells were delivered and a
+  selection's obs names failed with an `IndexError` in the notebook.
+- A file written again or replaced on disk while a server shows it (an
+  `.h5ad`, `.h5mu`, `.loom`, 10x `.h5` or `.zip` served in priority order) is
+  refused with HTTP 409 and why ("… changed on disk since the server opened
+  it: serve it again …"), which the viewer says as it is and then reads
+  nothing more: every chunk was answered 500 with an HDF5 error ("wrong
+  B-tree signature"), said as the server failing.
+- Offline, a viewer start serves the cached web app, as the R package does:
+  when the web source cannot be reached, a cached build whose every file
+  matches its checksums is that exact build, and the start says "Could not
+  reach …; serving the cached web app (build …)." (also when quiet). With no
+  cache, or one that does not check out, it stops saying which and how to get
+  the app; it stopped with the bare network error and never served a cache.
+  Both packages print the same words (`web_cache.WEB_APP_*`, pinned against R's
+  by the parity tests); `WebCachePrefetchSummary.unreachable` says why the
+  source was not read.
+- A viewer start no longer downloads the web app it already has: the source's
+  inventory is read at every start, and when the cache holds that very build,
+  every file verified, nothing else is fetched (each `cellucid serve`,
+  `serve_anndata()` and `AnnDataViewer` start fetched all 1,209 files again,
+  over six minutes from www.cellucid.com). A new build copies the files it
+  did not change from the cache and downloads the others six at once (the
+  first download took 6 min 49 s one file at a time, now under a minute).
+  The R package does the same.
+- In a notebook, a session or an action's answer collected in a later cell
+  before the viewer sent it says so, and why (the viewer is not shown, has
+  not connected, or is still working on it): it said "ask in one cell and
+  collect it in the next", which is what had been done.
+- `show_anndata()`, `serve_anndata()` and `AnnDataViewer` show an AnnData
+  holding a record array in `uns`, as every Scanpy object does after
+  `sc.tl.rank_genes_groups`: they failed with "Field elements must be 2- or
+  3-tuples" (the served store read a structured Zarr dtype as a type string).
+- An obs column of integers holding identifiers past 2^53 is read as the
+  viewer reads it (F116): `apply_cellucid_session_to_anndata()` takes its
+  categories as their exact decimal texts and writes a renamed label back as
+  text, `push` sends it as a categorical of those texts, and a MuData
+  modality's such column is placed on the cells as text, never as rounded
+  doubles. A boolean column's categories are `false` and `true` when a
+  session applies, as the viewer shows them: a label renamed in the viewer is
+  written (the column becomes text) instead of "holds numbers, not
+  categories".
+- `prepare()` refuses an element name longer than 255 bytes in UTF-8 (the
+  longest file name every platform takes) with the rule's sentence instead
+  of zarr's `OSError: File name too long`, and refuses two names that differ
+  only in Unicode form (`é` as one code point or as `e` and an accent), as
+  the web app's writers do.
+- `serve_anndata()`, `show_anndata()`, `AnnDataServer`, `AnnDataViewer`, `Widget`
+  and `cellucid serve` name the gene-name column and the opening embeddings as
+  `prepare()` and cellucid-r do: `var_gene_id_column=` (CLI
+  `--var-gene-id-column`) and `embedding_defaults=`. The former
+  `gene_id_column=`, `embedding_keys=` and `--gene-id-column` are gone, with
+  no second name.
+- `prepare(total_counts_over=)` (new) says what the column `total_counts`
+  names covers: `"all genes"` (the default) or `"source panel"`, every gene of
+  the source's gene panel -- a targeted or integration panel, more genes than
+  are stored but not the whole transcriptome. The Cellucid-ready AnnData
+  specification's `totalCounts` `over` gains `"source panel"`, which the web
+  app reads and says ("Cell totals from obs['total_counts'] (source panel)"),
+  and a file prepared again keeps it. With a MuData, one value or a mapping
+  by modality. cellucid-r's `cellucid_prepare(total_counts_over =)` is the
+  same. The four atlas samples' totals, over their sources' 8,192-gene
+  integration panels, are recorded so from their next build (they said
+  `"all genes"`).
+- `prepare(data=adata)` writes the expression matrix the viewer opens the
+  AnnData with (`cellucid.data_mapping.default_expression`, the web app's
+  `defaultExpression`, pinned by the shared conformance fixture): `raw.X` with
+  `raw.var` when `raw` holds more genes than `X` or `X` is scaled -- a Scanpy
+  object after `adata.raw = adata`, the highly variable genes and
+  `sc.pp.scale` -- else `X`; without `X`, `raw`, else a layer. It wrote `X`
+  whatever it held, so such an object's prepared file colored genes by the
+  scaled values of the highly variable genes where the object itself (opened,
+  served or shown) showed the log-normalized values of every gene; without
+  `X` it wrote no genes. A message says which matrix was written and why, and
+  how to write another; a `gene_expression=` given in its place goes with
+  `var`. The note for a `raw` left out no longer suggests
+  `adata.X = adata.raw.X`, which fails when `raw` holds more genes.
+  A MuData's modalities follow the same rule: a Scanpy-processed `rna`
+  modality is written from its `raw` (the root `var` and that modality's
+  `varmap` then hold `raw`'s genes), and a modality with no `X` but a `raw`
+  or a layer is written from it instead of refused.
+- `prepare()` writes a column's colors (`obs_colors=`, or Scanpy's
+  `uns['<column>_colors']` of `data`) only when each category's is hex
+  (`#rrggbb`, `#rgb`, `#rrggbbaa`), the forms the viewer reads: a palette
+  holding a named color (`"red"`) was written and the viewer opened the
+  column in its own colors without a word. Given as `obs_colors=`, such a
+  palette is refused; held by `data`, it is left out with a message.
+  cellucid-r's `cellucid_prepare()` checks the same.
+- `cellucid serve`, `serve_anndata()` and `show_anndata()` refuse a file
+  Cellucid does not open in the web app's words, as cellucid-r does: "<path>
+  is not a file Cellucid opens (an .h5ad file, a .loom file, …, an .rds file,
+  … or a .zarr.zip archive)." It listed one hand-picked ending per format
+  (`.rds.gz`, `.rdata.gz`, and the refused `.h5seurat`), and `cellucid serve`
+  wrapped it in "Unable to detect format for: <path>.", naming the path twice.
+  A missing path is "Nothing exists at <path>." (it was "Path not found:").
+- A server that cannot bind its address says why in one sentence, the one
+  `cellucid serve` says, with each setting spelled as the caller gives it
+  (`host='127.0.0.1'`, `port=9000` in Python; `--host`, `--port` on the
+  command line): a `host=` that is no address of this machine (it was the
+  resolver's `gaierror` or "Can't assign requested address"), an explicit
+  `port=` already in use (it was "[Errno 48] Address already in use"), a port
+  the system refuses. It is an `OSError` (`ServerBindError`, its `errno` the
+  system's). cellucid-r says the same.
+- Descriptive text in `uns['cellucid']` -- `name`, `description`, the
+  citation's text, the source's name -- is read and written with white space
+  at either end removed: a file whose description ended in a space was
+  refused whole by the web app ("must not start or end with white space").
+  `prepare()`, `serve_anndata()`/`show_anndata()` (`dataset_name`) and the web
+  app's browser copy write it trimmed; identifiers (`id`, keys, fields) keep
+  the strict rule. One rule in the specification, the web reader and both
+  packages; cellucid-r's `cellucid_prepare()` and `cellucid_view()` are the
+  same.
+- A refused `total_counts` column quotes the offending value as a number
+  (`-2.0`), not as NumPy's `np.float64(-2.0)`.
+- A change the viewer applied without a step of its history now says why.
+  The viewer's `action_result` carries `unrecorded` (`"unchanged"`: it was so
+  already; `"retracted"`: it put back the step just before it, which was
+  taken out; `"off"`: the History settings leave this kind of change out;
+  `"paused"`; `"elsewhere"`: another tracker was shown meanwhile;
+  `"no-history"`: the dataset's history has not started), kept as
+  `ActionRequest.unrecorded`; `request.result()` returns the outcome and
+  warns `cellucid.jupyter.ActionNotRecordedWarning` (a `UserWarning`, new),
+  as in "viewer.color_by(...): it changed nothing (it was so already), so no
+  step was recorded." A read records no step by nature and warns nothing.
+  Before, `request.step` was `None` with no reason, whether the change
+  happened or not. The viewer protocol fixture (`action_result` header,
+  `action.unrecorded` sentences) is re-pinned in the three repositories;
+  cellucid-r's `request$unrecorded` and `cellucid_action_not_recorded`
+  warning are the same.
+- `viewer.view_rename(view="View 2", name="Early")` (new, generated from the
+  viewer's `view.rename`) names a view or, with `name=None`, takes its name away;
+  `viewer.view_keep(name=...)` keeps and names a view in one step;
+  `viewer.views_state()` and `viewer.view_picture()` give each view's name
+  (`label`).
+- `viewer.annotation_publish(votes=[...], suggestions=[...])` (new, generated
+  from the viewer's `annotation.publish`) votes and suggests community
+  annotation labels together, published as one commit of the person's file
+  and asked of them once; `viewer.annotation_vote()` and
+  `viewer.annotation_suggest()` are removed with the viewer's actions.
+- `apply_cellucid_session_to_anndata()` writes every categorical user field
+  with the colors it is shown in, where Scanpy keeps a column's colors,
+  `uns['<key>_colors']` (one `#rrggbb` a category, every category), so
+  `sc.pl.*` and the viewer show the field alike: in the view in focus at the
+  applied step, the color the person or an agent gave a category (the
+  session's `colors` value; a field grouped from clusters and recolored gray,
+  gold and teal is written so), else the color it opens with -- its `palette`
+  (read and checked: a field made from highlight pages opens in its pages'
+  colors), else Cellucid's own category colors by position (the web app's
+  `getCategoryColor`, ported and pinned by the shared fixture
+  `category_default_colors.json` in the three repositories). The plan's
+  Colors row stays `not-applied` -- every other color is how the data was
+  shown -- and says so when a field's colors went with its column. A
+  column's colors follow it in every write of an apply and a pull: a column
+  without categories (a highlight group, a continuous field) has none (stale
+  colors under its name, which Scanpy and the viewer would have used for the
+  wrong categories, are removed); a renamed column carries its colors; merged
+  categories keep their first category's color (colors that did not cover
+  the categories are removed); a text column relabeled loses them; a column
+  a viewer pull removes takes them along. `pull()` of a session file writes a
+  field's colors the same way, under the column name it writes. Before, no
+  colors were written but a highlight-page field's palette (a grouped or
+  merged field's chosen colors never reached the object), and a rename or a
+  merge left colors that described another column. The web app's **Save
+  AnnData with this state…** and cellucid-r write the same.
+- A column that came with the dataset (`clusters`, `cell_type`) recolored in
+  the view in focus is written with the colors it is shown in too: one
+  `column-colors` row of the apply plan per column (a new row kind of the
+  history model), the categories recolored, the rest in the colors the
+  column opens with (its own `uns['<column>_colors']` as the viewer draws
+  them, else Cellucid's), under the column's name once the apply's renames
+  are made; `unchanged` when the column holds them already; `not-applied`,
+  saying why, for a column that is not categorical, a MuData modality's
+  column, or one with none of the categories recolored. Before, the colors a
+  person gave a dataset column never reached the object. And `pull()` from a
+  live viewer writes a categorical field's colors: each categorical result
+  of the viewer protocol carries the colors the view in focus shows it in
+  (`colors`, one `#rrggbb` a category), checked when it arrives. Before, a
+  viewer pull wrote no colors. cellucid-r and the web app's copy do the same.
+- A viewer given another `dataset_id=` than the one its data declares
+  (`AnnDataViewer(adata, dataset_id=...)`, `show_anndata`, a widget) takes
+  its own session back: `viewer.apply_session_to_anndata(adata, request)`
+  refused it ("This session was saved on the dataset 'pancreas-notebook',
+  and this object is 'pancreas'"), since the session is saved under the id
+  served and the object declares its own. The viewer now names the id it
+  served the data under for an object declaring the id its data declared;
+  `apply_cellucid_session_to_anndata()`, `CellucidSession.apply()` and
+  `pull()` of a session file take `dataset_id=`, the id the object was shown
+  under, and the refusal says to name it. A session of another dataset is
+  refused as before, and the cell count, data mapping and cell order are
+  checked as always.
+- `viewer.category_delete()` moves the cells into `'Unassigned'` by default
+  (the one spelling of cells without a label, as Create categorical's; it was
+  `'unassigned'`).
+- `pull()` of a field's obs-column CSV keeps the field's categories and their
+  order: the web app writes a third row, `categories`, holding each
+  categorical column's categories in the field's order as a JSON array of
+  strings, and `pull()` builds the column from it. They came back in the
+  order the rows first showed them, so Pancreas `clusters` lost its
+  trajectory order and a category no cell held was lost. A label the row does
+  not list, a categorical column without a list and a CSV without the row (the
+  two-row layout of earlier exports) are refused; export the field again.
+- `viewer.history_saved_open(saved=...)` (new, generated from the viewer's
+  `history.saved.open`): the viewer refuses it, as `dataset_open`, since a
+  notebook's viewer shows the dataset its notebook serves.
+- `viewer.figure_export_get()` reads the Figure export settings, by the
+  names `viewer.figure_export_set()` takes.
+- `viewer.highlight_category()` takes `categories`, one or more
+  labels of one field (was `category`, one): each becomes a group of the page
+  in one step of the viewer's history, as the viewer's `highlight.category`
+  version 2 does.
+- `prepare()` records each cell's total count (its library size) when `X`
+  holds counts: `obs['total_counts']`, the sum of each row of `X` as written,
+  with `uns['cellucid']['totalCounts'] = {"field": "total_counts", "over":
+  "stored genes"}`, so the web app normalizes a gene from one column instead
+  of reading every gene once (Suo: the whole 74 MB store). `total_counts=`
+  names the caller's own column, computed over every gene before any was
+  selected (`sc.pp.calculate_qc_metrics` before subsetting), recorded `"over":
+  "all genes"` and refused when it is below a cell's stored genes' sum (a log
+  of the totals) or `X` holds no counts; with a MuData, one column per
+  modality (`{"rna": "total_counts"}`), and each counts modality's own sums in
+  `mod/<name>/obs/total_counts`. A prepared file prepared again keeps a named
+  column named. The Cellucid-ready AnnData specification's new `totalCounts`
+  section is the contract, which cellucid-r and the web app follow.
+- `prepare()` keeps Scanpy's colors of the columns it writes: each categorical
+  `obs` column's `uns['<column>_colors']` is written with it, so a
+  Scanpy-colored AnnData (or one a session was applied to) opens in its own
+  colors instead of Cellucid's. A MuData's are kept where they were: the
+  root's columns' in `mdata.uns`, a modality's own in `mod/<name>/uns` (the
+  viewer reads `<name>:<column>`'s there). `obs_colors=` (new) gives or
+  replaces them (`{column: [color, ...]}`, a modality's column as
+  `<name>:<column>`; `{}` writes none), so the same components passed by hand
+  write the same file again. Colors that cannot color the written column (not
+  a list of text, fewer than its categories, a column not written as a
+  categorical) are left out with a message, or refused when given. Before,
+  every column's colors were dropped. cellucid-r's `cellucid_prepare()` and
+  `cellucid_view()` of an object keep them by the same rule; the
+  Cellucid-ready AnnData specification states it.
+- `apply_cellucid_session_to_anndata()` records the expression values the
+  genes were shown in at the step applied: each record of
+  `uns['cellucid']['history_applied']` (`cellucid.history_applied()`, the
+  history model's `Provenance`) has `expression`, `{"normalize": bool,
+  "log1p": bool}` as the step's **Expression values** held it (None for a
+  session without them), so a notebook knows what the person looked at.
+  Recorded, never applied: `X` and the layers keep their values. cellucid-r's
+  `cellucid_apply_session()` and the web app's **Save AnnData with this
+  state…** write the same field (history model, shared golden provenance).
+- `prepare()` stores every chunk of a Zarr store, also one that holds only
+  the fill value (the priority seed of 0, an all-zero column), as
+  `cellucid_prepare()` and the served store do: a chunk left out was answered
+  404 by a web host at every opening, reported by the browser as an error.
+  The Cellucid-ready AnnData specification states the rule.
+- The action catalog shipped with the package (`cellucid/action_catalog.json`)
+  is the web app's of this release: every action declares what it captures
+  (`captures`; `camera-path.keyframe.add` captures `camera`), and the
+  generated action reference says so.
+- `viewer.camera_path_keyframe_add(hold=...)` and
+  `viewer.camera_path_hold_set(seconds=..., keyframe=...)` give a camera path
+  keyframe a hold (seconds the camera rests there), generated from the
+  catalog as every action is; `cellucid mcp` lists `camera_path_hold_set`.
+- `viewer.highlight_cells(cells=...)` without `label` makes a group named
+  "Highlight" (the viewer's list shows its cell count), not "Highlight (N
+  cells)"; the method's docstring and the `cellucid mcp` tool say so.
+- `viewer.field_group(field=..., groups=[{"label": ..., "categories": [...]}],
+  rest=..., name=...)` makes a new categorical field of groups of a field's
+  categories in one step; `viewer.dataset_open(...)` takes `count` or
+  `fraction` (and `method`, `seed`, `field`, `allocation`, `embedding`) to
+  open a subsample at once, and `viewer.cells_open(...)` takes `fraction`
+  beside `count`; generated from the catalog, listed by `cellucid mcp`.
+- `viewer.camera_path_stop()` stops a path `viewer.camera_path_play()` is
+  still playing, at once, and returns `{"stopped": true}` (`false` when
+  nothing played; it was refused). It and `viewer.analysis_cancel(...)` are
+  documented as stopping work under way (the catalog's new effect
+  `control`); `cellucid mcp` describes them so.
+- A hook for an event the viewer never sends is refused:
+  `viewer.register_hook("selections", ...)` (and `@hooks.on`,
+  `unregister_hook`, `clear_hooks`) was taken and never fired, and
+  `viewer.wait_for_event("selections")` waited out its timeout. The events a
+  hook takes are `cellucid.jupyter.HOOK_EVENTS` (every event of the viewer
+  channel but an agent app's, and `message`), pinned to the shared protocol
+  fixture, the names R's `cellucid_on()` takes.
+- `expression_source="layer:<name>"` (`serve_anndata()`, `show_anndata()`,
+  `cellucid serve --expression`) refuses a layer name holding `/`, which the
+  web app's `defaults.expression` (`layers/<name>`) cannot name; R's
+  `cellucid_serve()` refuses it alike.
+- **The local servers hold nothing for a connection that never says who it
+  is.** A viewer channel socket that says no `hello` within 60 s is closed
+  (1008, "No hello frame was received"), as cellucid-r closes it
+  (`HELLO_SECONDS`); a binary first frame is refused from its header, unread
+  (it was read to its end, however long it said it was); and a connection to
+  the local agents endpoint that sends nothing for 120 s is closed. Each held
+  a server thread of the notebook's process for as long as any program on
+  the computer kept it open, with no token needed. A binary event's header
+  is read as its bytes arrive (over a WebSocket or a notebook widget), never
+  allocated at the length its first four bytes name: up to 4 GiB, zeroed,
+  before any of it came.
+- **JSON nested past what Python follows is refused in a sentence**: a
+  `hello` or event of the viewer channel (1008, "… nested more deeply than
+  this package reads"), a command to the agents endpoint (400), and a session
+  file (`CellucidSession`, `apply_cellucid_session_to_anndata()`, a session
+  bundle): "This session file holds a value nested more deeply than this
+  package reads …", which cellucid-r says too. Each raised the interpreter's
+  `RecursionError`: a traceback on the kernel's stderr per such socket, and a
+  session bundle's temporary file (the person's session) left behind with
+  the wait running to its timeout. Whatever else ends a bundle's read now
+  removes its file too.
+- `debug_connection()` reports `viewer_url` without the viewer token (the
+  report is what you paste when asking for help; the page's own debug
+  snapshot left it out already). `viewer.viewer_url` is the address to open.
+- `cellucid mcp` with a relative `CELLUCID_AGENTS_DIR` says so in
+  `cellucid_status` and to each call ("CELLUCID_AGENTS_DIR must be an absolute
+  path"), as cellucid-r's `cellucid_mcp()` does; it ended at start with a
+  `ValueError`.
+
+## [0.9.7] - 2026-11-07
 
 Version 0.9.7 is a patch release on 0.9.6. Files prepared and dataset
 catalogs written by 0.9.6 are read as before. **Session files are format 4**:
@@ -2494,6 +5422,7 @@ declared `0.0.9`. Release 0.9.1 restores one exact version across both systems.
   - Jupyter integration (`show()`, `show_anndata()`)
 - Export functionality for web deployment
 
+[0.9.8]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.8
 [0.9.7]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.7
 [0.9.6]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.6
 [0.9.5]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.5

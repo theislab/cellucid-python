@@ -31,13 +31,13 @@ from cellucid import show_anndata
       height=600,
       *,
       latent_key=None,
-      gene_id_column=None,
+      var_gene_id_column=None,
       normalize_embeddings=None,
       centroid_min_points=None,
       dataset_name=None,
       dataset_id=None,
       obs_keys=None,
-      embedding_keys=None,
+      embedding_defaults=None,
       knn_key=None,
       expression_source=None,
       vector_field_default=None,
@@ -82,8 +82,8 @@ from cellucid import show_anndata
 
 ### Actions (Python → viewer)
 
-Every action of the viewer's catalogue is a method, generated from the
-catalogue this package ships (`cellucid.jupyter.action_catalog()`); each
+Every action of the viewer's catalog is a method, generated from the
+catalog this package ships (`cellucid.jupyter.action_catalog()`); each
 returns an `ActionRequest` at once ({doc}`06_python_to_frontend_commands`):
 
 - `viewer.act(type: str, /, **params) -> ActionRequest` -- any action, by its
@@ -98,8 +98,11 @@ returns an `ActionRequest` at once ({doc}`06_python_to_frontend_commands`):
   step), … (the full list: {doc}`../g_api_reference_coverage/api/viewers`)
 - `request.result(timeout: float | None = 60.0)` → the outcome (a read's
   result); raises `ActionError` (`.reason`) when the viewer did not apply it;
-  `request.done`, `request.step` (`{"id", "label"}` of the history step, or
-  `None`), `request.cancel()`
+  warns `ActionNotRecordedWarning` (`.unrecorded`) when a change made no
+  history step; `request.done`, `request.step` (`{"id", "label"}` of the
+  history step, or `None`), `request.unrecorded` (why a change made no step:
+  `"unchanged"`, `"retracted"`, `"off"`, `"paused"`, `"elsewhere"`,
+  `"no-history"`; `None` beside a step and for a read), `request.cancel()`
 - `viewer.push(values, key=None) -> ActionRequest` (a pandas column or an
   array as a field: the `field.push` action)
 - `viewer.send_message(message: dict)` (low-level entry point for the closed
@@ -156,6 +159,11 @@ Programmatic registration:
 - `viewer.register_hook(event: str, callback) -> callback`
 - `viewer.unregister_hook(event: str, callback) -> bool`
 - `viewer.clear_hooks(event: str | None = None)`
+
+`event` is one of the viewer's events (`cellucid.jupyter.HOOK_EVENTS`: every
+event of {doc}`07_frontend_to_python_events` except an agent app's own) or
+`message`; any other name raises `ValueError`, as a misspelt one would never
+fire. R's `cellucid_on()` takes the same names.
 
 Synchronous API (a notebook widget hears the viewer only between cells, so
 the waiting calls raise at once in the cell that waits; see
@@ -275,6 +283,8 @@ rejected.
 {
   "requestId": str,            # the action's request
   "step": {"id": str, "label": str} | None,   # the history step it made; None for a read
+  "unrecorded": str | None,    # why a change made no step: "unchanged", "retracted", "off",
+                               # "paused", "elsewhere", "no-history"; None beside a step and for a read
   "outcome": object,           # the frame's body, UTF-8 JSON: a change's outcome or a read's result
 }
 ```
@@ -409,8 +419,10 @@ it is not used to discover or select a proxy.
 ### `GET /_cellucid/info`
 
 Returns `version`, `type`, `format`, `host`, `port`, `n_cells`, `n_genes` and
-`runtime`: the program serving the viewer, `"jupyter"` for a viewer started in
-a notebook kernel and `"python"` otherwise, which the viewer names.
+`runtime`: what opened the viewer, `"jupyter"` for a viewer started in a
+notebook kernel, `"python"` in a script or session, `"cellucid-serve"` for
+`cellucid serve` and `"cellucid-mcp"` for `cellucid mcp --open`, which every
+sentence of the viewer names.
 
 ### `GET /_cellucid/datasets`
 

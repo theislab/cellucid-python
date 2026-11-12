@@ -9,8 +9,7 @@ agent command (``agent_list``, ``agent_call``, ``agent_cancel``,
 it runs a connector agent's call: as the agent, through a connection of kind
 ``local``, under the person's permissions, asked in the confirm card, one
 turn the person can Stop and undo. The page answers with agent events
-(``agent_tools``, ``agent_result``, ``agent_asking``, ``agent_answered``,
-``agent_tools_changed``).
+(``agent_tools``, ``agent_result``, ``agent_asking``, ``agent_answered``).
 
 Two ways to a viewer, one interface (:class:`ViewerLink`):
 
@@ -34,8 +33,8 @@ The endpoint (``<endpoint>`` is ``http://127.0.0.1:<port>/_cellucid/agent/<viewe
   protocol has it; ``202`` once sent, ``409`` with the reason when no page is
   connected to the viewer, ``400`` for a command that is not one.
 - ``GET <endpoint>/events?consumer=<connection id>&wait=<seconds>``: the agent
-  events for that consumer (the answers to its commands, and every
-  ``agent_tools_changed``), oldest first, as ``{"events": [...]}``; it waits up
+  events for that consumer (the answers to its commands), oldest first, as
+  ``{"events": [...]}``; it waits up
   to ``wait`` seconds (at most :data:`EVENT_WAIT_LIMIT_SECONDS`) for one. A
   command the page refused is ``{"type": "agent_failed", "requestId",
   "reason"}``, the viewer stopping ``{"type": "viewer_stopped", "reason"}``.
@@ -88,6 +87,11 @@ CONSUMER_IDLE_SECONDS = 120.0
 #: model (a model writes at most a few hundred kilobytes in one answer).
 COMMAND_BODY_LIMIT_BYTES = 4 * 1024 * 1024
 
+#: How long a connection to the endpoint may sit idle before its thread
+#: closes it: longer than a client takes between one request and its next
+#: (``cellucid mcp`` asks again at once), as the data server's idle bound.
+CONNECTION_IDLE_SECONDS = 120.0
+
 #: What a call's listener hears, in order: ``asking`` and ``answered`` while
 #: the person is asked (any number of times), then exactly one of ``result``
 #: (the MCP tool result), ``failed`` (the page refused the command:
@@ -123,8 +127,6 @@ class ViewerLink(Protocol):
     def cancel(self, request_id: str) -> None: ...
 
     def answer(self, request_id: str, allowed: bool) -> None: ...
-
-    def add_tools_listener(self, listener: Callable[[], None]) -> Callable[[], None]: ...
 
     def close(self) -> None: ...
 
@@ -202,22 +204,12 @@ class ViewerAgentPort:
         self._lock = threading.Lock()
         self._calls: dict[str, CallListener] = {}
         self._lists: dict[str, list[Any]] = {}
-        self._tools_listeners: list[Callable[[], None]] = []
         self._stopped: str | None = None
 
     # -- the viewer's side -------------------------------------------------
 
     def deliver(self, event: str, data: dict[str, Any]) -> None:
         """One agent event from the page (``data`` without its ``type``)."""
-        if event == "agent_tools_changed":
-            with self._lock:
-                notify = list(self._tools_listeners)
-            for tools_changed in notify:
-                try:
-                    tools_changed()
-                except Exception:
-                    logger.exception("An agent tools listener failed")
-            return
         request_id = data["requestId"]
         if event == "agent_tools":
             self._settle_list(request_id, ("tools", data["tools"]))
@@ -262,11 +254,6 @@ class ViewerAgentPort:
             self._hear(listener, "failed", {"reason": PAGE_GONE})
         for request_id in lists:
             self._settle_list(request_id, ("failed", PAGE_GONE))
-
-    def page_back(self) -> None:
-        """A page holds the channel again: its tool list may say other things
-        (its settings), so whoever lists the tools is told."""
-        self.deliver("agent_tools_changed", {})
 
     def stopped(self, reason: str) -> None:
         """The viewer stopped: everything waiting ends with ``reason``."""
@@ -359,16 +346,6 @@ class ViewerAgentPort:
         if self.connected():
             self._send({"type": "agent_answer", "requestId": request_id, "allowed": bool(allowed)})
 
-    def add_tools_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
-        with self._lock:
-            self._tools_listeners.append(listener)
-
-        def remove() -> None:
-            with self._lock, contextlib.suppress(ValueError):
-                self._tools_listeners.remove(listener)
-
-        return remove
-
     def close(self) -> None:
         """Nothing to close: the viewer owns its channel."""
 
@@ -397,7 +374,8 @@ class ViewerAgentPort:
 def agents_dir() -> Path:
     """The folder of this user's published viewers.
 
-    ``$CELLUCID_AGENTS_DIR`` when set (an absolute path), else
+    ``$CELLUCID_AGENTS_DIR`` when set (an absolute path; a relative one is
+    refused with :class:`AgentsFolderError`), else
     ``<user cache>/cellucid/agents``: ``%LOCALAPPDATA%`` on Windows,
     ``~/Library/Caches`` on macOS, ``$XDG_CACHE_HOME`` or ``~/.cache``
     elsewhere -- the same folder cellucid-r reads and writes, so either
@@ -407,7 +385,9 @@ def agents_dir() -> Path:
     if override:
         path = Path(override)
         if not path.is_absolute():
-            raise ValueError("CELLUCID_AGENTS_DIR must be an absolute path")
+            # Refused as a folder shared with others is: nothing is published
+            # or read, and this is the sentence an agent reads (as cellucid-r's).
+            raise AgentsFolderError("CELLUCID_AGENTS_DIR must be an absolute path")
         return path
     if sys.platform == "win32":
         local = os.environ.get("LOCALAPPDATA", "")
@@ -430,7 +410,8 @@ LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 class AgentsFolderError(RuntimeError):
-    """The agents folder is not this user's alone: one sentence that says why."""
+    """The agents folder is refused (not this user's alone, or named by a
+    relative ``CELLUCID_AGENTS_DIR``): one sentence that says why."""
 
 
 def _this_host() -> str:
@@ -591,7 +572,6 @@ class _PublishedViewer:
         self.consumers: dict[str, _Consumer] = {}
         self.record_path: Path | None = None
         self.stopped: str | None = None
-        self.remove_tools_listener = port.add_tools_listener(self._tools_changed)
 
     def sweep(self, keep: str | None = None) -> None:
         """Drop the consumers silent for :data:`CONSUMER_IDLE_SECONDS` (their
@@ -623,12 +603,6 @@ class _PublishedViewer:
             entry.events.append(event)
             if event["type"] in {"agent_result", "agent_failed"}:
                 entry.requests.discard(event["requestId"])
-            self.lock.notify_all()
-
-    def _tools_changed(self) -> None:
-        with self.lock:
-            for entry in self.consumers.values():
-                entry.events.append({"type": "agent_tools_changed"})
             self.lock.notify_all()
 
     def stop(self, reason: str) -> None:
@@ -714,9 +688,7 @@ def publish_viewer(viewer_id: str, port: ViewerAgentPort, *, runtime: str) -> No
         endpoint_now = _endpoint
         if endpoint_now is not None:
             with endpoint_now.lock:
-                unpublished = endpoint_now.viewers.pop(viewer_id, None)
-            if unpublished is not None:
-                unpublished.remove_tools_listener()
+                endpoint_now.viewers.pop(viewer_id, None)
         logger.warning("This viewer is not published to agents on this computer: %s", error)
     except Exception:
         # Publication is the agents' way in, never the viewer's own work: a
@@ -733,7 +705,6 @@ def withdraw_viewer(viewer_id: str, reason: str = "the viewer was stopped") -> N
         published = endpoint.viewers.pop(viewer_id, None)
     if published is None:
         return
-    published.remove_tools_listener()
     published.stop(reason)
     if published.record_path is not None:
         with contextlib.suppress(OSError):
@@ -744,6 +715,11 @@ class _EndpointHandler(BaseHTTPRequestHandler):
     owner: _AgentEndpoint
     server_version = "cellucid-agents"
     protocol_version = "HTTP/1.1"
+    # A connection that sends nothing (its next request) for this long is
+    # closed, so it holds no thread: anyone on this computer can open one
+    # without the token. A waiting GET .../events does not read the socket,
+    # so the wait is not cut short by this.
+    timeout = CONNECTION_IDLE_SECONDS
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 - the base class's name
         logger.debug("agents endpoint: " + format, *args)
@@ -832,7 +808,7 @@ class _EndpointHandler(BaseHTTPRequestHandler):
             return
         try:
             command = json.loads(self.rfile.read(length).decode("utf-8"))
-        except (UnicodeDecodeError, ValueError):
+        except (UnicodeDecodeError, ValueError, RecursionError):
             self._answer(400, {"error": "A command is one JSON object."})
             return
         try:
@@ -842,6 +818,9 @@ class _EndpointHandler(BaseHTTPRequestHandler):
             return
         except (TypeError, ValueError, KeyError) as error:
             self._answer(400, {"error": str(error)})
+            return
+        except RecursionError:
+            self._answer(400, {"error": "The command is nested more deeply than this package reads."})
             return
         self._answer(202, {})
 
@@ -968,7 +947,6 @@ class RemoteViewerLink:
         self._lock = threading.Lock()
         self._calls: dict[str, CallListener] = {}
         self._lists: dict[str, list[Any]] = {}
-        self._tools_listeners: list[Callable[[], None]] = []
         self._stopped: str | None = None
         self._closed = threading.Event()
         self._reader = threading.Thread(target=self._read_events, name="cellucid-agent-events", daemon=True)
@@ -1059,16 +1037,6 @@ class RemoteViewerLink:
         with contextlib.suppress(ViewerUnavailableError, ValueError):
             self._command({"type": "agent_answer", "requestId": request_id, "allowed": bool(allowed)})
 
-    def add_tools_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
-        with self._lock:
-            self._tools_listeners.append(listener)
-
-        def remove() -> None:
-            with self._lock, contextlib.suppress(ValueError):
-                self._tools_listeners.remove(listener)
-
-        return remove
-
     def close(self) -> None:
         """Stop reading this viewer's events. A call still waiting can get no
         answer through this link now: it fails with the page-gone sentence
@@ -1111,13 +1079,6 @@ class RemoteViewerLink:
 
     def _route(self, event: dict[str, Any]) -> None:
         kind = event.get("type")
-        if kind == "agent_tools_changed":
-            with self._lock:
-                notify = list(self._tools_listeners)
-            for tools_changed in notify:
-                with contextlib.suppress(Exception):
-                    tools_changed()
-            return
         if kind == "viewer_stopped":
             self._end(str(event.get("reason") or "the viewer was stopped"))
             return

@@ -6,7 +6,7 @@
 - Which stored arrays Cellucid can show, and how to turn more on.
 - How several embeddings of one dimension (UMAP, t-SNE, PCA) are shown side by side.
 - What happens when a file has no UMAP.
-- How to choose the neighbour graph, the gene names and the expression matrix,
+- How to choose the neighbor graph, the gene names and the expression matrix,
   the latent space of outlier filters, and the vector fields.
 - What a session records about it.
 
@@ -17,7 +17,7 @@
 A dataset can hold several embeddings: a UMAP, a t-SNE, a force-directed
 layout, a PCA, spatial coordinates, in 1D, 2D or 3D. The **data mapping** says
 which of them views can show — any number, of any mix of dimensions — and
-which one is each dimension's **default**. It also names the neighbour graph,
+which one is each dimension's **default**. It also names the neighbor graph,
 gene names and expression matrix Cellucid reads, the latent space outlier
 filters measure in, and the vector fields it draws on which embedding.
 
@@ -43,9 +43,11 @@ differ (see [Launch defaults](#launch-defaults)).
 Turning an embedding on loads nothing. Its coordinates are read the first time
 a view shows it. After Embeddings, one disclosure per further group follows:
 [Genes and expression](#genes-and-expression),
-[Neighbour graph](#neighbour-graph), [Latent space](#latent-space) and
+[Expression values](#expression-values),
+[Neighbor graph](#neighbor-graph), [Latent space](#latent-space) and
 [Vector fields](#vector-fields). Every group is staged until **Apply**, and
-applied with the embeddings as one step.
+applied with the embeddings as one step; Expression values is the exception,
+two switches that take effect at once.
 
 ---
 
@@ -57,7 +59,10 @@ browser remembers it open), then **Embeddings**. The rows are one flat list,
 and each row is one embedding:
 
 - the checkbox turns it on (views can show it) or off;
-- its name (`UMAP`, `t-SNE`, `PCA 1,2,3`; a long one takes a
+- its name (`UMAP`, `t-SNE`, `PCA 1,2,3`; a MuData modality's array is
+  named with its modality after it, `UMAP (rna)`; two arrays that would be
+  named alike at the same width are named by their keys, `UMAP (X_umap)` and
+  `UMAP (X_umap_2d)`, in every menu; a long one takes a
   second line, and hovering it shows the array and columns) and its dimension
   (`3D`). The dimension is a button with a chevron: it opens the row's editor, described under
   [Dimension and columns](#dimension-and-columns-of-an-array);
@@ -65,7 +70,7 @@ and each row is one embedding:
   embedding per dimension that a view switched to that dimension shows first,
   and that keys 1, 2 and 3 show first (see
   {doc}`../c_core_interactions/05_dimension_switching_1d_2d_3d`), and
-  **guessed** marks a default the [best guess](#files-without-a-umap-the-best-guess)
+  **guessed** marks a default the [best guess](#the-default-of-each-dimension-and-the-best-guess)
   chose. An embedding that is off is one line.
 
 What is listed:
@@ -99,7 +104,10 @@ where the 24-column `scVI` array waits, off, with its width.
 Changes are staged: nothing loads until you press **Apply**, and **Revert**
 drops them. Turning the default of a dimension off makes the first other
 embedding of that dimension that is on, as listed, its default; turning on the
-first embedding of a dimension makes it the default. At least one embedding stays on, and an embedding a vector field is
+first embedding of a dimension makes it the default. A dimension the file names
+no default for (a file with `X_umap` names only the 2D one) shows its first
+embedding that is on, in the order of their keys, and **Default** marks it;
+Apply never names it unless you press its **Default**. At least one embedding stays on, and an embedding a vector field is
 drawn on cannot be turned off.
 
 On Apply, a view that shows an embedding you turned off switches to its
@@ -109,7 +117,7 @@ particular embedding — follows a new default. Every other view keeps what it
 shows. The embeddings those views switch to are loaded and checked first; if
 one is refused, nothing changes.
 
-Cells, highlights, selections, filters and colours are kept: they belong to
+Cells, highlights, selections, filters and colors are kept: they belong to
 cells, not to coordinates. Every embedding is scaled to the same box, so
 cameras stay where they were. A dataset you open next starts from its own
 view: the default camera of the dimension it opens in, and the point size its
@@ -145,7 +153,7 @@ disabled until that is fixed. A selection you added can be removed with its ×.
 The embedding is recorded as `X_pca` with its 0-based columns wherever it is
 named exactly: in a view's hover text, in a session, on the Jupyter wire.
 
-## Files without a UMAP: the best guess
+## The default of each dimension, and the best guess
 
 A file opened in the browser normally shows the UMAP it carries:
 `obsm['X_umap_1d']`, `obsm['X_umap_2d']` and `obsm['X_umap_3d']` are the
@@ -154,21 +162,26 @@ conventional name is the default of the dimension of its width: the first 1- to
 3-column array of `X_umap` (what `sc.tl.umap()` writes, and a Seurat object's
 `umap` reduction), `X_UMAP` (a SingleCellExperiment's `UMAP` reducedDim, as
 scater's `runUMAP()` names it), `X_wnn.umap` and `X_ref.umap` (a Seurat
-object's weighted-nearest-neighbour and Azimuth reference UMAPs). An R
+object's weighted-nearest-neighbor and Azimuth reference UMAPs). An R
 object's reductions and reducedDims keep their names, case and all, as
 `obsm['X_<name>']`. A present UMAP is always used, even when it cannot be
 drawn: a NaN in `X_umap` is an error, not a reason to show something else.
 
-When the file has no UMAP at all, Cellucid guesses the defaults instead of
-refusing it:
+Every other dimension, and every dimension of a file with no UMAP at all, gets
+the best guess, so each width is treated alike: `X_umap` beside `X_umap_3d`
+names both a 2D and a 3D default, and `X_umap` beside a 3-column `X_phate`
+gets PHATE as its 3D default.
 
-1. It considers every `obsm` array that can be drawn, except vector fields.
+1. It considers every `obsm` array that can be drawn, except vector fields and
+   the arrays already a default.
 2. It ranks their names: `umap`, then `tsne`, then `draw_graph` or `force`,
    then `phate`, `pacmap` or `trimap`, `spatial`, `diffmap`, any other name,
    and last `pca`, `scvi`, `latent`, `harmony` or `X_emb`.
-3. Each dimension's default is the best-ranked array exactly that wide.
-4. When no array is 1 to 3 columns wide, only 2D gets a default, from the first
-   two columns of the best-ranked wide array (for example `X_pca`).
+3. Each dimension without a default takes the best-ranked array exactly that
+   wide.
+4. When no array is 1 to 3 columns wide and nothing is a default, only 2D gets
+   a default, from the first two columns of the best-ranked wide array (for
+   example `X_pca`).
 5. An array that fails the check below is skipped for the next one, and stays
    off.
 
@@ -181,8 +194,9 @@ higher dimension when they rank the same. A segmentation export with three
 highest dimension. Keys 1, 2 and 3 switch to the others.
 
 The guess is the same for the same file every time, in the browser and in
-`cellucid serve`. It is marked **guessed** in the checklist, and a notification
-says what is shown: "This file has no default UMAP (X_umap_1d, X_umap_2d,
+`cellucid serve`, and the Python and R packages apply the same rule. A guessed
+default is marked **guessed** in the checklist. When the file names no default
+of its own (no UMAP), a notification says what is shown: "This file has no default UMAP (X_umap_1d, X_umap_2d,
 X_umap_3d, X_umap, X_UMAP, X_wnn.umap or X_ref.umap). Showing 'X_tsne' as 2D. Change it under Session › Data mapping." Its
 **Show** button opens the checklist (the sidebar, the Session panel and its
 Data mapping section with it). Nothing opens on its own: Data mapping starts
@@ -197,7 +211,7 @@ key the default rule looks for, what is shown instead, and where to change it.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/best-guess-show-checklist.png
-:alt: The Data mapping group after Show on the best-guess notification: Embeddings open and summarised as 1 on · PCA 2D · guessed, its one row, PCA in 2D, on and marked Default and guessed, above the collapsed Genes, Neighbour graph, Latent space and Vector fields groups and the Revert and Apply buttons.
+:alt: The Data mapping group after Show on the best-guess notification: Embeddings open and summarized as 1 on · PCA 2D · guessed, its one row, PCA in 2D, on and marked Default and guessed, above the collapsed Genes, Neighbor graph, Latent space and Vector fields groups and the Revert and Apply buttons.
 :width: 496px
 
 **Show** opens **Data mapping › Embeddings** on the guess: `PCA` in 2D, on,
@@ -216,7 +230,7 @@ with sc.tl.umap in Scanpy), then open the data again.
 
 ## Launch defaults
 
-What an AnnData file opens with — each dimension's embedding, the neighbour
+What an AnnData file opens with — each dimension's embedding, the neighbor
 graph, the expression matrix and gene names, the latent space, the vector field
 the overlay opens on, the obs columns shown, embedding normalization and the
 fewest cells a category needs for outlier quantiles — is decided per choice,
@@ -224,16 +238,16 @@ in this order:
 
 1. The launch option, when the file is served and the option was set:
    `cellucid serve --embedding-2d`, `--knn`, `--expression`,
-   `--gene-id-column`, `--latent-key`, `--vector-field-default`, `--obs-key`,
+   `--var-gene-id-column`, `--latent-key`, `--vector-field-default`, `--obs-key`,
    `--modality`, or the matching `serve_anndata()` / `show_anndata()` keyword
-   (`embedding_keys`, `knn_key`, `expression_source`, `gene_id_column`,
+   (`embedding_defaults`, `knn_key`, `expression_source`, `var_gene_id_column`,
    `latent_key`, `vector_field_default`, `obs_keys`, `modality`,
    `normalize_embeddings`, `centroid_min_points`). The server checks each
    name against the file's metadata before it starts, and passes only the
    options that were set.
 2. The file's own `uns['cellucid']['defaults']`, when it declares them.
-3. The rule this page describes for that choice (the UMAP, else the best guess;
-   the default neighbour graph; `raw` or `X`; the var index; no latent space; each
+3. The rule this page describes for that choice (the UMAP, and the best guess for each other width;
+   the default neighbor graph; `raw` or `X`; the var index; no latent space; each
    `<field>_<basis>` vector field bound to its `X_<basis>`; every obs column).
 
 Every choice can still be changed under **Data mapping** once the file is open.
@@ -249,12 +263,12 @@ t-SNE and UMAP:
 2. In **View 2 shows**, choose `t-SNE · 2D`.
 
 Each row of **Views** says what its view shows (`t-SNE · 2D`) and, under it,
-the field it is coloured by. Select a row to edit that view: the menu under the
-list is labelled with the view it edits.
+the field it is colored by. Select a row to edit that view: the menu under the
+list is labeled with the view it edits.
 
 Cells and highlight pages are the same in every view, so a highlight or
 selection made in one view marks the same cells in all of them, whatever each
-shows. Each view keeps its own embedding, colouring, filters, camera,
+shows. Each view keeps its own embedding, coloring, filters, camera,
 navigation mode, centroid labels and vector field. Views that show the same
 embedding share its coordinates and GPU buffers, so a second view of an
 embedding costs no extra memory for positions.
@@ -282,15 +296,16 @@ its gene count, as `raw.X · 30,000 genes`, because `raw` has its own, often
 longer, gene list. A matrix that holds counts is listed with `· counts`: an
 integer one, or one whose first stored values are all whole and non-negative
 (raw counts written as floats, as a 10x or CELLxGENE conversion writes them);
-an analysis on it names it `· counts, not normalised`, since its fold changes
-are not corrected for each cell's sequencing depth. **None** shows no genes. A file opens where Scanpy reads
+an analysis on it names it `· counts` and says the values it computed from
+([Expression values](#expression-values): raw counts are not corrected for
+each cell's sequencing depth). **None** shows no genes. A file opens where Scanpy reads
 genes for the files that convention is for: on `raw.X` when the file has one
 and either `raw` holds more genes than `X` (`X` was cut to the highly variable
 genes) or `X` holds scaled values (`sc.pp.scale`: its first chunk has negative
 values); otherwise on `X`. A CELLxGENE file keeps raw counts in `raw.X` over
-the same genes as its normalised `X`, and opens on `X`. When it opens on
+the same genes as its normalized `X`, and opens on `X`. When it opens on
 `raw.X`, the line under the menus says why, as
-"Expression: raw, as Scanpy reads genes: it holds more genes than X." or
+"Expression: raw.X, as Scanpy reads genes: it holds more genes than X." or
 "… X holds scaled values."; `X` is one choice away. Without `X` it opens on
 `raw.X`; without either, on its only layer, or, among several, on one whose
 name contains `norm` or `log`, then any other, with `counts` and `raw_counts`
@@ -328,7 +343,7 @@ be read leaves the genes unnamed and says why, in the gene search, and
 another name source can still be chosen under **Gene names**.
 
 Genes leave the viewer by their identifier, the var index name (as in
-`adata.var_names`): the gene the viewer colours by, the gene sets a notebook
+`adata.var_names`): the gene the viewer colors by, the gene sets a notebook
 receives, gene-set GMT files, and the DE and marker tables. When a var column
 names the genes, the name shown goes beside each identifier (a `symbols`
 column, `var['symbol']` in an `.h5ad` export); named by the var index, the
@@ -338,10 +353,13 @@ the name shown (identifiers first; a name two genes answer is reported, not
 guessed).
 
 A file that names its genes itself (`uns['cellucid']['defaults']['geneIdColumn']`,
-`--gene-id-column`) opens on that column for the matrix it opens with.
+`--var-gene-id-column`) opens on that column for the matrix it opens with.
 Switching **Expression** to a matrix on another var axis (to or from `raw.X`)
 keeps the column when that axis has one of the same name, else takes its var
-index; switching **Modality** takes the var index of the new modality.
+index; switching **Modality** takes the var index of the new modality. A
+change made by an agent or a notebook that names only the matrix or the
+modality (`set_data_mapping(expression="X")`) moves the gene names, and the
+highly variable genes below, by the same rule.
 Nothing guesses which column holds symbols. A gene search that finds nothing
 says which list it searched ("Searched the 33,538 genes of this dataset, named
 by its var index.") and offers **Choose gene names…**, which opens this menu.
@@ -363,7 +381,7 @@ does. The default follows Scanpy, which records `sc.pp.log1p` in
   `X`); a `counts` layer stored as floats is guessed `log1p` too: set it to
   **As stored**;
 - `raw.X` is what `adata.raw = adata` saved, conventionally the
-  log-normalised matrix before scaling: it is `log1p` too, unless it is stored
+  log-normalized matrix before scaling: it is `log1p` too, unless it is stored
   as integers (counts);
 - without `uns['log1p']`, every matrix is as stored;
 - a matrix whose stored values could not be `log1p` stays as stored, whatever
@@ -387,32 +405,138 @@ then names that say so (`highly_variable_*`, `hvg`, `*_hvg`), then any other.
 It starts on `highly_variable`, the column `sc.pp.highly_variable_genes`
 writes and Scanpy uses as its `mask_var`, when that column is true/false
 (the line under the menus says "Guessed: highly variable genes."); otherwise
-on **None**. Choosing it reads nothing: analyses that keep to the highly
-variable genes read the column when they first ask for it. A missing value in
-a nullable column is not marked.
+on **None**. Switching **Expression** keeps the column when the new matrix's
+var table has one of that name, else starts it as opening on that matrix
+would: from `raw.X` (None) to `X`, on `highly_variable`. Choosing it reads
+nothing: analyses that keep to the highly variable genes read the column when
+they first ask for it. A missing value in a nullable column is not marked.
 
 Apply reads the new gene list, and the values of every gene a view is
-coloured by, before anything changes. Then:
+colored by, before anything changes. Then:
 
-- A view coloured by a gene keeps that gene, with its colour range, log scale
+- A view colored by a gene keeps that gene, with its color range, log scale
   and filter. Other names for the same matrix (the var index and a symbol
   column, or `X` and a layer) keep the same column: `ENSG00000090382` becomes
   `LYZ`. Between `raw.X` and the others the gene is found by name. A range or
   filter outside the new values is narrowed to them.
-- A gene missing from the new list loses its colouring, and Apply says so:
-  "Applied. 'PPBP' is not on the new gene list; its colouring was removed."
-- Cells, highlights, selections, obs filters and colours are kept.
+- A gene missing from the new list loses its coloring, and Apply says so:
+  "Applied. 'PPBP' is not on the new gene list; its coloring was removed."
+- Cells, highlights, selections, obs filters and colors are kept.
 - Gene search, the gene menus and the **Genes** row of the **Dataset** box's
   **Details** use the new list; any
   other gene loads when it is first used.
 - Analysis windows close, since what they computed came from the previous
   values.
 
+## Expression values
+
+**Expression values**, right after Genes, is collapsed by default; its header
+says what the genes are shown in: **Raw values**, **Normalized**, **log1p** or
+**Normalized · log1p**. It has two switches, both off by default, each a
+change made at once (not staged with Apply):
+
+| Switch | Each value becomes | scanpy | Seurat |
+| --- | --- | --- | --- |
+| **Normalize to library size** | `x · 10,000 / t`, `t` the cell's total count | `sc.pp.normalize_total(adata, target_sum=1e4)` | `NormalizeData(normalization.method = "RC", scale.factor = 1e4)` |
+| **Log transform (log1p)** | `ln(1 + x)`, after the normalization when both are on | `sc.pp.log1p(adata)` | with the first: `NormalizeData(normalization.method = "LogNormalize", scale.factor = 1e4)` |
+
+The common total is fixed at 10,000, not scanpy's default median of the totals:
+the median moves with the open cells (a subsample, the cells genes are read
+for), a fixed total does not, so one value means one thing whatever is open. A
+zero stays zero; a cell whose total is 0 holds only zeros; a cell genes were not
+read for stays not read.
+
+**One setting for the whole app.** Coloring by a gene, the legend (its color
+scale is named in the values' units: `Values: log1p(norm.)`, and a figure's
+legend titles the gene `Ins1 · log1p(norm.)`), range filters and color ranges
+of a gene, highlights by value, the cell card (`Ins1 · log1p(norm.)`), an
+agent's `cells_values`, `field_summary` and `dataset_summary` reads (each names
+the values), and every analysis that reads genes — Marker genes, Differential
+expression with cells as observations, Dot plot, Gene signature, Detailed and
+Correlation — use these values (Quick reads only obs fields). Wherever a gene's values are
+named — the legend, a figure's legend, the cell card, a gene's range filter and
+a highlight or annotation group made from a range, Detailed's axes, heading,
+summary and CSV, Correlation's axes and CSV (`x_label`, `y_label`), the dot
+plot's and the marker heatmap's color bars, the means in the dot plot and DE
+CSVs — the name carries the units when they are not as stored:
+`Ins1 · log1p(norm.)`, `Ins1 · norm.`, `Ins1 · log1p` (an analysis names the
+values its run read, so a stale result keeps its own). Obs fields are never
+transformed, and a gene field made in the app (a copy) keeps the values it was
+made with, and its bare name.
+Pseudobulk differential expression always sums each sample's raw counts and
+normalizes the samples itself (TMM, log-CPM: see
+{doc}`../h_analysis/06_analysis_mode_differential_expression_de`). An AnnData
+saved or exported from the app keeps its matrix as stored. Applying a session
+to its dataset (**Save AnnData with this state…**, Python
+`apply_cellucid_session_to_anndata()`, R `cellucid_apply_session()`) never
+changes the values either: the apply's record in
+`uns['cellucid']['history_applied']` holds the step's expression values
+(`expression: {normalize, log1p}`, as asked: a matrix that does not hold
+counts was shown as stored), so a notebook knows what you looked at.
+
+**Where each cell's total comes from.** The line under the first switch says it:
+
+- the obs column the file names as its cells' totals
+  (`uns['cellucid']['totalCounts']`: `prepare()` and `cellucid_prepare()` write
+  `obs['total_counts']`, over all genes, over the source's gene panel or over
+  the genes stored; the line names which, `Cell totals from obs['total_counts']
+  (source panel)`), read as one column — free;
+- else a continuous obs column named like a total — `total_counts` (scanpy
+  `calculate_qc_metrics`), `n_counts`, `nCount_RNA` (Seurat), `nUMI`,
+  `total_umis`, `umi_count`, `library_size` — whose every value is a total of 0
+  or more;
+- else every gene of the matrix, read once and summed per cell (as
+  `normalize_total` sums `X`), only the cells genes are read for. The line says
+  what that reads at the link as measured (`Cell totals: every gene summed
+  (reads ~74 MB, ~20 s)`), and an agent is asked first (heavy work). The totals
+  are kept for the open dataset, one set per matrix, shared by the coloring and
+  every analysis; the open cells grown later or genes read for more cells add
+  only the cells added, once however many genes are shown.
+
+**Every change that sums them asks first.** Summing a matrix is never done
+behind your back by a later read: the change that needs the totals reads them
+before it shows anything, at the price it said.
+
+- Turning **Normalize** on: the line under the switch is the price.
+- With Normalize on, **Apply** of a mapping onto another counts matrix (another
+  layer, `raw`, another modality): the status line above Apply says it
+  (`Apply sums all 27,998 genes of layers['counts'] once for each cell's total
+  (normalized values): ~74 MB, ~12 s.`). Mapping back onto a matrix summed
+  before reads nothing again.
+- **Genes read for** more cells: its price counts the totals of the cells
+  added (its tooltip says `with the cells' totals of normalized values`).
+- **Cells to open** again, an undo or redo, a jump in the history, or a saved
+  state or session restoring normalized values: the totals are read as part of
+  that change.
+
+An agent is asked for each of these as heavy work (by your permission
+settings: by default when it would take longer than about ten seconds), before
+anything is read; declined, nothing changes. A mapping restored with its
+Expression values (an undo, a saved state) shows its matrix in the values it
+ends on at once, so it never sums a matrix for values it does not keep.
+
+**When it is offered.** Only for a mapped matrix of counts (listed `· counts`)
+whose Values are as stored: a matrix the file stores as `log1p`, or one that
+does not hold counts, is shown as stored, the switches are disabled and the
+line says why (`X holds log1p values already (Data mapping › Genes › Values).`).
+The setting is kept as asked and applies again when you map a matrix of counts.
+
+**What a change does.** A view colored by a gene keeps it and reads it again in
+the new values; its color range and range filter are dropped, being in the old
+units (the line says which genes). Analysis results stay, each saying the values
+it was computed from, and are marked **Stale** (`The expression values changed
+since this result`). The change is one step of the history (`Expression values:
+normalized · log1p`), is saved in sessions, and is the agents' action
+`expression_transform_set {normalize, log1p}`. A dataset opens with both off.
+A session or saved state loaded onto the dataset open puts back the values it
+holds; one saved without them means the values as stored, whatever was shown
+before, so one file always shows the same values.
+
 ## Latent space
 
 The **Latent space** disclosure (**Outliers in**) chooses where a
 categorical field's outlier filter measures distance: each cell's distance to
-its category's centre in that space, as the share of its category at that
+its category's center in that space, as the share of its category at that
 distance or closer (see
 {doc}`../e_filtering/02_outlier_filtering_per_active_field`). It is never the
 2D/3D layout, and Cellucid never picks one for you. Its menu lists **None**
@@ -438,10 +562,12 @@ space, otherwise computed in the browser's reader worker from the latent
 space, which is read once and kept in memory within Cellucid's budget
 ([Stored or computed](../e_filtering/02_outlier_filtering_per_active_field.md#stored-or-computed)).
 The browser computes exactly the bytes `prepare()` stores. A latent space of
-any size works: it is streamed from the file in row slabs. A space holding a
-missing value (NaN) or a value beyond float32 fails at its first read with a
-message naming the cell, and is marked unusable. **None** turns the outlier
-filters off until a latent space is chosen again.
+any size works: it is streamed from the file in row slabs. A cell whose row
+holds a missing value (NaN) or an infinity has no place in it: it gets no
+quantile and is never hidden, and its category is measured over its other
+cells. A space holding a value beyond float32, or with no finite row, fails at
+its first read with a message naming the cell, and is marked unusable.
+**None** turns the outlier filters off until a latent space is chosen again.
 
 ## Vector fields
 
@@ -501,9 +627,9 @@ embedding the field is bound to (see
 An array whose values cannot be drawn is reported when it is first shown, and
 is then listed disabled with the reason.
 
-## Neighbour graph
+## Neighbor graph
 
-For an AnnData file, the **Neighbour graph** disclosure chooses the graph that
+For an AnnData file, the **Neighbor graph** disclosure chooses the graph that
 connectivity edges and the KNN drag tool use. Its menu lists **None** and
 every `obsp` matrix, as `connectivities · sparse 10,000 × 10,000`: the
 `connectivities` that `sc.pp.neighbors()` writes, a `<key>_connectivities`
@@ -511,10 +637,12 @@ from `sc.pp.neighbors(key_added=…)`, and any other square matrix with one row
 per cell. A matrix that is not square, or not as large as the dataset, is
 listed disabled with the reason.
 
-A file starts with `obsp['connectivities']` when it has one; else with
-Seurat's shared-nearest-neighbour graph of the modality (assay) it opens
-with, `<modality>_snn` (`RNA_snn`), else the first other one (`<assay>_snn`,
-or `SNN`, in any case); else with none. A served file starts with the graph
+A file starts with `obsp['connectivities']` when it has one; else, for a
+MuData, with the graph of the modality it opens with (`rna:connectivities`,
+where scanpy and `prepare()` write a modality's graph); else with Seurat's
+shared-nearest-neighbor graph of the modality (assay) it opens with,
+`<modality>_snn` (`RNA_snn`), else the first other one (`<assay>_snn`, or
+`SNN`, in any case); else with none. A served file starts with the graph
 `cellucid serve --knn KEY` (or `show_anndata(..., knn_key=...)`) names
 instead. Either way the graph is read only when edges are drawn or the KNN
 drag tool is used. `prepare()` and `cellucid_prepare()` choose the graph they
@@ -523,7 +651,7 @@ write by the same rule.
 Apply reads the graph and checks it before anything changes. It must be
 symmetric, with no negative, infinite or missing weight. Its diagonal is left
 out: a cell joined to itself is no edge anyone can draw (Seurat's
-`FindNeighbors` counts each cell among its own neighbours, so `RNA_snn` has 1
+`FindNeighbors` counts each cell among its own neighbors, so `RNA_snn` has 1
 on its diagonal). A graph that is not symmetric, such as Seurat's directed
 `RNA_nn` or the `distances` that `sc.pp.neighbors()` also writes, is refused,
 never repaired:
@@ -535,7 +663,7 @@ obsp['distances'] is not symmetric — choose a connectivities matrix.
 The previous graph stays, and the refused one is listed disabled with that
 reason until the dataset is opened again. After a graph changes, shown
 connectivity edges are redrawn from it, the KNN drag tool uses it on its next
-drag, and the **Neighbour graph** row of the **Dataset** box's **Details** counts
+drag, and the **Neighbor graph** row of the **Dataset** box's **Details** counts
 its edges.
 
 ## Where each group starts
@@ -545,9 +673,9 @@ opens:
 
 | Group | File read in the browser | Served file |
 |---|---|---|
-| Neighbour graph | `connectivities`, else `<modality>_snn`, else the first other `*_snn` | `--knn`, else as in the browser |
+| Neighbor graph | `connectivities`, else `<modality>:connectivities` (MuData), else `<modality>_snn`, else the first other `*_snn` | `--knn`, else as in the browser |
 | Modality (several only) | the first gene-expression modality (`rna`, `gex`, `gene expression`, `gene_expression`, `sct`), else the first | as in the browser |
-| Gene names | the var index | `--gene-id-column`, else as in the browser |
+| Gene names | the var index | `--var-gene-id-column`, else as in the browser |
 | Expression | `raw.X` when it holds more genes than `X` or `X` is scaled, else `X` | `--expression`, else as in the browser |
 | Values (log1p) | every matrix not stored as integers (`X`, `raw.X`, each layer) is `log1p` when `uns['log1p']` exists (its `base`, e when none); else as stored | as in the browser |
 | Highly variable genes | `var['highly_variable']` (`raw.var` for `raw.X`) when it is true/false, else None | as in the browser |
@@ -571,12 +699,16 @@ embedding it shows. Loading the session restores both:
 - If it names an embedding this dataset does not have, the session is refused
   and names it: "This session shows obsm['X_tsne'] columns [0, 1], which this
   dataset does not have."
-- If it was saved with another neighbour graph, modality, gene names, expression
+- Its expression values (normalized, log1p) are restored with it; a session
+  saved before they existed opens with the values as stored.
+- If it was saved with another neighbor graph, modality, gene names, expression
   matrix, values (`log1p`) of a matrix, highly variable genes column, latent
   space or vector fields, that choice is restored when this
   dataset has it and can use it; otherwise the session is refused and names
-  it: "This session uses obsp['scvi_connectivities'] as its neighbour graph,
-  which this dataset does not have." A gene a view was coloured by is
+  it: "This session uses obsp['scvi_connectivities'] as its neighbor graph,
+  which this dataset does not have." Gene names and highly variable genes
+  are looked up on the var table of the session's own matrix: one saved on
+  `X` with `highly_variable` restores onto the file opened on `raw.X`. A gene a view was colored by is
   restored on the saved gene list, and the gene count is checked against that
   list (`raw.X` has its own). Outlier thresholds are restored with the
   latent space they were set in, by getting their quantiles (stored or

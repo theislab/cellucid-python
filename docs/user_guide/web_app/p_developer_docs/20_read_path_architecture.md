@@ -130,8 +130,12 @@ included, each rejecting with `reason` (the reader passes why it moved on,
 | The reader | `data/anndata/reader.js` | `AnnDataReader` (open, fields, genes, embeddings, graphs, category codings) |
 | Gene columns and cell rows by layout, and their prices | `data/anndata/matrix-access.js` | `geneLayoutOf`, `requestPriceOf`, each layout's `readCost`, `columnIndexResidentBytes` |
 
-Invariant: a format-specific path is a view or a transcoder, never a branch
-in `reader.js`.
+Invariants: a format-specific path is a view or a transcoder, never a branch
+in `reader.js`. A file the readers cannot read is said to the person once, in
+`open.js` (`explainFormatError`): each container's damage and unsupported
+features, an R stream's, a web page in place of data, and an element that
+breaks the AnnData layout (`AnnDataFormatError`, `elements.js`: every check of
+what a file holds throws it; a check of Cellucid's own work never does).
 
 ## 5. The share planner: which cells, which genes, at what cost
 
@@ -144,7 +148,7 @@ in `reader.js`.
 | The subsample as a smaller AnnData | `data/anndata/views/cell-subset.js` | `cellSubsetView`, `gatheredArray` (kept rows as boxes in source order, in waves), `KeptPositions`, `CellRows` |
 | Rows read in store order | `data/anndata/values.js` | `readRowsInStoreOrder`, `readInSourceOrder` |
 | Gene indexes of cell-major matrices | `data/sparse-column-index.js`; `data/anndata/prefix-column-index.js` (segments over priority-ordered rows, doubling, carried to the next opening of nested cells); `data/anndata/kept-column-index.js` (kept across visits) | `AnnDataReader` `_segmentedColumns` (rows spread through the store form one segment in store order, or every stored row's index restricted to them: `_restrictsWhole`, `restrictedAccess`, `PassRates`) |
-| Neighbour graphs at a share | `data/anndata/graph-lines.js` | `inducedGraphLines`, `readInducedGraph` |
+| Neighbor graphs at a share | `data/anndata/graph-lines.js` | `inducedGraphLines`, `readInducedGraph` |
 | Progressive first view and growth | `data/anndata/progressive-open.js`, `data/opening-cost.js` | grown in place by `app/open-cells-resize.js` |
 | Every rate measured of the machine or the link that these plans weigh | `utils/machine.js` | `measureOf` (the link the reader plans on, `formats/io/link.js` `plannedLink`; the decoding rate; the order time; the kept-read rate; the index pass rates; the opening cost; the cores), `holdMachine` (tests and benchmarks: held on the page and handed to every worker, `workers/worker-script.js` `handToWorkers`) |
 
@@ -208,12 +212,12 @@ A cell not read for a gene holds NaN (no value), never a zero.
 
 | Owns | Module | Entry points |
 | --- | --- | --- |
-| What a colour's alpha byte means | `rendering/alpha-visibility.js` | `BENEATH_ALPHA_BYTE` (254, no-value grey beneath), `UNREAD_ALPHA_BYTE` (253, not read), 255 coloured |
+| What a color's alpha byte means | `rendering/alpha-visibility.js` | `BENEATH_ALPHA_BYTE` (254, no-value gray beneath), `UNREAD_ALPHA_BYTE` (253, not read), 255 colored |
 | How unread, zero and read cells look | `rendering/read-cell-layer.js` | `zeroCellColor`, `unreadCellColor`, `readCellSizeMultiplier` |
 | Points, LOD, culling | `rendering/high-perf-renderer.js`, `rendering/high-perf/` | `HighPerfRenderer`; LOD levels are the first cells of the priority order (`data/cell-priority.js`) |
 
 Invariants: every surface that draws cells (viewer, figure export, smoke)
-takes its layer colours and alpha meanings from these two modules; unread
+takes its layer colors and alpha meanings from these two modules; unread
 cells are drawn first, so every read cell shows above them.
 
 ---
@@ -238,7 +242,7 @@ what was tried and reverted, and the open items:
 | Step | Tests (in `cellucid/tests/`) |
 | --- | --- |
 | Bytes | `formats-io-contract`, `host-*`, `http-request-resilience-contract`, `kept-parts-*`, `formats-decode-pool`, `codec-layer-contract`, `wasm-codecs-contract`, `close-stops-reads-contract` (a close, a disconnect or a failed opening leaves no request in flight) |
-| Containers | `hdf5-*`, `zarr-*`, `rds-*`, `text-matrix-*`, the corpus conformance tests |
+| Containers | `hdf5-*`, `zarr-*`, `rds-*`, `text-matrix-*`, the corpus conformance tests, `reader-resilience-contract` (damaged, mistaken and malformed input, web pages in place of data) |
 | AnnData and share planner | `anndata-*`, `subsample-*`, `gene-sample-contract`, `kept-column-index-contract`, `graph-lines-contract`, `edges-at-a-share-contract`, `obs-strings-share-contract`, `subsample-share-cost-contract` |
 | Page and renderer | `high-perf-*`, `alpha-*`, browser specs `gene-sample`, `renderer-smoke`, the `*-parity` specs |
 

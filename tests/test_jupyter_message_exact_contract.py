@@ -138,7 +138,7 @@ def test_the_viewer_page_address_uses_the_shared_protocols_keys() -> None:
     query = parse_qsl(urlsplit(viewer.viewer_url).query)
     assert [key for key, _ in query] == protocol["page"]["parameters"]
     assert query[0] == (protocol["page"]["mode"], "true")
-    assert set(protocol["runtimes"]) == {"python", "jupyter", "r"}
+    assert set(protocol["runtimes"]) == {"jupyter", "python", "cellucid-serve", "cellucid-mcp", "r", "r-mcp"}
 
 
 def test_valid_message_serialization_is_strict_json() -> None:

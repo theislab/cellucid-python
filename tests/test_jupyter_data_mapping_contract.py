@@ -166,11 +166,12 @@ def test_mapping_set_names_only_the_groups_it_changes_and_its_answer_is_the_live
     viewer._handle_frontend_message(_event(origin="notebook", mapping=live))
     viewer._handle_frontend_message({
         "type": "action_result", "requestId": request.request_id,
-        "step": {"id": "s2", "label": "Changed the data mapping: neighbour graph, expression"},
+        "step": {"id": "s2", "label": "Changed the data mapping: neighbor graph, expression"},
+        "unrecorded": None,
         "body": bytearray(b'{"groups":2}'),
     })
     assert request.result(timeout=0) == {"groups": 2}
-    assert request.step == {"id": "s2", "label": "Changed the data mapping: neighbour graph, expression"}
+    assert request.step == {"id": "s2", "label": "Changed the data mapping: neighbor graph, expression"}
     assert viewer.data_mapping == live
     assert viewer.data_mapping_origin == "notebook"
 

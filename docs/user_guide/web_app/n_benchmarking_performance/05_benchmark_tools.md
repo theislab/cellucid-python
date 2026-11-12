@@ -253,7 +253,7 @@ The shader figure was removed rather than corrected because the instrument
 cannot support it. It timed the three qualities in a fixed order, one run each,
 for about sixteen frames apiece, and compared the spread against fixed
 thresholds. The effect itself is not there — the three qualities are within
-noise at every point size, because nearly every rasterised fragment dies at the
+noise at every point size, because nearly every rasterized fragment dies at the
 depth test before the fragment shader runs. Adding counterbalancing and a
 measured noise floor was tried and still produced a false positive on a busy
 machine, so no threshold on that instrument is trustworthy.
@@ -278,7 +278,7 @@ analysis no longer changes your shader quality as a side effect.
   reports 8,192 (Firefox) holds as many points as one that reports 16,384, and
   every draw is split into calls of at most 16,777,216 points, below the
   30,000,000 vertices Firefox accepts in one call. No GPU buffer limits it
-  either: positions and colours are stored in segments of 16,777,216 points,
+  either: positions and colors are stored in segments of 16,777,216 points,
   one buffer each (one buffer of 3D positions used to stop at 178.8 million
   points). Nor does the browser's largest single array: Chromium allocates at
   most 2,145,386,496 bytes in one `ArrayBuffer` (3D positions of 178.8 million
@@ -303,8 +303,8 @@ analysis no longer changes your shader quality as a side effect.
   which is the honest outcome — the limit that binds is your machine's
   memory, and the control does not pretend to know what that is.
 - The controls in this panel start out disabled and become usable once the app
-  has finished wiring them. If a preset looks greyed out for a moment during a
-  slow start, that is the intended behaviour — see
+  has finished wiring them. If a preset looks grayed out for a moment during a
+  slow start, that is the intended behavior — see
   {doc}`../q_troubleshooting_index/index`.
 
 ---

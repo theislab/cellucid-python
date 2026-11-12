@@ -75,7 +75,7 @@ The confirmation to look for. If you do not see it, the file was not written:
 check the browser's download permissions for the site.
 ```
 
-**Share…** stays greyed out until a dataset is open. Changes made while
+**Share…** stays grayed out until a dataset is open. Changes made while
 recording was paused become one step first. To keep a version in this
 browser instead of a file, type a name in **Load…** and **Save**
 ({doc}`../m_state_history/03_saved_states_and_autosave`).
@@ -85,8 +85,11 @@ browser instead of a file, type a name in **Load…** and **Save**
 1) Under **State › Session**, click **Load…**.
 2) Under **From a file**, click **Open a session file…** and choose the
    `.cellucid-session` file.
-3) Wait for the progress notification to finish as **Loaded** with
-   **Session fully restored.**
+3) Wait for the notice that reads **Session fully restored.**
+
+Dropping the file on the page, or choosing it in **Open… › File…**, loads it
+the same way: a file someone sent you opens with one gesture, its dataset
+first when another is shown.
 
 The file's trackers are added beside yours, and the file's active tracker is
 shown at the step it showed when it was saved; **Undo** walks back through its
@@ -118,14 +121,14 @@ is loaded onto that one instead, and refused with an explanation if it was
 saved on a different dataset. See {ref}`changing-dataset-while-loading`.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-04-restore-confirmation.png
-:alt: The two notifications a completed restore publishes: "Loaded "Tracker 1 (shared)" from Pancreatic endocrinogenesis (scVelo).cellucid-session beside yours." with Undo, and the restore's progress entry, now titled "Loaded" and reading "Session fully restored.".
-:width: 760px
+:alt: The one notification a completed load leaves, titled "Loaded "Tracker 1 (shared)" beside yours" and reading "Session fully restored.", with an Undo button.
+:width: 676px
 
-A successful load says what it added (**Loaded "…" from <file> beside
-yours.**, with **Undo**, which takes the loaded trackers out again), and its
-own progress entry completes as **Session fully restored.**: every step and
-every value read and checked, and the step shown put back. A load that fails ends the same entry as **Loading
-failed** instead, naming the reason.
+A successful load ends in one notice that says what it added (**Loaded "…"
+beside yours**, with **Undo**, which takes the loaded trackers out again) and
+reads **Session fully restored.**: every step and every value read and
+checked, and the step shown put back. A load that fails ends its progress
+notification as **Loading failed** instead, naming the reason.
 ```
 
 If the view already matched the file, the visual change may be subtle; use the
@@ -162,7 +165,8 @@ You do not need a file to pick up your own work on the same computer:
 - When you open a dataset again whose history this browser kept, a
   notification asks **Continue where you left off?** with **Continue** and
   **Start fresh**. Nothing is loaded until you choose **Continue**; **Start
-  fresh** stops the question for that history.
+  fresh** stops the question for that history. At a start that shows the
+  welcome, the question comes once the welcome is closed.
 - From **Session › Open data › My datasets › All…**, a dataset's **Continue**
   opens it with its latest saved state.
 - **State › Session › Load…** lists every history kept, for every dataset:
@@ -215,7 +219,7 @@ keeps the trackers you had.
 After loading:
 
 1) Look for the session notification:
-   - **Loaded** with **Session fully restored.** on the load's progress entry.
+   - **Session fully restored.** on the load's notice.
 2) If the load was refused, read the exact message.
    - A dataset mismatch refuses everything; see
      {doc}`07_versioning_compatibility_and_dataset_identity`.

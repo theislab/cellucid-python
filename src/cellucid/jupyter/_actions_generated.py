@@ -1,9 +1,9 @@
-"""The viewer's methods, one per action of the catalogue: generated, do not edit.
+"""The viewer's methods, one per action of the catalog: generated, do not edit.
 
 Written by ``scripts/generate_actions.py`` from ``cellucid/action_catalog.json``
-(the web app's action catalogue, digest a805685f10d2625d). Each method sends one
+(the web app's action catalog, digest 725d32e5357cebbc). Each method sends one
 ``action`` command through :meth:`AnnDataViewer.act`, which checks and converts
-its parameters by the catalogue, and returns its :class:`ActionRequest`.
+its parameters by the catalog, and returns its :class:`ActionRequest`.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class ViewerActions:
-    """Every action of the catalogue as a method (mixed into the viewer)."""
+    """Every action of the catalog as a method (mixed into the viewer)."""
 
     __slots__ = ()
 
@@ -34,10 +34,12 @@ class ViewerActions:
     ) -> ActionRequest:
         r"""Stop an analysis.
 
-        Stop a running analysis; what it was showing stays, nothing else changes.
+        Stop a running analysis, at once, also while its run is still waiting for it; what it was
+        showing stays, nothing else changes.
 
-        Action ``analysis.cancel``. It reads only and changes nothing; ``request.result()`` is what it
-        reads.
+        Action ``analysis.cancel``. It stops work under way in the viewer at once, also while the
+        request that started it is still waiting; that work's own step records what it changed, so this
+        records no step; ``request.result()`` is its outcome.
 
         Parameters
         ----------
@@ -118,7 +120,7 @@ class ViewerActions:
         options : dict
             Keys: ``barsBy`` (optional), ``cellTypes`` (optional), ``cells`` (optional), ``condition``
             (optional), ``correction`` (optional), ``method`` (optional), ``onlyTypes`` (optional),
-            ``order`` (optional), ``samples`` (optional), ``values`` (optional).
+            ``order`` (optional), ``paired`` (optional), ``samples`` (optional), ``values`` (optional).
         in_ : "panel" or int
             Default ``'panel'``.
         show : bool
@@ -280,8 +282,9 @@ class ViewerActions:
             (optional), ``maxAdjP`` (optional), ``method`` (optional), ``minCells`` (optional),
             ``minCellsPerSample`` (optional), ``minLog2FC`` (optional), ``minPct`` (optional),
             ``onlyGenes`` (optional), ``onlyGenesList`` (optional), ``pConvention`` (optional),
-            ``pageA`` (optional), ``pageB`` (optional), ``replicates`` (optional), ``within``
-            (optional), ``withinCategories`` (optional), ``withinField`` (optional).
+            ``pageA`` (optional), ``pageB`` (optional), ``paired`` (optional), ``replicates``
+            (optional), ``within`` (optional), ``withinCategories`` (optional), ``withinField``
+            (optional).
         in_ : "panel" or int
             Default ``'panel'``.
         show : bool
@@ -356,6 +359,46 @@ class ViewerActions:
             answer arrives once the cell has finished: collect it in a later cell.
         """
         return self.act('analysis.dotplot.set', options=options, **{'in': in_}, show=show)
+
+    def analysis_export(
+        self,
+        *,
+        analysis: Literal['markers', 'differential', 'dotplot', 'signature', 'composition', 'correlation'],
+        all: bool = False,
+        in_: Literal['panel'] | int = 'panel',
+    ) -> ActionRequest:
+        r"""Export an analysis result.
+
+        Write an analysis's whole result table as a CSV file, as its expanded view's CSV button does:
+        differential expression every gene with scanpy's columns (scores, logfoldchanges, pvals,
+        pvals_adj, pct_nz_group, pct_nz_reference, auroc, means, cells); marker genes the shown markers
+        of each group, or with all every gene of every group; the dot plot one row per group and gene;
+        gene signature every cell's score per set and page (per set and group with a Group by field);
+        composition the results per cell type with a test, else the counts; correlation each page's
+        statistics. Refused, saying why, when there is no result or it is out of date (run it again
+        first).
+
+        Action ``analysis.export``. It acts outside the viewer's state and history (a file the person
+        receives in the browser, a publication, or what the browser keeps for later visits), which Undo
+        does not take back, and records no step; ``request.result()`` is its outcome.
+
+        Parameters
+        ----------
+        analysis : {"markers", "differential", "dotplot", "signature", "composition", "correlation"}
+            An analysis with a Run button.
+        all : bool
+            Marker genes only: every gene of every group (the All genes CSV) instead of the shown
+            markers. Default ``False``.
+        in_ : "panel" or int
+            Default ``'panel'``.
+
+        Returns
+        -------
+        ActionRequest
+            The request, sent at once (or as soon as the viewer connects). In a notebook widget its
+            answer arrives once the cell has finished: collect it in a later cell.
+        """
+        return self.act('analysis.export', analysis=analysis, all=all, **{'in': in_})
 
     def analysis_list(
         self,
@@ -551,8 +594,8 @@ class ViewerActions:
     ) -> ActionRequest:
         r"""Read an analysis result.
 
-        The top rows of an analysis's result table (N a parameter), with what it was computed on and
-        whether it is stale.
+        The top rows of an analysis's result table (N a parameter), with how it was tested (groups and
+        their cells, test, matrix), what it was computed on and whether it is stale.
 
         Action ``analysis.result``. It reads only and changes nothing; ``request.result()`` is what it
         reads.
@@ -564,7 +607,9 @@ class ViewerActions:
         in_ : "panel" or int
             Default ``'panel'``.
         top : int
-            At most this many rows (per group, where the result has groups). Default ``20``.
+            At most this many rows: per group of marker genes, per direction of a differential
+            expression (top 40: 40 up in A and 40 up in B); about.rows says how it counted. Default
+            ``20``.
 
         Returns
         -------
@@ -582,7 +627,9 @@ class ViewerActions:
     ) -> ActionRequest:
         r"""Run an analysis.
 
-        Run an analysis with its options and pages, and wait for its result.
+        Run an analysis with its options and pages, and wait for its result. The Analysis panel shows
+        one analysis at a time: run in it, an analysis is shown first when another is (its section and
+        the sidebar must be open).
 
         Action ``analysis.run``. It changes the data's meaning (fields, labels, filters, highlights,
         results), as one step of the viewer's history, which the person can undo; ``request.result()``
@@ -646,9 +693,10 @@ class ViewerActions:
         Parameters
         ----------
         options : dict
-            Keys: ``bins`` (optional), ``controlSize`` (optional), ``geneSets`` (optional), ``layout``
-            (optional), ``maxRank`` (optional), ``method`` (optional), ``plotType`` (optional),
-            ``rescale`` (optional), ``seed`` (optional).
+            Keys: ``bins`` (optional), ``cells`` (optional), ``controlSize`` (optional), ``geneSets``
+            (optional), ``groupBy`` (optional), ``groups`` (optional), ``layout`` (optional),
+            ``maxRank`` (optional), ``method`` (optional), ``plotType`` (optional), ``rescale``
+            (optional), ``seed`` (optional).
         in_ : "panel" or int
             Default ``'panel'``.
         show : bool
@@ -850,26 +898,26 @@ class ViewerActions:
         """
         return self.act('analysis.window.place', window=window, left=left, top=top, width=width, height=height)
 
-    def annotation_suggest(
+    def annotation_publish(
         self,
         *,
-        field: Mapping[str, Any],
-        category: str,
-        label: str,
-        evidence: str | Omit = OMIT,
-        ontology_id: str | Omit = OMIT,
+        suggestions: Sequence[Mapping[str, Any]] | Omit = OMIT,
+        votes: Sequence[Mapping[str, Any]] | Omit = OMIT,
     ) -> ActionRequest:
-        r"""Suggest a label.
+        r"""Vote and suggest labels.
 
-        Suggest a label for a category in the person's name, with their upvote, as the voting dialog's
-        New suggestion does, and publish that suggestion alone: the person's own file in the community
-        annotation repository is written as published now plus this suggestion (a pull request when they
-        cannot write to the repository), which others see on their next Pull. A label already suggested
-        for the category is refused with its id (vote on it instead). Asked of the person first; the
-        history cannot take it back. Refused until the person has connected the repository and signed in
-        to GitHub.
+        Vote suggested labels of categories up or down (none takes the person's vote back) and suggest
+        new labels in the person's name (each with their upvote, as the voting dialog's New suggestion
+        does), and publish all of them together as one commit: the person's own file in the community
+        annotation repository is written as published now plus these changes (a pull request when they
+        cannot write to the repository), which others see on their next Pull. Put everything of a turn
+        in one call: each call is one commit of the person's file and one question to them. Nothing else
+        of the person's is published; votes that change nothing publish nothing. A label already
+        suggested for its category is refused with its id (vote on it instead), and nothing of a call is
+        published when any of it is refused. Asked of the person first; the history cannot take it back.
+        Refused until the person has connected the repository and signed in to GitHub.
 
-        Action ``annotation.suggest``. It acts outside the viewer's state and history (a file the person
+        Action ``annotation.publish``. It acts outside the viewer's state and history (a file the person
         receives in the browser, a publication, or what the browser keeps for later visits), which Undo
         does not take back, and records no step; ``request.result()`` is its outcome. It publishes for
         others to see, so the viewer asks the person first, from Python too, as when an agent runs it;
@@ -877,16 +925,12 @@ class ViewerActions:
 
         Parameters
         ----------
-        field : dict
-            A categorical column of the cells by name (source "obs"). Keys: ``key``, ``source``.
-        category : str
-            A category label as the legend shows it.
-        label : str
-            The label suggested.
-        evidence : str
-            Why: the markers or reasoning behind it. Optional: left out, the viewer decides.
-        ontology_id : str
-            Its ontology term, when known. Optional: left out, the viewer decides.
+        suggestions : list
+            The new labels, each for one category; one label once per category. Optional: left out, the
+            viewer decides.
+        votes : list
+            The votes, each on one suggestion of one category; one vote per suggestion. Optional: left
+            out, the viewer decides.
 
         Returns
         -------
@@ -894,7 +938,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('annotation.suggest', field=field, category=category, label=label, evidence=evidence, ontology_id=ontology_id)
+        return self.act('annotation.publish', suggestions=suggestions, votes=votes)
 
     def annotation_suggestions(
         self,
@@ -902,14 +946,17 @@ class ViewerActions:
         field: Mapping[str, Any],
         category: str | Omit = OMIT,
         cursor: int | Omit = OMIT,
+        pull: bool | Omit = OMIT,
     ) -> ActionRequest:
         r"""Read the community annotation.
 
         The labels suggested for the categories of a field by the community annotation of the dataset
         shown (its connected GitHub repository), with their votes, the person's own vote and each
         category's consensus, as the voting dialog and the legend show them; whether the field is open
-        for voting, and when this browser last pulled. One page holds what fits a tool result; \`next\`
-        starts the following one.
+        for voting, and when this browser last pulled. The repository is pulled first when this browser
+        has not pulled it yet, or when asked (pull), as GitHub sync › Pull latest does: nothing of the
+        person's is published. One page holds what fits a tool result; \`next\` starts the following
+        one.
 
         Action ``annotation.suggestions``. It reads only and changes nothing; ``request.result()`` is
         what it reads.
@@ -924,6 +971,10 @@ class ViewerActions:
         cursor : int
             Where the page starts: the next of the last page; the first page when left out. Optional:
             left out, the viewer decides.
+        pull : bool
+            Pull the latest suggestions and votes from the repository first (true), or read what this
+            browser has (false). Left out: pulled only when this browser has not pulled the repository
+            yet. Optional: left out, the viewer decides.
 
         Returns
         -------
@@ -931,42 +982,48 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('annotation.suggestions', field=field, category=category, cursor=cursor)
+        return self.act('annotation.suggestions', field=field, category=category, cursor=cursor, pull=pull)
 
-    def annotation_vote(
+    def camera_framing(
         self,
         *,
-        field: Mapping[str, Any],
-        category: str,
-        suggestion: str,
-        vote: Literal['up', 'down', 'none'],
+        azimuth: float | Omit = OMIT,
+        categories: Sequence[str] | Omit = OMIT,
+        elevation: float | Omit = OMIT,
+        field: Mapping[str, Any] | Omit = OMIT,
+        fill: float = 0.8,
+        view: str | Omit = OMIT,
     ) -> ActionRequest:
-        r"""Vote on a suggested label.
+        r"""Frame cells with the camera.
 
-        Vote a suggested label of a category up or down (none takes the person's vote back) and publish
-        that vote alone: the person's own file in the community annotation repository is written as
-        published now plus this vote (a pull request when they cannot write to the repository), which
-        others see on their next Pull. Nothing else of the person's is published, and a vote that
-        changes nothing publishes nothing. Asked of the person first; the history cannot take it back.
-        Refused until the person has connected the repository and signed in to GitHub.
+        Where cells sit in a view and cameras that frame them, seen from a direction: the whole view,
+        each category of a field (or those named), and those named together. Nothing moves; give a
+        camera to camera_set or camera_path_keyframe_add. It frames the view as it is laid out now (side
+        by side, a view is narrower): arrange the views first.
 
-        Action ``annotation.vote``. It acts outside the viewer's state and history (a file the person
-        receives in the browser, a publication, or what the browser keeps for later visits), which Undo
-        does not take back, and records no step; ``request.result()`` is its outcome. It publishes for
-        others to see, so the viewer asks the person first, from Python too, as when an agent runs it;
-        ``request.result()`` waits for their answer (call it again if its timeout passes first).
+        Action ``camera.framing``. It reads only and changes nothing; ``request.result()`` is what it
+        reads.
 
         Parameters
         ----------
+        azimuth : float
+            Degrees around the vertical axis the camera looks from (3D views); omitted, the view's own.
+            90 apart is a quarter turn. Optional: left out, the viewer decides.
+        categories : list
+            Only these categories of the field; they are also framed together. Omitted, every category
+            the view shows. Optional: left out, the viewer decides.
+        elevation : float
+            Degrees above (positive) or below the subject the camera looks from (3D views); omitted, the
+            view's own. Optional: left out, the viewer decides.
         field : dict
-            A categorical column of the cells by name (source "obs"). Keys: ``key``, ``source``.
-        category : str
-            A category label as the legend shows it.
-        suggestion : str
-            The suggestion, by its id or its label (annotation_suggestions); suggestions with the same
-            label are one suggestion.
-        vote : {"up", "down", "none"}
-            up, down, or none to take the person's vote back.
+            A categorical field whose categories to frame, each on its own. Keys: ``key``, ``source``.
+            Optional: left out, the viewer decides.
+        fill : float
+            How much of the frame the cells fill across or up: 0.8 a close shot with a margin, 0.4 the
+            subject with its surroundings. Default ``0.8``.
+        view : str
+            The view: "View N" as the Compare views list numbers it; the selected view when left out.
+            Optional: left out, the viewer decides.
 
         Returns
         -------
@@ -974,7 +1031,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('annotation.vote', field=field, category=category, suggestion=suggestion, vote=vote)
+        return self.act('camera.framing', azimuth=azimuth, categories=categories, elevation=elevation, field=field, fill=fill, view=view)
 
     def camera_navigation_set(
         self,
@@ -1056,17 +1113,69 @@ class ViewerActions:
         """
         return self.act('camera-path.duration.set', seconds=seconds, keyframe=keyframe)
 
+    def camera_path_get(
+        self,
+    ) -> ActionRequest:
+        r"""Read the camera path.
+
+        The camera path: each keyframe (label, camera, when it is reached, how long the camera rests
+        there, the time of the transition after it), how it plays, its length, and whether it is
+        playing.
+
+        Action ``camera-path.get``. It reads only and changes nothing; ``request.result()`` is what it
+        reads.
+
+        Returns
+        -------
+        ActionRequest
+            The request, sent at once (or as soon as the viewer connects). In a notebook widget its
+            answer arrives once the cell has finished: collect it in a later cell.
+        """
+        return self.act('camera-path.get')
+
+    def camera_path_hold_set(
+        self,
+        *,
+        seconds: float,
+        keyframe: str | Omit = OMIT,
+    ) -> ActionRequest:
+        r"""Set a camera path hold.
+
+        Set how long the camera rests at one keyframe, or at every keyframe, before moving on (0 for no
+        rest). The path grows by the hold; each transition keeps its time.
+
+        Action ``camera-path.hold.set``. It changes how the cells are shown, as one step of the viewer's
+        history, which the person can undo; ``request.result()`` is its outcome and ``request.step`` the
+        step.
+
+        Parameters
+        ----------
+        seconds : float
+            Seconds the camera rests at the keyframe before moving on (a pause in the shot); 0 for none.
+        keyframe : str
+            The keyframe the camera rests at; omitted, every keyframe. Optional: left out, the viewer
+            decides.
+
+        Returns
+        -------
+        ActionRequest
+            The request, sent at once (or as soon as the viewer connects). In a notebook widget its
+            answer arrives once the cell has finished: collect it in a later cell.
+        """
+        return self.act('camera-path.hold.set', seconds=seconds, keyframe=keyframe)
+
     def camera_path_keyframe_add(
         self,
         *,
         camera: Mapping[str, Any] | Omit = OMIT,
         embedding: Mapping[str, Any] | None | Omit = OMIT,
+        hold: float | Omit = OMIT,
         label: str | Omit = OMIT,
     ) -> ActionRequest:
         r"""Add a camera path keyframe.
 
         Save a camera as the next keyframe of the camera path (before the return to start, when there is
-        one).
+        one), optionally with a hold: seconds the camera rests there.
 
         Action ``camera-path.keyframe.add``. It changes how the cells are shown, as one step of the
         viewer's history, which the person can undo; ``request.result()`` is its outcome and
@@ -1075,14 +1184,21 @@ class ViewerActions:
         Parameters
         ----------
         camera : dict
-            The camera to save; omitted, the selected view's camera now. Keys: ``freefly``,
-            ``navigationMode``, ``orbit``. Optional: left out, the viewer decides.
+            The camera to save, whole (one from camera_framing or views_state); omitted, the selected
+            view's camera now. Keys: ``freefly``, ``navigationMode``, ``orbit``. Optional: left out, the
+            viewer decides.
         embedding : dict or None
             The embedding the keyframe was recorded on; omitted, the one the selected view shows. Keys:
             ``columns``, ``key``. Optional: left out, the viewer decides.
+        hold : float
+            Seconds the camera rests at the keyframe before moving on; omitted, 0 (none). Optional: left
+            out, the viewer decides.
         label : str
-            The keyframe's label; omitted, "KF n". Unique among the keyframes. Optional: left out, the
-            viewer decides.
+            The keyframe's label, the shot's name: in the Camera path list, and, while the path plays
+            with captions on (the default), its caption over the plot from halfway into the move to it
+            until halfway out of it, as a documentary's title ("Beta cells", "Overview"; short, a title
+            case phrase). Omitted, "KF n", which is never captioned. Unique among the keyframes.
+            Optional: left out, the viewer decides.
 
         Returns
         -------
@@ -1090,7 +1206,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('camera-path.keyframe.add', camera=camera, embedding=embedding, label=label)
+        return self.act('camera-path.keyframe.add', camera=camera, embedding=embedding, hold=hold, label=label)
 
     def camera_path_keyframe_move(
         self,
@@ -1166,7 +1282,7 @@ class ViewerActions:
         keyframe : str
             A keyframe, by its label as the Camera path list shows it.
         label : str
-            The new label.
+            The new label: the shot's name, and its caption while the path plays with captions on.
 
         Returns
         -------
@@ -1202,10 +1318,35 @@ class ViewerActions:
         """
         return self.act('camera-path.loop-back.set', enabled=enabled)
 
+    def camera_path_play(
+        self,
+    ) -> ActionRequest:
+        r"""Play the camera path.
+
+        Play the camera path in the selected view from its first keyframe, as Play does; answers when it
+        ends or camera_path_stop or the person's Stop stops it (the camera stays where it stopped; a
+        looping path plays on until stopped, by camera_path_stop or the person's Stop of this turn),
+        with ended "end", "stopped", "looping" or "reduced-motion": the person's system asks for reduced
+        motion, so the camera went to the last keyframe without moving (seconds: how long it moved, 0
+        when at once); nothing played, so never describe a film that ran.
+
+        Action ``camera-path.play``. It changes how the cells are shown, as one step of the viewer's
+        history, which the person can undo; ``request.result()`` is its outcome and ``request.step`` the
+        step.
+
+        Returns
+        -------
+        ActionRequest
+            The request, sent at once (or as soon as the viewer connects). In a notebook widget its
+            answer arrives once the cell has finished: collect it in a later cell.
+        """
+        return self.act('camera-path.play')
+
     def camera_path_playback_set(
         self,
         *,
         autoplay: bool | Omit = OMIT,
+        captions: bool | Omit = OMIT,
         easing: Literal['linear', 'ease-in-out', 'ease-in', 'ease-out'] | Omit = OMIT,
         loop: bool | Omit = OMIT,
         position_interpolation: Literal['catmull-rom', 'linear', 'bezier'] | Omit = OMIT,
@@ -1214,8 +1355,8 @@ class ViewerActions:
     ) -> ActionRequest:
         r"""Set camera path playback.
 
-        Set how the camera path plays: interpolation, easing, speed of automatic transitions, loop and
-        autoplay.
+        Set how the camera path plays: interpolation, easing, speed of automatic transitions, loop,
+        autoplay and captions.
 
         Action ``camera-path.playback.set``. It changes how the cells are shown, as one step of the
         viewer's history, which the person can undo; ``request.result()`` is its outcome and
@@ -1225,12 +1366,19 @@ class ViewerActions:
         ----------
         autoplay : bool
             Start playing as soon as the path has two keyframes. Optional: left out, the viewer decides.
+        captions : bool
+            Show each named keyframe's label as a caption over the plot while the path plays (on by
+            default; a keyframe still called "KF n" has none). Optional: left out, the viewer decides.
         easing : {"linear", "ease-in-out", "ease-in", "ease-out"}
-            How each transition speeds up and slows down. Optional: left out, the viewer decides.
+            How the path starts and ends: from rest and to rest (ease-in-out), from rest (ease-in), to
+            rest (ease-out), or moving (linear); every transition keeps its own time. Optional: left
+            out, the viewer decides.
         loop : bool
             Play the path again from its start when it ends. Optional: left out, the viewer decides.
         position_interpolation : {"catmull-rom", "linear", "bezier"}
-            How positions between keyframes are drawn. Optional: left out, the viewer decides.
+            How positions between keyframes are drawn: catmull-rom is the smooth one (no jolt or
+            overshoot at a keyframe; a keyframe repeated is a hold). Optional: left out, the viewer
+            decides.
         rotation_interpolation : {"slerp", "linear"}
             How the view direction turns between keyframes. Optional: left out, the viewer decides.
         speed : int
@@ -1243,7 +1391,28 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('camera-path.playback.set', autoplay=autoplay, easing=easing, loop=loop, position_interpolation=position_interpolation, rotation_interpolation=rotation_interpolation, speed=speed)
+        return self.act('camera-path.playback.set', autoplay=autoplay, captions=captions, easing=easing, loop=loop, position_interpolation=position_interpolation, rotation_interpolation=rotation_interpolation, speed=speed)
+
+    def camera_path_stop(
+        self,
+    ) -> ActionRequest:
+        r"""Stop the camera path.
+
+        Stop a playing camera path where the camera is, at once, also while camera_path_play is still
+        waiting for it to end (that play then answers ended "stopped", and its step holds the camera
+        where it stopped).
+
+        Action ``camera-path.stop``. It stops work under way in the viewer at once, also while the
+        request that started it is still waiting; that work's own step records what it changed, so this
+        records no step; ``request.result()`` is its outcome.
+
+        Returns
+        -------
+        ActionRequest
+            The request, sent at once (or as soon as the viewer connects). In a notebook widget its
+            answer arrives once the cell has finished: collect it in a later cell.
+        """
+        return self.act('camera-path.stop')
 
     def camera_reset(
         self,
@@ -1293,7 +1462,11 @@ class ViewerActions:
             it is shown, the kept views follow in the order they were kept).
         camera : dict
             A camera: its navigation mode, and its orbit and free-fly poses (the one the mode drives is
-            used). Keys: ``freefly``, ``navigationMode``, ``orbit``.
+            used). Coordinates are the view's (the embedding scaled to about -1..1, y up); an orbit
+            camera sits at target + radius·(sin phi·cos theta, cos phi, sin phi·sin theta) looking at
+            target (theta the azimuth, phi from straight above, radians); a planar one at target + (0,
+            0, radius). Take cameras from \`camera_framing\` rather than composing them. Keys:
+            ``freefly``, ``navigationMode``, ``orbit``.
 
         Returns
         -------
@@ -1308,11 +1481,11 @@ class ViewerActions:
         *,
         field: Mapping[str, Any],
         category: str,
-        unassigned_label: str = 'unassigned',
+        unassigned_label: str = 'Unassigned',
     ) -> ActionRequest:
         r"""Delete a category.
 
-        Move every cell of one category into the unassigned category. A column from the file becomes a
+        Move every cell of one category into the Unassigned category. A column from the file becomes a
         new column (the original moves to Deleted fields); a column made in the app is edited in place.
 
         Action ``category.delete``. It changes the data's meaning (fields, labels, filters, highlights,
@@ -1326,7 +1499,7 @@ class ViewerActions:
         category : str
             A category label as the legend shows it.
         unassigned_label : str
-            The category the cells move into, made when missing. Default ``'unassigned'``.
+            The category the cells move into, made when missing. Default ``'Unassigned'``.
 
         Returns
         -------
@@ -1342,11 +1515,14 @@ class ViewerActions:
         field: Mapping[str, Any],
         category: str,
         into: str,
+        label: str | Omit = OMIT,
     ) -> ActionRequest:
         r"""Merge two categories.
 
-        Move every cell of one category into another. A column from the file becomes a new column (the
-        original moves to Deleted fields); a column made in the app is edited in place.
+        Move every cell of one category into another. The merged category is named "merged <category> +
+        <into>" (as the legend's drag names it) unless label names it: give label the into category's
+        own name to keep it. A column from the file becomes a new column (the original moves to Deleted
+        fields); a column made in the app is edited in place.
 
         Action ``category.merge``. It changes the data's meaning (fields, labels, filters, highlights,
         results), as one step of the viewer's history, which the person can undo; ``request.result()``
@@ -1360,6 +1536,9 @@ class ViewerActions:
             The category whose cells move.
         into : str
             The category they join.
+        label : str
+            The merged category's name; "merged <category> + <into>" when left out. Optional: left out,
+            the viewer decides.
 
         Returns
         -------
@@ -1367,7 +1546,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('category.merge', field=field, category=category, into=into)
+        return self.act('category.merge', field=field, category=category, into=into, label=label)
 
     def category_rename(
         self,
@@ -1442,13 +1621,15 @@ class ViewerActions:
         count: int | Omit = OMIT,
         embedding: str | Omit = OMIT,
         field: str | Omit = OMIT,
+        fraction: float | Omit = OMIT,
         method: Literal['uniform', 'blocks', 'stratified', 'spatial'] | None = None,
         seed: int | None = None,
     ) -> ActionRequest:
         r"""Open a share of the cells.
 
-        Read the dataset again with every cell, or with exactly \`count\` cells chosen by a subsample
-        method; highlights, labels, views and filters are kept for the cells still open.
+        Read the dataset again with every cell, or with a subsample: an exact \`count\` of cells or a
+        \`fraction\` of them, chosen by a subsample method; highlights, labels, views and filters are
+        kept for the cells still open.
 
         Action ``cells.open``. It changes the data's meaning (fields, labels, filters, highlights,
         results), as one step of the viewer's history, which the person can undo; ``request.result()``
@@ -1457,20 +1638,24 @@ class ViewerActions:
         Parameters
         ----------
         mode : {"all", "subsample"}
-            See the action's summary.
+            all: every cell; subsample: the count or fraction given.
         allocation : {"proportional", "balanced"}
             Stratified: how the cells are split over the categories. Default ``'proportional'``.
         count : int
-            Subsample: how many cells. Optional: left out, the viewer decides.
+            How many cells, exactly (at least 2; the dataset's count or more opens every cell). Not with
+            fraction. Optional: left out, the viewer decides.
         embedding : str
             Spatial: the obsm embedding it thins. Optional: left out, the viewer decides.
         field : str
             Stratified: the categorical column it is stratified by. Optional: left out, the viewer
             decides.
+        fraction : float
+            The share of the dataset's cells: 0.1 opens a tenth, 1 every cell. Not with count. Optional:
+            left out, the viewer decides.
         method : {"uniform", "blocks", "stratified", "spatial", null}
-            Subsample: how the cells are chosen; null for the file's default. Default ``None``.
+            How the cells are chosen; null for the file's default. Default ``None``.
         seed : int or None
-            Subsample: its seed; null for the file's. Default ``None``.
+            The subsample's seed; null for the file's. Default ``None``.
 
         Returns
         -------
@@ -1478,7 +1663,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('cells.open', mode=mode, allocation=allocation, count=count, embedding=embedding, field=field, method=method, seed=seed)
+        return self.act('cells.open', mode=mode, allocation=allocation, count=count, embedding=embedding, field=field, fraction=fraction, method=method, seed=seed)
 
     def cells_read_genes(
         self,
@@ -1569,10 +1754,10 @@ class ViewerActions:
         *,
         field: Mapping[str, Any] | None,
     ) -> ActionRequest:
-        r"""Colour the cells by a field or gene.
+        r"""Color the cells by a field or gene.
 
-        Colour the view in focus by a column of the cells (source "obs") or a gene (source "var"),
-        reading it first when needed; null clears the colouring.
+        Color the view in focus by a column of the cells (source "obs") or a gene (source "var"),
+        reading it first when needed; null clears the coloring.
 
         Action ``color.by``. It changes how the cells are shown, as one step of the viewer's history,
         which the person can undo; ``request.result()`` is its outcome and ``request.step`` the step.
@@ -1580,7 +1765,7 @@ class ViewerActions:
         Parameters
         ----------
         field : dict or None
-            The field or gene by name; null colours the cells by nothing. Keys: ``key``, ``source``.
+            The field or gene by name; null colors the cells by nothing. Keys: ``key``, ``source``.
 
         Returns
         -------
@@ -1597,9 +1782,11 @@ class ViewerActions:
         category: str,
         color: str,
     ) -> ActionRequest:
-        r"""Colour one category.
+        r"""Color one category.
 
-        Give one category of a categorical column another colour.
+        Give one category of a categorical column another color in the view in focus: each view keeps
+        its own colors, so view_focus first selects the view to change (a view not colored by the column
+        shows no change).
 
         Action ``color.category``. It changes how the cells are shown, as one step of the viewer's
         history, which the person can undo; ``request.result()`` is its outcome and ``request.step`` the
@@ -1612,7 +1799,7 @@ class ViewerActions:
         category : str
             A category label as the legend shows it.
         color : str
-            A colour as six hex digits, "#e41a1c".
+            A color as six hex digits, "#e41a1c".
 
         Returns
         -------
@@ -1628,9 +1815,10 @@ class ViewerActions:
         field: Mapping[str, Any],
         colormap: Literal['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'turbo', 'twilight', 'coolwarm', 'bluered', 'spectral', 'rdylbu', 'rdbu', 'piyg', 'prgn', 'brbg', 'seismic', 'ylgnbu', 'ylorrd', 'ylorbr', 'gnbu', 'bupu', 'rdpu', 'purd', 'orrd', 'blues', 'greens', 'reds', 'purples', 'oranges', 'greys', 'heat', 'hot', 'cool', 'jet', 'rainbow', 'ocean', 'terrain', 'spring', 'summer', 'autumn', 'winter', 'bone', 'copper', 'pink'],
     ) -> ActionRequest:
-        r"""Choose a colour map.
+        r"""Choose a color map.
 
-        The colour map a continuous field or gene is drawn with.
+        The color map a continuous field or gene is drawn with in the view in focus (each view keeps its
+        own).
 
         Action ``color.continuous.colormap``. It changes how the cells are shown, as one step of the
         viewer's history, which the person can undo; ``request.result()`` is its outcome and
@@ -1639,10 +1827,10 @@ class ViewerActions:
         Parameters
         ----------
         field : dict
-            The continuous field or gene the view in focus is coloured by, by name. Keys: ``key``,
+            The continuous field or gene the view in focus is colored by, by name. Keys: ``key``,
             ``source``.
         colormap : {"viridis", "plasma", "inferno", "magma", "cividis", "turbo", "twilight", "coolwarm", "bluered", "spectral", "rdylbu", "rdbu", "piyg", "prgn", "brbg", "seismic", "ylgnbu", "ylorrd", "ylorbr", "gnbu", "bupu", "rdpu", "purd", "orrd", "blues", "greens", "reds", "purples", "oranges", "greys", "heat", "hot", "cool", "jet", "rainbow", "ocean", "terrain", "spring", "summer", "autumn", "winter", "bone", "copper", "pink"}
-            The colour map by its id (viridis, magma, coolwarm, …).
+            The color map by its id (viridis, magma, coolwarm, …).
 
         Returns
         -------
@@ -1658,9 +1846,10 @@ class ViewerActions:
         field: Mapping[str, Any],
         enabled: bool,
     ) -> ActionRequest:
-        r"""Log colour scale.
+        r"""Log color scale.
 
-        Colour a continuous field or gene on a log scale, or a linear one.
+        Color a continuous field or gene on a log scale, or a linear one, in the view in focus (each
+        view keeps its own).
 
         Action ``color.continuous.log``. It changes how the cells are shown, as one step of the viewer's
         history, which the person can undo; ``request.result()`` is its outcome and ``request.step`` the
@@ -1669,7 +1858,7 @@ class ViewerActions:
         Parameters
         ----------
         field : dict
-            The continuous field or gene the view in focus is coloured by, by name. Keys: ``key``,
+            The continuous field or gene the view in focus is colored by, by name. Keys: ``key``,
             ``source``.
         enabled : bool
             See the action's summary.
@@ -1689,9 +1878,10 @@ class ViewerActions:
         min: float,
         max: float,
     ) -> ActionRequest:
-        r"""Set the colour range.
+        r"""Set the color range.
 
-        The values the colour map spans for a continuous field or gene that is rescaled to a range.
+        The values the color map spans for a continuous field or gene that is rescaled to a range, in
+        the view in focus (each view keeps its own).
 
         Action ``color.continuous.range``. It changes how the cells are shown, as one step of the
         viewer's history, which the person can undo; ``request.result()`` is its outcome and
@@ -1700,7 +1890,7 @@ class ViewerActions:
         Parameters
         ----------
         field : dict
-            The continuous field or gene the view in focus is coloured by, by name. Keys: ``key``,
+            The continuous field or gene the view in focus is colored by, by name. Keys: ``key``,
             ``source``.
         min : float
             See the action's summary.
@@ -1721,10 +1911,10 @@ class ViewerActions:
         field: Mapping[str, Any],
         enabled: bool,
     ) -> ActionRequest:
-        r"""Rescale colours to the visible range.
+        r"""Rescale colors to the visible range.
 
-        Stretch the colour map over the visible range of a continuous field or gene, or over all its
-        values.
+        Stretch the color map over the visible range of a continuous field or gene, or over all its
+        values, in the view in focus (each view keeps its own).
 
         Action ``color.continuous.rescale``. It changes how the cells are shown, as one step of the
         viewer's history, which the person can undo; ``request.result()`` is its outcome and
@@ -1733,7 +1923,7 @@ class ViewerActions:
         Parameters
         ----------
         field : dict
-            The continuous field or gene the view in focus is coloured by, by name. Keys: ``key``,
+            The continuous field or gene the view in focus is colored by, by name. Keys: ``key``,
             ``source``.
         enabled : bool
             See the action's summary.
@@ -1754,7 +1944,8 @@ class ViewerActions:
     ) -> ActionRequest:
         r"""Gray for zero.
 
-        Draw a gene's zeros in gray beneath the expressing cells, or in the colour map's lowest colour.
+        Draw a gene's zeros in gray beneath the expressing cells, or in the color map's lowest color, in
+        the view in focus (each view keeps its own).
 
         Action ``color.continuous.zero-gray``. It changes how the cells are shown, as one step of the
         viewer's history, which the person can undo; ``request.result()`` is its outcome and
@@ -1763,7 +1954,7 @@ class ViewerActions:
         Parameters
         ----------
         field : dict
-            The continuous field or gene the view in focus is coloured by, by name. Keys: ``key``,
+            The continuous field or gene the view in focus is colored by, by name. Keys: ``key``,
             ``source``.
         enabled : bool
             See the action's summary.
@@ -1780,14 +1971,25 @@ class ViewerActions:
         self,
         *,
         name: str,
+        allocation: Literal['proportional', 'balanced'] = 'proportional',
+        count: int | Omit = OMIT,
+        embedding: str | Omit = OMIT,
+        field: str | Omit = OMIT,
+        fraction: float | Omit = OMIT,
         kind: Literal['any', 'sample', 'my-datasets', 'link'] = 'any',
+        method: Literal['uniform', 'blocks', 'stratified', 'spatial'] | None = None,
+        seed: int | None = None,
     ) -> ActionRequest:
         r"""Open a dataset.
 
         Open a dataset by the name the person gives: a built-in sample, one of their datasets (My
         datasets), a link, or an accession the link box takes. It replaces the open dataset; that one's
-        history stays kept in this browser and the new one starts its own. A whole-file download is
-        asked about first.
+        history stays kept in this browser while Autosave keeps it (steps it does not keep are asked
+        about first) and the new one starts its own. A link, accession or server the person has not
+        typed, pasted or opened in this tab is asked of them first (before anything is requested), and
+        so is a whole-file download. A count or fraction opens that subsample of its cells at once, read
+        once (as cells_open takes it); without, it opens with the cells the person chose for openings
+        (Session › Subsampling), or the cells one of My datasets was last open with.
 
         Action ``dataset.open``. It opens another dataset in place of the one the viewer shows, as an
         agent in the viewer does. A notebook's viewer shows the dataset its notebook serves, so the
@@ -1800,9 +2002,26 @@ class ViewerActions:
             A sample's name or id, a name from My datasets, a link to a dataset (a file, a Zarr store, a
             dataset folder, a CELLxGENE, Zenodo, Figshare or GitHub address), an accession (GSE123456, a
             DOI), or a Cellucid server (localhost:8765).
+        allocation : {"proportional", "balanced"}
+            Stratified: how the cells are split over the categories. Default ``'proportional'``.
+        count : int
+            How many cells, exactly (at least 2; the dataset's count or more opens every cell). Not with
+            fraction. Optional: left out, the viewer decides.
+        embedding : str
+            Spatial: the obsm embedding it thins. Optional: left out, the viewer decides.
+        field : str
+            Stratified: the categorical column it is stratified by. Optional: left out, the viewer
+            decides.
+        fraction : float
+            The share of the dataset's cells: 0.1 opens a tenth, 1 every cell. Not with count. Optional:
+            left out, the viewer decides.
         kind : {"any", "sample", "my-datasets", "link"}
             Where to look for the name: any (samples, then My datasets, then as a link), sample,
             my-datasets or link. Default ``'any'``.
+        method : {"uniform", "blocks", "stratified", "spatial", null}
+            How the cells are chosen; null for the file's default. Default ``None``.
+        seed : int or None
+            The subsample's seed; null for the file's. Default ``None``.
 
         Returns
         -------
@@ -1810,7 +2029,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('dataset.open', name=name, kind=kind)
+        return self.act('dataset.open', name=name, allocation=allocation, count=count, embedding=embedding, field=field, fraction=fraction, kind=kind, method=method, seed=seed)
 
     def dataset_share_link(
         self,
@@ -1841,8 +2060,8 @@ class ViewerActions:
     ) -> ActionRequest:
         r"""Read the dataset summary.
 
-        The open dataset: its name, citation, how many cells (and how many are open), genes, embeddings
-        and fields.
+        The open dataset: its name, description, citation, how many cells (and how many are open),
+        genes, embeddings, vector fields and fields.
 
         Action ``dataset.summary``. It reads only and changes nothing; ``request.result()`` is what it
         reads.
@@ -1895,6 +2114,41 @@ class ViewerActions:
         """
         return self.act('display.reset')
 
+    def expression_transform_set(
+        self,
+        *,
+        log1p: bool | Omit = OMIT,
+        normalize: bool | Omit = OMIT,
+    ) -> ActionRequest:
+        r"""Set the expression values.
+
+        Show and analyze the genes normalized to 10,000 counts per cell and/or log1p (Data mapping ›
+        Expression values; scanpy normalize_total(target_sum=1e4) then log1p). One setting for coloring,
+        legends, filters, the cell card, reads and every analysis (pseudobulk differential expression
+        always sums raw counts). The person's setting: an agent changes it only when the person asks.
+        Offered when the mapped matrix holds counts; normalizing reads each cell's total from an obs
+        column, else sums every gene once (heavy on a large matrix: asked first).
+
+        Action ``expression.transform.set``. It changes the data's meaning (fields, labels, filters,
+        highlights, results), as one step of the viewer's history, which the person can undo;
+        ``request.result()`` is its outcome and ``request.step`` the step.
+
+        Parameters
+        ----------
+        log1p : bool
+            ln(1 + x), after the normalization when both are on. Optional: left out, the viewer decides.
+        normalize : bool
+            Each cell's values scaled to 10,000 counts: x · 10,000 / the cell's total. Optional: left
+            out, the viewer decides.
+
+        Returns
+        -------
+        ActionRequest
+            The request, sent at once (or as soon as the viewer connects). In a notebook widget its
+            answer arrives once the cell has finished: collect it in a later cell.
+        """
+        return self.act('expression.transform.set', log1p=log1p, normalize=normalize)
+
     def field_categories(
         self,
         *,
@@ -1903,7 +2157,7 @@ class ViewerActions:
         r"""Read the categories of a field.
 
         Each category of a categorical field with its cells, the cells shown in the active view, its
-        colour and whether it is shown.
+        color and whether it is shown.
 
         Action ``field.categories``. It reads only and changes nothing; ``request.result()`` is what it
         reads.
@@ -1971,12 +2225,15 @@ class ViewerActions:
         intersection_labels: Sequence[Mapping[str, Any]] | Omit = OMIT,
         overlap: Literal['first', 'last', 'overlap-label', 'intersections'] = 'first',
         overlap_label: str = 'Overlap',
+        rest: Mapping[str, Any] | Omit = OMIT,
         uncovered_label: str = 'Unassigned',
     ) -> ActionRequest:
         r"""Make a field from highlight pages.
 
-        A new categorical column whose categories are highlight pages: each page's cells take its label;
-        cells on several pages follow the overlap rule.
+        A new categorical column whose categories are highlight pages, shown at once: each page's cells
+        take its label; cells on several pages follow the overlap rule; cells on none keep their
+        category of rest when it is given (refine an annotation: a page per new label, every other cell
+        keeps its label), else take uncovered_label, a category only when there are such cells.
 
         Action ``field.create-from-pages``. It changes the data's meaning (fields, labels, filters,
         highlights, results), as one step of the viewer's history, which the person can undo;
@@ -1996,8 +2253,14 @@ class ViewerActions:
             per combination of pages. Default ``'first'``.
         overlap_label : str
             The label of cells on several pages when overlap is "overlap-label". Default ``'Overlap'``.
+        rest : dict
+            A categorical column whose category the cells on no page keep (split one label: a page per
+            new label, every other cell keeps its label in one call). A page label that is one of its
+            categories is that category. Keys: ``key``, ``source``. Optional: left out, the viewer
+            decides.
         uncovered_label : str
-            The category of cells on no page; empty leaves them without one. Default ``'Unassigned'``.
+            The category of cells on no page (with rest: of those with no category there); empty leaves
+            them without one. Default ``'Unassigned'``.
 
         Returns
         -------
@@ -2005,7 +2268,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('field.create-from-pages', key=key, pages=pages, intersection_labels=intersection_labels, overlap=overlap, overlap_label=overlap_label, uncovered_label=uncovered_label)
+        return self.act('field.create-from-pages', key=key, pages=pages, intersection_labels=intersection_labels, overlap=overlap, overlap_label=overlap_label, rest=rest, uncovered_label=uncovered_label)
 
     def field_delete(
         self,
@@ -2044,7 +2307,7 @@ class ViewerActions:
         r"""Duplicate a field.
 
         Copy a column of the cells or a gene as a new field (named "<name> (copy)" unless a name is
-        given) and colour by the copy.
+        given) and color by the copy.
 
         Action ``field.duplicate``. It changes the data's meaning (fields, labels, filters, highlights,
         results), as one step of the viewer's history, which the person can undo; ``request.result()``
@@ -2096,15 +2359,57 @@ class ViewerActions:
         """
         return self.act('field.export', field=field)
 
+    def field_group(
+        self,
+        *,
+        field: Mapping[str, Any],
+        groups: Sequence[Mapping[str, Any]],
+        name: str | Omit = OMIT,
+        rest: str | None = None,
+    ) -> ActionRequest:
+        r"""Group categories into a new field.
+
+        A new categorical column from another, whose categories are groups of its categories (a lineage
+        from cell types: Ductal and Ngn3 low EP as "Progenitor", Alpha, Beta, Delta and Epsilon as
+        "Endocrine"), shown at once; the column it is made from stays. A category no group lists is kept
+        as it is, or joins rest when rest names a category. One step: one undo.
+
+        Action ``field.group``. It changes the data's meaning (fields, labels, filters, highlights,
+        results), as one step of the viewer's history, which the person can undo; ``request.result()``
+        is its outcome and ``request.step`` the step.
+
+        Parameters
+        ----------
+        field : dict
+            The categorical column whose categories are grouped. Keys: ``key``, ``source``.
+        groups : list
+            The new categories, in order, each with the categories it holds (a category in one group at
+            most).
+        name : str
+            The new column's name; by default "<name> (grouped)", numbered when taken. Optional: left
+            out, the viewer decides.
+        rest : str or None
+            The category every category no group lists joins ("Other", or a group's label); null keeps
+            each as it is. Default ``None``.
+
+        Returns
+        -------
+        ActionRequest
+            The request, sent at once (or as soon as the viewer connects). In a notebook widget its
+            answer arrives once the cell has finished: collect it in a later cell.
+        """
+        return self.act('field.group', field=field, groups=groups, name=name, rest=rest)
+
     def field_purge(
         self,
         *,
         field: Mapping[str, Any],
+        which: int | Omit = OMIT,
     ) -> ActionRequest:
-        r"""Purge a deleted field.
+        r"""Delete a deleted field for good.
 
-        Confirm a deletion: the field leaves Deleted fields and can no longer be restored there (undo
-        still brings it back).
+        Delete a deleted field for good (Deleted fields › Delete for good…): it leaves Deleted fields
+        and can no longer be restored there (undo still brings it back).
 
         Action ``field.purge``. It changes the data's meaning (fields, labels, filters, highlights,
         results), as one step of the viewer's history, which the person can undo; ``request.result()``
@@ -2114,6 +2419,9 @@ class ViewerActions:
         ----------
         field : dict
             The deleted field by the name it had when deleted. Keys: ``key``, ``source``.
+        which : int
+            Only when several deleted fields have this name: which, 1 the first of them as Deleted
+            fields lists them. Optional: left out, the viewer decides.
 
         Returns
         -------
@@ -2121,7 +2429,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('field.purge', field=field)
+        return self.act('field.purge', field=field, which=which)
 
     def field_push(
         self,
@@ -2201,6 +2509,7 @@ class ViewerActions:
         self,
         *,
         field: Mapping[str, Any],
+        which: int | Omit = OMIT,
     ) -> ActionRequest:
         r"""Restore a deleted field.
 
@@ -2214,6 +2523,9 @@ class ViewerActions:
         ----------
         field : dict
             The deleted field by the name it had when deleted. Keys: ``key``, ``source``.
+        which : int
+            Only when several deleted fields have this name: which, 1 the first of them as Deleted
+            fields lists them. Optional: left out, the viewer decides.
 
         Returns
         -------
@@ -2221,7 +2533,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('field.restore', field=field)
+        return self.act('field.restore', field=field, which=which)
 
     def field_revert_name(
         self,
@@ -2255,10 +2567,12 @@ class ViewerActions:
         *,
         field: Mapping[str, Any],
         by: Mapping[str, Any],
+        categories: Sequence[str] | Omit = OMIT,
         top: int = 50,
         visible_only: bool = False,
+        within: Mapping[str, Any] | Omit = OMIT,
     ) -> ActionRequest:
-        r"""Summarise a field per category.
+        r"""Summarize a field per category.
 
         A continuous field or a gene per category of a categorical field (cells, mean, median, range,
         share above zero), or a categorical field's top categories per category.
@@ -2273,10 +2587,18 @@ class ViewerActions:
             as shown. Keys: ``key``, ``source``.
         by : dict
             The categorical obs field to group the cells by. Keys: ``key``, ``source``.
+        categories : list
+            Only these categories of \`by\`, by name (else every category with cells). Optional: left
+            out, the viewer decides.
         top : int
             For a categorical field: at most this many of its categories per group. Default ``50``.
         visible_only : bool
             Only the cells the active view shows. Default ``False``.
+        within : dict
+            Only the cells of some categories of another categorical field, or in a range of a
+            continuous field or gene (both ends included), leaving the view as it is: donors within one
+            cell type, cell types per age range. Keys: ``categories`` (optional), ``field``, ``max``
+            (optional), ``min`` (optional). Optional: left out, the viewer decides.
 
         Returns
         -------
@@ -2284,7 +2606,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('field.summary', field=field, by=by, top=top, visible_only=visible_only)
+        return self.act('field.summary', field=field, by=by, categories=categories, top=top, visible_only=visible_only, within=within)
 
     def fields_list(
         self,
@@ -2322,9 +2644,10 @@ class ViewerActions:
 
         Write the figure of the view shown (every view in a grid when the settings say so) as its
         Download button does, with the figure export's settings as they are (figure_export_set changes
-        them: format, size, labels, legend, style): one SVG or PNG file, or several in one ZIP archive.
-        Refused, saying why, when the figure cannot reproduce what the view shows (a render mode other
-        than points, an overlay it cannot draw).
+        them: format, size, labels, legend, style): one SVG or PNG file, or several in one ZIP archive
+        (view.picture with source "export" shows that figure first, nothing written). Refused, saying
+        why, when the figure cannot reproduce what the view shows (a render mode other than points, an
+        overlay it cannot draw).
 
         Action ``figure.export``. It acts outside the viewer's state and history (a file the person
         receives in the browser, a publication, or what the browser keeps for later visits), which Undo
@@ -2337,6 +2660,25 @@ class ViewerActions:
             answer arrives once the cell has finished: collect it in a later cell.
         """
         return self.act('figure.export')
+
+    def figure_export_get(
+        self,
+    ) -> ActionRequest:
+        r"""Read the figure export settings.
+
+        The Figure export panel's settings now, each named as figure-export.set names it: what Export
+        would write, and what a session or the history put back.
+
+        Action ``figure-export.get``. It reads only and changes nothing; ``request.result()`` is what it
+        reads.
+
+        Returns
+        -------
+        ActionRequest
+            The request, sent at once (or as soon as the viewer connects). In a notebook widget its
+            answer arrives once the cell has finished: collect it in a later cell.
+        """
+        return self.act('figure-export.get')
 
     def figure_export_set(
         self,
@@ -2351,8 +2693,7 @@ class ViewerActions:
         export_all_views: bool | Omit = OMIT,
         font_family: Literal['Arial, Helvetica, sans-serif', 'Helvetica, Arial, sans-serif', '"Times New Roman", Times, serif'] | Omit = OMIT,
         font_sizes: Mapping[str, Any] | None | Omit = OMIT,
-        frame: Mapping[str, Any] | None | Omit = OMIT,
-        height: int | Omit = OMIT,
+        frame: Mapping[str, Any] | None | Literal['cells'] | Omit = OMIT,
         include_axes: bool | Omit = OMIT,
         include_legend: bool | Omit = OMIT,
         legend_position: Literal['right', 'bottom'] | Omit = OMIT,
@@ -2361,18 +2702,21 @@ class ViewerActions:
         reference_grid: bool | Omit = OMIT,
         selection_muted_opacity: float | Omit = OMIT,
         show_orientation: bool | Omit = OMIT,
-        size_preset: Literal['screen-half', 'screen', '1200x900', '1600x1200', '1920x1080'] | Omit = OMIT,
-        svg_strategy: Literal['full-vector', 'optimized-vector', 'hybrid'] | None | Omit = OMIT,
+        size_preset: Literal['single-column', 'one-and-half-column', 'double-column', 'custom'] | Omit = OMIT,
+        svg_strategy: Literal['full-vector', 'optimized-vector', 'hybrid'] | Omit = OMIT,
         title: str | None | Omit = OMIT,
         title_follows_dataset: bool | Omit = OMIT,
-        width: int | Omit = OMIT,
+        width: float | Omit = OMIT,
         x_label: str | Omit = OMIT,
         y_label: str | Omit = OMIT,
     ) -> ActionRequest:
         r"""Change figure export settings.
 
-        Set Figure export options: size, frame, background, fonts, title and axis labels, axes, legend,
-        preview, what Export downloads; only those given change, nothing is exported.
+        Set Figure export options: width (millimetres or a journal column; the figure fills it, text in
+        points keeps its printed size), frame (frame "cells" fits it to the cells, so plots take their
+        shape, not the pane's), background, fonts, title and axis labels, axes, legend, preview, what
+        Export downloads; only those given change, nothing is exported (figure-export.get reads them;
+        view.picture with source "export" shows the figure they make).
 
         Action ``figure-export.set``. It changes how the cells are shown, as one step of the viewer's
         history, which the person can undo; ``request.result()`` is its outcome and ``request.step`` the
@@ -2381,34 +2725,40 @@ class ViewerActions:
         Parameters
         ----------
         auto_text_size : bool
-            Size the text from the figure's size (font_sizes is then null). Optional: left out, the
-            viewer decides.
+            Set the text in the sizes journals print figure text at: 7 pt, ticks and centroid labels 6
+            pt, the title 8 pt (font_sizes is then null). Optional: left out, the viewer decides.
         background : {"viewer", "white", "transparent", "custom"}
             The background: the viewer's, white, transparent or custom. Optional: left out, the viewer
             decides.
         background_color : str
-            The custom background colour, lowercase #rrggbb. Optional: left out, the viewer decides.
+            The custom background color, lowercase #rrggbb. Optional: left out, the viewer decides.
         depth_sort : bool
             Draw 3D points back to front. Optional: left out, the viewer decides.
         download : {"svg", "png", "svg+png", "png-multi", "all"}
             What Export downloads. Optional: left out, the viewer decides.
         dpi : {150, 300, 600}
-            The resolution of a PNG. Optional: left out, the viewer decides.
+            The resolution of a PNG: its pixels are the width in inches times this (an SVG is the same
+            size, as vectors). Optional: left out, the viewer decides.
         emphasize_selection : bool
             Fade the cells that are not highlighted. Optional: left out, the viewer decides.
         export_all_views : bool
-            Export every view of the multiview, side by side. Optional: left out, the viewer decides.
+            Export every view of the multiview, side by side: each panel is titled by its view's name
+            (view_rename; a view with none by its field and filters). Optional: left out, the viewer
+            decides.
         font_family : {"Arial, Helvetica, sans-serif", "Helvetica, Arial, sans-serif", "\\"Times New Roman\\", Times, serif"}
             The font of every text. Optional: left out, the viewer decides.
         font_sizes : dict or None
-            Text sizes in pixels while auto_text_size is off, else null. Keys: ``axis_label``, ``base``,
+            Text sizes in points (1/72 inch; halves allowed) while auto_text_size is off, else null.
+            They keep their printed size at any width and resolution. Keys: ``axis_label``, ``base``,
             ``centroid_label``, ``legend``, ``ticks``, ``title``. Optional: left out, the viewer
             decides.
-        frame : dict or None
-            The part of the view exported (needs the preview on), or null for the whole view. Keys:
-            ``lock_aspect``, ``rect``. Optional: left out, the viewer decides.
-        height : int
-            Plot height in CSS pixels. Optional: left out, the viewer decides.
+        frame : dict or None or "cells"
+            The part of the view exported (needs the preview on, which "cells" turns on), null for the
+            whole view, or "cells": the frame every cell the figure draws fills, with a small margin
+            (the panel's Fit the cells), so a plot takes the cells' shape instead of its pane's (a
+            narrow pane gives a narrow plot; never rearrange the person's screen for a figure). With
+            export_all_views, one frame holding every panel's cells. Keys: ``lock_aspect``, ``rect``.
+            Optional: left out, the viewer decides.
         include_axes : bool
             Draw the axes. Optional: left out, the viewer decides.
         include_legend : bool
@@ -2418,26 +2768,35 @@ class ViewerActions:
         optimized_target_count : int
             How many points an optimized SVG keeps. Optional: left out, the viewer decides.
         preview : dict
-            The preview in the panel and the colour-vision deficiency it simulates. Keys:
-            ``colorblind_mode``, ``enabled``. Optional: left out, the viewer decides.
+            The preview in the panel and the color-vision deficiency it simulates; with the preview on,
+            view.picture with source "export" draws that simulation too (Export writes the true colors).
+            Keys: ``colorblind_mode``, ``enabled``. Optional: left out, the viewer decides.
         reference_grid : bool
             Draw a reference grid. Optional: left out, the viewer decides.
         selection_muted_opacity : float
             The opacity of the faded cells, 0 to 1. Optional: left out, the viewer decides.
         show_orientation : bool
             Draw the 3D orientation indicator. Optional: left out, the viewer decides.
-        size_preset : {"screen-half", "screen", "1200x900", "1600x1200", "1920x1080"}
-            The size preset shown in the panel. Optional: left out, the viewer decides.
-        svg_strategy : {"full-vector", "optimized-vector", "hybrid", null}
-            How an SVG draws many points, or null until chosen. Optional: left out, the viewer decides.
+        size_preset : {"single-column", "one-and-half-column", "double-column", "custom"}
+            The figure's width as a journal column: single-column (89 mm), one-and-half-column (120 mm),
+            double-column (183 mm); custom is the width given. A preset sets width. Optional: left out,
+            the viewer decides.
+        svg_strategy : {"full-vector", "optimized-vector", "hybrid"}
+            How an SVG draws its points: full-vector (the default: every point a circle, editable; a
+            file grows with the cells drawn), optimized-vector (fewer points, optimized_target_count),
+            hybrid (the points as one image, text and axes as vector: small at any cell count).
+            Optional: left out, the viewer decides.
         title : str or None
             The figure title while it does not follow the dataset, else null. Optional: left out, the
             viewer decides.
         title_follows_dataset : bool
             The title is the dataset's name (title is then null). Optional: left out, the viewer
             decides.
-        width : int
-            Plot width in CSS pixels. Optional: left out, the viewer decides.
+        width : float
+            The figure's width in millimetres; the figure is exactly this wide, at every resolution, and
+            as tall as its plots make it (each keeps its view's shape, or its frame's: set a frame to
+            change the shape). A width that is not a preset's makes size_preset custom. Optional: left
+            out, the viewer decides.
         x_label : str
             The x axis label. Optional: left out, the viewer decides.
         y_label : str
@@ -2449,7 +2808,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('figure-export.set', auto_text_size=auto_text_size, background=background, background_color=background_color, depth_sort=depth_sort, download=download, dpi=dpi, emphasize_selection=emphasize_selection, export_all_views=export_all_views, font_family=font_family, font_sizes=font_sizes, frame=frame, height=height, include_axes=include_axes, include_legend=include_legend, legend_position=legend_position, optimized_target_count=optimized_target_count, preview=preview, reference_grid=reference_grid, selection_muted_opacity=selection_muted_opacity, show_orientation=show_orientation, size_preset=size_preset, svg_strategy=svg_strategy, title=title, title_follows_dataset=title_follows_dataset, width=width, x_label=x_label, y_label=y_label)
+        return self.act('figure-export.set', auto_text_size=auto_text_size, background=background, background_color=background_color, depth_sort=depth_sort, download=download, dpi=dpi, emphasize_selection=emphasize_selection, export_all_views=export_all_views, font_family=font_family, font_sizes=font_sizes, frame=frame, include_axes=include_axes, include_legend=include_legend, legend_position=legend_position, optimized_target_count=optimized_target_count, preview=preview, reference_grid=reference_grid, selection_muted_opacity=selection_muted_opacity, show_orientation=show_orientation, size_preset=size_preset, svg_strategy=svg_strategy, title=title, title_follows_dataset=title_follows_dataset, width=width, x_label=x_label, y_label=y_label)
 
     def filter_category_all(
         self,
@@ -2587,7 +2946,7 @@ class ViewerActions:
     ) -> ActionRequest:
         r"""Set a visible range.
 
-        Show only the cells whose value of a continuous field or gene lies in [min, max]; the colours
+        Show only the cells whose value of a continuous field or gene lies in [min, max]; the colors
         follow when they are rescaled to the range.
 
         Action ``filter.continuous.range``. It changes the data's meaning (fields, labels, filters,
@@ -2597,7 +2956,7 @@ class ViewerActions:
         Parameters
         ----------
         field : dict
-            The continuous field or gene the view in focus is coloured by, by name. Keys: ``key``,
+            The continuous field or gene the view in focus is colored by, by name. Keys: ``key``,
             ``source``.
         min : float
             See the action's summary.
@@ -2628,7 +2987,7 @@ class ViewerActions:
         Parameters
         ----------
         field : dict
-            The continuous field or gene the view in focus is coloured by, by name. Keys: ``key``,
+            The continuous field or gene the view in focus is colored by, by name. Keys: ``key``,
             ``source``.
 
         Returns
@@ -2689,7 +3048,7 @@ class ViewerActions:
         Parameters
         ----------
         field : dict
-            The categorical column the view in focus is coloured by, by name. Keys: ``key``, ``source``.
+            The categorical column the view in focus is colored by, by name. Keys: ``key``, ``source``.
         threshold : float
             The quantile above which cells are hidden; 1 hides none.
 
@@ -2766,22 +3125,27 @@ class ViewerActions:
     def genes_search(
         self,
         *,
-        query: str,
         limit: int = 20,
+        names: Sequence[str] | Omit = OMIT,
+        query: str | Omit = OMIT,
     ) -> ActionRequest:
         r"""Search the genes.
 
-        Gene names matching what is typed, best first, as the gene search box ranks them.
+        Gene names matching what is typed, best first, as the gene search box ranks them; or, given
+        names, which of them the dataset has.
 
         Action ``genes.search``. It reads only and changes nothing; ``request.result()`` is what it
         reads.
 
         Parameters
         ----------
-        query : str
-            See the action's summary.
         limit : int
-            At most this many names. Default ``20``.
+            At most this many names (for a query). Default ``20``.
+        names : list
+            Gene names to look up at once, exact in any case: genes lists those the dataset has, as it
+            names them; lacks the rest. Optional: left out, the viewer decides.
+        query : str
+            What is typed (give it or names). Optional: left out, the viewer decides.
 
         Returns
         -------
@@ -2789,19 +3153,20 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('genes.search', query=query, limit=limit)
+        return self.act('genes.search', limit=limit, names=names, query=query)
 
     def highlight_category(
         self,
         *,
         field: Mapping[str, Any],
-        category: str | float | bool,
+        categories: Sequence[str],
         color: str | Omit = OMIT,
         page: str | Omit = OMIT,
     ) -> ActionRequest:
-        r"""Highlight a category.
+        r"""Highlight categories.
 
-        Add the cells of one category of a field, as the selected view shows them, as a group.
+        Add the cells of one or more categories of a field, as the selected view shows them, each
+        category as a group of its own, in one step.
 
         Action ``highlight.category``. It changes the data's meaning (fields, labels, filters,
         highlights, results), as one step of the viewer's history, which the person can undo;
@@ -2811,15 +3176,16 @@ class ViewerActions:
         ----------
         field : dict
             A categorical field, by name. Keys: ``key``, ``source``.
-        category : str or float or bool
-            The category, by its label as the legend shows it.
+        categories : list
+            The categories, by their labels as the legend shows them: each becomes a group of the page,
+            all in one step. One already on the page is brought up to the cells the view shows now.
         color : str
-            The colour of the page the group goes on. With \`page\`, the colour of the page made (an
-            existing page must already have it). Without, the page shown when it has this colour, else
+            The color of the page the group goes on. With \`page\`, the color of the page made (an
+            existing page must already have it). Without, the page shown when it has this color, else
             the first page that has it, else a new page of it. Optional: left out, the viewer decides.
         page : str
             The page the group goes on, by name; a page of that name is made when there is none.
-            Omitted: the page shown, or with \`color\`, a page of that colour. Optional: left out, the
+            Omitted: the page shown, or with \`color\`, a page of that color. Optional: left out, the
             viewer decides.
 
         Returns
@@ -2828,7 +3194,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('highlight.category', field=field, category=category, color=color, page=page)
+        return self.act('highlight.category', field=field, categories=categories, color=color, page=page)
 
     def highlight_cells(
         self,
@@ -2851,17 +3217,20 @@ class ViewerActions:
         Parameters
         ----------
         cells : cells (rows, a boolean mask or obs names)
-            Cells by original position (0-based row of obs), each once, in any order.
+            Cells by original position, each once, in any order: the 0-based row of obs in the order the
+            data was given. A file prepare() wrote holds its rows in priority order, so a row of it read
+            as stored is not that position: its obs["cellucid_original_position"] gives the row's (or
+            pass obs names).
         color : str
-            The colour of the page the group goes on. With \`page\`, the colour of the page made (an
-            existing page must already have it). Without, the page shown when it has this colour, else
+            The color of the page the group goes on. With \`page\`, the color of the page made (an
+            existing page must already have it). Without, the page shown when it has this color, else
             the first page that has it, else a new page of it. Optional: left out, the viewer decides.
         label : str
-            The group's label; omitted, "Highlight (N cells)". A label already on the page gets " (2)",
-            " (3)", …. Optional: left out, the viewer decides.
+            The group's label; omitted, "Highlight" (the list shows its cell count). A label already on
+            the page gets " (2)", " (3)", …. Optional: left out, the viewer decides.
         page : str
             The page the group goes on, by name; a page of that name is made when there is none.
-            Omitted: the page shown, or with \`color\`, a page of that colour. Optional: left out, the
+            Omitted: the page shown, or with \`color\`, a page of that color. Optional: left out, the
             viewer decides.
         tool : {"annotation", "lasso", "proximity", "knn"}
             The selection tool that made the cells (annotation for cells named directly). Default
@@ -3030,7 +3399,7 @@ class ViewerActions:
         Parameters
         ----------
         color : str
-            The new page's colour; omitted, the next colour of the page palette. Optional: left out, the
+            The new page's color; omitted, the next color of the page palette. Optional: left out, the
             viewer decides.
         name : str
             The new page's name; omitted, the first free "Page N". Optional: left out, the viewer
@@ -3047,11 +3416,11 @@ class ViewerActions:
     def highlight_page_delete(
         self,
         *,
-        page: str,
+        pages: Sequence[str],
     ) -> ActionRequest:
-        r"""Delete a highlight page.
+        r"""Delete highlight pages.
 
-        Delete a highlight page and its groups; the last page cannot be deleted.
+        Delete one or several highlight pages and their groups, as one step; at least one page stays.
 
         Action ``highlight.page.delete``. It changes the data's meaning (fields, labels, filters,
         highlights, results), as one step of the viewer's history, which the person can undo;
@@ -3059,8 +3428,8 @@ class ViewerActions:
 
         Parameters
         ----------
-        page : str
-            A highlight page, by its name as its tab shows it.
+        pages : list
+            The pages to delete, by name; at least one page stays (clear the last one instead).
 
         Returns
         -------
@@ -3068,7 +3437,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('highlight.page.delete', page=page)
+        return self.act('highlight.page.delete', pages=pages)
 
     def highlight_page_recolor(
         self,
@@ -3076,9 +3445,9 @@ class ViewerActions:
         page: str,
         color: str,
     ) -> ActionRequest:
-        r"""Recolour a highlight page.
+        r"""Recolor a highlight page.
 
-        Set the colour a highlight page has in its tab, the analyses and the category builder.
+        Set the color a highlight page has in its tab, the analyses and the category builder.
 
         Action ``highlight.page.recolor``. It changes the data's meaning (fields, labels, filters,
         highlights, results), as one step of the viewer's history, which the person can undo;
@@ -3089,7 +3458,7 @@ class ViewerActions:
         page : str
             A highlight page, by its name as its tab shows it.
         color : str
-            A colour as six hex digits, "#e41a1c".
+            A color as six hex digits, "#e41a1c".
 
         Returns
         -------
@@ -3181,12 +3550,12 @@ class ViewerActions:
         max : float
             The largest value included.
         color : str
-            The colour of the page the group goes on. With \`page\`, the colour of the page made (an
-            existing page must already have it). Without, the page shown when it has this colour, else
+            The color of the page the group goes on. With \`page\`, the color of the page made (an
+            existing page must already have it). Without, the page shown when it has this color, else
             the first page that has it, else a new page of it. Optional: left out, the viewer decides.
         page : str
             The page the group goes on, by name; a page of that name is made when there is none.
-            Omitted: the page shown, or with \`color\`, a page of that colour. Optional: left out, the
+            Omitted: the page shown, or with \`color\`, a page of that color. Optional: left out, the
             viewer decides.
 
         Returns
@@ -3708,7 +4077,7 @@ class ViewerActions:
         r"""Add steps to a group.
 
         Extend a group to a later step of its branch, taking in every step between (whole turns, none of
-        another group).
+        another group). A turn's later steps join its group by themselves.
 
         Action ``history.group.extend``. It moves the viewer's history, as the person's Undo, Redo or a
         click on a step does, and records no step; ``request.result()`` is its outcome.
@@ -4054,7 +4423,7 @@ class ViewerActions:
         r"""Pause recording.
 
         Pause the history of a tracker: changes still apply but make no step until it is resumed, and an
-        agent's change cannot be undone on its own meanwhile. Ask the person first.
+        agent's change cannot be undone on its own meanwhile.
 
         Action ``history.recording.pause``. It moves the viewer's history, as the person's Undo, Redo or
         a click on a step does, and records no step; ``request.result()`` is its outcome.
@@ -4284,12 +4653,45 @@ class ViewerActions:
         """
         return self.act('history.saved.list')
 
+    def history_saved_open(
+        self,
+        *,
+        saved: str,
+    ) -> ActionRequest:
+        r"""Open a saved state.
+
+        Open one saved state of this browser (by its id from history_saved_list) to continue it, as
+        Load…'s Open does: its dataset first when another is shown (with the cells it was saved on),
+        then its history, which goes on where it left off (an autosave keeps being written; a named save
+        stays as it was and the history goes on as a new autosave). The history shown before stays kept
+        in this browser while Autosave keeps it (steps it does not keep are asked about first). To apply
+        its steps to the dataset shown instead, use history_replay. A whole-file download is asked about
+        first.
+
+        Action ``history.saved.open``. It opens another dataset in place of the one the viewer shows, as
+        an agent in the viewer does. A notebook's viewer shows the dataset its notebook serves, so the
+        viewer refuses it from Python: show another dataset with :func:`cellucid.show_anndata` or
+        :func:`cellucid.serve_anndata`.
+
+        Parameters
+        ----------
+        saved : str
+            Its id (history_saved_list).
+
+        Returns
+        -------
+        ActionRequest
+            The request, sent at once (or as soon as the viewer connects). In a notebook widget its
+            answer arrives once the cell has finished: collect it in a later cell.
+        """
+        return self.act('history.saved.open', saved=saved)
+
     def history_search(
         self,
         *,
         bookmarked: bool | Omit = OMIT,
         by: Literal['person', 'agent', 'python', 'r', 'replay', 'outside'] | Omit = OMIT,
-        domain: Literal['cells', 'mapping', 'field-overlays', 'gene-sets', 'views', 'active-field', 'filters', 'colors', 'visibility', 'highlights', 'camera', 'camera-path', 'settings', 'analysis', 'layout'] | Omit = OMIT,
+        domain: Literal['cells', 'mapping', 'expression', 'field-overlays', 'gene-sets', 'views', 'active-field', 'filters', 'colors', 'visibility', 'highlights', 'camera', 'camera-path', 'settings', 'analysis', 'layout'] | Omit = OMIT,
         flagged: bool | Omit = OMIT,
         has_note: bool | Omit = OMIT,
         kind: Literal['state', 'view', 'layout'] | Omit = OMIT,
@@ -4311,7 +4713,7 @@ class ViewerActions:
             Optional: left out, the viewer decides.
         by : {"person", "agent", "python", "r", "replay", "outside"}
             Who took them. Optional: left out, the viewer decides.
-        domain : {"cells", "mapping", "field-overlays", "gene-sets", "views", "active-field", "filters", "colors", "visibility", "highlights", "camera", "camera-path", "settings", "analysis", "layout"}
+        domain : {"cells", "mapping", "expression", "field-overlays", "gene-sets", "views", "active-field", "filters", "colors", "visibility", "highlights", "camera", "camera-path", "settings", "analysis", "layout"}
             The part of the state they changed. Optional: left out, the viewer decides.
         flagged : bool
             Stale, or no longer applying. Optional: left out, the viewer decides.
@@ -4540,11 +4942,12 @@ class ViewerActions:
         *,
         tracker: str | Omit = OMIT,
     ) -> ActionRequest:
-        r"""Summarise the history.
+        r"""Summarize the history.
 
         The history at a glance: trackers, branches (fork step, tip, steps, main, locked, archived),
-        bookmarks, turns with their summaries, stale results and Recently deleted, without the steps.
-        Read it before acting on the history.
+        bookmarks, turns, stale results and Recently deleted, without the steps; the notes on the
+        tracker, each branch, group and turn in full (a shared session's notes are its sender's
+        account). Read it before acting on the history.
 
         Action ``history.summary``. It reads only and changes nothing; ``request.result()`` is what it
         reads.
@@ -4730,7 +5133,8 @@ class ViewerActions:
         Parameters
         ----------
         turn : str
-            A turn, by its id (history_summary lists them).
+            A turn, by its id: each change an agent makes names its turn in its result (step.turn);
+            history_summary lists them all.
         only_own : bool
             Delete only the turn's own steps, keeping the others (to Recently deleted). Default
             ``False``.
@@ -4838,6 +5242,26 @@ class ViewerActions:
             answer arrives once the cell has finished: collect it in a later cell.
         """
         return self.act('layout.panel.dock', panel=panel)
+
+    def layout_panel_dock_all(
+        self,
+    ) -> ActionRequest:
+        r"""Dock every section.
+
+        Put every floating sidebar section back into the sidebar, each where it was (the sidebar's Dock
+        all button).
+
+        Action ``layout.panel.dock-all``. It changes the viewer's layout, as one step of the viewer's
+        history, which the person can undo; ``request.result()`` is its outcome and ``request.step`` the
+        step.
+
+        Returns
+        -------
+        ActionRequest
+            The request, sent at once (or as soon as the viewer connects). In a notebook widget its
+            answer arrives once the cell has finished: collect it in a later cell.
+        """
+        return self.act('layout.panel.dock-all')
 
     def layout_panel_float(
         self,
@@ -5042,9 +5466,11 @@ class ViewerActions:
     ) -> ActionRequest:
         r"""Change the data mapping.
 
-        Choose which stored arrays are the embeddings, neighbour graph, genes (modality, expression
+        Choose which stored arrays are the embeddings, neighbor graph, genes (modality, expression
         matrix, gene names, log1p, highly variable), latent space and vector fields; groups not named
-        stay as they are. Applied as one change: refused, nothing changes.
+        stay as they are, except the genes groups, which follow a named modality (its defaults) or
+        expression matrix (a gene-name or highly variable column its var axis has is kept, else its
+        default), as the panel does. Applied as one change: refused, nothing changes.
 
         Action ``mapping.set``. It changes the data's meaning (fields, labels, filters, highlights,
         results), as one step of the viewer's history, which the person can undo; ``request.result()``
@@ -5063,7 +5489,7 @@ class ViewerActions:
             The boolean var column marking highly variable genes, or null. Optional: left out, the
             viewer decides.
         knn : str or None
-            The obsp neighbour graph, or null for none. Optional: left out, the viewer decides.
+            The obsp neighbor graph, or null for none. Optional: left out, the viewer decides.
         latent : str or None
             The obsm latent space outlier filters use, or null. Optional: left out, the viewer decides.
         log1p : list
@@ -5136,7 +5562,7 @@ class ViewerActions:
             The setting's id, as settings.list gives it.
         value : str or float or bool
             A number for a slider, true or false for a switch, an option value for a choice, #rrggbb for
-            a colour.
+            a color.
 
         Returns
         -------
@@ -5242,6 +5668,56 @@ class ViewerActions:
             answer arrives once the cell has finished: collect it in a later cell.
         """
         return self.act('stored.remove', connection_speeds=connection_speeds, dataset=dataset, decoder_choices=decoder_choices, everything=everything, items=items, my_datasets=my_datasets, saved_states=saved_states)
+
+    def vector_field_summary(
+        self,
+        *,
+        by: Mapping[str, Any],
+        categories: Sequence[str] | Omit = OMIT,
+        neighbors: int = 30,
+        vector_field: str | Omit = OMIT,
+        view: str | Omit = OMIT,
+        visible_only: bool = False,
+    ) -> ActionRequest:
+        r"""Summarize where cells are heading.
+
+        Where the cells of each category of a field are heading along a vector field (RNA velocity, a
+        drift), in the embedding a view shows: per category, how fast (mean speed relative to the mean
+        cell), how aligned its arrows are, their mean direction in the view's axes, and the categories
+        its arrows lead into (each cell's arrow shared among its nearest cells by how directly it points
+        at them, as scVelo's velocity graph does, here in the embedding). Read from the arrows as drawn
+        in that embedding, not from the genes: an embedding can bend, merge or reverse a flow.
+
+        Action ``vector-field.summary``. It reads only and changes nothing; ``request.result()`` is what
+        it reads.
+
+        Parameters
+        ----------
+        by : dict
+            The categorical field to group the cells by. Keys: ``key``, ``source``.
+        categories : list
+            Only these categories of \`by\` (else every category with cells); their arrows still lead
+            into every category. Optional: left out, the viewer decides.
+        neighbors : int
+            How many nearest cells (in the embedding) each cell's arrow is shared among. Default ``30``.
+        vector_field : str
+            The vector field, by name (dataset_summary lists them). Left out: the one the overlay shows,
+            else the dataset's default, else the only one bound to the view's embedding; with several
+            bound and none of those, name one. Optional: left out, the viewer decides.
+        view : str
+            The view whose embedding the arrows are read in: "View N"; the selected view when left out.
+            Optional: left out, the viewer decides.
+        visible_only : bool
+            Only the cells the view shows (its filters and hidden categories), as cells and as
+            neighbors. Default ``False``.
+
+        Returns
+        -------
+        ActionRequest
+            The request, sent at once (or as soon as the viewer connects). In a notebook widget its
+            answer arrives once the cell has finished: collect it in a later cell.
+        """
+        return self.act('vector-field.summary', by=by, categories=categories, neighbors=neighbors, vector_field=vector_field, view=view, visible_only=visible_only)
 
     def view_cameras_link(
         self,
@@ -5410,12 +5886,13 @@ class ViewerActions:
         self,
         *,
         branch: str | Omit = OMIT,
+        name: str | Omit = OMIT,
     ) -> ActionRequest:
         r"""Keep the view.
 
-        Freeze the selected view as a panel of the multiview, with its colouring, filters and camera,
-        and select it; with a branch, the view as it is at the last step of that branch of the history
-        (to compare branches side by side).
+        Freeze the selected view as a panel of the multiview, with its coloring, filters and camera, and
+        select it; with a branch, the view as it is at the last step of that branch of the history (to
+        compare branches side by side).
 
         Action ``view.keep``. It changes how the cells are shown, as one step of the viewer's history,
         which the person can undo; ``request.result()`` is its outcome and ``request.step`` the step.
@@ -5424,7 +5901,13 @@ class ViewerActions:
         ----------
         branch : str
             A branch of the tracker in use, by its name: the kept view shows what the selected view
-            shows at its last step (colouring, filters, hidden cells, camera). Optional: left out, the
+            shows at its last step (coloring, filters, hidden cells, camera). Optional: left out, the
+            viewer decides.
+        name : str
+            The kept view's name (view_rename gives or changes one later). A name for the view, one line
+            of text ("Early", "Day 7, treated"): its row and its pane show it beside its number ("2 ·
+            Early"), a figure's panel after its letter ("B. Early": the figure letters its panels A, B,
+            … in order, so a name needs no letter of its own). Not "View N". Optional: left out, the
             viewer decides.
 
         Returns
@@ -5433,7 +5916,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('view.keep', branch=branch)
+        return self.act('view.keep', branch=branch, name=name)
 
     def view_layout_set(
         self,
@@ -5466,13 +5949,18 @@ class ViewerActions:
         *,
         height: int = 480,
         legend: bool = True,
+        source: Literal['figure', 'screen', 'export'] = 'figure',
         view: str | Omit = OMIT,
         width: int = 640,
     ) -> ActionRequest:
         r"""Take a picture of a view.
 
-        A PNG of a view as the figure export draws it (points, legend), returned as base64; nothing is
-        downloaded.
+        A PNG of a view as the figure export draws it (points, legend), or as the screen shows it now
+        (source "screen": the vector field overlay, the connectivity edges and a playing camera path's
+        caption included, which a figure cannot draw), or the whole figure exactly as Export would
+        download it now with the Figure export settings (source "export": size, frame, background,
+        fonts, title, panel titles, legends, every view while Export all views is on: check a figure
+        with it before the person downloads it); returned as base64; nothing is downloaded.
 
         Action ``view.picture``. It reads only and changes nothing; ``request.result()`` is what it
         reads.
@@ -5480,14 +5968,27 @@ class ViewerActions:
         Parameters
         ----------
         height : int
-            The plot's height in pixels. Default ``480``.
+            The height of the box the plot fits in, in pixels (source "export": of the box the figure is
+            scaled into). Default ``480``.
         legend : bool
-            Draw the colour legend beside the plot. Default ``True``.
+            Draw the color legend beside the plot (a figure picture; the screen has none). Default
+            ``True``.
+        source : {"figure", "screen", "export"}
+            figure: one view drawn as the figure export draws it (points, legend; no overlay), with
+            plain settings (no title, 12 px text, the screen's background). screen: the view's pane as
+            the screen shows it now, overlays included (the moving flow caught at this instant), no
+            legend; the view must be on screen. export: the figure Export would download now, with every
+            Figure export setting (figure_export_set), scaled down into width × height (ask 1200 × 1200
+            or more to read a multi-panel figure's titles). Default ``'figure'``.
         view : str
             The view: "View N" as the Compare views list numbers it; the selected view when left out.
-            Optional: left out, the viewer decides.
+            Not with source "export" (it draws what Export would). Optional: left out, the viewer
+            decides.
         width : int
-            The plot's width in pixels (the picture adds its margins and the legend). Default ``640``.
+            The width of the box the plot fits in, in pixels: the plot keeps the view's shape inside
+            width × height, as the figure export frames it (the picture adds its margins and the
+            legend). With source "export": the box the whole figure is scaled down into (never up).
+            Default ``640``.
 
         Returns
         -------
@@ -5495,7 +5996,7 @@ class ViewerActions:
             The request, sent at once (or as soon as the viewer connects). In a notebook widget its
             answer arrives once the cell has finished: collect it in a later cell.
         """
-        return self.act('view.picture', height=height, legend=legend, view=view, width=width)
+        return self.act('view.picture', height=height, legend=legend, source=source, view=view, width=width)
 
     def view_remove(
         self,
@@ -5504,7 +6005,8 @@ class ViewerActions:
     ) -> ActionRequest:
         r"""Remove a view.
 
-        Remove a view; removing the live view (View 1) hides it while two or more kept views remain.
+        Remove a view: a kept view is deleted; the live view (View 1) is hidden and every kept view
+        stays. The last open view cannot be removed; view_clear shows the live view again.
 
         Action ``view.remove``. It changes how the cells are shown, as one step of the viewer's history,
         which the person can undo; ``request.result()`` is its outcome and ``request.step`` the step.
@@ -5523,13 +6025,45 @@ class ViewerActions:
         """
         return self.act('view.remove', view=view)
 
+    def view_rename(
+        self,
+        *,
+        view: str,
+        name: str | None,
+    ) -> ActionRequest:
+        r"""Name a view.
+
+        Give a view a name of its own, or take it away (null): its row and its pane show it beside its
+        number, a figure's panel title after the panel's letter ("B. Early"). The view is still named
+        "View N" in actions.
+
+        Action ``view.rename``. It changes how the cells are shown, as one step of the viewer's history,
+        which the person can undo; ``request.result()`` is its outcome and ``request.step`` the step.
+
+        Parameters
+        ----------
+        view : str
+            A view: "View N" as the Compare views list numbers its rows (the live view is View 1 while
+            it is shown, the kept views follow in the order they were kept).
+        name : str or None
+            The new name, or null for none.
+
+        Returns
+        -------
+        ActionRequest
+            The request, sent at once (or as soon as the viewer connects). In a notebook widget its
+            answer arrives once the cell has finished: collect it in a later cell.
+        """
+        return self.act('view.rename', view=view, name=name)
+
     def views_state(
         self,
     ) -> ActionRequest:
         r"""Read the views.
 
-        Each open view: its name (what actions name it by), its title, the representation it shows, what
-        it is coloured by, its filters and camera; the layout; the highlight pages with their groups.
+        Each open view: its name (what actions name it by), the name it was given (view_rename), its
+        title, the representation it shows, what it is colored by, its filters and camera; the layout;
+        the highlight pages with their groups; whether the person's system asks for reduced motion.
 
         Action ``views.state``. It reads only and changes nothing; ``request.result()`` is what it
         reads.

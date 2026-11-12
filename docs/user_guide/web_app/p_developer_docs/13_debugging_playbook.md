@@ -23,7 +23,7 @@ Before you click anything else, write down:
 
 1) **Where you ran Cellucid**
    - Hosted: `https://www.cellucid.com`
-   - Local app: `http://localhost:8000` (your own `cellucid/` checkout)
+   - Local app: `http://localhost:4173` (`npm run serve` in your own `cellucid/` checkout)
    - A viewer opened by Python (`show_anndata()`, in a notebook or a browser tab) or R (`cellucid_view()`)
 
 2) **Browser + OS**
@@ -100,7 +100,7 @@ How to confirm:
 - DevTools → Network: click the failing `.js` request and check headers.
 
 Fix:
-- Run `python -m http.server` from `cellucid/` (see {doc}`02_local_development_setup`).
+- Run `npm run serve` from `cellucid/` (see {doc}`02_local_development_setup`).
 - Fix server MIME types (see {doc}`03_build_run_and_deployment`).
 
 ### Symptom: “WebGL2 is required but not supported”
@@ -157,19 +157,19 @@ Likely cause:
 Fix:
 - Open the failed request URL in a new tab; verify it’s real JSON/binary and returns correct status codes.
 
-### Read the failure message before theorising
+### Read the failure message before theorizing
 
 Four distinct load failures used to report themselves identically. They no
 longer do, and the wording identifies the cause:
 
 | Message contains | Cause | Error code |
 |---|---|---|
-| “was cancelled” | An abort — re-thrown untouched, never relabelled | (the original `AbortError`) |
+| “was canceled” | An abort — re-thrown untouched, never relabeled | (the original `AbortError`) |
 | “is longer than the longest text this browser can hold” | A metadata document exceeds the engine's longest string | `VALIDATION_ERROR` |
 | “response body transfer failed” | The connection dropped mid-body | `NETWORK_ERROR` |
 | “must contain valid JSON” | Genuinely malformed content | `INVALID_FORMAT` |
 
-The connection and catalogue UI classifies these by **error code and HTTP
+The connection and catalog UI classifies these by **error code and HTTP
 status**, never by matching message text, so a message you rephrase will keep
 its user-facing sentence — but a code you get wrong will silently move the
 failure into the wrong bucket. Set the code deliberately.
@@ -331,7 +331,7 @@ on the strength of the headline tiles alone.
 Check, in this order, that between the two runs you did not change: the window
 size, the **layout** (one view / two- or three-view row / 2×2 grid — these are
 three different workloads, not one curve), the filter state (hidden cells are
-rejected before rasterisation and cost nothing), or the machine's background
+rejected before rasterization and cost nothing), or the machine's background
 load. See {doc}`../n_benchmarking_performance/04_benchmarking_methodology_and_metrics`.
 
 ---
@@ -378,7 +378,7 @@ Likely causes:
 How to confirm:
 - `window._cellucidHistories.current().active` is the tracker in use; its
   `steps` map holds each step's `touches`, `before` and `after`.
-- A step labelled **Changed outside the history** (type
+- A step labeled **Changed outside the history** (type
   `history.outside-change`) names the domains that changed without an action;
   the console warns `[history] <domains> changed outside an action`.
 - The area's browser spec proves `touches` (`applyUndoRedo`,

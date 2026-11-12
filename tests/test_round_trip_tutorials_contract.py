@@ -16,6 +16,7 @@ import re
 from pathlib import Path
 
 import pytest
+from _web_root import sibling_file
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DOCS = REPOSITORY_ROOT / "docs" / "user_guide"
@@ -24,7 +25,6 @@ R_FOLDER = DOCS / "r_package" / "f_notebooks_tutorials"
 GALLERY = PYTHON_FOLDER / "06_cellucid_in_your_pipeline_python_and_r.md"
 R_INDEX = R_FOLDER / "index.md"
 R_REFERENCE = DOCS / "r_package" / "g_api_reference_coverage" / "01_public_functions_and_classes.md"
-R_NAMESPACE = REPOSITORY_ROOT.parent / "cellucid-r" / "NAMESPACE"
 COLAB = "https://colab.research.google.com/github/theislab/cellucid-python/blob/main/"
 RAW = "https://raw.githubusercontent.com/theislab/cellucid-python/main/"
 
@@ -46,7 +46,7 @@ TWINS = (
     ("45_gene_sets_round_trip", "11_gene_sets_round_trip",
      ("cellucid.write_gmt(", "cellucid.read_gmt(", "viewer.gene_set_save(", "viewer.gene_sets()", "viewer.pull(adata)"),
      ("cellucid_write_gmt(", "cellucid_read_gmt(", "cellucid_gene_set_save(", "cellucid_gene_sets(viewer)", "cellucid_pull(")),
-    ("46_export_an_h5ad_subset_and_reanalyse", "12_subset_and_reanalyse",
+    ("46_export_an_h5ad_subset_and_reanalyze", "12_subset_and_reanalyze",
      ("viewer.subset(adata)", "ad.read_h5ad(SUBSET)", "sc.tl.leiden("),
      ("cellucid_subset(seu, viewer)", "anndataR::read_h5ad(", "FindClusters(")),
     ("47_subsampled_views", "13_subsampled_views",
@@ -127,17 +127,26 @@ def test_the_python_tutorials_download_only_what_the_repository_holds() -> None:
             assert (REPOSITORY_ROOT / folder.group(1) / name.group(1)).is_file(), path.name
 
 
-def test_every_r_call_in_the_tutorials_is_a_documented_export() -> None:
+def _r_calls() -> list[tuple[str, str]]:
+    """Each R tutorial and every cellucid function it calls."""
+    return [
+        (path.name, name)
+        for path in sorted(R_FOLDER.glob("*.ipynb"))
+        for name in sorted(set(re.findall(r"\b(cellucid_\w+)\(", _text(_notebook(path), "code"))))
+    ]
+
+
+def test_every_r_call_in_the_tutorials_is_documented() -> None:
     reference = R_REFERENCE.read_text(encoding="utf-8")
-    exported = None
-    if R_NAMESPACE.is_file():
-        exported = set(re.findall(r"^export\((\w+)\)", R_NAMESPACE.read_text(encoding="utf-8"), re.MULTILINE))
-    for path in sorted(R_FOLDER.glob("*.ipynb")):
-        code = _text(_notebook(path), "code")
-        for name in sorted(set(re.findall(r"\b(cellucid_\w+)\(", code))):
-            assert f"`{name}()`" in reference, f"{path.name}: {name}() is not in the R API reference"
-            if exported is not None:
-                assert name in exported, f"{path.name}: {name}() is not exported by cellucid-r"
+    for notebook, name in _r_calls():
+        assert f"`{name}()`" in reference, f"{notebook}: {name}() is not in the R API reference"
+
+
+def test_every_r_call_in_the_tutorials_is_exported_by_cellucid_r() -> None:
+    namespace = sibling_file("cellucid-r", "NAMESPACE").read_text(encoding="utf-8")
+    exported = set(re.findall(r"^export\((\w+)\)", namespace, re.MULTILINE))
+    for notebook, name in _r_calls():
+        assert name in exported, f"{notebook}: {name}() is not exported by cellucid-r"
 
 
 def test_the_gallery_explains_the_two_cell_pattern() -> None:

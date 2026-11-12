@@ -28,7 +28,10 @@ There is no required bundler step to run it locally:
   (`modulepreload`). A module that reads its own address (`import.meta`) is not
   bundled but imported at its versioned URL (`PAGE_EXTERNALS` in
   `scripts/build-page-bundle.mjs`): the worker scripts, the worker-start
-  registry and `app/asset-url.js`.
+  registry, the listener set it uses (`utils/listener-set.js`) and
+  `app/asset-url.js`. Such a module imports nothing but another of them (the
+  build refuses one that does): any other module it imported would be asked
+  for from the sources on a deployed page, beside its copy in the bundle.
 - Workers follow the same rule: their sources on this machine, a bundle per
   worker in `assets/workers/` anywhere else.
 - Stylesheets name what they import the same way: every `@import` and
@@ -48,10 +51,12 @@ Recommended minimal server:
 
 ```bash
 cd cellucid
-python -m http.server 8000
+npm run serve
 ```
 
-Then open `http://localhost:8000`.
+Then open `http://localhost:4173`. Every answer is `Cache-Control: no-store`,
+so a reload runs a module you just edited (a server without cache headers,
+such as `python -m http.server`, lets the browser keep the old one).
 
 Why this is required:
 - Browsers restrict ES module imports and `fetch()` behavior under `file://`.
@@ -95,7 +100,7 @@ Any static host works (GitHub Pages, Netlify, S3+CloudFront, Cloudflare Pages, n
    - If you edit the inline JSON-LD `<script type="application/ld+json">`, the CSP hash in `script-src` must be updated or the browser will block it.
 
 4) **Know what your hostname turns on**
-   - Analytics initialises **only** on `cellucid.com`, `www.cellucid.com` and
+   - Analytics initializes **only** on `cellucid.com`, `www.cellucid.com` and
      `theislab.github.io`. A deployment on any other hostname — including a
      staging copy of the production site — reports nothing, by design.
    - If you deploy an internal instance for sensitive data, that is the property
@@ -236,7 +241,7 @@ This requirement has no alternate browser-side transport: if the dataset host
 does not authorize the app origin, host the files on an endpoint whose CORS
 policy you control.
 
-### 2) Serve dataset bytes as they are, and honour `Range`
+### 2) Serve dataset bytes as they are, and honor `Range`
 
 Cellucid reads an HDF5 file (`.h5ad`, `.h5mu`, `.loom`, 10x `.h5`), a Zarr ZIP
 or a Zarr store's chunks in place with HTTP range requests

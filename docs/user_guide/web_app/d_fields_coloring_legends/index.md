@@ -34,7 +34,7 @@ Cellucid treats “coloring” and “filtering” as coupled:
 All three rows of the table above live in the same place, one under the other:
 
 ```{figure} ../../../_static/screenshots/web_app/field-selectors-three-routes.png
-:alt: The Color by heading with its (i), above the three field selectors stacked in order — Categorical obs holding clusters, Continuous obs holding None, and an empty Gene expression search box — each followed by four small icon buttons, with the pointer pressing the first.
+:alt: The Color by heading with its (i), above the three field selectors stacked in order — Categorical obs holding clusters, Continuous obs holding None, and an empty Gene expression search box — the Categorical obs row followed by six small icon buttons, the Continuous obs row by five and the gene row by four, with the pointer pressing the first selector.
 :width: 504px
 
 Only one of the three can be active at a time. Choosing a field in one selector
@@ -45,17 +45,17 @@ Which one you choose decides which legend you get, and the legend is where most
 of the work happens:
 
 ```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
-:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a color swatch, a label, a cell count, a rename pencil and a delete bin.
 :width: 488px
 
-**Categorical** → a list of rows you can tick, recolour, rename and merge.
+**Categorical** → a list of rows you can tick, recolor, rename and merge.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/legend-continuous-sscore.png
 :alt: The continuous legend for S_score: the Color scale (Viridis) bar with its two end values, Log color scale off and Rescale to range on, each with its (i), and below a rule the Visible range block with Live filtering on, Minimum and Maximum sliders, and Reset (Filter appears only with Live filtering off).
 :width: 488px
 
-**Continuous or gene** → a colour bar, two colour-mapping toggles, and a
+**Continuous or gene** → a color bar, two color-mapping toggles, and a
 filtering block.
 ```
 

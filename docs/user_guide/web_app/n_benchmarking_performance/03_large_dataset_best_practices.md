@@ -27,7 +27,7 @@ Practical (very rough) intuition:
 - **100k–500k**: you need good habits (avoid recompute loops, keep the window modest).
 - **500k–2M+**: drawing is usually still fine; what bites first is the *CPU* cost
   of each filter change and the memory footprint of large highlight groups.
-- **Beyond that**: the built-in benchmark offers presets up to 20 million points
+- **Beyond that**: the built-in benchmark offers presets up to 40 million points
   precisely because the renderer is not the first thing to give way. Run it on
   your own machine before assuming a dataset is too big — the answer is a
   property of your GPU, not of the cell count.
@@ -52,7 +52,7 @@ Practical (very rough) intuition:
   the memory Cellucid may use on this device is refused with its size, and
   the dataset stays open without it. The KNN drag tool checks the graph once
   (building its edges and letting them go) and then reads each degree's
-  neighbours from the file, so it holds nothing per cell or edge.
+  neighbors from the file, so it holds nothing per cell or edge.
 
 If you hit “WebGL context lost”, jump to {doc}`07_troubleshooting_performance` and {doc}`../a_orientation/02_system_requirements`.
 
@@ -146,8 +146,8 @@ See {doc}`../i_vector_field_velocity/05_performance_and_quality`.
 
 If a categorical field has thousands–tens of thousands of unique values:
 - the legend still scrolls (only the rows in view are drawn),
-- but colours stop being distinguishable and counts take longer,
-- and the field is cognitively overwhelming as a colouring.
+- but colors stop being distinguishable and counts take longer,
+- and the field is cognitively overwhelming as a coloring.
 
 If you see this, treat it as a **data preparation problem**, not a “tweak a knob” problem.
 
@@ -301,7 +301,7 @@ These are so common that it’s worth recognizing them immediately.
 - **Overlay across views**: overlays scale with pixels × views in every layout.
 - **Huge highlight groups**: highlighting costs GPU memory per highlighted cell
   per view, and it does not go away when you look elsewhere.
-- **Category explosion**: the field loads and scrolls, but colours stop being distinguishable.
+- **Category explosion**: the field loads and scrolls, but colors stop being distinguishable.
 
 For a deeper list, see {doc}`06_edge_cases_performance`.
 
@@ -325,7 +325,7 @@ If large datasets are unusable, triage in this order:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: The whole window in Grid compare with the sidebar open: two equal panels to the right of the sidebar show the Pancreas 3D embedding from the same linked camera — view 1 coloured by cell_type, view 2 recoloured by S_score on a Viridis scale — each under a title chip naming its embedding and field. The sidebar shows Compare views with the two view rows, each marked linked and Orbit, View 2 shows UMAP · 3D, Keep view, Link cameras, Layout Grid compare and Clear, and Coloring & filtering with S_score in the Continuous obs select.
+:alt: The whole window in Grid compare with the sidebar open: two equal panels to the right of the sidebar show the Pancreas 3D embedding from the same linked camera — view 1 colored by cell_type, view 2 recolored by S_score on a Viridis scale — each under a title chip naming its embedding and field. The sidebar shows Compare views with the two view rows, each marked linked and Orbit, View 2 shows UMAP · 3D, Keep view, Link cameras, Layout Grid compare and Clear, and Coloring & filtering with S_score in the Continuous obs select.
 :width: 1440px
 
 Two kept views support side-by-side comparison while retaining one dataset

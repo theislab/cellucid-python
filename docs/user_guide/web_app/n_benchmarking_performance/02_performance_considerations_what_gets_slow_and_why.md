@@ -53,7 +53,7 @@ index was built once, in the background from the moment the dataset opened
 (about 2 s: the browser measured the localhost link as fast as a disk), after
 which a gene took a few ms and 100 genes about 20 ms (a gene asked for before
 the index was built waited for it, 1.3 s); 1,000 cell rows took 0.55 s and the
-neighbour graph 0.65 s when first drawn. Data passed to `show_anndata()` as an
+neighbor graph 0.65 s when first drawn. Data passed to `show_anndata()` as an
 in-memory object is served in priority order, so a subsample transfers only its
 cells (measured in
 {doc}`../../python_package/d_viewing_apis/14_performance_scaling_and_lazy_loading`).
@@ -88,7 +88,7 @@ Best practices and alternatives:
 Three things that are commonly assumed to cost per frame, and do not:
 
 - **Hidden points.** A cell that filters have hidden is rejected before
-  rasterisation — it is pushed outside the clip volume in the vertex shader, so
+  rasterization — it is pushed outside the clip volume in the vertex shader, so
   no fragment is ever produced for it. A heavily filtered view is therefore
   *cheaper* to navigate than the same dataset unfiltered, not more expensive.
 - **Standing still.** When nothing changes, the frame transfers no data to the
@@ -136,7 +136,7 @@ High-leverage knobs:
   measured at all, and culling is tried only where cells lie outside the
   view; otherwise tick them yourself. A reduced level draws a uniform random sample of
   the open cells (their priority order, the order subsamples are taken in), so
-  it shows the same density and the same mix of colours as all cells do, up to
+  it shows the same density and the same mix of colors as all cells do, up to
   sampling noise; full detail draws every cell. `Auto` has a floor, and the floor is the coarsest
   level still holding at least `min(2,000,000, total points ÷ 8)` points: it may
   never reduce a cloud by more than 8×, and it may never take a large one below
@@ -147,7 +147,7 @@ High-leverage knobs:
   gets ten levels for the camera to move through. That rung is only a *floor*:
   `Auto` falls to it when you pull back and draws more as you move in. The forced
   level slider is deliberately *not* bounded by either limit, so asking for a
-  coarser level explicitly is still honoured.
+  coarser level explicitly is still honored.
 - **Reduce `Point size`** once points are big enough to overlap — the one
   rendering setting that measurably moves frame time, and it is measured below.
 - **Turn off `Antialiasing`** under **Visualization →
@@ -175,7 +175,7 @@ Separate build cost from frame cost:
 
 - **Visible-cell count** scales density-build validation and GPU submission
   approximately linearly. A build runs on entering smoke and again after every
-  visibility, colour, or dimension change while smoke is active.
+  visibility, color, or dimension change while smoke is active.
 - **Grid density** scales the build's splat and normalization work with the
   cube of the grid width, but its memory is capped: 128³ is the largest grid on
   every device, an 8 MiB volume, with under 50 MiB of temporary atlases during
@@ -397,21 +397,21 @@ below measures at 52.7 ms with antialiasing on and 42.5 ms with it off:
 |---|---|---|
 | Vertex processing | 2.62 ms, and **flat** — identical at every point size | a few percent of a frame that runs 42–53 ms at this point size |
 | Fragment shading | rises 1.82× for **190×** the fragments | small, and mostly hidden |
-| Per-sprite rasterisation | the remainder | the bulk of the frame |
+| Per-sprite rasterization | the remainder | the bulk of the frame |
 
 Two consequences follow, and both contradict advice that used to appear on this
 page:
 
 - **Simplifying the fragment shader buys nothing.** Depth writes are on and
   submission order is uncorrelated with depth, so at point size 0.75 only
-  about **5%** of rasterised fragments survive to be shaded at all. Removing fog,
+  about **5%** of rasterized fragments survive to be shaded at all. Removing fog,
   removing lighting, removing the alpha texture fetch, removing the round
   discard, and stepping the whole quality ladder down — 43 shader statements to 9
   to 2 in the compiled Metal — each stayed inside its own measurement noise band,
   at every point size tested. The fragment shader runs on a rounding error's
   worth of the fill, so making it cheaper changes nothing you can see.
-- **The floor is the per-sprite rasterisation footprint**, not shading and not
-  vertex work: binning, rasteriser setup and raster operations, measured at about
+- **The floor is the per-sprite rasterization footprint**, not shading and not
+  vertex work: binning, rasterizer setup and raster operations, measured at about
   **5.7 ns per sprite (~175 million sprites/s)** and reproduced three times by
   three independent instruments. `GL_POINTS` is the cheapest way to reach it —
   instanced quads and every triangle arrangement tried came out **1.41× to 2.12×
@@ -435,13 +435,13 @@ antialiasing.
 
 Point size is the one rendering setting with a measurable effect on frame time,
 and the reason is geometric rather than arithmetic: a sprite's area grows with
-the square of its size, so it changes how much the rasteriser has to cover
+the square of its size, so it changes how much the rasterizer has to cover
 rather than how much arithmetic runs per pixel.
 
 A dataset already opens at a size chosen from its cell count, so most of this
 work is done before you touch anything. The opening size holds the total drawn
 area roughly constant, which means the diameter falls with the square root of
-the count: 100,000 cells open at about 1.5, 3,696 cells at 7.8, and 18,142,044
+the count: 100,000 cells open at about 1.5, 3,696 cells at about 7.7, and 18,142,044
 cells at about 0.112. It is applied on every dataset publication, but *before* a
 saved session or a published preset is replayed, so an explicit choice you
 stored still wins.
@@ -450,14 +450,15 @@ Two things happen after the square-root law, and both are load-bearing if you
 are reproducing the number: the curve is capped at 8
 (`MAXIMUM_AUTOMATIC_POINT_SIZE`), so a few-hundred-cell dataset does not open as
 a field of overlapping discs, and the chosen position is snapped to the slider's
-own 0.5 step — which is why 100,000 cells land on 1.52 rather than exactly 1.5.
+own 0.5 step — which is why 100,000 cells land on 1.48 rather than exactly 1.5.
 
 `Point size` runs from position -24 to position 100 in steps of 0.5. The
-positions are exponents of a curve anchored at 0.25 (position 0) and 200
-(position 100), so the reachable sizes run from 0.050 to 200.
+positions are exponents of a curve anchored at 0.25 (position 0) and 160
+(position 100), the largest sprite a cell is drawn at, so the reachable sizes
+run from 0.053 to 160 and no travel at the top draws the same sprite.
 
 It does not respond everywhere on its range. Below roughly **`gl_PointSize` 15**
-— `Point size` at position 50, a point size of about 7, or a point size
+— `Point size` at position 50, a point size of about 6.3, or a point size
 of 0.75 after zooming in about sixfold — the frame is bound by the per-sprite
 cost, and shrinking points further buys very little. Above it the frame becomes
 fill-bound and point size becomes the dominant term. In practice:
@@ -578,7 +579,7 @@ Why this works:
 - one view is unambiguously the cheapest state to iterate in, and it keeps the
   comparison you eventually build deliberate rather than accidental. You can
   keep any number of snapshots, but each one shown is drawn every frame and
-  holds about 5 bytes per cell of GPU memory (its colours and visibility;
+  holds about 5 bytes per cell of GPU memory (its colors and visibility;
   positions are shared), so keep the ones you compare.
 
 ### 2) Stage expensive actions
@@ -614,7 +615,7 @@ This is especially important for smoke mode and vector overlays.
 
 Some problems are best solved upstream:
 
-- **Category explosion** (tens of thousands of categories) loads and its legend scrolls, but one colour per category carries little information.
+- **Category explosion** (tens of thousands of categories) loads and its legend scrolls, but one color per category carries little information.
 - **Pathological filters** (dozens of stacked filters) means you’re doing data cleaning in the UI.
 - **Huge feature sets** (very large var/gene tables) can make gene search and loading heavy.
 

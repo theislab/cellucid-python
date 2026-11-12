@@ -7,6 +7,7 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 import pytest
+from _stand_in_server import StandInServer
 from anndata import AnnData
 
 
@@ -145,27 +146,11 @@ def test_jupyter_none_port_requests_8765_and_the_next_free_port(monkeypatch) -> 
     seen_ports: list[int] = []
     servers: list[object] = []
 
-    class DummyServer:
+    class DummyServer(StandInServer):
         def __init__(self, **kwargs):
             seen_ports.append(kwargs["port"])
             servers.append(self)
-            self.host = kwargs["host"]
-            self.port = 43123
-            self.dataset_id = "demo"
-            self.server_info = {"n_cells": 3}
-
-        @property
-        def url(self) -> str:
-            return f"http://{self.host}:{self.port}"
-
-        def start_background(self) -> None:
-            return None
-
-        def is_running(self) -> bool:
-            return True
-
-        def stop(self) -> None:
-            return None
+            super().__init__(**{**kwargs, "port": 43123})
 
     # ``AnnDataViewer._start_server`` imports ``AnnDataServer`` from its module
     # when it runs, so the patch names that module.

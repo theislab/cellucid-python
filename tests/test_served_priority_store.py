@@ -22,6 +22,8 @@ from __future__ import annotations
 import http.client
 import json
 import shutil
+import subprocess
+import sys
 import tempfile
 import threading
 import warnings
@@ -40,6 +42,7 @@ from zarr.core.buffer import default_buffer_prototype
 
 from cellucid import _served_store
 from cellucid._anndata_files import classify_anndata_path
+from cellucid._file_versions import path_version
 from cellucid._served_store import (
     SERVED_ENTRY_CHUNK_ELEMENTS,
     SERVED_PRIORITY_SEED,
@@ -89,7 +92,7 @@ def _adata(n: int = 600, m: int = 9, *, form: str = "csr", seed: int = 3) -> ad.
     graph = sparse.random(n, n, density=0.01, format="csr", dtype=np.float32, random_state=seed + 2).tolil()
     graph.setdiag(0)
     graph = sparse.csr_matrix(graph)
-    # Symmetric with no self-loops, as prepare() requires of a neighbour graph.
+    # Symmetric with no self-loops, as prepare() requires of a neighbor graph.
     adata.obsp["connectivities"] = sparse.csr_matrix(graph + graph.T)
     adata.uns["cellucid"] = {"id": "served", "name": "Served"}
     adata.uns["note"] = "kept"
@@ -237,6 +240,29 @@ def test_a_text_column_is_served_as_prepare_stores_it() -> None:
     assert not isinstance(served.obs["name"].dtype, pd.CategoricalDtype)
     # The object served is not changed.
     assert source.obs["donor"].dtype == object
+
+
+def test_a_record_array_in_uns_is_served_as_anndata_wrote_it() -> None:
+    """A structured (record) array in ``uns`` -- every Scanpy object after
+    ``sc.tl.rank_genes_groups`` holds several -- is served field for field: its
+    Zarr v2 dtype is a list of ``[name, type]`` fields, not a type string."""
+    source = _adata()
+    # Eight groups of 100 genes, wide names (as Scanpy writes them): zarr stores
+    # the table in more than one chunk, so it is laid out again when served.
+    groups = [str(group) for group in range(8)]
+    names = np.rec.fromarrays([np.array([f"g{group}-{j}" for j in range(100)], dtype="<U200") for group in groups], names=groups)
+    scores = np.rec.fromarrays([np.linspace(int(group), int(group) + 1, 100, dtype=np.float32) for group in groups], names=groups)
+    source.uns["rank_genes_groups"] = {"names": names, "scores": scores, "params": {"groupby": "cell_type"}}
+    store = PriorityStore.of_anndata(source)
+    try:
+        served, _ = _read(store)
+    finally:
+        store.close()
+    ranked = served.uns["rank_genes_groups"]
+    for key, want in (("names", names), ("scores", scores)):
+        assert ranked[key].dtype.names == tuple(groups)
+        for group in groups:
+            np.testing.assert_array_equal(ranked[key][group], want[group])
 
 
 def test_the_object_is_not_changed_and_its_own_order_names_the_cells() -> None:
@@ -1114,3 +1140,87 @@ def test_obs_of_every_encoding_is_cut_straight_in_served_order() -> None:
     assert len(per_cell) == 1 + 9 + 2 + 1
     assert all(document["chunks"] == [CELL_CHUNK_ELEMENTS] for document in per_cell.values())
     assert documents["obs/wide/codes"]["dtype"] == "<i2" and documents["obs/small/codes"]["dtype"] == "|i1"
+
+
+def test_a_file_replaced_or_rewritten_while_it_is_served_is_refused_with_why_not_failed(tmp_path: Path) -> None:
+    """Round 9 sources lane (R9S-9): a file written again while a server
+    served it (from a notebook beside ``cellucid serve``) had every chunk
+    answered 500 with an HDF5 error ("wrong B-tree signature"), which the
+    viewer said as the server failing. Every key of the store made of the
+    old version is now refused with 409 and why, through the widget's
+    ``answer_request`` and over HTTP: a file replaced (a new one moved over
+    it, as a safe write does) and one written in place alike."""
+    path = tmp_path / "served.h5ad"
+    source = _adata(n=300)
+    source.write_h5ad(path)
+    why = (
+        "served.h5ad changed on disk since the server opened it: serve it again "
+        "(restart cellucid serve, or show the viewer again) to read it as it is now."
+    )
+    for change in ("replaced", "rewritten"):
+        source.write_h5ad(path)
+        server = AnnDataServer(path, host="127.0.0.1", port=0, quiet=True, serve_web_ui=False, dataset_id="served")
+        server.start(blocking=False)
+        try:
+            status, _, _ = server.answer_request("GET", "_cellucid/anndata/served.zarr/.zmetadata", None)
+            assert status == 200
+            if change == "replaced":
+                other = tmp_path / "other.h5ad"
+                source[:120].copy().write_h5ad(other)
+                if sys.platform == "win32":
+                    # Windows refuses to move a file over one a process holds
+                    # open (the server's HDF5 handle has no delete sharing):
+                    # the replacement never happens, so the served file is
+                    # still the one the server opened and is answered as such.
+                    with pytest.raises(PermissionError):
+                        other.replace(path)
+                    for key in (".zmetadata", "obs/_index/0", "X/indptr/0"):
+                        status, _, _ = server.answer_request("GET", f"_cellucid/anndata/served.zarr/{key}", None)
+                        assert status == 200, (change, key)
+                    continue
+                other.replace(path)
+            else:
+                # Another process writing over its bytes (HDF5 itself refuses to
+                # truncate a file another process holds; any writer can where
+                # the system lets it). The write is unbuffered, so a system
+                # that refuses it says so at once: Windows does, since the
+                # HDF5 handle holds a byte-range lock that every process's
+                # writes obey (a buffered write there failed unseen as the
+                # interpreter exited, with exit code 0, and left the file as
+                # it was).
+                before = path_version(path)
+                written = subprocess.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        "import sys\n"
+                        "with open(sys.argv[1], 'r+b', buffering=0) as file:\n"
+                        "    file.write(b'not hdf5 any more')\n",
+                        str(path),
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+                if sys.platform != "win32":
+                    assert written.returncode == 0, written.stderr
+                if written.returncode != 0:
+                    # The system kept the file as the server opened it: it is
+                    # answered as such, never refused for a change that did
+                    # not happen.
+                    assert "PermissionError" in written.stderr, written.stderr
+                    assert path_version(path) == before
+                    for key in (".zmetadata", "obs/_index/0", "X/indptr/0"):
+                        status, _, _ = server.answer_request("GET", f"_cellucid/anndata/served.zarr/{key}", None)
+                        assert status == 200, (change, key)
+                    continue
+                assert path_version(path) != before, (before, path_version(path))
+            for key in (".zmetadata", "obs/_index/0", "X/indptr/0"):
+                status, _, body = server.answer_request("GET", f"_cellucid/anndata/served.zarr/{key}", None)
+                assert (status, body.decode()) == (409, why), (change, key)
+            connection = http.client.HTTPConnection("127.0.0.1", server.port, timeout=10)
+            connection.request("GET", "/_cellucid/anndata/served.zarr/obs/_index/0")
+            response = connection.getresponse()
+            assert (response.status, response.read().decode()) == (409, why), change
+            connection.close()
+        finally:
+            server.stop()

@@ -14,7 +14,7 @@ you want to see as particle flow over an embedding.
 
 The 3,696-cell Pancreas sample in 2D (**Planar**) with its `velocity` field
 drawn as particle trails; the **Vector field** controls (field, density,
-speed, trail, size, opacity, colour scheme, Sync with LOD) are open beside it.
+speed, trail, size, opacity, color scheme, Sync with LOD) are open beside it.
 ```
 
 UI docs: {doc}`../../web_app/i_vector_field_velocity/index`.
@@ -82,8 +82,8 @@ Rules (each refused before writing when broken):
 - The embedding key is one of `embeddings` and starts with `X_` (`X_<basis>`);
   any other key is refused ("needs an 'X_<basis>' key").
 - An array has exactly as many columns as its embedding (any number: 50 for a
-  50-column `X_pca`), one row per cell, float32-range values; a row of NaN
-  is a cell without a vector, drawn without an arrow. A plain `(n_cells,)`
+  50-column `X_pca`), one row per cell, float32-range values; a row holding NaN
+  or an infinity is a cell without a vector, drawn without an arrow. A plain `(n_cells,)`
   vector is one column.
 - No two arrays may be stored under the same key, and no stored key may collide
   with an embedding key.

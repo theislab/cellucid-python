@@ -19,11 +19,11 @@ htmlwidgets integration.
 For the web UI experience after opening a store (filtering, analysis, sessions, community annotation), see {doc}`../web_app/index`.
 ```
 
-:::{admonition} Active package version — 0.9.7
+:::{admonition} Active package version — 0.9.8
 :class: note
 <!-- CELLUCID_VERSION -->
 
-Version **0.9.7** is the active Cellucid for R source and documentation <!-- CELLUCID_VERSION -->
+Version **0.9.8** is the active Cellucid for R source and documentation <!-- CELLUCID_VERSION -->
 version and the CRAN submission release. The
 [CRAN package index](https://cran.r-project.org/web/packages/available_packages_by_name.html)
 is authoritative for registry availability. Check an installed environment
@@ -52,7 +52,7 @@ matching CRAN and official-source installation paths.
 :link: installation
 :link-type: doc
 
-Install version 0.9.7 from the source currently available to you, verify the <!-- CELLUCID_VERSION -->
+Install version 0.9.8 from the source currently available to you, verify the <!-- CELLUCID_VERSION -->
 loaded package, and diagnose dependency or environment problems.
 :::
 

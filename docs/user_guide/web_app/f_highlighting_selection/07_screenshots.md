@@ -1,7 +1,7 @@
 # Verified highlighting captures
 
 Every image below was captured from the running web app against the
-**Pancreatic endocrinogenesis (scVelo)** sample (3,696 cells), coloured by
+**Pancreatic endocrinogenesis (scVelo)** sample (3,696 cells), colored by
 `cell_type`, at a 1440×1000 viewport with a device pixel ratio of 2, in the
 light theme. Each one is a named scenario in `docs/_tooling/screenshots/`
 (`highlighting-…` in `scenarios.mjs`) and can be regenerated and re-verified
@@ -33,11 +33,11 @@ while the page is empty.
 ## One lasso, start to finish
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/01-draw-lasso.png
-:alt: The 2D planar Pancreas embedding mid-lasso: Alt is held, the pointer is pressed at the end of a dotted path drawn most of the way round the upper part of the left lobe, and the cells the path already encloses are drawn in the highlight colour while the panel shows no step yet.
+:alt: The 2D planar Pancreas embedding mid-lasso: Alt is held, the pointer is pressed at the end of a dotted path drawn most of the way round the upper part of the left lobe, and the cells the path already encloses are drawn in the highlight color while the panel shows no step yet.
 :width: 1440px
 
 **Step 1 — draw.** `Alt` is held and the button is down. The enclosed cells are
-already repainted in the highlight colour: that is the *preview*, which shows
+already repainted in the highlight color: that is the *preview*, which shows
 the set a release would commit under the modifier you are holding. The path
 does not have to be closed by hand — releasing closes it.
 ```
@@ -53,27 +53,27 @@ true.
 ```
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/03-confirm-lasso-group.png
-:alt: The Highlighting panel after Confirm: the page tab reads Page 1 826, and the ringed group list shows the summary "826 cells highlighted", a Clear button, and one group row labelled "Lasso (826 cells) (826)" with a checkbox and a remove control.
+:alt: The Highlighting panel after Confirm: the page tab reads Page 1 826, and the ringed group list shows the summary "826 cells highlighted", CSV, .h5ad and Clear buttons, and one group row labeled "Lasso" with a checkbox, its count 826 and a remove control.
 :width: 532px
 
 **Step 3 — confirm.** **Confirm** turns the candidate set into one group on the
 active page. The page tab, the summary line and the group row now all carry the
-same count, and **Clear** has appeared.
+same count, and **CSV**, **.h5ad** and **Clear** have appeared.
 ```
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/04-view-highlighted-cells.png
-:alt: The whole window after confirming the lasso group: the 826 enclosed cells in the upper part of the left lobe are drawn in the highlight colour, and the Highlighting panel reports 826 cells highlighted with one Lasso group.
+:alt: The whole window after confirming the lasso group: the 826 enclosed cells in the upper part of the left lobe are drawn in the highlight color, and the Highlighting panel reports 826 cells highlighted with one Lasso group.
 :width: 1440px
 
 **Step 4 — the result.** The group survives everything that is not a filter:
-change the coloured field, move the camera, switch embedding, and these 826
+change the colored field, move the camera, switch embedding, and these 826
 cells stay members.
 ```
 
 ## The other three tools
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/select-category-by-click.png
-:alt: Annotation selection after Alt+click on a cell of the green Beta arm: all 591 Beta cells are drawn in the highlight colour, a tooltip by the pointer names Beta, 591 cells and cell_type, and the panel reads Step 1: 591 cells with the help line "Alt to replace, Shift+Alt to add, Ctrl+Alt to subtract" above the Confirm, undo, redo and Cancel controls.
+:alt: Annotation selection after Alt+click on a cell of the green Beta arm: all 591 Beta cells are drawn in the highlight color, a tooltip by the pointer names Beta, 591 cells and cell_type, and the panel reads Step 1: 591 cells with the help line "Alt to replace, Shift+Alt to add, Ctrl+Alt to subtract" above the Confirm, undo, redo and Cancel controls.
 :width: 1440px
 
 **Annotation.** One `Alt+click` on one cell selected all 591 visible cells
@@ -83,22 +83,22 @@ because intersecting one category with another is almost always empty.
 ```
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/drag-proximity-radius.png
-:alt: Proximity drag mid-gesture on the 2D embedding: a dashed circle centred on a dot at the seed cell in the left lobe, the cells inside it drawn in the highlight colour, and the pointer pressed on the circle's edge.
+:alt: Proximity drag mid-gesture on the 2D embedding: a dashed circle centered on a dot at the seed cell in the left lobe, the cells inside it drawn in the highlight color, and the pointer pressed inside the circle, below and to the right of the seed.
 :width: 1440px
 
 **Proximity drag.** The dashed circle is the radius in *embedding* space, not
-screen space; the small dot at its centre is the seeded cell. In 3D the same
+screen space; the small dot at its center is the seeded cell. In 3D the same
 gesture is a sphere. The step readout appears only on release, so mid-drag the
 panel shows no step yet.
 ```
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/drag-knn-degree.png
-:alt: KNN drag mid-gesture from the same seed cell, dragged upward by the same distance: a small dashed circle labelled 3° around the seed, and the highlighted cells spreading through the left lobe along the neighbour graph rather than filling a disc, with the pointer pressed above the seed.
+:alt: KNN drag mid-gesture from the same seed cell, dragged upward by the same distance: a small dashed circle labeled 3° around the seed, and the highlighted cells spreading through the left lobe along the neighbor graph rather than filling a disc, with the pointer pressed above the seed.
 :width: 1440px
 
 **KNN drag.** The same seed cell and the same drag distance as the proximity
 capture above, dragged upward. Compare the shape: the selection follows the
-neighbour graph, so it spreads along the manifold instead of filling a disc.
+neighbor graph, so it spreads along the manifold instead of filling a disc.
 Drag distance sets the degree in whole steps, and the label beside the dashed
 circle (`3°`) names the degree reached.
 ```
@@ -106,16 +106,16 @@ circle (`3°`) names the degree reached.
 ## Two pages
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/compare-highlight-pages.png
-:alt: The Highlighting panel with two page tabs ringed, their names shortened — Page 1 with a blue swatch carrying 826, and the active Page 2 with a red swatch carrying 267, each with a combine (⋈) and a delete (×) control — the list reading 267 cells highlighted with one Proximity (267 cells) (267) group, and the pointer on the button that adds another page.
+:alt: The Highlighting panel with two page tabs ringed — Page 1 with a blue swatch carrying 826, and the active Page 2 with a red swatch carrying 267, each with a combine (⋈) and a delete (×) control — the list reading 267 cells highlighted above CSV, .h5ad and Clear buttons and one group row, Proximity, with its count 267, and the pointer on the button that adds another page.
 :width: 534px
 
-Pages are alternative workspaces. Each carries its own colour, its own count and
+Pages are alternative workspaces. Each carries its own color, its own count and
 its own group list; only the active one is rendered. The `⋈` control on a tab
 combines it with another page by intersection or union.
 ```
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/share-highlight-across-views.png
-:alt: Two 3D panels of the same dataset side by side with the sidebar closed, each under a title chip (1 · UMAP 3D · cell_type, 2 · UMAP 3D · cell_type): the left panel at the default close-up camera, the right panel zoomed out and rotated; the cells confirmed by one lasso drawn in the left panel are drawn in the highlight colour in both.
+:alt: Two 3D panels of the same dataset side by side with the sidebar closed, each under a title chip (1 · UMAP 3D · cell_type, 2 · UMAP 3D · cell_type): the left panel at its default camera, the right panel zoomed out and rotated; the cells confirmed by one lasso drawn in the left panel are drawn in the highlight color in both.
 :width: 1440px
 
 Highlight membership is one list for the whole dataset, so both panels draw the
@@ -136,10 +136,10 @@ history. The full list is in {doc}`06_troubleshooting_highlighting`.
 ```
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-no-active-field-notice.png
-:alt: The Highlighting panel with the Annotation tool chosen and no field coloured, and the Selection (i) tip open, its first line ringed: "Color by a field first (Coloring & filtering), then Alt+click a cell."
+:alt: The Highlighting panel with the Annotation tool chosen and no field colored, and the Selection (i) tip open, its first line ringed: "Color by a field first (Coloring & filtering), then Alt+click a cell."
 :width: 762px
 
-With no coloured field, **Annotation** has no rule to apply, so the
+With no colored field, **Annotation** has no rule to apply, so the
 **Selection** (i) leads with an instruction instead of the usual invitation.
 ```
 
@@ -155,7 +155,7 @@ it before you press a modifier: it is the only place the app tells you that
 ## A named page
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/highlighting-selected-page.png
-:alt: The Highlighting panel with one page renamed "Left lobe" carrying 826 cells, the summary "826 cells highlighted", and one group row labelled "Lasso (826 cells) (826)".
+:alt: The Highlighting panel with one page renamed "Left lobe" carrying 826 cells, the summary "826 cells highlighted" above CSV, .h5ad and Clear buttons, and one group row labeled "Lasso" with its count 826.
 :width: 532px
 
 The confirmed lasso group from above, on a page renamed by double-clicking its

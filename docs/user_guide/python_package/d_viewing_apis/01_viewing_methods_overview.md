@@ -23,10 +23,11 @@ Cellucid always needs two things:
   **Viewer URL** printed by that server:
 
   ```text
-  http://127.0.0.1:8765/?anndata=true
+  http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
   ```
 
-  The `anndata=true` marker declares the user-served source before the first
+  (`viewerId` and `viewerToken` open the page's viewer channel; an
+  `AnnDataViewer` holds its own.) The `anndata=true` marker declares the user-served source before the first
   paint, and the UI can load the data without cross-origin issues.
 
 ## At a glance

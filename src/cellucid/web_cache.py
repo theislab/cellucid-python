@@ -85,7 +85,11 @@ class FetchedWebResponse:
 
 @dataclass(frozen=True)
 class WebCachePrefetchSummary:
-    """Result of establishing one complete local web build."""
+    """Result of establishing one complete local web build.
+
+    ``unreachable`` is why the source could not be read when the cached build
+    is served without it (offline), else None.
+    """
 
     cache_dir: Path
     source_url: str
@@ -93,6 +97,20 @@ class WebCachePrefetchSummary:
     downloaded_files: int
     downloaded_bytes: int
     skipped_files: int
+    unreachable: str | None = None
+
+
+# What a start says when the source cannot be reached, word for word as the R
+# package says it (`web-cache.R`; `tests/test_r_python_parity_contract.py`
+# pins the two): the cached build served offline, or why nothing can be
+# served and how to get the app.
+WEB_APP_OFFLINE_NOTICE = "Could not reach {source}; serving the cached web app (build {build_id})."
+WEB_APP_UNAVAILABLE = (
+    "The Cellucid web app could not be downloaded from {source} ({reason}), and {cache}. "
+    "Connect to the internet once, or set web_cache_dir to a folder that holds a verified build."
+)
+WEB_APP_NOT_CACHED = "no copy of it is cached in {cache_dir}"
+WEB_APP_CACHE_UNVERIFIED = "the copy cached in {cache_dir} does not check out ({problem})"
 
 
 def _require_source_url(value: str) -> str:
@@ -574,6 +592,27 @@ def _verify_fetched_asset(asset: WebAsset, response: FetchedWebResponse) -> None
     _verify_asset_bytes(asset, response.data)
 
 
+#: Downloads in flight at once while a generation is established: the six
+#: connections per host a browser opens to a site, so the source sees no more
+#: than a browser loading the app asks of it. One file at a time took over six
+#: minutes for the 1,209 files of a build from www.cellucid.com (2026-11-11).
+_CONCURRENT_DOWNLOADS = 6
+
+
+def _active_copy(cache_dir: Path, source_url: str, asset: WebAsset) -> bytes | None:
+    """The bytes the active generation from ``source_url`` holds for ``asset``
+    when they are exactly the ones the new inventory declares (length and
+    SHA-256), else None: an unchanged file is not downloaded again."""
+    try:
+        if _read_cache_source(cache_dir) != source_url:
+            return None
+        data = (cache_dir / asset.path).read_bytes()
+        _verify_asset_bytes(asset, data)
+    except (OSError, ValueError):
+        return None
+    return data
+
+
 def _establish_staged_generation(
     *,
     cache_dir: Path,
@@ -582,7 +621,13 @@ def _establish_staged_generation(
     inventory_payload: bytes,
     timeout: float,
     show_progress: bool,
-) -> tuple[Path, int]:
+) -> tuple[Path, int, int]:
+    """Stage one complete generation beside ``cache_dir``: each file the active
+    generation already holds with the declared bytes is copied from it, every
+    other one downloaded (several at once) and verified. Returns the stage, the
+    bytes downloaded and the number of files downloaded."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     cache_dir.parent.mkdir(parents=True, exist_ok=True)
     stage = Path(
         tempfile.mkdtemp(
@@ -591,6 +636,14 @@ def _establish_staged_generation(
         )
     )
     progress = None
+
+    def place(asset: WebAsset, data: bytes) -> None:
+        target = stage / asset.path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        if progress is not None:
+            progress.update(1)
+
     try:
         if show_progress:
             from tqdm.auto import tqdm
@@ -600,26 +653,40 @@ def _establish_staged_generation(
                 desc="Cellucid web UI cache",
                 unit="file",
             )
-        downloaded_bytes = 0
+        missing: list[WebAsset] = []
         for asset in inventory.assets:
-            response = _fetch_web_response(
-                source_url=source_url,
-                asset_path=asset.path,
-                timeout=timeout,
-            )
-            _verify_fetched_asset(asset, response)
-            target = stage / asset.path
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(response.data)
-            downloaded_bytes += len(response.data)
-            if progress is not None:
-                progress.update(1)
+            kept = _active_copy(cache_dir, source_url, asset)
+            if kept is None:
+                missing.append(asset)
+            else:
+                place(asset, kept)
+        downloaded_bytes = 0
+        pool = ThreadPoolExecutor(max_workers=_CONCURRENT_DOWNLOADS)
+        try:
+            pending = {
+                pool.submit(
+                    _fetch_web_response,
+                    source_url=source_url,
+                    asset_path=asset.path,
+                    timeout=timeout,
+                ): asset
+                for asset in missing
+            }
+            for future in as_completed(pending):
+                asset = pending[future]
+                response = future.result()
+                _verify_fetched_asset(asset, response)
+                place(asset, response.data)
+                downloaded_bytes += len(response.data)
+        finally:
+            # A failure stops the downloads not yet started.
+            pool.shutdown(wait=True, cancel_futures=True)
         (stage / WEB_ASSET_INVENTORY_FILENAME).write_bytes(inventory_payload)
         (stage / _WEB_CACHE_SOURCE_FILENAME).write_bytes(
             _source_control_bytes(source_url)
         )
         verify_web_ui_cache(stage, expected_source_url=source_url)
-        return stage, downloaded_bytes
+        return stage, downloaded_bytes, len(missing)
     except BaseException as error:
         try:
             _remove_web_cache_dir(stage)
@@ -663,6 +730,30 @@ def _activate_staged_generation(stage: Path, cache_dir: Path) -> None:
         raise
     if had_active:
         _remove_web_cache_dir(backup)
+
+
+def _serve_cached_offline(cache_dir: Path, source: str, unreachable: BaseException) -> WebCachePrefetchSummary:
+    """The verified cached build, served while ``source`` cannot be reached."""
+    reason = str(unreachable) or type(unreachable).__name__
+    with _CACHE_LOCK:
+        try:
+            held = verify_web_ui_cache(cache_dir, expected_source_url=source)
+        except (OSError, ValueError) as problem:
+            cache = (
+                WEB_APP_CACHE_UNVERIFIED.format(cache_dir=cache_dir, problem=problem)
+                if cache_dir.is_dir()
+                else WEB_APP_NOT_CACHED.format(cache_dir=cache_dir)
+            )
+            raise RuntimeError(WEB_APP_UNAVAILABLE.format(source=source, reason=reason, cache=cache)) from unreachable
+    return WebCachePrefetchSummary(
+        cache_dir=cache_dir,
+        source_url=source,
+        build_id=held.build_id,
+        downloaded_files=0,
+        downloaded_bytes=0,
+        skipped_files=len(held.assets),
+        unreachable=reason,
+    )
 
 
 def get_web_cache_dir() -> Path:
@@ -713,6 +804,16 @@ def ensure_web_ui_cached(
 ) -> WebCachePrefetchSummary:
     """Establish the source build, or verify only when ``force=False``.
 
+    ``force=True`` reads the source's inventory. When the source cannot be read,
+    a cache whose every file verifies is served as it is (``unreachable`` says
+    why; ``WEB_APP_OFFLINE_NOTICE`` is what a server prints), and with none the
+    ``RuntimeError`` says what is missing and how to get it
+    (``WEB_APP_UNAVAILABLE``). When the cache holds that very
+    inventory and every file verifies, the cache is the build and nothing is
+    downloaded; otherwise a new generation is staged -- each file the cache
+    holds with the declared bytes copied from it, every other one downloaded
+    (six at once) and verified -- and swapped in whole.
+
     ``cache_dir`` must name a directory dedicated to the web build, because
     ``force=True`` renames the whole existing directory aside and then removes
     it. The same directories ``clear_web_cache`` refuses are refused here,
@@ -742,14 +843,20 @@ def ensure_web_ui_cached(
                 skipped_files=len(cached_inventory.assets),
             )
 
-    inventory_response = _require_fetched_response(
-        _fetch_web_response(
-            source_url=source,
-            asset_path=WEB_ASSET_INVENTORY_FILENAME,
-            timeout=timeout,
-        ),
-        label="Web asset inventory",
-    )
+    try:
+        inventory_response = _require_fetched_response(
+            _fetch_web_response(
+                source_url=source,
+                asset_path=WEB_ASSET_INVENTORY_FILENAME,
+                timeout=timeout,
+            ),
+            label="Web asset inventory",
+        )
+    except (OSError, RuntimeError, ValueError) as unreachable:
+        # The source cannot be read (offline, blocked, down): a cache whose
+        # every file matches its inventory's SHA-256 is that build exactly,
+        # so it is served; else the error says what is missing and how to get it.
+        return _serve_cached_offline(resolved, source, unreachable)
     if inventory_response.content_type != "application/json; charset=utf-8":
         raise ValueError(
             "Web asset inventory response Content-Type must be "
@@ -758,8 +865,26 @@ def ensure_web_ui_cached(
     inventory = parse_web_asset_inventory(inventory_response.data)
 
     with _CACHE_LOCK:
-        _require_web_cache_directory_or_missing(resolved)
-        stage, downloaded_bytes = _establish_staged_generation(
+        if _require_web_cache_directory_or_missing(resolved):
+            # The source still publishes the generation this cache holds: the
+            # cache is that exact generation once every file verifies.
+            try:
+                same = (resolved / WEB_ASSET_INVENTORY_FILENAME).read_bytes() == inventory_response.data
+                held: WebAssetInventory | None = (
+                    verify_web_ui_cache(resolved, expected_source_url=source) if same else None
+                )
+            except (OSError, ValueError):
+                held = None
+            if held is not None:
+                return WebCachePrefetchSummary(
+                    cache_dir=resolved,
+                    source_url=source,
+                    build_id=held.build_id,
+                    downloaded_files=0,
+                    downloaded_bytes=0,
+                    skipped_files=len(held.assets),
+                )
+        stage, downloaded_bytes, downloaded_files = _establish_staged_generation(
             cache_dir=resolved,
             source_url=source,
             inventory=inventory,
@@ -779,7 +904,7 @@ def ensure_web_ui_cached(
         cache_dir=resolved,
         source_url=source,
         build_id=inventory.build_id,
-        downloaded_files=len(inventory.assets),
+        downloaded_files=downloaded_files,
         downloaded_bytes=downloaded_bytes,
-        skipped_files=0,
+        skipped_files=len(inventory.assets) - downloaded_files,
     )

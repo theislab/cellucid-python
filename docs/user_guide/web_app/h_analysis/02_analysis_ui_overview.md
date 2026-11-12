@@ -77,7 +77,7 @@ ends in **Run**, and nothing is computed until you press it.
 
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/autorun-vs-run-a.png
-:alt: The Detailed panel holding a finished result — Variable set to Categorical obs then cell_type, two pages selected, Bar Plot chosen and a grouped bar plot drawn beneath — with no Run button anywhere in the panel.
+:alt: The Detailed panel holding a finished result — Variable set to Categorical obs then cell_type, two pages selected, Bar plot chosen and a grouped bar plot drawn beneath — with no Run button anywhere in the panel.
 :width: 488px
 
 **Auto-run** (Detailed). The result sits directly under the controls. Change a
@@ -122,11 +122,15 @@ result in place, dimmed, with a **Stale · Run** chip: press it (or Run) to run
 again. Options that only change what is shown — the filters and labels of a
 volcano, the ranking and number of markers, a signature’s plot and rescaling —
 redraw the result at once, without computing again. Changing pages or page
-contents marks a result stale the same way.
+contents marks a result stale the same way. So does changing **Data mapping ›
+Expression values**, for a result whose genes were read in them: each mode
+declares the values it reads (the values line under its form, and an agent's
+`computed_on.values`), so a pseudobulk result (raw counts summed per sample),
+a UCell signature (ranks) or a Composition (no gene values) stays current.
 
 ---
 
-## Running, cancelling and running again
+## Running, canceling and running again
 
 Every analysis that reads genes or computes for more than a moment runs as one
 **job** you can stop: Differential expression, Marker genes, Dot plot,
@@ -187,6 +191,14 @@ root of the number of open cells. A first pass the sample cannot carry (a
 group with fewer than two of its cells in the sample) is skipped. The
 measurements are kept in this browser (they are a convenience, never needed).
 
+What a run measured counts only for runs over the same genes (the dataset's
+matrix): per gene, a run of 6 genes costs far more than one of 4,000 (its
+start and first reads are paid once), so it says nothing about another
+dataset. The same measurements say how long a run would take, which an agent
+is asked about as heavy work (more than about ten seconds); a run measured
+once, on fewer cells than are open now, gives no such estimate, since how its
+time grows with the cells is not known until two sizes were measured.
+
 **Genes on a sample of the open cells.** A large dataset stored cell by cell
 opens every cell on the map and reads a gene for a sample of them, the first
 cells of their order
@@ -215,15 +227,15 @@ module score bins and a z-score divides by are over the sample's cells.
 Run**, and run again use the cells now read; a Detailed view of a gene draws
 itself again on them.
 
-**Cancel.** Cancelling stops the job where it is: its gene reads stop in the
+**Cancel.** Canceling stops the job where it is: its gene reads stop in the
 file reader (a remote file stops downloading), and its computations stop in
 the analysis workers (a worker still busy a quarter of a second after the
-cancel is replaced by a fresh one, so nothing keeps running for a cancelled
-job). Nothing of the cancelled pass is kept: no partial result is shown, cached
+cancel is replaced by a fresh one, so nothing keeps running for a canceled
+job). Nothing of the canceled pass is kept: no partial result is shown, cached
 or exported. A first pass already on screen stays, and its line says so:
 `… Stopped before every cell; run again for all of them.`; it is not saved in
 sessions or exported as the analysis's result. A read that something else also
-waits for, the gene the embedding is coloured by, or the same gene another
+waits for, the gene the embedding is colored by, or the same gene another
 analysis window reads, goes on for it.
 
 The same happens, without asking, when you close the analysis window or switch
@@ -240,8 +252,8 @@ is never passed on as current: it is not saved in a session, its exports
 (CSV, PNG, SVG, GMT) are refused with a note saying why, and its scores and
 gene sets are withdrawn from what a notebook reads until it is run again.
 
-**After a cancel** the box reads `<mode> cancelled` and
-`Cancelled after 12 s. 1,240 of 3,753 genes were done. Nothing was kept.`,
+**After a cancel** the box reads `<mode> canceled` and
+`Canceled after 12 s. 1,240 of 3,753 genes were done. Nothing was kept.`,
 with **Run again**. A cancel is never reported as an error. **Run again** runs
 the form as it stands.
 
@@ -264,11 +276,11 @@ Some modes also show derived pages:
 - **Rest of \<page\>** (the complement of a page across the full dataset).
 
 ```{figure} ../../../_static/screenshots/analysis/rest-of-page-selector.png
-:alt: The page chips of the Detailed panel: Page 1 with its colour swatch and the count 262, and Rest of Page 1 with its own swatch and count, both selected, with the pointer on Rest of Page 1.
+:alt: The page chips of the Detailed panel: Page 1 with its color swatch and the count 262, and Rest of Page 1 with its own swatch and count, both selected, with the pointer on Rest of Page 1.
 :width: 448px
 
 `Rest of Page 1` is the derived complement — every cell **not** in Page 1. You do
-not create it; it appears next to each base page with its own count and colour,
+not create it; it appears next to each base page with its own count and color,
 which is what makes a two-group comparison possible from a single selection.
 ```
 
@@ -303,7 +315,7 @@ needs no wait. Moving on cancels that load, and choosing the gene uses it.
 ### Correlation mode
 
 Correlation’s **X axis** and **Y axis** use the same picker (continuous obs or
-gene). **Method** (Pearson or Spearman) and **Colour by** are under More options.
+gene). **Method** (Pearson or Spearman) and **Color by** are under More options.
 
 ---
 
@@ -318,24 +330,24 @@ questions.
 The preview lives inside the mode’s own accordion panel, roughly 224 pixels wide.
 It contains **the plot and nothing else** — no tables, no thresholds, no export.
 Its job is to confirm that the run produced something and to give you a shape to
-recognise.
+recognize.
 
 Plots trade away decoration rather than legibility at that width. A category
 axis prints only the names that fit and drops the rest whole, so the labels you
 can see are real categories rather than truncated ones; the volcano keeps its
-axis titles and drops its legend, because an unlabelled axis cannot be read at
-any size while a red/blue/grey volcano still reads without a key. Both come back
+axis titles and drops its legend, because an unlabeled axis cannot be read at
+any size while a red/blue/gray volcano still reads without a key. Both come back
 as the box grows, so expand when you need the names.
 
 ### The expanded view
 
-Below every preview is an **⤢ Expand** button.
+Below every preview is an **Expand** button.
 
 ```{figure} ../../../_static/screenshots/analysis/expand-button.png
 :alt: A Detailed result in the sidebar: the small bar plot of cell_type for the two pages and, under it, the Expand button with the pointer on it.
 :width: 446px
 
-The **⤢ Expand** button is the only way into the full view. The preview above it
+The **Expand** button is the only way into the full view. The preview above it
 is not clickable — it is a plot, not a control.
 ```
 
@@ -354,7 +366,7 @@ separated by splitters you can move:
 | **Statistical analysis** (bottom right) | tests, interpretation, ranked tables |
 
 ```{figure} ../../../_static/screenshots/analysis/detailed-expanded.png
-:alt: The expanded Detailed modal headed COMPARING: CELL_TYPE with a grouped bar plot top-left whose horizontal axis prints five of the eight category names, an Export row and PLOT OPTIONS column on the right, a SUMMARY STATISTICS table bottom-left, and a STATISTICAL ANALYSIS panel bottom-right holding a chi-squared card reading N/A, with a pointer on the CSV button.
+:alt: The expanded Detailed modal headed Comparing: cell_type with a grouped bar plot top-left whose horizontal axis prints five of the eight category names, an Export row and Plot options column on the right, a Summary statistics table bottom-left, and a Statistical analysis panel bottom-right holding a chi-squared card reading N/A, with a pointer on the CSV button.
 :width: 1440px
 
 The four-region expanded layout, here for **Detailed**. Every mode with an Expand
@@ -386,6 +398,9 @@ need a number, expand.
 
 Two consequences worth remembering:
 
+- The expanded view's options list the mode's own display options (those that
+  only change what is shown: differential expression's filters, the dot plot's
+  Values and Layout, composition's Show) above the plot's options.
 - Changing a **plot option** in the expanded view re-draws; it does **not**
   re-run the analysis. Statistics computed by the run are fixed. This is why
   moving a differential-expression threshold is instant.
@@ -404,7 +419,7 @@ Copy creates a floating analysis window so you can:
 - run the same mode with different settings side-by-side.
 
 ```{figure} ../../../_static/screenshots/analysis/floating-analysis-window.png
-:alt: The whole Cellucid window with the Correlation analysis copied into a floating window over the point cloud: its own header with copy, maximise, close and collapse buttons, and its own copy of the Correlation form.
+:alt: The whole Cellucid window with the Correlation analysis copied into a floating window over the point cloud: its own header with copy, maximize, close and collapse buttons, and its own copy of the Correlation form.
 :width: 1440px
 
 **Copy** undocks a mode into a floating window that sits over the viewer. It has
@@ -448,7 +463,9 @@ On a screen 720 px wide or less, analysis windows are bottom sheets: full
 width, at 40%, 75% or all of the screen. While the panel is closed, a sheet
 stands on the panel's bar at the foot of the screen, no taller than the screen
 above it, so the bar always opens the panel; every other window is kept above
-the bar too. Drag the grip above the header to
+the bar too. While the panel is open, no window is put over its close button
+at the top (on any screen, no floating window covers the panel's toggle).
+Drag the grip above the header to
 change the height (it settles on the nearest of the three), tap the grip to
 step through them, or use the arrow keys on it. A tap on the header collapses
 the sheet to its header. One sheet shows at a time; with several open, a tab

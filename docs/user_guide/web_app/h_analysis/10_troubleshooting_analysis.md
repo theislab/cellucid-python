@@ -161,7 +161,7 @@ of these, and neither is a bug:
 
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/volcano-threshold-a.png
-:alt: A volcano plot at a log2 fold-change threshold of 0.5, with broad red and blue clouds of coloured points either side of a narrow grey band, and a legend below the axis title counting each colour.
+:alt: A volcano plot at a log2 fold-change threshold of 0.5, with broad red and blue clouds of colored points either side of a narrow gray band, and a legend below the axis title counting each color.
 :width: 1192px
 
 `|log₂FC| ≥ 0.5` — 1,588 genes called.
@@ -170,7 +170,7 @@ of these, and neither is a bug:
 
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/volcano-threshold-b.png
-:alt: The same volcano plot at a log2 fold-change threshold of 3, with the threshold lines pushed far apart and almost every point now grey, and a legend below the axis title counting each colour.
+:alt: The same volcano plot at a log2 fold-change threshold of 3, with the threshold lines pushed far apart and almost every point now gray, and a legend below the axis title counting each color.
 :width: 1192px
 
 `|log₂FC| ≥ 3` — 190 genes called, from the identical run.
@@ -181,8 +181,8 @@ of these, and neither is a bug:
 ### Likely causes (ordered)
 
 1) **Filters hide most genes**
-   - The volcano colours and lists the genes passing **Max adjusted p**,
-     **Min |log2FC|** and **Min % expressing**; **Labelled genes** names the top ones.
+   - The volcano colors and lists the genes passing **Max adjusted p**,
+     **Min |log2FC|** and **Min % expressing**; **Labeled genes** names the top ones.
 2) **Weak signal after correction**
    - The volcano always uses adjusted p-values; with weak signal few genes pass.
 3) **Non-finite values**

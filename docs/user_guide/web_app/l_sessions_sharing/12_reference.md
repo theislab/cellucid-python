@@ -46,8 +46,8 @@ There may be no duplicate chunks, unlisted payload, truncated payload, or
 trailing bytes. Cellucid treats every file as untrusted input and checks the
 framing, manifest, chunk inventory, byte lengths, gzip streams, digests,
 hashes and dataset identity before reporting success; a file that breaks the
-format is refused with a sentence starting *This session file is damaged:*
-(framing faults: *Invalid session file*).
+format is refused as a damaged file, the notification's **Details** starting
+*This session file is damaged:* (framing faults: *Invalid session file*).
 
 ## Exact manifest
 
@@ -55,7 +55,7 @@ The root has exactly `createdAt`, `app`, `actions`, `scope`,
 `datasetFingerprint`, `source`, `requires`, `chrome`, `activeTracker`,
 `trackers` and `chunks`, plus `cells` and `genes` when the session was saved on a subsample
 or with genes read for some of the open cells. `app` is what wrote it (the
-Cellucid version and the SHA-256 of its action catalogue), `actions` one stamp
+Cellucid version and the SHA-256 of its action catalog), `actions` one stamp
 per action type and parameters version its steps use, and `scope` what the
 save or share chose ({doc}`../../python_package/g_api_reference_coverage/api/sessions`
 says what each choice keeps). The complete layout
@@ -65,7 +65,7 @@ is the web app's `assets/js/app/session/README.md` ("The file"), in the
 ```json
 {
   "createdAt": "2026-11-03T12:00:00.000Z",
-  "app": { "version": "0.9.7", "catalog": "<sha256 of the action catalogue>" },
+  "app": { "version": "0.9.7", "catalog": "<sha256 of the action catalog>" },
   "actions": [
     { "type": "category.merge", "version": 1, "params": "<sha256 of its parameter schema>" }
   ],
@@ -176,8 +176,8 @@ is the web app's `assets/js/app/session/README.md` ("The file"), in the
   name (or `null`); it is informational (messages name a dataset by it) and is
   never compared.
 - `requires` lists, sorted and without repeats, every dataset observation field
-  (`obs`) and gene (`var`) the shown step uses: what its views are coloured by,
-  filter on or have changed the colours of, and the fields its highlight
+  (`obs`) and gene (`var`) the shown step uses: what its views are colored by,
+  filter on or have changed the colors of, and the fields its highlight
   groups are bound to, by the
   dataset's own key (a field renamed in the session by its original key).
   Fields the session creates itself are not listed. Before anything is put
@@ -288,14 +288,14 @@ agreeing, each branch one line from its fork step to its tip, and the step
 shown on the active branch's path; the full rules are the README's and
 `model.js`'s.
 
-The parts a step can change are the fifteen state domains, in the order a load
-puts them back: `cells`, `mapping`, `field-overlays`, `gene-sets`, `views`,
+The parts a step can change are the sixteen state domains, in the order a load
+puts them back: `cells`, `mapping`, `expression`, `field-overlays`, `gene-sets`, `views`,
 `active-field`, `filters`, `colors`, `visibility`, `highlights`, `camera`,
 `camera-path`, `settings`, `analysis`, `layout`
 ({doc}`02_what_gets_saved_and_restored` says what each holds). The value of a
 part at a step is the `after` value of the nearest step on the way from the
 root that changed it, or the root's. A part this version does not have is
-refused, naming it.
+left out of every step when the file is opened, and named.
 
 ### Values
 
@@ -364,13 +364,19 @@ A load is one awaited operation, all or nothing:
 1. the session's dataset is opened if needed, with the cells it was saved on;
 2. the signature, manifest, fingerprint and `requires` are checked;
 3. the eager chunks are read and the step shown is put back, part by part in
-   domain order, changing only the parts whose value differs;
+   domain order, changing only the parts whose value differs; a part that
+   cannot be put back is left as it was shown and the others go on;
 4. the lazy chunks are read while that step is shown; a new step waits; and
-5. the history's trackers are replaced by the file's, and the progress entry
-   ends as **Loaded** with **Session fully restored.**
+5. the file's trackers are added beside the history's, and the load ends in
+   one notice reading **Session fully restored.**: titled **Loaded "…" beside
+   yours**, with **Undo**, when trackers of yours are beside them, else the
+   progress notification finishing as **Loaded**.
 
-Any failure, and **Cancel**, puts back what was shown and keeps the trackers
-there were. Starting a newer load cancels the older one, which is dismissed
+A part that could not be put back ends the load in **Session restored but
+for N parts** instead, naming each part (a part saved by another version of
+Cellucid is said as that), with each failure's words under **Details**. Any
+other failure, and **Cancel**, puts back what was shown and keeps the
+trackers there were. Starting a newer load cancels the older one, which is dismissed
 without a false failure or success. A camera path saved with **Autoplay** on
 starts once the load is done. The history kept in this browser
 ({doc}`../m_state_history/03_saved_states_and_autosave`) is read the same way

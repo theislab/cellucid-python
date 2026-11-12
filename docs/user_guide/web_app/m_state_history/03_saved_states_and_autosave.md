@@ -56,6 +56,27 @@ Nothing is put back unless you choose **Continue**. The offer names the most
 recent kept history of this dataset that holds something of yours. When that
 history is open in another tab, the offer is **Open a copy here** instead.
 
+**A part that cannot be put back.** A saved state (and a session file) is put
+back part by part: the views, the fields, the highlights, the filters, the
+Expression values and each other part of the state, the history's steps,
+and its conversations. A part that cannot be put back is left as it was
+shown, and the rest is restored. The notification says *Session restored but
+for 1 part* and names each such part in a sentence of its own, with the
+failure's own words under **Details**. A part saved by an earlier (or a
+newer) version of Cellucid that this version cannot read is said as that:
+*Expression values could not be restored: it was saved by an earlier
+version of Cellucid (0.9.7), and this version cannot read this part.*
+The history then holds one more step, *Not restored from the saved state:
+… (kept as shown)*, so what you see and the history agree; undoing it tries
+the saved part again. A tracker whose steps this version cannot read is left
+out and named; when it is the one that was shown, what it showed is
+restored as the start of a new tracker of that name, with its
+conversations. A conversation this version cannot show is named the same
+way and stays with the history. The saved state you continued is then not
+written into: it keeps every part as it was, and your work goes on as a new
+saved state beside it. An agent opening a saved state (`history_saved_open`)
+is told the same sentences (`not_restored`).
+
 ```{figure} ../../../_static/screenshots/state_history/continue-offer.png
 :alt: The notification Cellucid shows when a dataset whose history this browser kept is opened again: "Continue where you left off? Kept in this browser from … on this dataset: 3 steps.", with Continue and Start fresh.
 :width: 760px
@@ -75,8 +96,9 @@ opens the dataset with its latest one
 **State › Session › Load…** lists, under **Saved in this browser**, every
 history this browser keeps, for every dataset, newest first. Each row shows:
 
-- its name: **Autosave** for a history kept as you worked, or the name you gave
-  it, with a badge (**Auto** or **Named**) and its size;
+- its name: the name you gave it, or, for a history kept as you worked, what
+  its latest step did ("Colored by gene CD33"), so autosaves read apart; with
+  a badge (**Auto** or **Named**) and its size;
 - its dataset, how many steps, and when it last changed (hover for when it was
   first saved).
 
@@ -95,6 +117,18 @@ saved states with their ids, and `history.saved.delete` deletes one by its id
 deleted saved state cannot be brought back, so an agent asks you first
 (**Deleting what was saved**,
 {doc}`../g_agents/03_permissions_and_what_agents_see`).
+
+An agent asked to continue your saved work opens it as **Open** does
+(`history.saved.open`, by its id): its dataset first when another is shown,
+then its history, which goes on where it left off. A whole-file download of
+that dataset is asked about first (**Large downloads**). When it cannot open
+it, it says why: a file of your computer the browser lets only you read
+again (the page offers **Reopen** *file*, after which it opens), a saved
+state this version cannot open, or what failed. Applying its steps to the
+dataset shown instead is **Replay here** (`history.replay`). A notebook's
+viewer shows the dataset its notebook serves, so it refuses
+`history_saved_open()` from Python (`cellucid_history_saved_open()` in R), as
+it refuses opening another dataset.
 
 Below the list, **From a file**: **Open a session file…** adds a session file's
 trackers beside yours, and **Replay a session file here…** applies its steps
@@ -118,7 +152,7 @@ replaced, and importing the same file twice keeps two copies. Open one as
 any named save.
 
 ```{figure} ../../../_static/screenshots/state_history/saved-states-dialog.png
-:alt: The Load dialog: under Saved in this browser, a state saved under the name "Without Ductal" and the autosave of the Pancreas history, each with its kind, size, dataset, steps and when, Open (or Shown), Replay here, rename and delete; the name field, the History / Current state only / Steps only choice and Save; and under From a file, Open a session file… and Replay a session file here….
+:alt: The Load dialog: under Saved in this browser, a state saved under the name "Without Ductal" and the autosave of the Pancreas history, named by its latest step "Colored by clusters_coarse", each with its kind (Named, Auto), size, dataset, steps and when; Open and Replay here on the named state, Shown on the autosave, and rename and delete on both; the name field, the History / Current state only / Steps only choice and Save; and under From a file, Open a session file… and Replay a session file here….
 :width: 960px
 
 **Load…** with the autosave of the history shown and a state saved under a name.
@@ -137,6 +171,22 @@ button in the **History** header), is on by default.
 
 - **Off:** nothing more is written. Saving under a name in **Load…** still
   works, and what was kept before stays until you delete it.
+- **Work not kept is never dropped without a question.** While the history
+  shown holds steps made since you last saved it (a named save in **Load…**,
+  or **Save file** of the whole history) and this browser is not keeping them
+  (Autosave off, a browser that keeps nothing for the site, or no room left),
+  opening another dataset (the sample list, My datasets, a file, a link, a
+  server, a saved state or session file of another dataset, **None**, the
+  benchmark) first asks *Your work is not kept*: **Save…** opens **Save
+  file** (open the dataset again once it is saved), **Open anyway** drops the
+  steps, **Cancel** keeps the dataset shown. Steps that only arranged the
+  page (a section opened, a panel moved or docked) are not counted: losing
+  them is no loss to ask about. An agent opening a dataset is
+  asked about through its permission card instead (**Replacing work that is
+  not kept**, {doc}`../g_agents/03_permissions_and_what_agents_see`). Reloading
+  or closing the tab gets the browser's own leave-page question, in the same
+  case only. Reading the same dataset on other cells (**Cells to open**) keeps
+  the history and asks nothing.
 - **On again:** the whole history shown is written at once, then every step as
   before.
 

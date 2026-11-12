@@ -2,7 +2,7 @@
 
 **Audience:** computational biologists and developers
 **Time:** 30 minutes
-**Goal:** store vector fields and a neighbour graph, then read the store back
+**Goal:** store vector fields and a neighbor graph, then read the store back
 byte for byte to see exactly what `cellucid_prepare()` wrote.
 
 ## Step 1 — A trajectory with velocities and a graph
@@ -18,7 +18,7 @@ umap3 <- cbind(umap, t)
 velocity_2d <- cbind(-sin(t), cos(t))          # along the circle
 velocity_3d <- cbind(velocity_2d, 1)
 
-# A symmetric 10-nearest-neighbour graph with a zero diagonal.
+# A symmetric 10-nearest-neighbor graph with a zero diagonal.
 d <- as.matrix(dist(umap))
 diag(d) <- Inf
 nearest <- t(apply(d, 1, order))[, 1:10]

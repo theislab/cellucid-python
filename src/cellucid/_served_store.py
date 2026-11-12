@@ -121,6 +121,7 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from ._file_versions import path_version
 from ._plural import plural
 from ._scratch import Scratch, machine_memory_bytes
 from ._source_arrays import (
@@ -218,6 +219,18 @@ _ENCODING = "encoding-type"
 
 def _encoding(kind: str, version: str) -> dict[str, str]:
     return {_ENCODING: kind, "encoding-version": version}
+
+
+def _zarr_v2_dtype(spec: str | list[Any]) -> np.dtype[Any]:
+    """The numpy dtype a Zarr v2 ``.zarray`` names: a type string, or a
+    structured dtype's list of ``[name, type]`` fields (anndata writes one for
+    a record array in ``uns``, such as the tables of Scanpy's
+    ``rank_genes_groups``; zarr writes no subarray field)."""
+    if isinstance(spec, str):
+        return np.dtype(spec)
+    return np.dtype([(name, _zarr_v2_dtype(kind)) for name, kind in spec])
+
+
 # =============================================================================
 # Reading a source
 # =============================================================================
@@ -273,6 +286,14 @@ class NotReady(Exception):
     def __init__(self, message: str, seconds: float | None) -> None:
         super().__init__(message)
         self.seconds = seconds
+
+
+class SourceChanged(Exception):
+    """A file the store is made from changed on disk (written again in place,
+    replaced or removed) since the store opened it: what is read of it now
+    is not the dataset the store describes. The server answers ``409`` with
+    the message, which the viewer says (\"changed on disk since the server
+    opened it\"); serving it again shows the new version."""
 
 
 class StoreBody:
@@ -1218,6 +1239,10 @@ class PriorityStore:
             self._lines,
         )
         self.etag = f'"served-{secrets.token_hex(12)}"'
+        #: The files the store reads, each with its version when opened
+        #: (:func:`~cellucid._file_versions.path_version`): one that changed
+        #: since refuses every key (:meth:`require_unchanged`).
+        self._sources: list[tuple[Path, tuple[int, str]]] = []
         self._consolidated: bytes | None = None
         #: The seed of the store's priority order.
         self.seed = SERVED_PRIORITY_SEED
@@ -1335,7 +1360,10 @@ class PriorityStore:
         import h5py
 
         # A larger chunk cache per dataset than h5py's 1 MiB: rows in
-        # priority order revisit chunks in no order.
+        # priority order revisit chunks in no order. Its version is kept: a
+        # file written again or replaced while it is served refuses what the
+        # store made of the old one (`require_unchanged`).
+        self._sources.append((path, path_version(path)))
         file = h5py.File(path, "r", rdcc_nbytes=64 * 2**20, rdcc_nslots=100003)
         self._closers.append(file.close)
         return file
@@ -1348,6 +1376,7 @@ class PriorityStore:
         import zarr
 
         if source.layout == "zip":
+            self._sources.append((source.path, path_version(source.path)))
             zip_store = zarr.storage.ZipStore(source.path, mode="r")
             self._closers.append(zip_store.close)
             return zarr.open_group(zip_store, path=source.zip_root, mode="r")
@@ -1415,7 +1444,7 @@ class PriorityStore:
         chunks = document["chunks"]
         size = chunks[0]
         text = any(item.get("id") == "vlen-utf8" for item in document.get("filters") or ())
-        dtype = np.dtype(object) if text else np.dtype(document["dtype"])
+        dtype = np.dtype(object) if text else _zarr_v2_dtype(document["dtype"])
         block = np.asarray(block, dtype=dtype)
         if len(block) < size:
             padded = np.empty((size, *block.shape[1:]), dtype=dtype)
@@ -2147,7 +2176,7 @@ class PriorityStore:
             if document.get("fill_value") is None and document.get("dtype") != "|O":
                 # A numeric array anndata wrote with no fill value (a scalar):
                 # zero, as prepare() writes one (every chunk is stored).
-                document["fill_value"] = False if document["dtype"].endswith("b1") else 0
+                document["fill_value"] = False if _zarr_v2_dtype(document["dtype"]) == np.bool_ else 0
                 self._put(key, document)
             if document.get("compressor") is None:
                 continue
@@ -2221,6 +2250,22 @@ class PriorityStore:
                     metadata[key] = json.loads(self._documents[key].to_bytes())
             self._consolidated = json.dumps({"zarr_consolidated_format": 1, "metadata": metadata}).encode()
         return self._consolidated
+
+    def require_unchanged(self) -> None:
+        """Raise :class:`SourceChanged` when a file the store reads changed
+        on disk since it was opened (its size, times or inode; removed), so
+        nothing made of another version is served under this store's tag. A
+        Zarr folder is not watched: its objects are files of their own."""
+        for path, version in self._sources:
+            try:
+                now = path_version(path)
+            except OSError:
+                now = None
+            if now != version:
+                raise SourceChanged(
+                    f"{path.name} changed on disk since the server opened it: serve it again "
+                    "(restart cellucid serve, or show the viewer again) to read it as it is now."
+                )
 
     def body(self, key: str) -> StoreBody | None:
         """One key of the store as its length and its bytes made on request,

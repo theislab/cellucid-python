@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ._agent_link import STOPPED, CallListener, ViewerLink, ViewerUnavailableError
+from ._console import console_print
 from ._mcp_core import SERVER_NAME, SERVER_TITLE, LocalAgentSession, mcp_tools_document
 
 if TYPE_CHECKING:
@@ -51,13 +52,13 @@ SDK_MISSING = (
 )
 
 
-def _import_sdk() -> tuple[Any, Any, Any]:
+def _import_sdk() -> tuple[Any, Any]:
     try:
-        from mcp.server.lowlevel.server import NotificationOptions, Server
+        from mcp.server.lowlevel.server import Server
         from mcp.server.stdio import stdio_server
     except ImportError as error:
         raise RuntimeError(SDK_MISSING) from error
-    return Server, NotificationOptions, stdio_server
+    return Server, stdio_server
 
 
 def _client_supports_elicitation(ctx: Any) -> bool:
@@ -120,7 +121,7 @@ class _ViewerCall:
     """One call sent to the viewer, stopped there whenever the app gives up on
     it -- also while it is still being sent.
 
-    The send runs in a worker thread, and a cancelled task stops waiting for
+    The send runs in a worker thread, and a canceled task stops waiting for
     it at once while the thread goes on: the page may already run the call
     when the app's ``notifications/cancelled`` arrives, before the link that
     sent it is back. Whichever of the two ends second -- the send, or the
@@ -149,7 +150,7 @@ class _ViewerCall:
     def abandon(self) -> None:
         """The app gave up on the call: stop it in the viewer once it is sent
         (a change rolled back, a question withdrawn). From a thread of its
-        own -- a cancelled task may not await anything more -- that the
+        own -- a canceled task may not await anything more -- that the
         process waits for when it ends, so a cancel sent as the app quits
         still reaches the viewer."""
         with self._lock:
@@ -165,18 +166,20 @@ class _ViewerCall:
             logger.debug("call %s: not stopped in the viewer: %s", self.request_id, error)
 
 
-def _build_server(session: LocalAgentSession, holder: dict[str, Any]) -> tuple[Any, Any]:
-    Server, NotificationOptions, _stdio = _import_sdk()
+def _build_server(session: LocalAgentSession) -> Any:
+    """The MCP server of one agent connection. Its tool list never changes
+    while it runs (the person's settings are told after tool results, not in
+    the list), so it advertises no list changes and sends none: a list change
+    makes the app rewrite its cached prompt."""
+    Server, _stdio = _import_sdk()
     from . import __version__
 
     async def list_tools(ctx: Any, params: Any) -> dict[str, Any]:
         _adopt_client(session, ctx)
-        holder.setdefault("session", ctx.session)
         return {"tools": await asyncio.to_thread(session.tools)}
 
     async def call_tool(ctx: Any, params: Any) -> dict[str, Any]:
         _adopt_client(session, ctx)
-        holder.setdefault("session", ctx.session)
         name = params.name
         args = dict(params.arguments or {})
         if name == mcp_tools_document()["statusTool"]["name"]:
@@ -232,12 +235,17 @@ def _build_server(session: LocalAgentSession, holder: dict[str, Any]) -> tuple[A
         on_list_tools=list_tools,
         on_call_tool=call_tool,
     )
-    return server, NotificationOptions(tools_changed=True)
+    return server
 
 
 def _open_viewer(path: str, *, port: int | None, open_browser: bool, web_source_url: str | None, web_cache_dir: str | None) -> AnnDataViewer:
     """Serve ``path`` in a viewer of this process (``--open``) and open its page."""
-    from . import jupyter
+    from .jupyter import AnnDataViewer
+
+    class _AgentAppViewer(AnnDataViewer):
+        # The viewer says what opened it -- this server, which the agent app
+        # runs -- in what it says, as its /_cellucid/info names it.
+        _runtime = "cellucid-mcp"
 
     options: dict[str, Any] = {}
     if web_source_url is not None:
@@ -246,10 +254,10 @@ def _open_viewer(path: str, *, port: int | None, open_browser: bool, web_source_
         options["web_cache_dir"] = web_cache_dir
     # Started once the MCP transport holds stdout (it sends what anything
     # else writes there to stderr), so nothing it prints reaches the channel.
-    viewer = jupyter.AnnDataViewer(str(Path(path).expanduser()), port=port, auto_open=False, **options)
-    print(f"Cellucid viewer: {viewer.viewer_url}", file=sys.stderr, flush=True)
+    viewer = _AgentAppViewer(str(Path(path).expanduser()), port=port, auto_open=False, **options)
+    console_print(f"Cellucid viewer: {viewer.viewer_url}", file=sys.stderr)
     if open_browser and webbrowser.open(viewer.viewer_url) is not True:
-        print("Open the address above in a browser: no browser could be opened from here.", file=sys.stderr, flush=True)
+        console_print("Open the address above in a browser: no browser could be opened from here.", file=sys.stderr)
     return viewer
 
 
@@ -281,30 +289,14 @@ def run_mcp(
             https://www.cellucid.com).
         web_cache_dir: Where the viewer keeps its copy of the page.
     """
-    _server_class, _options_class, stdio_server = _import_sdk()
+    _server_class, stdio_server = _import_sdk()
     if open is not None and viewer is not None:
         raise ValueError("Give --open or --viewer, not both: --open drives the viewer it opens.")
     session = LocalAgentSession(choice=viewer)
-    holder: dict[str, Any] = {}
     opened: list[AnnDataViewer] = []
-    server, notification_options = _build_server(session, holder)
+    server = _build_server(session)
 
     async def main() -> None:
-        loop = asyncio.get_running_loop()
-
-        def tools_changed() -> None:
-            mcp_session = holder.get("session")
-            if mcp_session is None:
-                return
-
-            async def send() -> None:
-                with contextlib.suppress(Exception):
-                    await mcp_session.send_tool_list_changed()
-
-            loop.call_soon_threadsafe(lambda: asyncio.ensure_future(send()))
-
-        session.add_tools_listener(tools_changed)
-
         async with stdio_server() as (read_stream, write_stream):
             if open is not None:
                 target = str(open)
@@ -321,7 +313,7 @@ def run_mcp(
                         )
                     except Exception as error:  # said to the agent and on stderr; the server stays up
                         message = f"The Cellucid viewer of {target} could not open: {error}"
-                        print(message, file=sys.stderr, flush=True)
+                        console_print(message, file=sys.stderr)
                         session.set_opened(None, opening=message)
                         return
                     opened.append(started)
@@ -329,8 +321,8 @@ def run_mcp(
 
                 threading.Thread(target=start, name="cellucid-mcp-open", daemon=True).start()
             elif await asyncio.to_thread(session.link) is None:
-                print(f"cellucid mcp: {session.status()['advice']} The server waits; its tools work once one is open.", file=sys.stderr, flush=True)
-            await server.run(read_stream, write_stream, server.create_initialization_options(notification_options))
+                console_print(f"cellucid mcp: {session.status()['advice']} The server waits; its tools work once one is open.", file=sys.stderr)
+            await server.run(read_stream, write_stream, server.create_initialization_options())
 
     try:
         asyncio.run(main())

@@ -52,11 +52,11 @@ route is named for the AnnData element it reads:
 | the base itself | the dataset identity (`loadDatasetIdentity`) |
 | `obs` | the obs field list (`loadObsFields`) |
 | `var`, `var/{g}` | the gene list the file opens with, and gene `g` (`loadGeneList`); read after the first view |
-| `obsp` | the neighbour graph the file opens with (`loadConnectivitySummary`, `loadEdges`) |
+| `obsp` | the neighbor graph the file opens with (`loadConnectivitySummary`, `loadEdges`) |
 | `candidates` | the data-mapping candidate catalog (`loadMappingCandidates`) |
 | `obsm/{i}/{cols}` | `obsm` entry `i` read at some columns (an embedding) |
 | `vectors/{v}/{vcols}/{e}/{ecols}` | a vector field drawn on an embedding |
-| `obsp/{p}` | another neighbour graph |
+| `obsp/{p}` | another neighbor graph |
 | `var/{axis}/{names}`, `…/{g}` | another gene list: an expression matrix named by a name source |
 | `outliers/{l}/{f}` | the outlier quantiles of categorical field `f` in latent space `l` |
 
@@ -145,7 +145,7 @@ Then the startup selection loads as the first ordinary dataset change (see
   3D embedding), not the 10.9 MB in 139 requests that reading all three
   embeddings costs; over HTTP/2 at 80 ms and 2 MB/s its first render takes
   3.8 s in WebKit (6.9 s reading all three)
-- optionally describe the neighbour graph (edges load when shown)
+- optionally describe the neighbor graph (edges load when shown)
 - note the latent space the file stores outlier quantiles for
   (`uns['cellucid']['outlierQuantiles']`); no latent space and no quantile is
   read at open
@@ -187,7 +187,7 @@ openings the dataset controls began (a file's reader, a connection's
 candidate), so its teardown waits only for work told to stop, never for a
 read to answer on its own.
 
-A stream reader is read to its end, or cancelled, and dropped: no browser code
+A stream reader is read to its end, or canceled, and dropped: no browser code
 calls `releaseLock()` (`tests/browser-stream-reader-release-contract.test.mjs`).
 WebKit (314030@main) runs the release's JavaScript while it holds a lock its
 garbage collector takes when it visits the reader; a collection that starts
@@ -235,7 +235,17 @@ the synthetic benchmark. The rules:
   address bar's **Open** reads `actionSequence`; a one-dataset activation then calls
   `beginIfNoActionSince(sequence)`, which supersedes loads that were running at
   the click but never a choice made or a session applied after it. A
-  connection that lost that race is kept as a catalog.
+  connection that lost that race is kept as a catalog. The startup selection
+  begins its transaction with `beginStartup()`: it supersedes like any other
+  but is no action of the person's, so a link typed before it began still
+  replaces it when its server answers.
+- **The shown dataset growing does not supersede a newer choice.** A staged
+  selection is refused at commit only when another change of *which* dataset
+  is shown was committed meanwhile (a selection, its rollback, **None**:
+  `DataSourceManager`'s committed-change count). Growth in place
+  (`adoptResizedMetadata`, every step of a progressive opening) moves the
+  selection revision, which caches keyed to the open cells read, but never
+  that count: a link opened while a large sample still grows opens.
 - **A session file** chosen during a load waits on `whenSettled()` (the newest
   transaction has called `finish()`) and is then restored onto whatever
   dataset that produced.
@@ -354,7 +364,7 @@ Code:
 
 Behavior:
 - The user pastes a link or id, or the page has `?data=<locator>`.
-- The registry picks the provider that recognises it. A provider only says
+- The registry picks the provider that recognizes it. A provider only says
   where the bytes are: a dataset catalog folder (a folder URL holding
   `datasets.json`; GitHub resolves to
   `https://raw.githubusercontent.com/owner/repo/<branch>/path/`), one file of
@@ -407,7 +417,7 @@ Code:
 - `cellucid/assets/js/app/ui/modules/open-data-menu.js` (the **Open…** menu)
 - `cellucid/assets/js/app/ui/modules/dataset-drop.js` (drag and drop)
 - `cellucid/assets/js/data/local-folder.js` (a dropped or chosen folder's files, listed concurrently)
-- `cellucid/assets/js/app/local-file-handles.js` (handles kept to reopen, Chromium)
+- `cellucid/assets/js/app/library/local-file-handles.js` (handles kept to reopen, Chromium)
 
 Behavior:
 - Lets the user pick, or drop on the viewer:
@@ -607,9 +617,9 @@ file), a picked folder `{files, rootName}`, or a store folder on a web host
 (`{format, layout}`). It opens the container (`formats/hdf5`,
 `formats/zarr`), then `presentStore()` asks the layout views of the formats
 that container can hold (`data/anndata/views/index.js`) whether they
-recognise the root: a view presents its format as an AnnData store root
+recognize the root: a view presents its format as an AnnData store root
 without copying it (`views/view-nodes.js`, the nodes `older-layouts.js` is
-made of), and a root no view recognises is AnnData as stored. A format that is
+made of), and a root no view recognizes is AnnData as stored. A format that is
 one stream is turned into an AnnData Zarr store by its transcoder
 (`data/anndata/transcode/index.js`) and opened with the Zarr reader. The
 views are Loom, a 10x `.h5` and a Cell Ranger `outs/` folder, and MuData
@@ -644,9 +654,9 @@ order and collected a block at a time.
 
 | Layer | Code | What it does |
 |---|---|---|
-| Bytes | `formats/io/` | Byte sources (a local `File`, HTTP range requests, memory) and **one byte reader per file**: reads asked for in the same task are planned together, neighbours closer than the merge gap become one request, requests are split at the request size so large reads run in parallel (`concurrency` at once: six per HTTP/1.1 host, the browser's limit), requests waiting for a slot take their neighbours with them when round trips cost more than bytes, each byte in flight is fetched once (a read of bytes a request already carries waits for that request, and no plan fetches a gap across bytes in flight; a request that fetched a gap no read asked for is kept a while within the cache's budget, so the rest of a heap collection read in part is answered from it), metadata is cached in aligned blocks (16 KiB from a web host: an anndata-written `.h5ad` keeps each element's headers within a few KiB beside its data, so larger blocks fetched mostly data; a 1M-cell `.h5ad` opened at 80 ms/2 MB/s in 1.4 s instead of 4.2 s), and a read's `AbortSignal` cancels it. A host that content-codes a file even in a range (`Content-Encoding`, hidden from the page; NCBI does so for GEO's `.rds`) is told by the probe (`probeHttpResource`: the ranged read fails while the whole file answers), and the file is downloaded whole. The merge gap and request size follow **the link as measured** (`link.js`, see below). `inflate.js` decompresses with the browser's native `DecompressionStream`, to an exact or bounded size, feeding it the input in 32 KiB slices so the size bound holds while it decodes (WebKit's decompressor inflates whatever is written to it at once: a chunk written whole expanded a 60 MB bomb past its 1 KiB declared size), or, for a chunk of known decoded size, with fflate 0.8.2's inflater (`assets/external/fflate-0.8.2/`, vendored unchanged and pinned by digest), into an output one byte larger than the declared size and checked as the stream checks it (Adler-32 or CRC-32 and size); fflate cannot seek, so `deflate-seek.js` keeps the streams read in parts. Which of the two inflates is measured, not named (`decoder-choice.js`; Zstandard, LZ4 and Blosc choose between WebAssembly and JavaScript the same way): per codec family and size class of the decoded chunk. Until a size class is decided, every chunk is decoded with the engine's prior (`ENGINE_PRIORS`: the decoder measured fastest on that engine for a read; Firefox: fflate and the JavaScript Zstandard, LZ4 and Blosc decoders; Chromium: the JavaScript Zstandard and Blosc decoders, whose WebAssembly is fast only once V8 has optimised it in each worker, which a gene's read does not reach (10M cells, first gene zstd 175–244 ms in JavaScript against 386–678 cold WebAssembly); WebKit: the references), never with an untested decoder, so the first gene of a first visit costs what the best known decoder costs. The decoders are measured only once the pool has had no other work for a second (`EXPLORE_AFTER_IDLE_MS`: a read's chunks come in waves, and a measuring message between two would delay the next): it keeps copies of a few chunks of each undecided size class (one per worker; chunks that only travel in batches are not kept and keep the prior) and sends them, one message a worker at a time, in phases (eight per worker, every one of a phase with one decoder, so each is measured under its own copies' contention on the other workers), first one warm-up phase per decoder (the engines compile it tier by tier), the prior first, then two phases each in turn, every phase counted, the warm-up too, so a decoder fast only once optimised is charged its cold cost, which a person's short reads pay; a read's chunk sent meanwhile voids the phase under way, which runs again later. A message's time is its worker's busy time for it, measured in the pool's thread (from its sending, or the worker's previous answer if still busy, to its answer: waiting for work is not counted, travel is); the decoder with the most decoded bytes per busy millisecond is kept. Decisions are kept in this browser (`decoder-memory.js`, IndexedDB `cellucid-decoders`, under a version naming the WebAssembly module's digest, the decoder lists, the user agent and the core count; any change measures again), so only a first visit measures; the Stored dialog lists and forgets them (*Decoder choices measured*). A decoder other than the reference is checked once against it on one chunk of the measuring messages (never on a read's path: a read's chunk is decoded once) and dropped if it differs or throws. Node (four worker threads, real chunks, each decoder fixed in the pool against the probe free): the probe kept the pool's fastest in all six cases measured (h5py-sized DEFLATE native 621 vs fflate 572 MB/s, zlib 538 KB 1,429 vs 454, Zstandard WebAssembly 2,726 vs JavaScript 1,209, LZ4 8,045 vs 2,518, Blosc-LZ4 4,498 vs 3,002, Blosc-zlib native 1,769 vs fflate 340). A stream's fixed cost contends across threads in some engines (Firefox's eight workers inflated h5py's 34 KB chunks at 160 MB/s in total, one at 300), which a choice made on one core or by engine name gets wrong. `decode-pool.js` decodes chunks on decode workers (`decode-worker.js`, nested in the reader worker: one started when a file opens, the others as chunks need them, up to as many as the cores allow, less one for the reader thread and one for the page, and as many as the `decodeWorkers` memory share holds), small chunks that wait together going to a worker in one message, a background pass's chunks behind every other read's, so a background pass over a matrix leaves the reader thread free; where no worker can be made, chunks are decoded in the reader thread. The same workers take the reader thread's work on decoded values (`runOnDecodeWorker`: a function of a module that depends on nothing else, its arguments transferred, with a context each worker is sent once), as a cell subset's runs of genes. `activity.js` counts what each operation fetched and decoded, and which shared loads it reads for (`keys`: a job joining one adopts the read, `read-activity-log.js`). |
-| Formats | `formats/hdf5/`, `formats/zarr/`, `formats/zip/` (and, for the transcoders, `formats/rds/`: R's serialization, gzip native, bzip2 and xz in JavaScript, zstd in WebAssembly; `formats/text/`: MatrixMarket) | Cellucid's own HDF5 reader (every superblock, object header, group, attribute and chunk-index version; deflate, shuffle, Fletcher-32, LZF and hdf5plugin's Blosc, LZ4, Zstandard and bitshuffle), Zarr reader (v2 and v3 with sharding; gzip, zlib, Blosc, LZ4 and Zstandard; a picked folder, a ZIP, or a folder on a web host via consolidated metadata) and ZIP reader. Zstandard, LZ4 and Blosc (Zarr's codecs and hdf5plugin's filters alike) are decoded by their own libraries compiled to WebAssembly: zstd 1.5.6, lz4 1.10.0 and c-blosc 1.21.6 (with the blosclz and bitshuffle it carries) in one module, `assets/wasm/codecs.wasm`, built by `scripts/build-wasm-codecs.mjs` from the release tarballs pinned by SHA-256 with zig 0.13.0 (the build is byte-for-byte reproducible; `tests/wasm-codecs-contract.test.mjs` pins the module's digest and rebuilds it where the build cache holds the inputs), licences in `assets/wasm/LICENSES/`. `formats/io/wasm-codecs.js` loads it once per thread at the address `assets/workers/scripts.js` gives (`?v=` its bytes' version, kept by the service worker), decodes into exactly the size each format declares, and lets go of an instance whose memory grew past a decode worker's budget. A Blosc frame of zlib streams (what `prepare()` and `cellucid_prepare()` write for a shuffled Zarr v3 array) is read by c-blosc too, but its streams are inflated by the page's DEFLATE decoder (below), each into its place, and its blocks byte-unshuffled in JavaScript (`bloscZlib`): no zlib is built into the module. The HDF5 bitshuffle filter (32008: bit-transposed blocks, stored as they are or each LZ4- or zstd-compressed, the elements after the last block as they are) is undone in one call (`bitshuffleChunk`), and an R file's zstd stream piece by piece (`zstdStream`, in an instance of its own). The JavaScript decoders written for this reader (`formats/zarr/codecs/javascript/`) stay as each family's other candidate: the decode pool measures both (`decoder-choice.js`, below) and keeps the faster on the machine, some engines' JIT running them faster than WebAssembly. Measured on one core against them (Node/V8, real float32 chunks re-encoded by numcodecs, byte-identical): Zstandard 345 → 717 MB/s, LZ4 664 → 2,695, Blosc-LZ4 841 → 1,224, Blosc bit shuffle 236 → 1,108, blosclz 710 → 968, Blosc-zlib 614–648 → 638–685. Each opens a file as the **array store** of `formats/store.js`: a store's tree is read as it is navigated into, a group at a time (`group.load(paths)`: the groups on the way and the node at each path to a depth, each object read once however many readings ask, a tree level's reads in flight together), and navigation is synchronous over what is loaded (a group navigated before it is loaded throws `StoreNotLoadedError`). Opening an HDF5 file reads its root and what its format opens with (`ANNDATA_OPENING_PATHS` in `data/anndata/elements.js`: every element's own node -- the group to depth 2: each dataframe column, each `obsm`, `varm`, `obsp`, `varp`, `layers` and `uns` entry, `raw` likewise -- and every expression matrix and `uns['cellucid']` whole; a layout view's `openingPaths`), named to `openHdf5` so they load with the root and before any opening step runs; what lies inside an element (a categorical's codes and categories, a nullable column's values and mask, a graph's arrays, nested `uns` entries) loads when a reading needs it (about half of a CELLxGENE file's objects at open: HLCA's 259). A Zarr store's metadata is described in one place (consolidated) or read in one batch, so it is loaded whole at open. Array values are read on demand, fetching only the chunks a selection touches, in parallel, each decoded once (a per-file decoded-chunk cache serves neighbouring reads); of an unfiltered HDF5 chunk (anndata's default sparse `.h5ad`), or a Zarr chunk stored as its values' bytes (no compressor or filter, C order: what `cellucid serve` and `cellucid_serve` answer), only the run of bytes a selection needs is fetched (`partialChunks`; a few columns of some rows of such a chunk read those rows' bytes), so 1,000 cells of a 1M-cell CSR `.h5ad` over 30 ms/5 MB/s read 4.5 MB in 12 s, not 121 MB in 25 s. A one-dimensional column of variable-length strings (an obs index, a text column) reads the rows asked for alone (`readRows`): of an HDF5 column the references of the chunks they lie in, then of each global heap collection those rows point into the prefix up to the furthest of their objects (the chunk's other references, and its neighbours', name the objects before it), a collection let go once the rows pointing into it are decoded; of a Zarr column the chunks they lie in, held as stored (bytes and an offset an item) with only the rows asked for decoded. A share of such a column decodes and holds its own strings, not every string of the chunks it touches. A categorical obs column whose dictionary has more categories than there are open cells, and more than one request of the link reads (its stored elements past the link's `maxRequestBytes`; a smaller dictionary is read whole, every category listed, the unused ones too), is coded by the categories its open cells hold (`AnnDataReader._categoryCoding`, `_readPresentCategorical`): its codes are read, then the labels and `uns['<key>_colors']` entries at the stored positions they name alone (`readCategoriesAt`, the dictionary gathered by those positions through `gatheredArray`) -- unless the rows read are enough to name a category in every chunk of a chunked dictionary (more than c · ln c rows for c chunks), when the dictionary and its colours are read whole beside the codes, in one plan, and the present ones picked (no round trip waits for the codes; no byte or request more than reading the dictionary); the field's categories are those in stored order, its codes positions among them, and the worker hands the page `present: {count, stored, colors}` (the adapter's `_adoptPresentCategories`, `presentCategoryPalette`: each category's colour is the file's or Cellucid's at its stored position). The coding is decided on the field's first read and kept: a clear of the reader's cache keeps it, an opening grown or cut in place carries it (`_takeCarried`), so added rows are coded with every category found plus the ones they add, in stored order, and the page grows the field by label (`category-growth.js`); the page marks such a field `discovered` (a saved category it lacks is one no open cell holds, `pending-categories.js`) with `storedCategoryCount` for the legend's line. |
-| AnnData | `data/anndata/` | **One** AnnData reader for both formats: the element rules of the current layout (`elements.js`, `dataframe.js`, `sparse.js`), files from anndata 0.6/0.7 and SeuratDisk presented in the current layout (`older-layouts.js`), slabbed reads with read-ahead and exact conversions (`values.js`), gene columns and cell rows per layout (`matrix-access.js`), and opening plus error explanations (`open.js`, `views/`, `transcode/`). |
+| Bytes | `formats/io/` | Byte sources (a local `File`, HTTP range requests, memory) and **one byte reader per file**: reads asked for in the same task are planned together, neighbors closer than the merge gap become one request, requests are split at the request size so large reads run in parallel (`concurrency` at once: six per HTTP/1.1 host, the browser's limit), requests waiting for a slot take their neighbors with them when round trips cost more than bytes, each byte in flight is fetched once (a read of bytes a request already carries waits for that request, and no plan fetches a gap across bytes in flight; a request that fetched a gap no read asked for is kept a while within the cache's budget, so the rest of a heap collection read in part is answered from it), metadata is cached in aligned blocks (16 KiB from a web host: an anndata-written `.h5ad` keeps each element's headers within a few KiB beside its data, so larger blocks fetched mostly data; a 1M-cell `.h5ad` opened at 80 ms/2 MB/s in 1.4 s instead of 4.2 s), and a read's `AbortSignal` cancels it. A host that content-codes a file even in a range (`Content-Encoding`, hidden from the page; NCBI does so for GEO's `.rds`) is told by the probe (`probeHttpResource`: the ranged read fails while the whole file answers), and the file is downloaded whole. The merge gap and request size follow **the link as measured** (`link.js`, see below). `inflate.js` decompresses with the browser's native `DecompressionStream`, to an exact or bounded size, feeding it the input in 32 KiB slices so the size bound holds while it decodes (WebKit's decompressor inflates whatever is written to it at once: a chunk written whole expanded a 60 MB bomb past its 1 KiB declared size), or, for a chunk of known decoded size, with fflate 0.8.2's inflater (`assets/external/fflate-0.8.2/`, vendored unchanged and pinned by digest), into an output one byte larger than the declared size and checked as the stream checks it (Adler-32 or CRC-32 and size); fflate cannot seek, so `deflate-seek.js` keeps the streams read in parts. Which of the two inflates is measured, not named (`decoder-choice.js`; Zstandard, LZ4 and Blosc choose between WebAssembly and JavaScript the same way): per codec family and size class of the decoded chunk. Until a size class is decided, every chunk is decoded with the engine's prior (`ENGINE_PRIORS`: the decoder measured fastest on that engine for a read; Firefox: fflate and the JavaScript Zstandard, LZ4 and Blosc decoders; Chromium: the JavaScript Zstandard and Blosc decoders, whose WebAssembly is fast only once V8 has optimized it in each worker, which a gene's read does not reach (10M cells, first gene zstd 175–244 ms in JavaScript against 386–678 cold WebAssembly); WebKit: the references), never with an untested decoder, so the first gene of a first visit costs what the best known decoder costs. The decoders are measured only once the pool has had no other work for a second (`EXPLORE_AFTER_IDLE_MS`: a read's chunks come in waves, and a measuring message between two would delay the next): it keeps copies of a few chunks of each undecided size class (one per worker; chunks that only travel in batches are not kept and keep the prior) and sends them, one message a worker at a time, in phases (eight per worker, every one of a phase with one decoder, so each is measured under its own copies' contention on the other workers), first one warm-up phase per decoder (the engines compile it tier by tier), the prior first, then two phases each in turn, every phase counted, the warm-up too, so a decoder fast only once optimized is charged its cold cost, which a person's short reads pay; a read's chunk sent meanwhile voids the phase under way, which runs again later. A message's time is its worker's busy time for it, measured in the pool's thread (from its sending, or the worker's previous answer if still busy, to its answer: waiting for work is not counted, travel is); the decoder with the most decoded bytes per busy millisecond is kept. Decisions are kept in this browser (`decoder-memory.js`, IndexedDB `cellucid-decoders`, under a version naming the WebAssembly module's digest, the decoder lists, the user agent and the core count; any change measures again), so only a first visit measures; the Stored dialog lists and forgets them (*Decoder choices measured*). A decoder other than the reference is checked once against it on one chunk of the measuring messages (never on a read's path: a read's chunk is decoded once) and dropped if it differs or throws. Node (four worker threads, real chunks, each decoder fixed in the pool against the probe free): the probe kept the pool's fastest in all six cases measured (h5py-sized DEFLATE native 621 vs fflate 572 MB/s, zlib 538 KB 1,429 vs 454, Zstandard WebAssembly 2,726 vs JavaScript 1,209, LZ4 8,045 vs 2,518, Blosc-LZ4 4,498 vs 3,002, Blosc-zlib native 1,769 vs fflate 340). A stream's fixed cost contends across threads in some engines (Firefox's eight workers inflated h5py's 34 KB chunks at 160 MB/s in total, one at 300), which a choice made on one core or by engine name gets wrong. `decode-pool.js` decodes chunks on decode workers (`decode-worker.js`, nested in the reader worker: one started when a file opens, the others as chunks need them, up to as many as the cores allow, less one for the reader thread and one for the page, and as many as the `decodeWorkers` memory share holds), small chunks that wait together going to a worker in one message, a background pass's chunks behind every other read's, so a background pass over a matrix leaves the reader thread free; where no worker can be made, chunks are decoded in the reader thread. The same workers take the reader thread's work on decoded values (`runOnDecodeWorker`: a function of a module that depends on nothing else, its arguments transferred, with a context each worker is sent once), as a cell subset's runs of genes. `activity.js` counts what each operation fetched and decoded, and which shared loads it reads for (`keys`: a job joining one adopts the read, `read-activity-log.js`). |
+| Formats | `formats/hdf5/`, `formats/zarr/`, `formats/zip/` (and, for the transcoders, `formats/rds/`: R's serialization, gzip native, bzip2 and xz in JavaScript, zstd in WebAssembly; `formats/text/`: MatrixMarket) | Cellucid's own HDF5 reader (every superblock, object header, group, attribute and chunk-index version; deflate, shuffle, Fletcher-32, LZF and hdf5plugin's Blosc, LZ4, Zstandard and bitshuffle), Zarr reader (v2 and v3 with sharding; gzip, zlib, Blosc, LZ4 and Zstandard; a picked folder, a ZIP, or a folder on a web host via consolidated metadata) and ZIP reader. Zstandard, LZ4 and Blosc (Zarr's codecs and hdf5plugin's filters alike) are decoded by their own libraries compiled to WebAssembly: zstd 1.5.6, lz4 1.10.0 and c-blosc 1.21.6 (with the blosclz and bitshuffle it carries) in one module, `assets/wasm/codecs.wasm`, built by `scripts/build-wasm-codecs.mjs` from the release tarballs pinned by SHA-256 with zig 0.13.0 (the build is byte-for-byte reproducible; `tests/wasm-codecs-contract.test.mjs` pins the module's digest and rebuilds it where the build cache holds the inputs), licenses in `assets/wasm/LICENSES/`. `formats/io/wasm-codecs.js` loads it once per thread at the address `assets/workers/scripts.js` gives (`?v=` its bytes' version, kept by the service worker), decodes into exactly the size each format declares, and lets go of an instance whose memory grew past a decode worker's budget. A Blosc frame of zlib streams (what `prepare()` and `cellucid_prepare()` write for a shuffled Zarr v3 array) is read by c-blosc too, but its streams are inflated by the page's DEFLATE decoder (below), each into its place, and its blocks byte-unshuffled in JavaScript (`bloscZlib`): no zlib is built into the module. The HDF5 bitshuffle filter (32008: bit-transposed blocks, stored as they are or each LZ4- or zstd-compressed, the elements after the last block as they are) is undone in one call (`bitshuffleChunk`), and an R file's zstd stream piece by piece (`zstdStream`, in an instance of its own). The JavaScript decoders written for this reader (`formats/zarr/codecs/javascript/`) stay as each family's other candidate: the decode pool measures both (`decoder-choice.js`, below) and keeps the faster on the machine, some engines' JIT running them faster than WebAssembly. Measured on one core against them (Node/V8, real float32 chunks re-encoded by numcodecs, byte-identical): Zstandard 345 → 717 MB/s, LZ4 664 → 2,695, Blosc-LZ4 841 → 1,224, Blosc bit shuffle 236 → 1,108, blosclz 710 → 968, Blosc-zlib 614–648 → 638–685. Each opens a file as the **array store** of `formats/store.js`: a store's tree is read as it is navigated into, a group at a time (`group.load(paths)`: the groups on the way and the node at each path to a depth, each object read once however many readings ask, a tree level's reads in flight together), and navigation is synchronous over what is loaded (a group navigated before it is loaded throws `StoreNotLoadedError`). Opening an HDF5 file reads its root and what its format opens with (`ANNDATA_OPENING_PATHS` in `data/anndata/elements.js`: every element's own node -- the group to depth 2: each dataframe column, each `obsm`, `varm`, `obsp`, `varp`, `layers` and `uns` entry, `raw` likewise -- and every expression matrix and `uns['cellucid']` whole; a layout view's `openingPaths`), named to `openHdf5` so they load with the root and before any opening step runs; what lies inside an element (a categorical's codes and categories, a nullable column's values and mask, a graph's arrays, nested `uns` entries) loads when a reading needs it (about half of a CELLxGENE file's objects at open: HLCA's 259). A Zarr store's metadata is described in one place (consolidated) or read in one batch, so it is loaded whole at open. Array values are read on demand, fetching only the chunks a selection touches, in parallel, each decoded once (a per-file decoded-chunk cache serves neighboring reads); of an unfiltered HDF5 chunk (anndata's default sparse `.h5ad`), or a Zarr chunk stored as its values' bytes (no compressor or filter, C order: what `cellucid serve` and `cellucid_serve` answer), only the run of bytes a selection needs is fetched (`partialChunks`; a few columns of some rows of such a chunk read those rows' bytes), so 1,000 cells of a 1M-cell CSR `.h5ad` over 30 ms/5 MB/s read 4.5 MB in 12 s, not 121 MB in 25 s. A one-dimensional column of variable-length strings (an obs index, a text column) reads the rows asked for alone (`readRows`): of an HDF5 column the references of the chunks they lie in, then of each global heap collection those rows point into the prefix up to the furthest of their objects (the chunk's other references, and its neighbors', name the objects before it), a collection let go once the rows pointing into it are decoded; of a Zarr column the chunks they lie in, held as stored (bytes and an offset an item) with only the rows asked for decoded. A share of such a column decodes and holds its own strings, not every string of the chunks it touches. A categorical obs column whose dictionary has more categories than there are open cells, and more than one request of the link reads (its stored elements past the link's `maxRequestBytes`; a smaller dictionary is read whole, every category listed, the unused ones too), is coded by the categories its open cells hold (`AnnDataReader._categoryCoding`, `_readPresentCategorical`): its codes are read, then the labels and `uns['<key>_colors']` entries at the stored positions they name alone (`readCategoriesAt`, the dictionary gathered by those positions through `gatheredArray`) -- unless the rows read are enough to name a category in every chunk of a chunked dictionary (more than c · ln c rows for c chunks), when the dictionary and its colors are read whole beside the codes, in one plan, and the present ones picked (no round trip waits for the codes; no byte or request more than reading the dictionary); the field's categories are those in stored order, its codes positions among them, and the worker hands the page `present: {count, stored, colors}` (the adapter's `_adoptPresentCategories`, `presentCategoryPalette`: each category's color is the file's or Cellucid's at its stored position). The coding is decided on the field's first read and kept: a clear of the reader's cache keeps it, an opening grown or cut in place carries it (`_takeCarried`), so added rows are coded with every category found plus the ones they add, in stored order, and the page grows the field by label (`category-growth.js`); the page marks such a field `discovered` (a saved category it lacks is one no open cell holds, `pending-categories.js`) with `storedCategoryCount` for the legend's line. |
+| AnnData | `data/anndata/` | **One** AnnData reader for both formats: the element rules of the current layout (`elements.js`, `dataframe.js`, `sparse.js`; an element that breaks one is an `AnnDataFormatError`, which opening says to the person as the file's problem, with what to do), files from anndata 0.6/0.7 and SeuratDisk presented in the current layout (`older-layouts.js`), slabbed reads with read-ahead and exact conversions (`values.js`), gene columns and cell rows per layout (`matrix-access.js`), and opening plus error explanations (`open.js`, `views/`, `transcode/`). |
 | Worker | `data/anndata-reader-worker.js`, `data/anndata-reader-client.js` | The reader's methods over `postMessage`, results transferred; live `activity` and `transfer` events. |
 
 **Genes and cells by layout.** Only what one gene (or cell) needs is read:
@@ -656,7 +666,7 @@ order and collected a block at a time.
 | CSC | its own entries: indices and values fetched together | the cells' entries of every gene, read as a cell subset (each gene's entries once, keeping the cells'; a priority-ordered file opened as a prefix reads each gene's prefix alone), never an index of every stored row |
 | CSR, over a link as fast as a disk (a local file, the same machine or network) | indexed by gene once in the background, at open, indices and values into a column store (in memory, or on disk when it does not fit); a gene asked for meanwhile is answered from the same pass, and every later one is a copy out of the store | its own entries |
 | CSR, over a slower link | indexed when the first gene is shown, from the **indices** alone (kept in memory when they fit the `columnIndex` budget; otherwise a second pass fills a column store, values and all, on disk when the site's storage quota has room); a gene's values are then fetched as the ranges its entries occupy; once the ranges already read and those asked for together would cost as much as every value (a request costs a round trip of the measured link), every value is read once, after which every gene is answered from memory (never more than twice the cheaper choice in hindsight) | its own entries |
-| Dense, chunked in strips of few genes | the chunks of its strip (kept for its neighbours) | the chunks of its row strip |
+| Dense, chunked in strips of few genes | the chunks of its strip (kept for its neighbors) | the chunks of its row strip |
 | Dense, in one piece or in wide chunks | indexed by gene once, streaming | its row |
 
 A CSC matrix's column pointers are read while the dataset opens, beside the
@@ -707,7 +717,7 @@ merge); a stored matrix opened whole reads its first `rows + 1` pointers.
 The rows' pointers are read in one pass over the rows ascending
 (`CellRows.ascending`, made once), pointer ranges up to three pointers
 apart read and held as one (a range of its own holds as many numbers): a
-50 % uniform share's millions of pointer ranges are a few, and no run of
+50% uniform share's millions of pointer ranges are a few, and no run of
 the rows in open order is placed in them until something reads the rows in
 open order (`RowPointers.runIndexFor`). A share's pass in store order
 (rows spread through the store, `_inStoreOrder`) answers in the open rows'
@@ -715,7 +725,7 @@ own file order (`CellRows.byRow`, made once, its rows the rows ascending),
 and the gene plan of such a pass makes no matrix of the rows in open order
 (`_segmentProgress`); the kept values and the share of index chunks they
 lie in are one walk forward (`keptValueStats`), and pricing a read lists no
-piece (`planBoxes` `pieces: false`). A 4M-cell CSR `.h5ad`'s 50 % uniform
+piece (`planBoxes` `pieces: false`). A 4M-cell CSR `.h5ad`'s 50% uniform
 share's first gene at 20 ms / 50 MB/s took 5.06 s against every cell's
 4.83 s before these, 4.69 s after. Spread rows to the last open row whose
 own pass is more work than every cell's, for the same bytes (they lie in
@@ -729,7 +739,7 @@ on the source (`PassRates`: the index's own work per entry, and the view's
 -- its kept rows' pointers, rows put in file order, entries gathered -- per
 entry a pass over it indexes), carried to each opening of the same store;
 before any is measured, a share keeping at least half of the entries reads
-the whole. On a link faster than decoding the 50 % share's own pass took
+the whole. On a link faster than decoding the 50% share's own pass took
 about 1.4x every cell's first gene; through the whole it is every cell's.
 Pointers read once are kept together and copied from by every later read,
 piece by piece (a range only part of which is held reads only what it
@@ -743,7 +753,7 @@ indices while a gene waits, and kept, when they fit beside the kept indices
 values are read per gene by range. A raise reads the pointer
 chunks its added rows share with the open ones from those decoded chunks,
 as every gathered read of a subsample does (`readKeptRowPointers`,
-`inducedGraphLines`, a modality's cell map: `chunks`). A subsample's neighbour
+`inducedGraphLines`, a modality's cell map: `chunks`). A subsample's neighbor
 graph (the induced subgraph of the open cells) streams into its edges a slab
 at a time, as a whole graph does; it is never held whole. It is read in the
 stored graph's row order, never in the order the cells were opened (a
@@ -788,7 +798,7 @@ opened in that same order with its cells filtered (`shareInCellOrder`,
 `priorityOrder` of the cell order's `blocks` over the share's cells): its
 sample is its cells in every cell's first blocks, a subset of the same
 reads. In its own priority order each of its first cells lay in a chunk of
-its own (1 % of a 10M-cell CSR `.h5ad` over an emulated S3 link: 71 cells
+its own (1% of a 10M-cell CSR `.h5ad` over an emulated S3 link: 71 cells
 in 10.7 s against every cell's 1,572,326 in 5.5 s). The share's cells are
 unchanged; the order's rung is recorded (`cellOrder`), a request reading
 the same cells again names it (`order`, `requestOfOpenCells`), the kept
@@ -801,7 +811,7 @@ whose every open cell is read anyway keeps its priority order, as every
 cell then keeps file order. A share's sample (and the page's top-up after
 it) never makes more bytes or requests than every cell's sample in the
 same time (`wholeSampleCost`, `geneTimeFit`'s `ceiling`,
-`geneSampleCost`'s `geneTime.spentRequests`): on Tabula Sapiens a 1 %
+`geneSampleCost`'s `geneTime.spentRequests`): on Tabula Sapiens a 1%
 share in the cell order, bounded by bytes alone, read 3.4 MB in 434
 requests for 83 cells where every cell's sample made 351.
 Over a measured link `firstGeneReadCost` prices the index pass for the
@@ -845,11 +855,11 @@ plans are split only when that delivery is below 0.8 of the most the link
 has delivered (`CONNECTION_BOUND_SHARE`), shown by four transfer-bound
 request ends, never one (`LINK_EVIDENCE`: one delivery timed over a stretch
 little longer than the clock's tick can be any rate, and on a local web host
-it split every later plan of the page: a 1 % share's `.h5ad` export of a 10M
+it split every later plan of the page: a 1% share's `.h5ad` export of a 10M
 file went from 473 to 3,135 requests, 6.2 to 18.2 s): a request sharing the link
 delivers its share of a busy link, and taking that for a connection's rate
 split each next plan finer (a 10M-cell export over an emulated 30 MB/s
-HTTP/2 link went from 255 to 7,556 requests of 16–40 KB, 18 % slower, the
+HTTP/2 link went from 255 to 7,556 requests of 16–40 KB, 18% slower, the
 same bytes); on a host whose one connection carries the link (most web
 hosts and CDNs) nothing is split. The round trip (the shortest of the latest requests
 that were mostly a round trip) shapes reads (merge gaps, request
@@ -949,18 +959,18 @@ before the reply (`getMatrixColumn`'s `progressive` argument), as the cells
 read so far in their sparse form when that is smaller (below), so a partial
 answer moves a gene's entries, not a whole column (40 MB at 10M cells, 200
 MB at 50M); the client hands them to the callers that asked (`onPartial`),
-and the page draws them as colours only (`DataState.showPartialVarField`:
+and the page draws them as colors only (`DataState.showPartialVarField`:
 the gene is not loaded until it is whole, so filters, analyses and sessions
-never see partial values; Cancel puts the colours of the field shown back).
-`geneReadPlan` says what remains to read and when the first colours come
+never see partial values; Cancel puts the colors of the field shown back).
+`geneReadPlan` says what remains to read and when the first colors come
 (`progressive`).
 
-**Two forms of a gene.** A view colours by a gene's dense column (float32,
+**Two forms of a gene.** A view colors by a gene's dense column (float32,
 one value per cell), made in the reader worker and transferred, so the page
 never expands one. Beside it the worker makes, in one pass, its sparse form
 when that is smaller (`data/column-forms.js`: `{length, indices, values,
 readRows}`, cells from `readRows` on not read, a gene sample's NaN tail),
-and the client notes it beside the column (`noteColumnForm`): the colour
+and the client notes it beside the column (`noteColumnForm`): the color
 kernels (`state/managers/continuous-colors.js`) and the range scan read the
 form, a word fill and the gene's entries, instead of two passes over every
 cell on the main thread (at 10M cells, a gene shown 66–70 ms → 6–10 ms;
@@ -972,7 +982,7 @@ exact while it lives. A computation reads the same gene as its non-zero entries,
 `DataState.readVarSparseColumn` → the var loader's `readSparseColumn` →
 `getGeneSparseValues`): the dense column's values bit for bit (a duplicate
 coordinate summed in stored order, a zero left out), about 45 times fewer
-bytes for a median Suo gene (0.2 % non-zero), and nothing installed in field
+bytes for a median Suo gene (0.2% non-zero), and nothing installed in field
 state. The analysis kernels take either form (`compute/gene-statistics.js`).
 Every typed array a worker reply carries owns its whole buffer (a view is
 copied out first), so replies are transferred, never cloned.
@@ -1049,14 +1059,14 @@ in Chromium, 0.31 s → 0.21 s, against 0.15 s for reading the whole of `X`
 (2.1× → 1.4×), byte for byte the block the reader thread keeps.
 
 **Decoding keeps up.** An `.h5ad` read fetches its chunks in groups of
-neighbours, as many bytes in flight (stored and decoded) as twice what keeps
+neighbors, as many bytes in flight (stored and decoded) as twice what keeps
 the link full, twice the largest group a read has fetched, and twice what
 keeps every decompression slot busy with the largest chunk seen
 (`formats/hdf5/context.js`), so the next group is fetched while one decodes:
 every value of Suo's expression matrix 210 → 175 ms (121 ms to decode the
-chunks all at once), its neighbour graph 110 → 100 ms (54 ms).
+chunks all at once), its neighbor graph 110 → 100 ms (54 ms).
 
-**Graphs and embeddings arrive finished.** For a neighbour graph the reader
+**Graphs and embeddings arrive finished.** For a neighbor graph the reader
 worker checks the `obsp` matrix as its lines stream in (bounds, order, a
 diagonal left out, exact symmetry of topology and weight) and builds its
 forward adjacency: each edge once, at its smaller cell, with its partner and
@@ -1072,10 +1082,10 @@ pane shows is derived from it on the page; nothing is stored in draw order.
 The k-NN tool reads the rows it expands through from the file, by cell, in
 the reader worker (`getConnectivityRows`, through the chunks that hold them;
 a frontier whose rows lie in every chunk streams the graph instead, as a
-subsample's edges do), so no thread holds every cell's neighbour list. While
+subsample's edges do), so no thread holds every cell's neighbor list. While
 a view shows the graph's edges the page holds them anyway, and a frontier is
 then answered from them (`forwardEdgeRows`: two passes over every edge, the
-same neighbours) whenever that is faster than the file by the rates both
+same neighbors) whenever that is faster than the file by the rates both
 ways measured on this page (`knnRowReader` in `app/main.js`; 20M edges, a
 65,536-cell frontier: 0.18 s, against 1.7 s from a 10M-cell file). Each upper entry of a line is
 an edge kept with its partner and exact weight; each lower entry must match
@@ -1085,7 +1095,7 @@ An index built ahead of need (the cells of a CSC matrix, asked for before)
 does not take turns with an extraction someone waits for: Suo's graph after
 1,000 cell rows, Chromium, 0.80 → 0.47 s. The page checks only the
 payload's shape against the graph summary. The adapter keeps only the
-neighbour graph asked for last: it is the payload the viewer shows, held by
+neighbor graph asked for last: it is the payload the viewer shows, held by
 reference, so keeping it costs nothing, and a graph no longer shown is
 released and read again if it is shown again. For an embedding the worker reads the selected `obsm`
 columns at their stored precision, checks every value, normalizes them once
@@ -1112,10 +1122,10 @@ read once however many callers asked; a second caller of the same gene gets
 its own copy. Every read takes an `AbortSignal`: aborting rejects the caller
 at once and sends the worker `{cancel: id}`, whose reads then stop (a request
 the network has not sent is never sent; a gene index other reads still need
-goes on). A batched gene request is cancelled once every caller in it has
-cancelled. The same rule holds below it: **a shared read is cancelled only
+goes on). A batched gene request is canceled once every caller in it has
+canceled. The same rule holds below it: **a shared read is canceled only
 when every reader waiting on it withdrew** (`utils/abort.js`). Reads
-merged into one request (neighbouring ranges of a file, a Zarr store's
+merged into one request (neighboring ranges of a file, a Zarr store's
 chunks), a read two openings of the same file both wait on, and a read the
 page's byte cache hands to another reader each stop for one reader at once
 -- that reader's wait is rejected -- and the request itself is aborted only
@@ -1167,10 +1177,10 @@ nothing. From these:
   worth of the whole link (bandwidth × latency, never less than the
   source's prior): the bandwidth measured is shared by every request in
   flight, so a request that long already keeps the link busy for its own
-  round trip, and a longer one only serialises its bytes on one connection
+  round trip, and a longer one only serializes its bytes on one connection
   (24 connections at 50 MB/s and 150 ms asked 180 MB requests before; 7.5 MB
   now);
-- requests waiting for a slot are merged with their waiting neighbours,
+- requests waiting for a slot are merged with their waiting neighbors,
   whichever reads asked for them, while their round trips would take longer
   than their bytes and a gap is no wider than the waiting requests' own plan
   would fetch, and a request that fetched gaps is kept (within the metadata
@@ -1220,7 +1230,7 @@ nothing. From these:
   `indexBurst`), so their chunks go out in one task and the byte reader
   plans them as one set instead of wave by wave as each read's own leaves
   land (100 Loom genes over 150 ms / 5 MB/s: 11.1 → 7.8 s for every cell,
-  2.1 → 1.6 s at 1 %). A sharded Zarr v3 array does the same with its shard
+  2.1 → 1.6 s at 1%). A sharded Zarr v3 array does the same with its shard
   indexes (`formats/zarr/array.js`): a read asks for every shard index it
   needs at once and for the inner chunks of all its shards once they are
   in. A read that
@@ -1254,7 +1264,7 @@ nothing. From these:
   bandwidth (`LinkMeter.pricingBytesPerMs`): a link measured only while its
   connections were full of small requests measured its round trips, not its
   bandwidth, and priced at that no gap would ever pay. On an atlas-shaped
-  file over 150 ms / 50 MB/s (24 connections), 20 % blocks: first gene
+  file over 150 ms / 50 MB/s (24 connections), 20% blocks: first gene
   10.6 → 6.9 s, 1,617 → 1,013 requests (more bytes, fewer round trips);
 - **mirrors**: a public Amazon S3 object (an unsigned URL of a regional S3
   endpoint: the CELLxGENE Census bucket every CELLxGENE link reads, or any
@@ -1348,7 +1358,7 @@ by file (`formats/zarr/stores/directory.js`), each chunk a
   800 MB/s at 16, while the decode pool consumes about 670 MB/s of stored
   bytes); more only buffers files ahead of the decoders;
 - the inner chunks of a shard (Zarr v3 `sharding_indexed`) a read needs are
-  read in one slice per run of neighbours, up to 1 MiB: merging saves a read's
+  read in one slice per run of neighbors, up to 1 MiB: merging saves a read's
   fixed cost, a longer slice only delays decoding its first chunk (1,000 cell
   rows of a sharded Suo: 744 ms chunk by chunk, 519 ms merged to 1 MiB; the
   graph's 1 MB inner chunks 554 ms, against 687 ms merged to 32 MiB);
@@ -1421,7 +1431,7 @@ arrived frees its request's share of the in-flight budget at once
 (`matrix-access.js` `pipelined`), so a slow read at the head never holds the
 reads behind it below the link's concurrency. An index built ahead of need is background
 work: its requests wait while any read a view waits for is queued and never
-take the last request slot, so colouring by a field or drawing an embedding
+take the last request slot, so coloring by a field or drawing an embedding
 is not held up by it; once a gene waits for the index, the index is no
 longer background.
 
@@ -1434,7 +1444,7 @@ fields are coordinates: a value float32 cannot hold is refused there.
 Integer category labels beyond 2^53 are kept as their exact decimal text.
 
 **Older AnnData releases** are read through views (`older-layouts.js`), so the
-element rules exist once. **A neighbour graph** is not read at open: a direct
+element rules exist once. **A neighbor graph** is not read at open: a direct
 dataset records that it has one and counts its edges when they are first
 read.
 
@@ -1456,7 +1466,7 @@ one line when it ends:
 
 `app/read-progress-notifications.js` shows the reads a person waits for that
 nothing else shows as one progress notification, in plain words ("Reading
-field cell_type and the neighbour graph · 4.1 MB of 9.3 MB · ~3 s left"), on
+field cell_type and the neighbor graph · 4.1 MB of 9.3 MB · ~3 s left"), on
 screen once the reads have run a second (`NOTICE_AFTER_MS` in
 `app/notification-center.js`: the one rule for every card of work in
 progress) and gone when they end. A failed read only leaves that card: what
@@ -1510,8 +1520,8 @@ Atlas, Figshare, Hugging Face, GitHub, Dropbox, Google Drive, public S3, the
 sample catalog) is opened by `scripts/efficiency-floor/public-links.mjs`
 through the app's own path in Node over the real network (a browser's six
 connections to an HTTP/1.1 host and its name): each step's time, bytes,
-requests and share of the file (open and first view, a colouring field,
-the gene list, genes), the host's behaviour (HTTP version, ranges, CORS and
+requests and share of the file (open and first view, a coloring field,
+the gene list, genes), the host's behavior (HTTP version, ranges, CORS and
 the headers it exposes, content coding, validators, rate limits), and every
 request a second visit sends, which should be the version check alone. The R object corpus is written again with the
 current CRAN and Bioconductor packages once a month
@@ -1608,7 +1618,7 @@ APIs). None is left waiting for ever:
   told the budget) waited for the reset, none failed.
 - **A host's budget prices every request to it** (`hosts.js`
   `requestCostMs`, `link.js` `requestMs`): its interval, the window over the
-  limit (Zenodo: 60 s / 133, 0.45 s; the window learnt from the longest
+  limit (Zenodo: 60 s / 133, 0.45 s; the window learned from the longest
   reset stated with a whole window), in the share of the window already
   spent -- nearly nothing while most of it remains, so early reads stay
   exact, and the whole interval once nothing remains for what is asked or a
@@ -1714,7 +1724,16 @@ APIs). None is left waiting for ever:
   again in N s; what was read is kept.", until it is answered or no longer
   wanted; a long read (a graph's edges, genes for all cells) then goes on
   where it was (CELLxGENE's S3 refused this machine part way through
-  HLCA's graph twice on 2026-10-30, and the whole read failed). A file that
+  HLCA's graph twice on 2026-10-30, and the whole read failed). While this
+  computer says it is offline (`navigator.onLine`, looked at every 0.5 s: a
+  dedicated worker is not reliably sent the `online` event), the read waits
+  for the connection instead, told "This computer is offline: reading goes on
+  as soon as it is back; what was read is kept.", and asks again the moment it
+  is back: a loss streak of offline rounds holds its address quiet only until
+  then, and no such loss (nor one failing sooner than half the host's
+  quickest answer) teaches the host a pace (`hosts.js` `lostOnThisSide`;
+  measured: an 18 s outage on 3G no longer adds up to 20 s of back-off before
+  Suo resumes, and a 3 s drop no longer paces GitHub Pages for a day). A file that
   never delivered a range fails as before (CORS, a host that cannot serve
   ranges). A provider's
   own requests (a record, a file's details) are asked as the person asked,
@@ -1745,7 +1764,14 @@ APIs). None is left waiting for ever:
   side, not with the link or with Cellucid. It usually passes; try again
   later." (429: "is limiting requests from this network … Try again in
   30 s, as `<host>` asks"), the requests above under its **Details** (its
-  cause). A file's probe and whole download (`remote-file.js`) say every
+  cause). A request no answer arrived for keeps its own words (they name its
+  address, for **Details**) and carries the fault where it is known
+  (`unansweredFault`): this computer `offline`; every host asked lately
+  silent (`connection`); or a host that answered this site before now
+  `silent` ("`<host>` stopped answering this site, which it answered before
+  (`garcia.zarr/.zmetadata`): it may be refusing requests from this network
+  for now …, or failing, or this computer lost its connection. Try again
+  later."), so a sentence names it without its address. A file's probe and whole download (`remote-file.js`) say every
   class the same way (`missing`, `refused`, `refusing`, `offline`), every
   provider's own requests do (`hostFaultFailure`, `hostFaultOfResponse`),
   and a link names the provider the host serves (`link-source.js`
@@ -1836,7 +1862,7 @@ read; sessions, h5ad exports, mapping changes and view carries wait for it
 mapping is applied.
 
 Then, on demand: an embedding's positions when a view first shows it, an obs
-column when it is coloured, a gene's values when it is chosen, and a
+column when it is colored, a gene's values when it is chosen, and a
 categorical field's outlier quantiles on its outlier slider's first move below
 `100%` (never when the field is picked; `state/managers/outlier-quantiles.js`):
 the field's stored array when the file stores them for the latent space in use
@@ -1941,7 +1967,7 @@ Examples:
   larger `uniform` or `blocks` subsample under the same seed begins with the
   smaller one, and its index (built in segments of that order,
   `anndata/prefix-column-index.js`) is extended for the new cells only; a
-  smaller one cuts it and reads nothing. A failed or cancelled re-reading
+  smaller one cuts it and reads nothing. A failed or canceled re-reading
   reads the cells open before again (carried, so it fetches nothing) and
   leaves the dataset on screen as it was.
 - **The open cells grown or cut in place** (`app/open-cells-resize.js`).
@@ -1950,7 +1976,7 @@ Examples:
   `cell-subset-policy.js` is a link's, or the cells a dataset of My datasets
   was last opened with, for the next opening only): Apply
   during a progressive opening's step, and the earlier cells read back
-  after a cancelled one, never take or overwrite another's. Before
+  after a canceled one, never take or overwrite another's. Before
   reading, the work under way on the open cells ends on them
   (`data/open-cells-work.js`: field, gene, embedding and vector field
   loads, the gene list read after the first view, a data-mapping change,
@@ -1991,7 +2017,7 @@ Examples:
   back with their own request. Kept views are retired and made again from
   their record (the renderer sizes them by the count); a selection under
   way stays when cells are added and is retired when cells are cut; the
-  neighbour graph, the vector field overlay and outlier quantiles in use
+  neighbor graph, the vector field overlay and outlier quantiles in use
   are read again on the new cells; analyses mark their results stale. What
   is derived from the file takes the added cells as opening them would: a
   user-defined category made from a column (a copy, edits, a consensus)
@@ -2022,7 +2048,7 @@ Examples:
   one pass for the largest size, each smaller size is a prefix of that rank
   order and its priority order the prefix itself, and a priority-ordered
   file's uniform steps are prefixes of its computed row order, so a step
-  costs its own cells, not the file's (10M cells in Node: a 50 % uniform
+  costs its own cells, not the file's (10M cells in Node: a 50% uniform
   growth's resolutions 1.3 s → 0.2 s; a priority-ordered file opened whole,
   its steps 570 → 49 ms). A subsample's cells lie across the whole file, so
   every step's added cells lie in chunks earlier steps decoded: a
@@ -2035,14 +2061,14 @@ Examples:
   allowance or the working set changes, or the page is hidden:
   `trimDecodedChunks`), and a step, or a column read again, copies its
   rows out of them instead of decoding them again (an
-  HLCA-shaped `.h5ad`, 1 % blocks of 19 cells: the last step decoded 33
+  HLCA-shaped `.h5ad`, 1% blocks of 19 cells: the last step decoded 33
   embedding chunks and 2 of `cluster`, not 84 and 46). A gene index's pass
   in store order over a CSR matrix whose decoded chunks pass that budget
   reads through a window of its own instead (`AnnDataReader._scanChunks`:
   the two chunks of `indices` and of `data` a slab shares with the next):
   each pass reads each chunk once, in order, and kept by recency the chunks
   are gone before a later pass comes back to them, so keeping them only
-  held memory (a 50 % uniform share of 5M cells: 132 MB above every
+  held memory (a 50% uniform share of 5M cells: 132 MB above every
   cell's). Describing the open cells' CSR matrix makes none of its arrays
   (`_requireMatrixElement` reads its shape; the stored matrix was checked
   at opening): its arrays in open order are its kept rows' entry runs in
@@ -2050,7 +2076,7 @@ Examples:
   order never uses. Row runs hold 32-bit positions wherever every one fits
   (`runsOfPositions`). Measured (Node, the reader worker's handler, 5M-cell
   CSR `.h5ad` over an emulated 20 ms link, first gene with `genes: 'all'`):
-  50 % uniform 3.98 s, peak ArrayBuffers 922 MB, RSS 1,582 MB → 3.86 s,
+  50% uniform 3.98 s, peak ArrayBuffers 922 MB, RSS 1,582 MB → 3.86 s,
   711 MB, 1,383 MB; every cell 3.49 s, 599 MB, 1,119 MB. Each read of an
   `obsm` array names the open cells it read and what for in the read
   activity (`open cells 7,435–20,000 (embedding, cells added)`). Only a
@@ -2069,7 +2095,7 @@ Examples:
   moment keeps sizing later openings; kept in the browser under
   `cellucid:opening-cost:v2` as the records' decayed sums. An in-place resize is not recorded: the GPU
   keeps the cells kept and takes only those added, while every open
-  cell's colours and filters are made again, so its time is neither its
+  cell's colors and filters are made again, so its time is neither its
   added cells' cost on an opening nor its open cells'. A subsample of a file
   in its own order whose first-view embedding is chunked much coarser than
   its blocks grows from few chunks instead (`progressive-open.js`,
@@ -2087,7 +2113,7 @@ Examples:
   on the map no later than one reading of them would put them
   (`grownLater`: the same bytes in more readings, a loaded round trip each,
   every cell shown again at the end), so over a priced link a share opens
-  whole (50 % uniform of 10M cells on a local web host: grown from chunks,
+  whole (50% uniform of 10M cells on a local web host: grown from chunks,
   all 5M at 4.5 s; whole, 2.8 s). Every cell of a file in its own order
   never grows, and opens in its default subsample's cell order only when
   its gene sample brings the first gene sooner by more than the order
@@ -2157,20 +2183,20 @@ Examples:
   of its link (before the link is measured, no longer than the host is
   given to answer), since the page answers from its main thread, which a
   long task may hold; then it fetches, and the late answer is dropped. A
-  cancelled read stops waiting at once, and the request's round trip is
+  canceled read stops waiting at once, and the request's round trip is
   timed from when it went to the host. So a dataset opened again in a new worker (a worker the page ended
   and started again, the same file in another reader) fetches nothing the
   old one fetched: on an atlas-shaped CSR `.h5ad` over 150 ms / 50 MB/s,
-  re-opening at 10 % after 5 % blocks took 1.1 s and 12 requests before and
+  re-opening at 10% after 5% blocks took 1.1 s and 12 requests before and
   none now, and its first gene 6.0 s / 81 MB before and 2.7 s / 34 MB now.
   A read answered in part from the page measures no link. Pieces the page
   holds split a read into the parts it does not, each a request of its own;
   a held piece smaller than the gap the link makes worth fetching to save a
   request (`planMergeGap`, the byte reader's own pricing, once the link is
-  measured) is fetched again with its neighbours instead: 100 genes of a
+  measured) is fetched again with its neighbors instead: 100 genes of a
   dense `.h5ad` read after a few others, 150 ms / 5 MB/s over HTTP/1.1,
   took 208 requests and 6.1 s while the earlier genes' chunks split the
-  read, and take 22 requests and 2.9 s (its floor 3.0 s), fetching 4 % of
+  read, and take 22 requests and 2.9 s (its floor 3.0 s), fetching 4% of
   the bytes again.
 - A Zarr folder on a web host (every object a file of its own: the sample
   datasets, GitHub, Hugging Face, S3 and GCS folders, a Python or R
@@ -2410,7 +2436,7 @@ dialog's foot (*Where it's kept*) comes from `keptStoragePlace`: whether the
 window gives the site an origin private file system at all (asked for, never
 inferred from the engine: `navigator.storage.getDirectory()` answers or
 refuses), `navigator.storage.estimate()` (usage and what the quota leaves,
-labelled as the browser's figures) and `navigator.storage.persisted()`
+labeled as the browser's figures) and `navigator.storage.persisted()`
 (*Kept when space is low*); `keepKeptStoresWhenSpaceIsLow` calls
 `navigator.storage.persist()` only on the person's click (**Keep it when
 space is low**). Without storage the Stored row says *Kept for this tab only* and the dialog lists
@@ -2580,7 +2606,7 @@ machine's own load, never a network: its opening's metadata reads are each
 mostly their fixed cost (a 10M-cell `.h5ad` on a loopback host in Chromium
 measured 45 MB/s from 0.9 MB of them, a Zarr v3 store 9 MB/s from 51 KB),
 and priced at that its first gene's read of every cell (5-7 s in fact) was
-priced at 15-37 s, so the first gene was read for a sample of 22-68 % of
+priced at 15-37 s, so the first gene was read for a sample of 22-68% of
 the cells; with the machine busy (another browser starting beside it), one
 of those reads was slowed past three round trips and counted as a delivery
 bounded by transfer (`bandwidthMeasured`) at 0.1-13 MB/s, or the requests
@@ -2668,14 +2694,26 @@ Fix:
   requests in the Network tab; the `[cellucid:read]` console lines name the
   operation that is still reading.
 
-### Symptom: “Unexpected token `<`” during loading
+### Symptom: a host answers with a web page
 
-Likely cause:
-- The server returned an HTML document for a JSON request (`datasets.json`,
-  or a Zarr metadata key).
+A host that answers a path it has nothing at with its own page, as `200
+text/html` (a single-page site: Cloudflare Pages without a `404.html`, a
+Netlify or Vercel rewrite to `index.html`), or a link that answers with a
+sign-in or preview page, is told apart by the answer's type and its first
+bytes (`formats/io/byte-source.js` `isWebPageAnswer`, `looksLikeWebPage`):
 
-Fix:
-- Fetch the URL in a new tab; confirm it’s real JSON and returns `404` when missing.
+- a Zarr object answered with a page is absent, as a 404 says
+  (`formats/zarr/stores/http.js`): a chunk zarr-python left out (it holds
+  only the fill value) reads as its fill value, and a folder with no store at
+  it says so;
+- a catalog file (`datasets.json`) answered with a page is not found
+  (`fetchJson`), never a network failure to try again;
+- a data file whose link answers with a page, or a page saved under a data
+  file's name, is said to be a web page, with what to do (`httpByteSource`,
+  `data/anndata/open.js`), not "not a valid HDF5 file".
+
+Fix: fetch the URL in a new tab; a data file or Zarr object must come back as
+its bytes, and a missing one as a `404`.
 
 ### Symptom: a load reported “invalid format” but the file is fine
 
@@ -2684,7 +2722,7 @@ Read the message again — this class of failure is now split four ways, and
 
 | Message contains | Cause |
 |---|---|
-| “was cancelled” | An abort — a newer selection superseded this load. Re-thrown untouched so it is never relabelled. |
+| “was canceled” | An abort — a newer selection superseded this load. Re-thrown untouched so it is never relabeled. |
 | “is longer than the longest text this browser can hold” | A JSON document (a catalog, Zarr metadata) exceeds the engine's longest string |
 | “response body transfer failed” | The connection dropped mid-body |
 | “must contain valid JSON” | Genuinely malformed content |

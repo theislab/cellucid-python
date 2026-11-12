@@ -442,7 +442,7 @@ def test_docs_do_not_reintroduce_removed_or_invented_runtime_contracts() -> None
     assert "vector_field_default" in vector_page
     assert "rejects duplicate gene names" not in vector_page
     assert "var_names_make_unique()" in vector_page
-    assert "embedding_keys" in vector_page
+    assert "embedding_defaults" in vector_page
     assert "knn_key" in vector_page
     cli_page = text_by_path[
         Path("docs/user_guide/python_package/d_viewing_apis/04_cli_cellucid_serve_quickstart.md")
@@ -1423,13 +1423,14 @@ def test_specification_lists_exactly_the_uns_cellucid_keys_the_writer_and_viewer
     """
     import anndata as ad
     import numpy as np
+    import pandas as pd
 
     text = SPECIFICATION.read_text(encoding="utf-8")
     top = _table_keys(text.split("## 2. `uns['cellucid']`", 1)[1])
     defaults = _table_keys(text.split("### `defaults`", 1)[1])
     assert top == [
-        "schema", "id", "name", "description", "citation", "source", "defaults", "outlierQuantiles", "priority",
-        "history_applied", "gene_sets", "pulled",
+        "schema", "id", "name", "description", "citation", "source", "defaults", "outlierQuantiles", "totalCounts",
+        "priority", "history_applied", "gene_sets", "pulled",
     ]
     assert defaults == [
         "embedding1d",
@@ -1453,6 +1454,9 @@ def test_specification_lists_exactly_the_uns_cellucid_keys_the_writer_and_viewer
         embeddings={"X_umap": rng.normal(size=(6, 2)), "X_umap_3d": rng.normal(size=(6, 3))},
         dataset_id="every-key",
         dataset_name="Every key",
+        # Counts, so each cell's total is recorded (totalCounts).
+        gene_expression=rng.poisson(2.0, size=(6, 3)).astype(np.float32),
+        var=pd.DataFrame(index=["g1", "g2", "g3"]),
         vector_fields={"velocity": {"X_umap": rng.normal(size=(6, 2))}},
         dataset_description="All of them.",
         citation_text="Doe 2026",

@@ -82,11 +82,11 @@ naming the first affected cells.
 
 ### What you see
 
-- In the categorical legend, some category rows are greyed out, their checkbox and colour well disabled, and their count reads `0 cells`.
+- In the categorical legend, some category rows are grayed out, their checkbox and color well disabled, and their count reads `0 cells`.
 - Hovering the row shows the tooltip `No cells available in this category after other filters`.
 
 ```{figure} ../../../_static/screenshots/filtering/legend-category-unavailable.png
-:alt: The clusters legend under a narrow S_score range filter: Alpha, Ductal, Ngn3 high EP and Ngn3 low EP stay ticked with small counts, while Beta, Delta, Epsilon and Pre-endocrine are greyed out with disabled checkboxes and read 0 cells.
+:alt: The clusters legend under a narrow S_score range filter: Alpha, Ductal, Ngn3 high EP and Ngn3 low EP stay ticked with small counts, while Beta, Delta, Epsilon and Pre-endocrine are grayed out with disabled checkboxes and read 0 cells.
 :width: 488px
 
 Four categories with nothing left in them, under a narrow `S_score` range
@@ -181,12 +181,12 @@ Disabling the category filter stops it from hiding cells, but the legend may sti
 ### What you see
 
 - You filter by gene expression or outliers.
-- You colour by another field.
+- You color by another field.
 - The filtered-out cells stay hidden.
 
 ### Why it happens
 
-Every filter keeps applying until you remove it, whatever the view is coloured
+Every filter keeps applying until you remove it, whatever the view is colored
 by: a gene's range filter and a field's outlier filter hide cells exactly as an
 obs range or category filter does. Each is listed under **Filters**, and the
 visible-cell count and the analyses that use the visible cells read the same
@@ -195,8 +195,8 @@ filters.
 ### What to do
 
 - To see every cell again, remove or disable the filter under **Filters**.
-- To change a gene's range, colour by that gene again; to change an outlier
-  threshold, colour by the field it was set on.
+- To change a gene's range, color by that gene again; to change an outlier
+  threshold, color by the field it was set on.
 
 ---
 
@@ -225,7 +225,7 @@ Each view/snapshot can have its own filter state.
 Nothing special happens, and that is the point. The legend renders exactly one
 row with the whole dataset's count beside it, `Show all` / `Hide all` act on
 that one row, and unchecking it takes you straight to `Showing 0 of N cells`.
-There is no separate “all cells are in one group” state to recognise — it is
+There is no separate “all cells are in one group” state to recognize — it is
 the ordinary zero-visible case from section 1 above, reached in one click.
 
 ### A continuous field where every cell has the same value
@@ -294,7 +294,7 @@ after.
 
 ### Why it happens
 
-A slider moves in thousandths of the field's range (log-spaced on a log colour
+A slider moves in thousandths of the field's range (log-spaced on a log color
 scale), so its bounds are a grid, if a fine one.
 
 ### What to do

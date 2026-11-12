@@ -32,10 +32,12 @@ Security details: {doc}`13_security_privacy_cors_and_networking`.
 
 ## Can I use Cellucid offline?
 
-Not for a startup that serves the viewer UI. `cellucid serve`,
-`serve_anndata(...)` and `AnnDataViewer(...)` establish the configured exact
-web generation at each startup and report source failure instead of
-substituting a cached generation. `show_anndata(...)` needs the browser to
+Yes, once the web app is cached. `cellucid serve`, `serve_anndata(...)` and
+`AnnDataViewer(...)` read the web source's inventory at each startup; when it
+cannot be reached, a cached build whose every file matches its checksums is
+served as it is, and the start says *Could not reach … ; serving the cached
+web app (build …).* The first start needs the network (or a `web_cache_dir`
+holding a verified build, copied from a machine that has one). `show_anndata(...)` needs the browser to
 load the app from `https://www.cellucid.com` (or a copy you host, named with
 `web_source_url=`).
 

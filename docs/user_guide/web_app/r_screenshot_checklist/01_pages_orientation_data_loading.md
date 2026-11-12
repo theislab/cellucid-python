@@ -109,7 +109,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   "Performance Benchmark".
 - Session panel internals (redesigned 2026-10-23; the records further down
   name the earlier ids, translated in {doc}`index`): `#dataset-facts`
-  ("Dataset", with **Share**) holding the Dataset box `#dataset-info`
+  ("Dataset", with **Share…**) holding the Dataset box `#dataset-info`
   (`data-state` empty/loading/ready: `#dataset-name`, `#dataset-summary` with
   `#dataset-cells` · `#dataset-genes`, `#dataset-origin`, `#dataset-description`,
   `#dataset-read`, the collapsed **Details** `#dataset-details`); under
@@ -172,7 +172,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   reference, not an omission of taste.
 - **verdict** — DIAGRAM
 - **needs**
-  1. `_static/diagrams/mental-model-object-graph.svg` — the missing artefact at
+  1. `_static/diagrams/mental-model-object-graph.svg` — the missing artifact at
      line 69. A schematic, not a screenshot: boxes for **Dataset** →
      **Embedding (1D/2D/3D)** → **View** (with **Live view** and **Snapshot
      view** as two instances), with **Field** (categorical obs / continuous obs
@@ -186,7 +186,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
      is configured for it — it currently is not; no mermaid usage exists
      anywhere in the docs).
   2. Second, smaller diagram for the "State & persistence" section (line 109):
-     three nested boxes labelled **In-memory state** (lost on refresh),
+     three nested boxes labeled **In-memory state** (lost on refresh),
      **Session bundle** (`.cellucid-session`, explicit **Share…**),
      **localStorage preferences** (theme/background only), with a "refresh"
      arrow showing what survives. Suggested
@@ -338,7 +338,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
      *here*, because a glossary genuinely wants the same reference frame as the
      tour.
   2. **ADD one crop per terminology cluster that a beginner cannot picture from
-     text.** Prioritised, all `suo`, 2x:
+     text.** Prioritized, all `suo`, 2x:
      - **View badge** (line 115: "the clickable pill/row representing a view
        (with indicators like `3D`, `Orb/Pan/Fly`)"). This is pure jargon without
        a picture. Keep two views, crop tightly to the badge row so both badges
@@ -352,10 +352,10 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
        `-unlocked.png`.
      - **Categorical legend vs continuous legend** (lines 91–93). Two narrow
        `#legend` crops side by side — categories with swatches, and a numeric
-       colour scale. `_static/screenshots/web_app/glossary-legend-categorical.png`
+       color scale. `_static/screenshots/web_app/glossary-legend-categorical.png`
        and `-continuous.png`, ~246px display width each.
      - **The `i` help button open state** (lines 58–65). The page describes the
-       dialog's open/close behaviour in detail but never shows one. Click
+       dialog's open/close behavior in detail but never shows one. Click
        `#user-data-info-btn`; crop to `#user-data-block` with
        `#user-data-info-tooltip` visible; cursor on the `i` button.
        `_static/screenshots/web_app/glossary-info-tooltip-open.png`. There is a
@@ -379,12 +379,12 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
 - **needs**
   1. `_static/diagrams/workflow-decision-tree.svg` — replace the ASCII tree at
      lines 42–51 with a real flowchart, and place it at line 15 so both the
-     wet-lab and computational tabs can point at one artefact. Entry question
+     wet-lab and computational tabs can point at one artifact. Entry question
      "What do you have?" branching to: **a `.zarr` store folder** → **Open… › Folder…**; **`.h5ad` / `.zarr`** → server mode or Jupyter; **AnnData in a
      notebook** → `show_anndata()`; **nothing yet** → ask a colleague to
      `prepare()`. Then a second tier on sharing: **one-to-one / reproducible** →
      `.cellucid-session`; **public, no server** → a Zarr folder on GitHub;
-     **many-to-many labelling** → Community Annotation. Each leaf should carry
+     **many-to-many labeling** → Community Annotation. Each leaf should carry
      the page reference it currently links to in prose. The ASCII block is
      invisible to the wet-lab tab (it lives only in the "Computational / Power
      User" tab) and unreadable on a phone.
@@ -432,7 +432,7 @@ terminal and Jupyter captures:
   LOCAL DATA (H5AD / ZARR ZIP / PREPARED), REMOTE SERVER, GITHUB DATA, SESSION
   STATE — every path in the table above.
 - **notes** — This is the one place the 10-way reuse of this image is *correct*.
-  Consider adding coloured region labels ("① sample ② local ③ remote ④ GitHub
+  Consider adding colored region labels ("① sample ② local ③ remote ④ GitHub
   ⑤ session") keyed to the Fast Path table rows, which would make it a genuine
   index graphic rather than a bare panel photo.
 
@@ -504,7 +504,7 @@ terminal and Jupyter captures:
        line 234 ("What repo path to enter in Cellucid") and it has no picture.
        `_static/screenshots/data_loading/github-connect-form.png`, ~246px.
      - **The validated dataset list after connecting**, cropped to
-       `#dataset-select` (labelled "Dataset from <host>") expanded showing the
+       `#dataset-select` (labeled "Dataset from <host>") expanded showing the
        three synthetic entries — proof of
        the "show the validated dataset list" claim at line 244.
        `_static/screenshots/data_loading/github-connected-dataset-list.png`.
@@ -556,8 +556,8 @@ terminal and Jupyter captures:
      **Open… › File…** and
      `cellucid/tests/browser/fixtures/current-ui-smoke.zarr.zip`; the existing
      `data_loading/zarr-zip-loaded.png` should move here.
-  4. **The CSR reorganisation progress notice.** A large cell-major `.h5ad`
-     shows a progress notice while its matrix is reorganised by gene after
+  4. **The CSR reorganization progress notice.** A large cell-major `.h5ad`
+     shows a progress notice while its matrix is reorganized by gene after
      opening. Capture it cropped to the notification.
      `_static/screenshots/data_loading/h5ad-csr-index-progress.png`.
 - **notes** — The "Recommended alternative for larger `.h5ad`" block at line 104
@@ -595,7 +595,7 @@ terminal and Jupyter captures:
   3. ~~Add the SSH-tunnel terminal pair.~~ **WITHDRAWN, and the worst of the
      four:** `ssh -L 8765:localhost:8765 user@remote-host` puts a username and a
      hostname in the command itself. Document the tunnel as two `text` blocks
-     labelled "on the server" and "on your laptop".
+     labeled "on the server" and "on your laptop".
   4. **ADD the health-endpoint check** referenced at line 336
      (`http://127.0.0.1:8765/_cellucid/health`). A browser tab showing the small
      JSON response, cropped to the tab plus response. The troubleshooting step
@@ -630,7 +630,7 @@ terminal and Jupyter captures:
 - **needs** — The user asked specifically for Jupyter captures on the loader
   paths. This page is that path and has nothing. Four captures, all in
   JupyterLab at 1440x1000, 2x, using the `pancreas` dataset so the output is
-  recognisable single-cell data rather than a toy fixture:
+  recognizable single-cell data rather than a toy fixture:
   1. **The minimal embed.** A notebook cell containing exactly the "Minimal:
      show an in-memory `AnnData`" snippet from line 66
      (`viewer = show_anndata(adata, height=600, dataset_name=…, dataset_id=…)`),
@@ -791,7 +791,7 @@ terminal and Jupyter captures:
   - **The dataset is a 120-cell, 6-gene synthetic fixture.** I opened
     `h5ad-current-loaded.png`: it is roughly a hundred blue/orange/purple dots
     scattered on a grid, with `#dataset-info` reading `CELLS 120 / GENES 6 /
-    OBS FIELDS 2 / CONNECTIVITY None`. That is a correct acceptance artefact and
+    OBS FIELDS 2 / CONNECTIVITY None`. That is a correct acceptance artifact and
     a poor teaching image — a wet-lab reader learning what a loaded dataset
     looks like should see real single-cell structure, not a test fixture.
   - **Four of the six are near-duplicates.** `h5ad-current-loaded`,
@@ -892,7 +892,7 @@ terminal and Jupyter captures:
      `https://raw.githubusercontent.com/theislab/cellucid-demo-custom-datasets/HEAD/catalog/datasets.json`
      returning the JSON. The page warns the response "must return the JSON file
      itself, not an HTML sign-in page, a Git LFS pointer, or a 404" (line 251) —
-     showing the good response makes the three bad ones recognisable by
+     showing the good response makes the three bad ones recognizable by
      contrast. `_static/screenshots/data_loading/raw-catalog-json-response.png`.
 - **notes** — The reference repository, its three dataset ids, and their exact
   contents are corroborated by the fixture copy at
@@ -1042,7 +1042,7 @@ terminal and Jupyter captures:
   (the element id says "highlighted-cells", but the id is not the label — do not
   caption a screenshot "Highlighted Cells"). Inside it: `.highlight-mode-buttons`
   (`role="group"`, `aria-label="Highlight mode selection"`) holding four
-  `.highlight-mode-btn` entries labelled **"Annotation based"**
+  `.highlight-mode-btn` entries labeled **"Annotation based"**
   (`data-mode="annotation"`, the default, `aria-pressed="true"`), **"KNN drag"**,
   **"Proximity drag"**, and **"Lasso"**; `#highlight-mode-description` ("Alt+click
   a cell to highlight its group. Alt+drag to select a range.");

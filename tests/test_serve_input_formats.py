@@ -251,6 +251,53 @@ def test_contents_and_identity_are_read_only_where_python_can_read_them(tmp_path
     assert read_cellucid_identity(mudata) == ("cite-demo", "CITE demo")
 
 
+def test_an_identity_that_cannot_be_read_is_needed_only_where_the_caller_names_none(
+    tmp_path: Path,
+) -> None:
+    """A damaged ``uns['cellucid']`` id or name refuses the store unless the
+    caller names that field itself (cellucid-r's
+    ``test-viewer-robustness.R`` holds the same store to the same rule)."""
+    import cellucid
+
+    rng = np.random.default_rng(0)
+    adata = ad.AnnData(
+        X=rng.random((6, 3)).astype(np.float32),
+        obs=pd.DataFrame(index=[f"c{i}" for i in range(6)]),
+        var=pd.DataFrame(index=["g1", "g2", "g3"]),
+    )
+    adata.obsm["X_umap"] = rng.random((6, 2)).astype(np.float32)
+    path = tmp_path / "f.zarr"
+    cellucid.prepare(path, format="zarr", data=adata, dataset_id="orig", dataset_name="Orig")
+    # Its value's chunk damaged: the metadata every reader walks is intact.
+    (path / "uns" / "cellucid" / "id" / "0").write_bytes(b"not a zlib stream")
+    store = classify_anndata_path(path)
+
+    def serve(**identity: str) -> AnnDataServer:
+        return AnnDataServer(path, host="127.0.0.1", port=0, quiet=True, serve_web_ui=False, **identity)
+
+    damaged_id = r"holds uns/cellucid/id and it cannot be read \(.*\)\. Write the store again, or give dataset_id= yourself\.$"
+    with pytest.raises(ValueError, match=damaged_id):
+        read_cellucid_identity(store)
+    with pytest.raises(ValueError, match=damaged_id):
+        serve()
+    with pytest.raises(ValueError, match=damaged_id):
+        serve(dataset_name="F")
+    assert read_cellucid_identity(store, named=["id"]) == (None, "Orig")
+    server = serve(dataset_id="f")
+    try:
+        assert (server.dataset_id, server.dataset_name, server.declared_dataset_id) == ("f", "Orig", None)
+    finally:
+        server.stop()
+    (path / "uns" / "cellucid" / "name" / "0").write_bytes(b"not a zlib stream")
+    with pytest.raises(ValueError, match=r"holds uns/cellucid/name and it cannot be read .*give dataset_name= yourself\.$"):
+        serve(dataset_id="f")
+    server = serve(dataset_id="f", dataset_name="F")
+    try:
+        assert (server.dataset_id, server.dataset_name) == ("f", "F")
+    finally:
+        server.stop()
+
+
 def test_a_mudata_that_shares_features_is_refused_with_what_to_do(tmp_path: Path) -> None:
     path = _mudata_h5mu(tmp_path / "axis.h5mu")
     with h5py.File(path, "r+") as file:

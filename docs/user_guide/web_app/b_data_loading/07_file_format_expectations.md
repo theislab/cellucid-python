@@ -35,7 +35,7 @@ which ecosystem's tools write the format.
 
 The format is decided by the file's content, not only its name: an `.h5`
 that is a Loom or an AnnData file opens as what it is, and a file Cellucid
-recognises but cannot show (a Cell Ranger `molecule_info.h5`, a MuData whose
+recognizes but cannot show (a Cell Ranger `molecule_info.h5`, a MuData whose
 modalities share features rather than cells, a count matrix with no
 embedding, an h5Seurat file, a Seurat object whose counts live outside the
 `.rds`) is refused with what to do instead
@@ -112,15 +112,15 @@ How the file's own values combine with the route that opens it:
   command line taking precedence.
 
 Beside `uns['cellucid']` and `uns['title']`, the one other part of `uns`
-Cellucid reads is the colours Scanpy keeps for a categorical obs column,
+Cellucid reads is the colors Scanpy keeps for a categorical obs column,
 `uns['<column>_colors']`: the column opens in them
 ({doc}`../d_fields_coloring_legends/03_color_by_behavior`). They are read with
 the column's categories when the column is first shown: opening a file reads
 no category list, only how many categories each column has, so a column of
 one category per cell (barcodes stored as a categorical) costs nothing until
 it is shown. A column with more categories than there are open cells, and
-more than one request of the connection reads, is read codes first, then the names and colours of the categories those codes name
-alone: a share of the cells reads a share of its categories (1 % of a
+more than one request of the connection reads, is read codes first, then the names and colors of the categories those codes name
+alone: a share of the cells reads a share of its categories (1% of a
 1.2M-category column, about 12,000 names, not 35 MB).
 
 ---
@@ -253,9 +253,12 @@ Which array each dimension shows by default:
 - When a file declares none of the three and carries the plain `X_umap` that
   `sc.tl.umap()` writes, that array fills the dimension of its width (1, 2 or 3
   columns), so an ordinary Scanpy object loads as written.
-- When the file has no UMAP at all, a deterministic **best guess** fills the
-  dimensions instead (t-SNE, force layouts, spatial, …, and last the first two
-  columns of a wide array such as `X_pca`). See {doc}`13_data_mapping`.
+- Every dimension the UMAP leaves empty, and every dimension of a file with no
+  UMAP at all, gets a deterministic **best guess**: its best-ranked array of
+  exactly that width (UMAP-like names, then t-SNE, force layouts, spatial, …),
+  so `X_umap` beside `X_umap_3d` names both 2D and 3D; with nothing 1 to 3
+  columns wide, the first two columns of a wide array such as `X_pca`. See
+  {doc}`13_data_mapping`.
 
 This holds for every loading route: the browser file picker, `cellucid serve`,
 and the notebook viewers. In the browser any other array can then be turned
@@ -300,7 +303,7 @@ with -1 for a missing value). What a file needs is its index, its shape and
 An integer column wider than 16 bits (`int32`, `int64`, `uint32`, `uint64`, a
 nullable `Int64`) is held as float64: every integer up to 2^53 stays exact,
 so cell or donor ids and deep cells' counts above 16,777,216 are never merged
-by rounding, in colours, filters, highlights, analyses and exports. Narrower
+by rounding, in colors, filters, highlights, analyses and exports. Narrower
 integers and every float column are held as float32, as before.
 `prepare()` and `show_anndata(adata)` take an AnnData you have already read, so
 they hold the columns anndata read; pass the file's path to `cellucid serve`,
@@ -390,7 +393,7 @@ Meaning:
 
 Fix:
 - Provide `adata.X` and name the genes from the `var` column your readers will type.
-- In Jupyter/server mode, pass `gene_id_column=...` if needed.
+- In Jupyter/server mode, pass `var_gene_id_column=...` if needed.
 
 ---
 
@@ -406,7 +409,7 @@ Fix:
   refused, naming the cell.
 - **Duplicate gene names**: made unique as AnnData's `var_names_make_unique()`
   does (`MATR3`, `MATR3-1`), and reported.
-- **Huge categorical fields**: any number of categories loads and the legend scrolls, but palettes cannot keep 50k–100k colours distinct; consider aggregating.
+- **Huge categorical fields**: any number of categories loads and the legend scrolls, but palettes cannot keep 50k–100k colors distinct; consider aggregating.
 - **Browser memory**: there is no fixed size ceiling for an `.h5ad` or Zarr
   file. Each array read is held to the size its metadata declares, and one the
   browser cannot allocate is refused as too large, naming the bytes. A server

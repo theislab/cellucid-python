@@ -71,7 +71,7 @@ For deeper context:
 When you open a dataset, Cellucid needs several kinds of data:
 
 - **Embeddings** (UMAP coordinates): n_cells × 1 to 3 values, read when a view shows them
-- **Obs fields** (metadata for colouring and filtering): read when a field is first used
+- **Obs fields** (metadata for coloring and filtering): read when a field is first used
 - **Gene expression** (n_cells × n_genes): huge, read **one gene at a time, on demand**
 
 **Lazy reading** means Cellucid reads only what the current view needs, from
@@ -162,11 +162,11 @@ kept gene indexes and downloaded parts are removed first (they are the
 cheapest to make again),
 then the files opened least recently, never one a tab has open.
 **Session › Stored**, a section of its own right below Open data, sums it up
-on one line beside **Manage…**, never wrapped (for example *2 datasets · 540
-MB kept*, or *2 datasets · 540 MB · 3 more* when saved states or a host's
-speed are kept too; with no dataset kept, the one kind kept, *1 connection
-speed*, or *3 items*). Hovering the line names every kind (*2 datasets · 540
-MB · 2 saved states · 1 connection speed*), and **Manage…** lists them; its
+on one line beside **Manage…**, never wrapped: the datasets and what they take
+(for example *2 datasets · 540 MB kept*), or with no dataset kept, the one kind
+kept (*1 connection speed*) or *3 items*. Hovering the line names every kind,
+saved states and remembered connection speeds included (*2 datasets · 540 MB ·
+2 saved states · 1 connection speed*), and **Manage…** lists them; its
 (i) says what is kept and why. The line does not count **My datasets**,
 which has its own control under **Open data** ({ref}`my-datasets`).
 **Manage…** opens the *Stored in this browser* dialog, which lists each
@@ -413,7 +413,7 @@ Each row has three buttons:
 - **Open** opens it again, as the menu does.
 - **Continue** opens it, then its latest saved state, so its history is back
   at once and nothing is asked
-  ({doc}`../m_state_history/03_saved_states_and_autosave`). It is greyed out
+  ({doc}`../m_state_history/03_saved_states_and_autosave`). It is grayed out
   when this browser keeps no saved state of the dataset, and when a file must
   be chosen again first: choose it, and the offer to continue where you left
   off appears as it opens.
@@ -436,7 +436,7 @@ Saved states of datasets no longer listed follow under their own heading,
 unticked. Untick what should not go. The line under the list says how many
 datasets and saved states are ticked and how much room the saved states take
 here. **Export** downloads one `.cellucid-library` file
-(*cellucid-library-2026-11-04T10-30-00.cellucid-library*).
+(*cellucid-library-20261104_103000.cellucid-library*).
 
 Each saved state goes whole: every tracker and branch, every step with its
 values and analysis results, notes, **Recently deleted** and the
@@ -461,9 +461,9 @@ saved state like any other.
 
 A library file dropped on the page, or chosen in **Open… › File…**, is
 imported the same way: **All…** opens and its line says what was added. A
-session file dropped or chosen there is not a dataset: it is refused with a
-sentence saying where it goes (**State › Session › Load… › Open a session
-file…**, with its dataset open).
+session file dropped or chosen there loads as **State › Session › Load… ›
+Open a session file…** loads it: its dataset opens first when another is
+shown, then its history is added beside yours.
 
 The whole file is read and checked before anything is added, and an import
 adds everything or nothing: the saved states are kept in one go, and the
@@ -626,7 +626,7 @@ that is open, and only that one; opening another rewrites all of it.
   subsample, "228,245 of 2,282,447 (uniform, seed 0)", and ", fitted to this
   device" when the device chose the share), genes, obs fields, the embeddings shown
   (of how many `obsm` arrays), the modality of a MuData dataset, layers, raw,
-  the neighbour graph (with a subsample, once it is read, how much of the
+  the neighbor graph (with a subsample, once it is read, how much of the
   open cells' graph it keeps), the latent space and the vector fields. A change in
   **Data mapping** updates them.
 
@@ -639,8 +639,15 @@ notebook) is shown from its first moment: over the empty viewer while no
 dataset is shown, or as a notification with **Cancel** while another dataset
 stays on screen. It names what is opened, the step under way, how much has
 arrived, how fast and how long is left when that is known; a request made
-again shows as *Retrying…* with why. **Cancel** stops the opening where it is
+again shows as *Retrying…* with why, and a request to a host that answers
+with errors says so on its line ("… is answering with errors (HTTP 502); trying
+again in 1.4 s (attempt 2)…"). **Cancel** stops the opening where it is
 and keeps the dataset on screen. How it ended goes to the notification center.
+
+With no dataset open and nothing opening (**None** chosen, a link opened
+without, an opening canceled), the same panel over the viewer says **No
+dataset open**, where to open one (**Session › Open data**, or a file dropped
+on the page) and offers **Show Open data**, which opens the sidebar there.
 
 ## Edge Cases (Read This If Something Feels “Weird”)
 
@@ -659,7 +666,7 @@ and keeps the dataset on screen. How it ended goes to the notification center.
 - **Duplicate variable names**: the reader makes repeated gene names unique as
   AnnData's `var_names_make_unique()` does (`MATR3`, `MATR3-1`) and says so.
 - **Huge categorical fields** (e.g., 100k unique categories): they load (32-bit
-  codes) and the legend scrolls, but their colours are not distinguishable.
+  codes) and the legend scrolls, but their colors are not distinguishable.
 - **A malformed `uns['cellucid']`**: an unknown key or a wrong value refuses the
   file with a message naming it ({doc}`07_file_format_expectations`).
 

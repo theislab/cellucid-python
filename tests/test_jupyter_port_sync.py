@@ -3,31 +3,7 @@ from __future__ import annotations
 import html as html_module
 
 import pytest
-
-
-class _DummyServer:
-    """Stands in for the AnnData server: records the bind, serves nothing."""
-
-    port_offset = 0
-
-    def __init__(self, **kwargs: object) -> None:
-        self.host = kwargs["host"]
-        self.dataset_id = "demo"
-        self.server_info = {"n_cells": 3}
-        self.port = int(kwargs["port"] or 8765) + self.port_offset
-
-    @property
-    def url(self) -> str:
-        return f"http://{self.host}:{self.port}"
-
-    def start_background(self) -> None:
-        return None
-
-    def is_running(self) -> bool:
-        return True
-
-    def stop(self) -> None:
-        return None
+from _stand_in_server import StandInServer as _DummyServer
 
 
 def test_jupyter_viewer_port_sync(monkeypatch) -> None:
@@ -105,3 +81,23 @@ def test_jupyter_rejects_invalid_explicit_browser_server_urls(
             auto_open=False,
             client_server_url=value,
         )
+
+
+def test_the_stand_in_server_has_what_the_viewers_read() -> None:
+    """Every attribute the viewers read from their server (``self._server.<name>``
+    in ``jupyter/_viewer.py`` and ``_widget.py``) is on the one stand-in the
+    tests use, so a new one is added there once, not missed in a copy."""
+    import re
+    from pathlib import Path
+
+    import cellucid.jupyter as jupyter
+
+    package = Path(jupyter.__file__).parent
+    read = {
+        name
+        for module in ("_viewer.py", "_widget.py")
+        for name in re.findall(r"self\._server\.([A-Za-z_]+)", (package / module).read_text(encoding="utf-8"))
+    }
+    assert read, "the viewers read nothing from their server: the pattern is stale"
+    stand_in = _DummyServer(host="127.0.0.1", port=None)
+    assert sorted(name for name in read if not hasattr(stand_in, name)) == []

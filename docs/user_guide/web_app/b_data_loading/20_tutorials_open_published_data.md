@@ -55,7 +55,7 @@ files:
    a cell-table column named for a clustering is categorical even when its
    labels are numbers).
 
-Search a gene (`sox17`) to colour by it. The features of a Multiome sample
+Search a gene (`sox17`) to color by it. The features of a Multiome sample
 like this one are of two types, so they open as two modalities, as a 10x
 `.h5` of several feature types does: **Gene Expression** (the 32,058 genes,
 opened first) and **Peaks** (the 239,160 peaks), chosen under
@@ -99,7 +99,7 @@ same works for a SingleCellExperiment `.rds` and for an `.rda` or
 
 :::{note}
 A GEO supplementary file named `.rds` (not `.rds.gz`) saved with
-`saveRDS()`'s default gzip compression is labelled gzip-encoded by NCBI's
+`saveRDS()`'s default gzip compression is labeled gzip-encoded by NCBI's
 file host even in parts of it, and no browser can decode a part. Cellucid
 notices and downloads the whole file once instead (the notification says
 why), then reads it as usual.
@@ -166,15 +166,15 @@ fits and says so.
    cells, as many as the first gene reads in about 20 seconds on your
    connection: drawn first on the cells about 10 seconds read, then on more
    as the rest of the 20 seconds reads them. The header of the collapsed
-   **Session › Subsampling** says so ("100 % cells · genes 1.8 %"); opened,
+   **Session › Subsampling** says so ("100% cells · genes 1.8%"); opened,
    **Genes read for** shows the share and the cells ("40K of 2.3M cells"),
-   and the **Details** table under Cells to open says why ("a gene in about
-   20 s here") and what every cell would take. The gene's legend says the
+   and the **Details** table under Cells to open says why ("a gene in ~20 s
+   here") and what every cell would take. The gene's legend says the
    same in one line ("Gene read for 40K of 2.3M cells", a link to that
    slider), and the cells it was not read for are faded toward the
    background, beneath the cells read, which are drawn larger ("Faded: not
-   read"). Move the **Genes read for** slider to a larger share (10 %, 25 %,
-   … 100 %) and press **Read** to read genes for more cells, its download
+   read"). Move the **Genes read for** slider to a larger share (10%, 25%,
+   … 100%) and press **Read** to read genes for more cells, its download
    and time said first ({ref}`genes-read-for`).
 3. **Genes by symbol.** The genes open named by the var index, Ensembl ids
    (search `ENSG00000168484`). To name them by symbol, choose
@@ -187,7 +187,7 @@ fits and says so.
    cell's row, so before reading the first one Cellucid says what it costs
    in one line — the bytes to read, the time at the speed it measured, the
    cells — with a **Cancel** button; its **Details** say why, from how the
-   file stores its matrix. Its colours fill in on a growing sample of the
+   file stores its matrix. Its colors fill in on a growing sample of the
    open cells, with the time the rest takes. Later genes read only their own
    entries; picking another gene while the first is read joins that read
    instead of starting over. A smaller share of the cells costs less, and a

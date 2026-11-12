@@ -213,7 +213,7 @@ matter there.
 ### How to confirm
 - Lower render resolution first, then ray quality, when frame rate is poor.
 - Lower grid density when entering Smoke or rebuilding after a filter or
-  recolour is slow. Grid changes are applied after the approximately 300 ms
+  recolor is slow. Grid changes are applied after the approximately 300 ms
   slider debounce and then rebuild the volume.
 
 ### Fix
@@ -265,20 +265,20 @@ Related docs:
 
 ---
 
-## Edge case: category explosion (colours stop meaning anything)
+## Edge case: category explosion (colors stop meaning anything)
 
 ### What you see
 - A categorical field has thousands to millions of categories (barcodes, free
   text).
-- The field loads and its legend scrolls, but neighbouring categories share
-  near-identical colours, and switching to the field takes longer.
+- The field loads and its legend scrolls, but neighboring categories share
+  near-identical colors, and switching to the field takes longer.
 
 ### Why it happens
 The legend builds only the rows in view, so its size does not grow with the
 category count. What still grows with it:
 - sorting the category labels,
 - computing per-category counts,
-- assigning one colour per category, which a palette cannot keep distinct.
+- assigning one color per category, which a palette cannot keep distinct.
 
 ### How to confirm
 - Switch to a simpler categorical field; if the UI becomes responsive, the category explosion is the issue.
@@ -363,11 +363,14 @@ Related docs:
 ## Edge case: large cell-major `.h5ad` loaded in-browser (first genes wait)
 
 ### What you see
-- The dataset opens, but the first gene you colour by takes a while. Its
-  notification says why and what it costs before the read starts, e.g.
-  `Loading gene: SFTPC. X is stored cell by cell, so the first gene reads every
-  cell's entries: 4.7 GB (~57 min at the measured 1.4 MB/s). Later genes read
-  the gene index it builds.`, and has a **Cancel** button. A second notification
+- The dataset opens, but the first gene you color by takes a while. Its
+  notification (`Loading gene: SFTPC`, with a **Cancel** button) says what it
+  costs before the read starts, in one line, e.g.
+  `Reading gene SFTPC: 4.7 GB · ~55 min 57 s · 2,480,956 cells to read`, and
+  why in its details: **Stored** (cell by cell), **One gene reads** (every
+  open cell's entries, 4.7 GB at the measured 1.4 MB/s), **Later genes** (only
+  their own values: they reuse the gene index the first gene builds) and
+  **Faster** (fewer cells, or a gene-major copy). A second notification
   shows the read itself: `Reading X by gene (stored cell by cell, …): 20 MB of
   4.7 GB (0%), 1.4 MB/s, ~56 min left`.
 

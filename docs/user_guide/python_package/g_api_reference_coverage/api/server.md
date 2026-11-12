@@ -92,7 +92,7 @@ serve_anndata("my_study.h5ad")  # a prepared file names itself; blocks until Ctr
    ```
 3. In your laptop browser:
    - Open the printed Viewer URL:
-     `http://127.0.0.1:8765/?anndata=true`
+     `http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true`
 
 **Direct LAN access** (use carefully):
 - Bind to `0.0.0.0` to make the server accessible to other machines on the network:
@@ -108,8 +108,8 @@ serve_anndata("my_study.h5ad")  # a prepared file names itself; blocks until Ctr
 
 ### 3) Launch choices
 
-Every launch option is optional: `embedding_keys`, `knn_key`,
-`expression_source`, `gene_id_column`, `obs_keys`, `latent_key`,
+Every launch option is optional: `embedding_defaults`, `knn_key`,
+`expression_source`, `var_gene_id_column`, `obs_keys`, `latent_key`,
 `vector_field_default`, `normalize_embeddings`, `centroid_min_points`, and
 `modality`. For an AnnData or MuData, each one you set is checked against the
 store's metadata before the server binds (a named `obsm`, `obsp`, layer,
@@ -137,7 +137,7 @@ server = serve_anndata(
 )
 ```
 
-No choice costs startup time: the viewer reads the neighbour graph the first
+No choice costs startup time: the viewer reads the neighbor graph the first
 time a view draws it, and a vector field when the overlay shows it. Naming an
 element the store does not have is an error before the bind, for example
 `knn_key names obsp['connectivities'], which this store does not have.`
@@ -338,7 +338,7 @@ How to confirm:
 - Read the viewer's own error; `viewer.debug_connection()` probes the store.
 
 Fix:
-- Name the embedding with `embedding_keys`, or write the file again with
+- Name the embedding with `embedding_defaults`, or write the file again with
   {func}`~cellucid.prepare`.
 
 ---

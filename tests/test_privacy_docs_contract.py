@@ -82,6 +82,7 @@ def test_the_privacy_model_states_the_current_storage_sign_in_and_link_rules() -
         "`cellucid:opening-under-way`",
         "`cellucid:tab-local-dataset`",
         "`cellucid:phone-sheet`",
+        "`cellucid:github-app-auth:pending`",
         "`cellucid-history`",
         "`cellucid-library`",
         "`cellucid-local-files`",
@@ -94,7 +95,7 @@ def test_the_privacy_model_states_the_current_storage_sign_in_and_link_rules() -
         "`cellucid:agent-data`",
         "`cellucid:agent-relay:tab-secret`",
         "(privacy-agents)=",
-        "It is not anonymisation.",
+        "It is not anonymization.",
         "never what a link carried to grant access",
     ):
         assert required in page, required

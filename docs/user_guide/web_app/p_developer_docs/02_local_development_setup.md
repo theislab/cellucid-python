@@ -38,11 +38,18 @@ From the workspace root:
 
 ```bash
 cd cellucid
-python -m http.server 8000
+npm run serve
 ```
 
 Then open:
-- `http://localhost:8000`
+- `http://localhost:4173` (`CELLUCID_BROWSER_TEST_PORT=8000 npm run serve` moves it)
+
+The server answers every file with `Cache-Control: no-store`, so a reload runs
+the module you just edited. A server without cache headers
+(`python -m http.server`) lets the browser keep a module it guessed fresh: a
+reload then runs the code from before the edit. It also answers byte ranges,
+and serves the same tree with CORS on the next port (`http://localhost:4174/…`)
+for a dataset you open by link.
 
 :::{important}
 Do **not** open `cellucid/index.html` via `file://`.
@@ -131,7 +138,7 @@ This is best for:
 
 :::{note}
 If you are using the hosted app (`https://www.cellucid.com`) and a local server, you are doing an **https → http** connection.
-Most modern browsers allow `https://…` pages to talk to `http://localhost` / `http://127.0.0.1`, but if your environment blocks it, run the web app locally (`http://localhost:8000`) and connect to the server from there.
+Most modern browsers allow `https://…` pages to talk to `http://localhost` / `http://127.0.0.1`, but if your environment blocks it, run the web app locally (`npm run serve`, `http://localhost:4173`) and connect to the server from there.
 :::
 
 ### Option D: Notebook viewer (hooks + events)
@@ -143,26 +150,25 @@ If you are developing the Python↔frontend hooks system:
 
 ## Step 4: Make local iteration fast (recommended defaults)
 
-### Disable cache while debugging
+### Edited modules load on the next reload
 
-In Chrome/Edge DevTools:
-- Network tab → check “Disable cache”
-- Keep DevTools open while reloading
-
-This avoids “I fixed it but it still reproduces” confusion caused by cached ES modules.
+`npm run serve` answers every file with `Cache-Control: no-store`, so the
+browser asks for each module again at every reload and runs the one you just
+edited; nothing needs "Disable cache". With another server, check that it sends
+`no-store` or `no-cache`: one without cache headers lets the browser keep a
+module it guessed fresh, the cause of "I fixed it but it still reproduces".
 
 Every script URL carries its content version (`?v=`, written by
 `node scripts/generate-web-asset-inventory.mjs`; see
 {doc}`03_build_run_and_deployment`, checklist item 5). The server ignores it, so
-an edited module loads without running anything, as long as the browser does
-not answer it from its cache; once the generator has run, each changed module
-has a new URL and a plain reload loads it.
+an edited module loads without running anything; once the generator has run,
+each changed module has a new URL.
 
 Workers start from their sources too while the page is served from this
 machine (`localhost`, `127.0.0.1`, `[::1]`), so an edited worker module is live
 on the next reload. A deployed site starts them from the bundles the generator
 builds into `assets/workers/`; to try those locally, run the generator and open
-the same server as `http://deployed.localhost:8000` (every browser resolves a
+the same server as `http://deployed.localhost:4173` (every browser resolves a
 `.localhost` name to this machine).
 
 ### Keep reproducible datasets handy
@@ -221,7 +227,7 @@ Likely causes:
 - You opened via `file://`, or the server is sending incorrect MIME types for `.js`.
 
 Fix:
-- Use `python -m http.server` from `cellucid/` (Step 1).
+- Use `npm run serve` from `cellucid/` (Step 1).
 
 ### Symptom: “Remote server connect fails / CORS error”
 
@@ -235,7 +241,7 @@ How to confirm:
 - Check DevTools → Network for failed `fetch` requests and CORS messages.
 
 Fix:
-- Use the locally hosted app (`http://localhost:8000`) and connect from there.
+- Use the locally hosted app (`npm run serve`, `http://localhost:4173`) and connect from there.
 - Or configure the server origin/CORS (Python side).
 
 ---

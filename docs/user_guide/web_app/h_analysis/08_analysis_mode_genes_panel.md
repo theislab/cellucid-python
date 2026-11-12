@@ -55,7 +55,7 @@ result at once; any other change marks it **Stale · Run**.
 <!-- options:genesPanel -->
 | Label | Default |
 |---|---|
-| Group by | The first categorical field with two or more categories |
+| Group by | The coloring field when it is not named like a sample, else the best field named like a cell type, annotation, lineage or cluster, else the first not named like a sample |
 | Compare against | Rest |
 | Reference group | The largest group |
 | Groups to test | All |
@@ -165,8 +165,12 @@ The same options as Differential expression; formulas and conventions are in
   tested in each group.
 - **Expression matrix**: the matrix the genes are read from (see
   [Expression matrix](#expression-matrix)).
-- **Fold change from**: Automatic (undo `log1p` when the data mapping says the
-  matrix read holds `log1p` values), Undo log1p (scanpy), or As stored.
+- **Fold change from**: Automatic (undo `log1p` when the values are `log1p`:
+  the expression values' log1p, or a matrix the data mapping says holds
+  `log1p` values), Undo log1p (scanpy), or As stored (see
+  [Values tested](#values-tested)).
+- The values tested are not an option of the analysis: they follow
+  **Data mapping › Expression values** (see [Values tested](#values-tested)).
 
 For each group and gene the result holds:
 
@@ -196,8 +200,11 @@ every other analysis keep the matrix the data mapping shows.
 | **X**, **layers['…']**, **raw.X · N genes** | that matrix, when it is not the mapped one |
 
 A matrix that holds counts (Data mapping lists it with `· counts`) is named
-`· counts, not normalised` in the result's settings: its means and fold changes
-are of raw counts, not corrected for each cell's sequencing depth.
+`· counts` in the result's settings, and the result says beside it the values
+it tested ([Values tested](#values-tested)). The matrix can be named as the
+dataset names it too (`X`, `raw`, `layer:counts`): an agent's
+`analysis_markers_set {matrix: "X"}` on a dataset mapped to `X` is the
+mapped choice.
 
 Each matrix names its genes on its own axis: `X` and every layer share `var`;
 `raw` has `raw.var`, which often holds genes `X` lacks (`X` is frequently the
@@ -216,7 +223,41 @@ the file in the browser as AnnData, so each offers the file's other matrices.
 The result line names a matrix other than the mapped one
 (`12 groups · Wilcoxon · BH · 33,538 genes · raw`), the expanded view's statistics name
 the matrix read, and clicking a gene that only that matrix has says so instead of
-colouring by it. Results and sessions record the choice.
+coloring by it. Results and sessions record the choice.
+
+### Values tested
+
+The genes are tested in the values **Data mapping › Expression values** sets
+for the whole app (see {doc}`../b_data_loading/13_data_mapping`, Expression
+values): as stored (the default), normalized to 10,000 counts per cell,
+`log1p`, or both — `x' = ln(1 + x · 10,000 / t)`, scanpy's
+`normalize_total(target_sum=1e4)` then `log1p`, `t` the cell's total count. The
+analysis has no option of its own for it: the values it tests are the ones every
+view, legend and filter shows. A matrix other than the mapped one
+([Expression matrix](#expression-matrix)) is transformed the same way when it
+holds counts and is not `log1p` already, else read as stored.
+
+A run fixes its values when it starts: the cells' totals are read first when it
+normalizes (an obs column, else every gene summed once, kept for the open
+dataset and shared with the coloring and every other analysis), genes a view
+already shows are taken as shown, and genes read from the file are put in the
+run's values where they arrive (zeros stay zeros, so a sparse gene stays
+sparse). Changing Expression values after a run marks its result **Stale**
+(`The expression values changed since this result`).
+
+With log1p values, **Fold change from → Automatic** undoes the `log1p` (natural
+log) as scanpy's `logfoldchanges` does; with values normalized but not logged it
+is the ratio of the means. The result line ends in the values when they are not
+as stored (`… · Normalized · log1p`), and the heatmap's color bar names them
+(`z-score · log1p(norm.)`); the expanded view's statistics (**Values**)
+and an agent's `analysis.result` (`about.values`) say the formula and where the
+cells' totals came from, or `raw counts as stored`. Differential expression
+(cells as observations), Dot plot and Gene signature follow the same setting;
+pseudobulk differential expression always sums raw counts; Composition counts
+cells and reads no expression. Measured against scanpy 1.11.5 on a fixed matrix:
+each transform's values, and rank_genes_groups' Wilcoxon and t-test scores,
+p-values and (log1p) fold changes on them, agree to 10⁻⁶
+(`tests/expression-transform.test.mjs`).
 
 ---
 
@@ -278,11 +319,11 @@ expression matrix other than the mapped one ends the line with that matrix's nam
 - **Clustered** — the heatmap with genes and groups ordered by hierarchical
   clustering.
 
-**Click a gene** — in the list or in the expanded view's table — to colour the
+**Click a gene** — in the list or in the expanded view's table — to color the
 cells by it: the same as choosing it under **Coloring & filtering → Gene
 expression**, whose search box then names it, so the sidebar and the embedding
 always agree. A gene the shown expression matrix lacks (a run on another
-[Expression matrix](#expression-matrix)) colours nothing; a notification says so.
+[Expression matrix](#expression-matrix)) colors nothing; a notification says so.
 
 The result also hands its markers on: **Score as signature** opens Gene signature
 with one set per group, and **Dot plot** opens a dot plot of them by the same
@@ -290,12 +331,12 @@ field.
 
 ### Expanded view
 
-`⤢ Expand` opens the four-region view:
+**Expand** opens the four-region view:
 
 - **Options:** the filters, ranking and Top genes at the top, then the heatmap’s
   look: Transform (z-score, log(1 + x), none), Cluster genes, Cluster groups,
   Distance (correlation, Euclidean, cosine), Linkage (average, complete, single),
-  the dendrograms and the colours. Clustering choices re-cluster at once.
+  the dendrograms and the colors. Clustering choices re-cluster at once.
 - **Summary statistics:** Group by, groups tested, method, p-values, multiple
   testing, expression matrix, fold change, genes tested, duration.
 - **Statistical analysis:** one group at a time (choose it above the table), with
@@ -323,7 +364,7 @@ A finished run is kept in memory (up to a quarter of the analysis memory budget,
 least recently used first out). The same run — same field and grouping, cells,
 groups, reference, test and expression matrix — is answered from it and marked **Cached**; press
 **Recompute** to run it again. Changing the field’s categories, the data mapping
-or the dataset makes it a different run. A cancelled run is never cached.
+or the dataset makes it a different run. A canceled run is never cached.
 
 ---
 
@@ -376,7 +417,7 @@ is read without a gene index pass first.
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/analysis/marker-genes-ranked.png
-:alt: The Marker genes panel grouped by cell_type, with its Run button, and beneath it the result header, the Show choice (List, Heatmap, Clustered) on Heatmap, and a heatmap of eight cell-type rows against their top marker genes with a Z-score colour bar.
+:alt: The Marker genes panel grouped by cell_type, with its Run button, and beneath it the result line, the List, Heatmap and Clustered choice on Heatmap, and a heatmap of eight cell-type rows against their top marker genes with a z-score color bar.
 :width: 488px
 
 The marker heatmap in the sidebar. Every group is named, but only a handful of
@@ -385,7 +426,7 @@ a column is.
 ```
 
 ```{figure} ../../../_static/screenshots/analysis/marker-genes-clustered.png
-:alt: A heatmap with cell-type groups down one axis and gene names across the other, dendrograms attached to both axes, and a colour bar for the Z-scored expression.
+:alt: A heatmap with cell-type groups down one axis and gene names across the other, dendrograms attached to both axes, and a color bar for the Z-scored expression.
 :width: 1192px
 
 **Clustered**, in the expanded view. Genes and groups are each reordered by

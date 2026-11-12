@@ -52,7 +52,7 @@ All paths are under `cellucid/assets/js/app/`.
 | `session/index.js` | `createSessionSerializer({state, dataSourceManager, getHistory, dispatcher, onLoaded})` |
 | `session/session-serializer.js` | `SessionSerializer`: writing (`createSessionBundle`, `downloadSession`), Load (`loadSessionFromFile`, `restoreFromBlob`), a saved state of this browser (`loadSavedHistory`), a session file as a replay plan (`pickSessionFile`, `openSessionFile`), a starting view (`restorePublishedDefaultState`), the manifest alone (`readSessionDataset`), one owned operation at a time |
 | `session/share-scope.js` | What a Save or a Share chose (`ShareChoice`, `SAVE_DEFAULTS`, `SHARE_DEFAULTS`, `STATE_DEFAULTS`), made into the trackers a file holds (`shareHistory`) |
-| `history/persistence-actions.js` | The catalogue actions that write, list or delete: `history.share` (a session file to download), `history.save` (a saved state of this browser), `history.saved.list`, `history.saved.delete` (one saved state of this browser, by its id; `deletes-saved`), and `history.methods`, `history.pseudocode` |
+| `history/persistence-actions.js` | The catalog actions that write, list or delete: `history.share` (a session file to download), `history.save` (a saved state of this browser), `history.saved.list`, `history.saved.delete` (one saved state of this browser, by its id; `deletes-saved`), and `history.methods`, `history.pseudocode`. Opening one to continue it (`history.saved.open`) is Load…'s Open, provided with the dataset opening (`ui/modules/dataset-open-action.js`) |
 | `history/anndata-copy-save.js`, `history/exports/anndata-copy.js` | `history.anndata.save` (History ⋯ › **Save AnnData with this state…**; `writes-file`): the state shown, written as a "Current state only" share to name it by its SHA-256, applied to a new Cellucid-ready AnnData `.zarr.zip` of the open dataset by the packages' apply plan ({ref}`history-anndata-save-action`) |
 | `session/history-file.js` | The format: manifest and chunks, written (`writeHistoryFile`) and read in two stages (`openHistoryFile`: `readEager`, `readRest`), checked whole (`assertHistoryManifest`), the manifest alone (`readHistoryFileManifest`) |
 | `session/bundle/` | The framing: `format.js` (signature, `SESSION_FORMAT_VERSION`, refusal sentences), `reader.js` (streamed, never the whole file in memory), `writer.js` |
@@ -112,13 +112,13 @@ is written out in `app/session/README.md` ("The file"); every record is
 | Key | Holds |
 |---|---|
 | `createdAt` | The save's time, a canonical ISO string (`toISOString()` gives it back unchanged) |
-| `app` | `{version, catalog}`: the Cellucid version that wrote it and the SHA-256 of its action catalogue document (`app-stamp.js`) |
+| `app` | `{version, catalog}`: the Cellucid version that wrote it and the SHA-256 of its action catalog document (`app-stamp.js`) |
 | `actions` | `[{type, version, params}]`: one stamp per action type and parameters version its steps use, sorted by type then version, `params` the SHA-256 of that version's parameter schema as canonical JSON |
 | `scope` | What the save or share chose (`Scope`: `trackers`, `branches`, `content`, `results`, `notes`, `chats`, `journal`, `times`, `source`; `share-scope.js`): the file holds exactly that |
 | `datasetFingerprint` | The dataset it was saved on, exactly six fields ([Dataset identity](#dataset-identity)) |
 | `source` | Where that dataset opens from (`dataset-source-record.js`): `{kind: 'sample', dataset}`, `{kind: 'link', locator, dataset}` (the link in its public form: what it carried to grant access is never recorded), `{kind: 'remote', url, dataset}`, `{kind: 'file', name, dataset}` (a file's or folder's name, never a path or a handle), or `null` (a Python or R viewer) |
 | `chrome` | Page chrome kept outside the history, put back after a load (`assertPageChrome`): `{pressed: {<group id>: <button id>}}`, the pressed button of each pressed-button group (the selection tool, `{'highlight-mode': 'highlight-mode-lasso'}`); `{pressed: {}}` from a file written without a page. Kept in every form (history, state, steps). An empty group id, or a button not named by a non-empty id, is refused |
-| `requires` | `{obs, var}`: the sorted dataset keys of every observation field and gene the state shown at the save uses: a view is coloured by it, filters on it or holds colours for it, or a highlight group is bound to it (a renamed field by its original key; user-defined fields excluded) |
+| `requires` | `{obs, var}`: the sorted dataset keys of every observation field and gene the state shown at the save uses: a view is colored by it, filters on it or holds colors for it, or a highlight group is bound to it (a renamed field by its original key; user-defined fields excluded) |
 | `cells` | `{spec, kept, digest}` (`cell-subset-record.js`): the subsample's specification, the kept original positions as LEB128 cell-set bytes in base64, and their cell-set digest ({doc}`19_subsampling_specification`); its `k` equals the fingerprint's `cellCount`. Absent: every cell |
 | `genes` | `{cells, order, digest}`: how many of the open cells genes were read for (the first in their order), the cell order they were open in (`{method: 'blocks', seed, blockSize}` when every cell was open, else null), and the cell-set digest of their original positions |
 | `activeTracker` | The id of the tracker shown |
@@ -175,9 +175,10 @@ A `chat` chunk holds one conversation the chat bar kept with the tracker
 (`history.setChat`; the tracker's `chats` list `[conversation id,
 transcript]`, `model.js`). The transcript is the chat's conversation as
 `app/agent/chat/conversation.js` `transcriptOf` writes it: `{schema, id,
-createdAt, updatedAt, summary, messages}` (`schema` is `TRANSCRIPT_SCHEMA`,
-1; a transcript of another schema is refused when continued), each message
-one of
+createdAt, updatedAt, summary, messages, received?}` (`schema` is
+`TRANSCRIPT_SCHEMA`, 1; a transcript of another schema is refused when
+continued; `received`, when present, the distinct turn ids the conversation
+brought from a save or a share), each message one of
 
 - `{role: 'user', text, turn, at, context?, attached?}` (one per message the
   person sent; `turn` names every step the agent took in answer; `context`
@@ -191,13 +192,19 @@ one of
   step}]}` (`step` the history step a change made, `{id, label}`, or null;
   each picture a tool returned replaced by a line saying it was there);
 - `{role: 'note', turn, kind, text, otherCalls?}` (`stopped`, `error`,
-  `refusal`, `limit`, `summary`: what the chat told the person, never sent to
-  a model).
+  `refusal`, `limit`, `empty`, `summary`, `saved`: what the chat told the
+  person, never sent to a model).
 
 No key, provider credential or picture is ever in it. A conversation loaded
 from a file continues as a conversation of its own (`conversationFrom`); one
 kept mid-turn has its calls with no result answered with what became of them
-(`closeInterrupted`). With `chats: false` the chunks are left out, and so is
+(`closeInterrupted`). A save or a share writes each conversation through
+`transcriptForSave`: a turn the save was made in ends on a `saved` note, and
+`received` names every turn it holds. Opened, those turns are the sender's:
+none of their notes offers Try again (`offersRetry`) and a question of
+theirs offers no choices (`ask.js` `pendingQuestion`), since either would act
+again on what the history it came with already holds; the autosave keeps
+`received` as it is, and turns sent after the opening are the page's own. With `chats: false` the chunks are left out, and so is
 what the turns say of them (`conversation`, `message`). Python and R read the
 chunk as JSON and do not interpret it.
 
@@ -266,12 +273,12 @@ notes, conversations, authors or times) or one made from them:
    the `app` and `actions` stamps (`app-stamp.js`), checking what it wrote
    with the reader's own manifest and model checks.
 
-Writing a file is the catalogue action `history.share` (State › Session ›
+Writing a file is the catalog action `history.share` (State › Session ›
 **Share…**, `ui/modules/state/share-dialog.js`: History, Current state only
 or Steps only; branches, notes, conversations, Recently deleted, results,
 times, dataset; What's inside lists what the file will hold; an agent's
 `history.share` is asked about as `writes-file`). Its parameters left out,
-it writes `SHARE_DEFAULTS` (`shareScopeOf`, the catalogue's one rule).
+it writes `SHARE_DEFAULTS` (`shareScopeOf`, the catalog's one rule).
 `history.save` keeps the same choice as a saved state of this browser (the
 Load dialog). The Python and R hosts' `requestSessionBundle` pass
 `SAVE_DEFAULTS`, so conversations are left out (`chats: false`).
@@ -353,9 +360,12 @@ The load itself is one owned operation (`_runOwnedRestore`):
    every missing one at once; genes only when the saved mapping names genes the
    way the open one does, else the domain that holds a gene names it);
 6. the eager chunks are read: the steps, the parts and arrays the head's
-   values name, the head's values; every tree is checked and the head's values
-   must all be there;
-7. `history.load` refuses a domain this version does not have (naming it),
+   values name, the head's values; the header and how the trackers agree are
+   checked whole, each tree on its own (`checkSession`: `validateSession`'s
+   `unreadable` over `knownDomainsOnly` copies; a tree this version cannot read
+   is left for the history to name), and the head's values must all be there;
+7. `history.load` leaves a domain this version does not have out of every
+   step (`model.js` `knownDomainsOnly`; `{part: 'unknown-domain', domain}`),
    keeps the value shown for a domain the file's root does not hold, and shows
    the active head: only the domains whose value differs are put back, in
    domain order (`cells` first, then `mapping`, then `views` before every
@@ -363,15 +373,55 @@ The load itself is one owned operation (`_runOwnedRestore`):
 8. the lazy chunks are read while the head is shown and new actions wait:
    the other parts and arrays, the other values, the journal, the
    conversations; then the file must end, every value a step refers to must be
-   held, and no value, part or array may be left unreferenced;
+   held, and no value, part or array may be left unreferenced (values are not
+   checked for a reference when a tree could not be read: its values cannot be
+   listed);
 9. the trackers are added beside the history's (a saved state: they replace
    them), the progress notification ends with
    **Session fully restored**, and `onLoaded` runs: the camera path starts
    playing when it was saved with Autoplay on and has two keyframes
    (`cinematic-camera` `startAutoplay`).
 
-Any failure after step 7 began, and **Cancel**, puts back what was shown before
-and keeps the trackers there were; nothing is applied piecemeal. A failure is
+The head is put back part by part (F155, `history.js` `putBack`'s `failed`,
+`readSaved`): a domain whose owner refuses its value keeps what is shown, is
+listed in `unrestored` (`{part: 'domain', domain, error}`), and the next
+domain is put back; each tracker is checked on its own (`validateTracker`),
+one this version cannot read (`HistoryModelError`) is left out
+(`{part: 'tracker', tracker, active, error}`), and when it is the one shown
+its head is kept as a new tracker of its name with its conversations
+(`showLoaded`). A domain this version does not have (F164) is left out of
+every step, journal entry and paused draft before anything is checked
+(`knownDomainsOnly`), named first in `unrestored`; nothing here shows it, so it
+makes no step. A starting view puts back the domains it knows and names the
+others in the same words (`history.showValues` resolves `{leftOut}`). A domain left as shown becomes a step of the active
+tracker, *Not restored from the saved state: … (kept as shown)*
+(`unrestoredLabel`), so the head and what is shown agree. The serializer
+says each part in a sentence of its own (`describeUnrestored`): a part a
+history written by another version holds (`app-stamp.js`
+`writtenByOtherVersion`: an earlier or later version, or this version with
+another catalog) that this version refused is said as saved by that version,
+never as a problem inside Cellucid; the same holds for a whole-load failure
+(`describeLoadFailure`). A continued autosave with a part not restored is not
+written into (`autosave.js`: the `loaded` event's `unrestored`); the history
+goes on as a new saved state. An agent's `history_saved_open` returns the
+sentences as `not_restored`. A kept conversation the chat cannot show is
+said too (`conversation.js` `unreadConversationNotice`).
+
+Heavy work a load finds once its file is read (F167: the cells' totals a
+normalized restore, a mapping onto another counts matrix or a replayed step
+sums) is named on the load's own progress line, with its **Cancel**: the load
+hands every restore and replayed step a `heavy` (`_restore`'s `loadHeavy`)
+that asks an agent's load first (`history_saved_open`'s `ctx.heavy`) and then
+shows the work's own words (`estimate.doing`, `expression-values.js`
+`CELL_TOTALS_DOING`: *Summing each cell's counts for normalized values…*),
+whether the load is a session file, a saved state of this browser, a file of
+steps replayed, or a starting view. Heavy work a step a replay applies again
+finds is its replay's (`dispatcher.js`: an internal dispatch's `meta.heavy`).
+
+Any failure of the structure after step 7 began (a value a step names
+missing, a conversation of a tracker the file does not hold, a cancellation,
+the dataset replaced), and **Cancel**, puts back what was shown before and
+keeps the trackers there were. A failure is
 said once, on the load's own progress notification (marked reported, so the
 session controls do not say it again). The autosave keeps a loaded session as
 a new saved state, whole.
@@ -395,7 +445,7 @@ output chunk at once (WebKit inflates everything written to it), so
   (DEFLATE), no reserved flag bit, and a trailer ISIZE equal to the declared
   size modulo 2^32;
 - feeds the input in slices (`createSlicedInputStream`), so the stream is
-  cancelled within one slice once its output passes the declared size, and
+  canceled within one slice once its output passes the declared size, and
   the thread is handed back between slices;
 - requires exactly the declared length.
 
@@ -407,7 +457,7 @@ inflate is "Gzip input is not exactly one well-formed member: …".
 
 ### Cancellation outcomes
 
-Two coded aborts exist: a load cancelled by the person (**Cancel** on its
+Two coded aborts exist: a load canceled by the person (**Cancel** on its
 progress, `cancelled('user', …)`) and a load superseded by a newer one
 (`cancelled('superseded', …)`). Direct serializer APIs reject with the coded
 `AbortError` (its `kind` `user` or `superseded`), so lifecycle owners settle
@@ -456,6 +506,13 @@ the value they held at the root) — rather than drop it silently.
 `cellucid-datasets` imports these functions (`scripts/publish_session_preset.mjs`)
 rather than restating the rule. Do not route a starting view through the
 generic **Load**: it is applied only by `restorePublishedDefaultState()`.
+Applying it leaves `STARTING_VIEW_SHOWN_CONTROL_IDS` (the viewer background)
+as shown: `history.showValues(values, keepShownControls)` reads what is shown
+before putting the root back. The background is the person's look, as the
+theme is; one never chosen follows the theme (`backgroundForTheme`). Before
+this rule, the starting view's restore dispatched the background's `change`,
+which kept Studio (light) as the person's pick on every first visit, so the
+background never followed the theme again (bug hunt F46, 2026-11-10).
 
 ## The library file (`.cellucid-library`)
 
@@ -498,7 +555,7 @@ into the manifest at save and re-derived from the open dataset at load:
 | `cellOrder.embedding` | `state.getViewLayoutKey('live')`, named under the data mapping | `{key, columns}`: an `obsm` key with its 0-based columns |
 | `cellOrder.dimension` | `state.getViewDimensionLevel('live')` | exactly 1, 2, or 3 |
 | `cellOrder.digest` | `state.dimensionManager.getCellOrderDigest(<the live layout>)`: the reader worker's sums of that embedding's stored values (`data/cell-order-digest.js`) | 16 lowercase hex characters |
-| `dataMapping` | `state.getDataMapping()` | a canonical data mapping (`data/data-mapping.js`): the embeddings turned on and each dimension's default, vector bindings, neighbour graph, gene names, expression matrix, `log1p`, highly variable genes, latent space, and `modality` for a dataset of several modalities |
+| `dataMapping` | `state.getDataMapping()` | a canonical data mapping (`data/data-mapping.js`): the embeddings turned on and each dimension's default, vector bindings, neighbor graph, gene names, expression matrix, `log1p`, highly variable genes, latent space, and `modality` for a dataset of several modalities |
 
 `getDatasetFingerprint()` is asynchronous (the digest is the reader worker's)
 and throws unless `state.positionsArray` is a `Float32Array` of exactly
@@ -529,9 +586,9 @@ session's share, in priority order or in the order the file gives them.
   cells does not matter, and a set's sums are the sums of its parts.
 - The digest of `n` cells is `fmix32(high ^ fmix32(n ^ 0x297a2d39))` followed
   by `fmix32(low ^ fmix32(n ^ 0x2c1b3c6d))`, 16 lowercase hexadecimal digits
-  (`fmix32` is MurmurHash3's finaliser).
+  (`fmix32` is MurmurHash3's finalizer).
 
-It is never taken over display coordinates: those are centred and scaled by
+It is never taken over display coordinates: those are centered and scaled by
 the bounds of the cells an embedding was first read for, a frame an opening
 grown or cut in place keeps, so they depend on how the cells were opened.
 
@@ -587,11 +644,11 @@ another embedding would make them distrust a sound dataset.
 | A damaged file (a manifest, chunk, array, value or tree that breaks the format) | `history-file.js` | "This session file is damaged: …", naming what |
 | No dataset open | `verifySessionFingerprint()` | to open the dataset the session was saved on (named), then load the session again |
 | A different dataset | the counts differ, or the counts agree but the id differs | both cell and gene counts, or both datasets by name, and to open the one the session was saved on |
-| An enabled embedding this dataset cannot show; a data-mapping group (neighbour graph, modality, gene names, expression, `log1p`, highly variable genes, latent space, vector fields) whose saved choice this dataset cannot use, or which this dataset cannot change and is shown with another value | `describeDataMappingMismatch()` | the embedding or the group is named, with the reason it cannot be used, or both values |
+| An enabled embedding this dataset cannot show; a data-mapping group (neighbor graph, modality, gene names, expression, `log1p`, highly variable genes, latent space, vector fields) whose saved choice this dataset cannot use, or which this dataset cannot change and is shown with another value | `describeDataMappingMismatch()` | the embedding or the group is named, with the reason it cannot be used, or both values |
 | `cellOrder.embedding` names no layout of this dataset | `verifySessionFingerprint()` | the embedding and its dimension are named |
 | `cellOrder.digest` differs, everything else matches | `verifySessionFingerprint()` | the same name and counts but other cell coordinates: the cells are listed in another order, or were exported again from a re-computed embedding, so every saved selection could mark the wrong cells |
 | A field or gene in `requires` is missing | `describeMissingRequiredFields()` | every missing key at once |
-| A state domain this version does not have | `history.load` | the domain is named, with "Open it in the version of Cellucid it was saved with." |
+| A state domain this version does not have | `history.load` | not refused: left out of every step and named in the notice that ends the load (F164) |
 
 None of these messages carries identifiers or internal vocabulary. No
 dataset-agnostic part of a refused file (its layout, say) is salvaged: the

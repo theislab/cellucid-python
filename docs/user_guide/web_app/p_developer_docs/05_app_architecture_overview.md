@@ -24,7 +24,7 @@ If you are new to the codebase, start here before diving into any single module.
 ```
 cellucid/index.html
   ├─ defines: sidebar DOM + <canvas id="glcanvas">, CSP, deferred (disabled) controls
-  ├─ loads:   ui/core/*-init.js, code-load-watch.js, file-drop-guard.js (classic, pre-module)
+  ├─ loads:   ui/core/*-init.js, code-load-watch.js, file-drop-guard.js, press-guard.js (classic, pre-module)
   └─ runs:    assets/js/app/main.js  (ES module)
 
 main.js (orchestrator)
@@ -67,7 +67,7 @@ The high-level startup flow is:
 1) `cellucid/index.html` declares its import map (every module at the URL
    naming its bytes), runs its classic bootstraps (`ui/core/preconnect-init.js`,
    `ga-init.js`, `theme-init.js`, `viewport-init.js`, `code-load-watch.js`,
-   `file-drop-guard.js`), then loads `assets/js/app/main.js` as an ES module.
+   `file-drop-guard.js`, `press-guard.js`), then loads `assets/js/app/main.js` as an ES module.
    The parser stops at the style gate (`<script id="cellucid-style-gate">`,
    CELLUCID_STYLE_GATE, straight after the stylesheet link) until the
    stylesheet and all it imports are in, so no engine parses `<body>` or fires
@@ -199,13 +199,13 @@ Deep dive: {doc}`08_ui_modules_map`.
 ## Actions, state domains and the history
 
 Every state change a person, an agent, a Python or R host or a replay can make
-is an **action** of one catalogue (`app/actions/`), dispatched through one
+is an **action** of one catalog (`app/actions/`), dispatched through one
 dispatcher that checks its parameters, orders it against the actions running
 on the same state, records it as one **step** of the history and rolls a
 failed one back. A control dispatches the action it stands for
 (`dispatchFromControl`); settings controls and camera gestures are recorded by
-observation. The state is split into fifteen **state domains** (`cells`,
-`mapping`, `field-overlays`, … `layout`), each with one owner in
+observation. The state is split into sixteen **state domains** (`cells`,
+`mapping`, `expression`, `field-overlays`, … `layout`), each with one owner in
 `app/state/domains/` that captures and restores its value through the
 `DataState` methods the controls use. The **history** (`app/history/`) keeps
 trackers of step trees and every domain value by content hash, so undo, redo
@@ -214,7 +214,7 @@ and a jump put values back instead of recomputing. Deep dive:
 
 An **agent** (the chat bar with the person's API key, Claude or ChatGPT
 through the Cellucid relay, or a local app through `cellucid mcp`) acts
-through the same catalogue: each action is one tool, every call runs through
+through the same catalog: each action is one tool, every call runs through
 one tool call (`app/agent/bridge/tool-call.js`) as origin `agent`, the
 person's permissions decide whether it runs, asks or is refused
 (`app/agent/presence/`), and its steps undo as one turn. Deep dive:
@@ -337,7 +337,7 @@ If you are reporting an issue (even as a non-developer), include:
 
 1) **Environment**
    - Browser + OS
-   - Hosted (`https://www.cellucid.com`) vs local app (`http://localhost:8000`) vs a Python/R viewer (notebook or browser tab)
+   - Hosted (`https://www.cellucid.com`) vs local app (`http://localhost:4173`, `npm run serve`) vs a Python/R viewer (notebook or browser tab)
 
 2) **Dataset identity**
    - dataset id (and where it came from: local-user folder, remote server, GitHub repo/path)

@@ -49,7 +49,7 @@ def test_squash_phrases() -> None:
 
 def test_a_paused_period_that_changed_the_data_is_listed_and_said_plainly(tracker) -> None:  # type: ignore[no-untyped-def]
     scratch = list(tracker.path_to("s14"))
-    # Recording was paused while the filters and the colours changed (the person and a notebook acted).
+    # Recording was paused while the filters and the colors changed (the person and a notebook acted).
     scratch[-1] = dataclasses.replace(scratch[-1], touches=("filters", "colors"))
     text = methods_paragraph(scratch, dataset=DATASET, version=None, notes=tracker.notes[:0], groups=tracker.groups)
     assert text == "\n\n".join([
@@ -101,3 +101,16 @@ def test_a_squashed_step_that_only_presented_is_counted(tracker) -> None:  # typ
     assert pseudocode_text(path, dataset_name=None, version=None, tracker="T", branch="B", groups=tracker.groups).endswith(
         "# Changes made with recording paused: Colors, Settings (values only)\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("open_cells", "share"),
+    [(2_000, "10%"), (1_100, "5.5%"), (19_999, "99%"), (3, "0.015%"), (19_900, "99%")],
+)
+def test_a_share_of_the_cells_is_written_as_the_web_app_writes_it(tracker, open_cells: int, share: str) -> None:  # type: ignore[no-untyped-def]
+    # formatShare (cellucid/assets/js/utils/format-units.js): whole from 10%, never 100% short of
+    # every cell; two significant figures below. Before round 9 this said "6%" for 5.5% and the
+    # web app "5.5%" (R9U-3), and below 1% the web app's own two copies differed.
+    dataset = {**DATASET, "cells": 20_000, "open_cells": {"open": open_cells, "of": 20_000, "method": "uniform", "seed": 0}}
+    text = methods_paragraph(list(tracker.path_to("s14"))[:1], dataset=dataset, version=None)
+    assert f"was opened on {open_cells:,} of its 20,000 cells ({share})" in text

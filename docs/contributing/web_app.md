@@ -48,7 +48,7 @@ documentation change is a pull request against `cellucid-python`, not against
 - developer documentation: {doc}`/user_guide/web_app/p_developer_docs/index`
   (`cellucid-python/docs/user_guide/web_app/p_developer_docs/`)
 
-If you change UI or behaviour in the `cellucid` repository, update the matching
+If you change UI or behavior in the `cellucid` repository, update the matching
 page here in the same change, so the description users read on ReadTheDocs
 matches the app they are running.
 

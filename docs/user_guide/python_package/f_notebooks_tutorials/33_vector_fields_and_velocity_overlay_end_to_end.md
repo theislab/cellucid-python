@@ -245,7 +245,7 @@ viewer
 
 The 3,696-cell Pancreas sample in 2D (**Planar**) with its velocity field
 drawn as particle trails; the **Vector field** controls (field, density,
-speed, trail, size, opacity, colour scheme, Sync with LOD) are open beside it. A `velocity_umap` key is the field `velocity`.
+speed, trail, size, opacity, color scheme, Sync with LOD) are open beside it. A `velocity_umap` key is the field `velocity`.
 ```
 
 ---

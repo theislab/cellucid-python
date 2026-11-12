@@ -99,7 +99,7 @@ Recommended:
 - run `cellucid serve … --no-browser` on the remote machine,
 - create an **SSH tunnel** from your laptop,
 - open the exact **Viewer URL** printed by the server through the local tunnel
-  (it ends in `/?anndata=true`).
+  (`/?viewer=true&viewerId=…&viewerToken=…&anndata=true`).
 
 Step-by-step: {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
 

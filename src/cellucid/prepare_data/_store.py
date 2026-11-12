@@ -16,7 +16,7 @@ and every chunk is one request and one decode:
   fields, the stored outlier quantiles -- into chunks of
   :data:`CELL_CHUNK_ELEMENTS`, so a subsample (the first rows of a file in
   priority order) reads little beyond its own cells;
-- arrays it reads whole -- var columns and index, ``X/indptr``, the neighbour
+- arrays it reads whole -- var columns and index, ``X/indptr``, the neighbor
   graph -- into chunks of :data:`WHOLE_CHUNK_ELEMENTS`, so a whole read is a
   handful of requests;
 - a two-dimensional array read by rows (an embedding) holds every column of a
@@ -27,7 +27,7 @@ Every chunk is compressed with DEFLATE (:data:`DEFLATE_LEVEL`), which browsers
 inflate natively (``DecompressionStream``): HDF5's gzip filter in an
 ``.h5ad``, zlib (Zarr v2) or gzip (Zarr v3) in a Zarr store, unsharded. Before
 it, every array of values wider than one byte is byte-shuffled, which puts the
-similar high bytes of neighbouring values together -- except the expression
+similar high bytes of neighboring values together -- except the expression
 values themselves (a sparse ``X``'s ``data``, a dense ``X``), which repeat
 whole and compress best as they are. The shuffle is HDF5's shuffle filter in
 an ``.h5ad`` and numcodecs' ``Shuffle`` filter in Zarr v2 (a v2 filter is any
@@ -79,7 +79,7 @@ from ._priority import ORIGINAL_POSITION_COLUMN, PREFIX_COUNTS_KEY
 #: priority order over 150 ms and 5 MB/s (`.h5ad`): against 2^16, a 1% subsample's
 #: 99 genes fetched 2.4 instead of 8.9 MB (0.68 instead of 1.94 s), and every
 #: cell's 99 genes 8.7 instead of 14.5 MB (1.90 instead of 3.06 s), each gene
-#: dragging fewer of its neighbours; 2^12 fetched less still (0.8 MB) but its
+#: dragging fewer of its neighbors; 2^12 fetched less still (0.8 MB) but its
 #: chunk index, 16 times larger, cost the first gene 0.64 MB and a round trip.
 SLICED_CHUNK_ELEMENTS = 2**14
 
@@ -748,7 +748,7 @@ def _write_root(
 
 
 #: The user block an ``.h5mu`` starts with: mudata reads its first bytes
-#: (``MuData``) to recognise the file, and the HDF5 signature follows it.
+#: (``MuData``) to recognize the file, and the HDF5 signature follows it.
 H5MU_USERBLOCK_BYTES = 512
 
 
@@ -806,7 +806,12 @@ def _write_zarr_folder(path: Path, content: Elements | StoreContent, zarr_format
 
     root = zarr.open_group(str(path), mode="w", zarr_format=zarr_format)
     # Every array unsharded: one chunk is one file, read with one request.
-    with anndata.settings.override(auto_shard_zarr_v3=False):
+    # Every chunk stored, one that holds only the fill value too (as
+    # cellucid-r and the served store write them): zarr-python leaves it out
+    # by default, and a web host answers a chunk left out with 404, which the
+    # browser reports as an error (the priority seed of 0 at every opening).
+    # Leaving it out saves no request: a reader asks for it either way.
+    with anndata.settings.override(auto_shard_zarr_v3=False), zarr.config.set({"array.write_empty_chunks": True}):
         _write_root(root, "zarr", zarr_format, content)
     # A browser cannot list a folder: the consolidated metadata is how it
     # learns every array and group with one request. zarr-python warns that

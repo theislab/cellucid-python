@@ -25,7 +25,7 @@ If you're not technical, think:
 
 - **Dataset** = the "slide under the microscope" (the actual data).
 - **Session** = the lab notebook of everything you did at the microscope, in
-  order: where you looked, what you coloured by, what you filtered and
+  order: where you looked, what you colored by, what you filtered and
   highlighted, and which page of the notebook is open.
 
 Every change you make is one **step** of the history (see
@@ -85,7 +85,7 @@ Practical implication:
 ## Fast path (wet lab / non-technical): save your work and send it to someone
 
 1) Load your dataset.
-2) Explore until you have what you want (colour by a field, filters,
+2) Explore until you have what you want (color by a field, filters,
    highlights, kept views).
 3) Open the **State** section of the sidebar.
 4) Under **Session**, click **Share…**, then **Save file**.
@@ -104,13 +104,14 @@ and Edge, **Load…** offers
 
 ## Practical path (computational users): what "state" actually means
 
-What you can change is split into fifteen parts. A step records which parts it
+What you can change is split into sixteen parts. A step records which parts it
 changed, and their value before and after. A session file holds those values
 for every step.
 
 - **Parts of the whole dataset view:**
   - the cells to open and the genes read for them,
   - the data mapping (which stored arrays are plotted and read),
+  - the expression values (genes normalized and/or log1p, or as stored),
   - fields and labels (renames, deleted fields, fields you made),
   - gene sets,
   - the views (kept views, their layout, the focused view, linked cameras,
@@ -121,9 +122,9 @@ for every step.
   - analysis windows and the analysis panel, with their results,
   - layout (docked and floating panels, open sections, sidebar, theme).
 - **Parts each view has its own of** (the live view and each kept view):
-  - the field or gene it is coloured by,
+  - the field or gene it is colored by,
   - its filters,
-  - its colours,
+  - its colors,
   - cells hidden one by one,
   - its camera and navigation mode.
 
@@ -151,8 +152,7 @@ A load is all or nothing:
    shown.
 4. The other steps' values are read while it is shown; a new step waits for
    them.
-5. The progress notification ends as **Loaded** with **Session fully
-   restored.**
+5. The load ends in a notice reading **Session fully restored.**
 
 If anything fails, or you press **Cancel**, Cellucid puts back what was shown
 before and keeps the trackers you had. Loading another session while one is
@@ -189,7 +189,7 @@ You will see one of these messages, each naming what actually happened:
 |---|---|---|
 | The session was saved on a different dataset (with both cell and gene counts named) | it is not this dataset | open the dataset the session was saved on |
 | The session was saved on a different dataset with the same number of cells and genes (naming both datasets by the names they show) | the sizes agree exactly and the identity does not: two datasets, or one dataset reached two ways under two ids | open the dataset the session was saved on |
-| The session uses an embedding (or neighbour graph, modality, gene names, expression matrix, expression transform, highly variable genes, latent space, or vector field) this dataset does not have or cannot use, naming it | it was saved on another version of the dataset (a saved choice this dataset does have is put back, not refused) | open the dataset version the session was saved on |
+| The session uses an embedding (or neighbor graph, modality, gene names, expression matrix, expression transform, highly variable genes, latent space, or vector field) this dataset does not have or cannot use, naming it | it was saved on another version of the dataset (a saved choice this dataset does have is put back, not refused) | open the dataset version the session was saved on |
 | The dataset has the same name and counts but its cell coordinates differ | either the cells are listed in a different order, or the same cells were exported again from a re-computed embedding; a one-way digest cannot say which | load the version the session was saved on, or re-create the selections here |
 | The session uses observation fields or genes the dataset does not have, naming every one | it was saved on another version of the dataset | open the dataset version the session was saved on |
 | The session was saved by an earlier version of Cellucid (session format 3, or older), which this version no longer reads | a session file now holds the history of every step (session format 4); an earlier one held one saved state | open it in the version of Cellucid that saved it, or re-create the session in this version |

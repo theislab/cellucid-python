@@ -14,9 +14,10 @@ Before deep-diving, answer:
 1) Are you loading:
    - a browser-selected **`.h5ad`**, `.zarr.zip`, Zarr folder or another file
      or folder Cellucid reads (**Open…**),
-   - a Python-served path (the exact printed **Viewer URL**, `/?anndata=true`),
-   - a notebook or R viewer (`/?viewer=true&viewerId=…`, opened by
-     `show_anndata()` or `cellucid_view()`),
+   - a Python- or R-served viewer in a browser tab (the exact printed
+     **Viewer URL**, `/?viewer=true&viewerId=…&viewerToken=…&anndata=true`, from `cellucid serve`,
+     `serve_anndata()`, `AnnDataViewer` or `cellucid_view()`),
+   - a notebook widget (`show_anndata()`, or `cellucid_view()` in Jupyter),
    - a **remote server** (`?remote=...`, only when the viewer origin can fetch that scheme),
    - a **GitHub dataset catalog** (`?data=gh:...`),
    - or another **data link** (`?data=...`: a catalog folder on a static host
@@ -90,8 +91,9 @@ about the address itself (for example `Invalid GitHub path. Use format:
 owner/repo/folder (or owner/repo@branch/folder) for a folder holding
 datasets.json, owner/repo/path/file.h5ad, or paste a GitHub URL.`). An empty
 bar asks for an address the same way. A `?remote=` address in the page URL
-must be one absolute `http(s)://` base without a trailing slash, a query or a
-fragment.
+is read as the address bar reads a server (a trailing slash or an upper-case
+scheme is the same server); one that is no `http(s)://` address, or carries a
+query or a fragment, is refused as the link's, naming the parameter.
 
 :::{warning}
 Read the size row and the format row as opposites. *Larger than Cellucid opens
@@ -114,15 +116,32 @@ left is a transfer the browser abandoned from underneath the request, or a
 defect inside Cellucid.
 
 Every failure notification keeps the raw error text folded under its
-**Details** (and in the browser console), never in the sentence. A dataset you
+**Details** (and in the browser console), never in the sentence. It stays
+until you close it or the next dataset begins to open: a failure about what
+was open (a file refused, a sample view not applied, a field that could not be
+read) does not stay beside a dataset it is not about. A dataset you
 chose from the list that does not open is said once: with its host's
 answer when there is one (*"`<name>`" could not be opened: `<file>` was
 not found at `<host>` (HTTP 404, not found) …*), else as *Could not open
 "`<name>`".*; the explanation and **Try again** stay next to the selector. Quote the **Details** if you report the problem.
 
-Local file failures use neither shape. They quote the specific defect instead —
-for example `The selected file is not a valid HDF5 file, so it cannot be an AnnData (.h5ad) file…` or
-`Cellucid found nothing to plot. It needs an obsm array with one row per cell…`.
+Local file failures use neither shape. They quote the specific defect instead,
+with what to do — for example:
+
+- `The selected file is not a valid HDF5 file, so it cannot be an AnnData (.h5ad) file…`
+  (the bytes are not the format the name promises);
+- `This .h5ad file could not be read (… is truncated …). It may be corrupted or truncated…`
+  (the container is damaged; the same for Zarr, ZIP and R files, compressed or not);
+- `This .h5ad file breaks the AnnData format: obs index child '_index' was not found…`
+  (the container reads, but an element in it is not what anndata writes: a
+  writer's error, a hand-built file or damage; the rule it breaks is named, at
+  opening or when that field or gene is read; a Loom file or a 10x matrix
+  says `… is not laid out as its format requires: …`);
+- `cells.h5ad is a web page saved under a data file's name, not the data…`
+  (a page saved from a browser; for a link: `… answered with a web page
+  instead of the file (a sign-in, preview or error page). Open the file's
+  direct download link instead.`);
+- `Cellucid found nothing to plot. It needs an obsm array with one row per cell…`.
 
 ---
 
@@ -131,7 +150,7 @@ for example `The selected file is not a valid HDF5 file, so it cannot be an AnnD
 ### Symptom: “I chose Open… › File… or Folder…, but nothing happens”
 
 **Likely causes (ordered)**
-1) **You cancelled the file chooser.** This is by far the most common cause and
+1) **You canceled the file chooser.** This is by far the most common cause and
    it is deliberately silent: Cellucid shows no error, starts no spinner, and
    leaves the current dataset in place.
 2) You denied the file or directory permission prompt.
@@ -164,7 +183,7 @@ for example `The selected file is not a valid HDF5 file, so it cannot be an AnnD
 :::{note}
 A direct `.h5ad` has no size limit and is read from disk as each view needs it,
 so a large file opens in seconds. What can take longer is the first gene of a
-cell-major (CSR) matrix while it is reorganised by gene in the background; a
+cell-major (CSR) matrix while it is reorganized by gene in the background; a
 progress notice shows how far that is.
 :::
 
@@ -205,7 +224,7 @@ waits for answers. Include that console line when you report a hang.
 
 **Likely causes (ordered)**
 1) A very large cell-major (CSR) `.h5ad` opened directly in the browser while
-   its matrix is still being reorganised by gene (watch the progress notice).
+   its matrix is still being reorganized by gene (watch the progress notice).
 2) The data host is down, or a content blocker blocks some of its requests
    (the console's `[cellucid:transfer]` warnings name them).
 3) Remote server URL is wrong or unreachable.
@@ -227,7 +246,7 @@ waits for answers. Include that console line when you report a hang.
   ```
 
 **Fix**
-- Large cell-major `.h5ad` → wait for the reorganisation notice to finish,
+- Large cell-major `.h5ad` → wait for the reorganization notice to finish,
   or save the matrix column-major (CSC), which needs none. This is the same
   whether the file is opened in the browser or served
   ({doc}`04_server_tutorial`).
@@ -325,10 +344,10 @@ outs/ folder and open it from this computer (Open… › Folder…)".
 - Otherwise compute an embedding with the lines the message gives, and open
   the file they write.
 
-(recognised-but-refused)=
+(recognized-but-refused)=
 ### Symptom: “… is a Cell Ranger molecule table” or “… a MuData store whose modalities share features”
 
-Cellucid recognised the file but does not show it:
+Cellucid recognized the file but does not show it:
 
 - **`molecule_info.h5`** is a table of molecules, not a count matrix. Open
   `filtered_feature_bc_matrix.h5` from the same `outs/` folder, or the folder.
@@ -457,7 +476,7 @@ file again.
 
 **Fix**
 - Choose the matrix and the gene names under **Session › Data mapping › Genes** (see [Genes and expression](13_data_mapping.md#genes-and-expression)).
-- Provide a valid gene expression matrix, and name the genes from the `var` column your readers will search — `gene_id_column=...` in server/Jupyter mode, `var_gene_id_column=...` with `prepare()`.
+- Provide a valid gene expression matrix, and name the genes from the `var` column your readers will search — `var_gene_id_column=...` (`prepare()`, server and Jupyter mode alike).
 - For a large row-major (CSR) matrix, the first gene waits while the browser
   builds a gene index, once; later genes read only their own entries. A
   column-major (CSC) matrix needs no index.
@@ -621,9 +640,9 @@ The sign-in step sits under the **Link or server** bar and in a notification
   has no Google or Microsoft registration: a copy of the app hosted elsewhere
   never has one ({doc}`16_private_drive_onedrive`). Open the link on
   www.cellucid.com, or download the file and open it with **Open…**.
-- **"Your organisation (…) lets only an administrator approve Cellucid"**
+- **"Your organization (…) lets only an administrator approve Cellucid"**
   (Microsoft said "Need admin approval", `AADSTS90094`, `AADSTS90095`,
-  `AADSTS65001`). Your work or school account's organisation approves apps
+  `AADSTS65001`). Your work or school account's organization approves apps
   itself. Ask your IT administrator, with the steps in
   [Work and school accounts](16_private_drive_onedrive.md#work-and-school-accounts-administrator-approval)
   (the line under the bar links them), or click **Use another account** and
@@ -633,8 +652,8 @@ The sign-in step sits under the **Link or server** bar and in a notification
   page with "Return to the application without granting consent", which
   Microsoft reports the same way. Click **Sign in again** and accept, or see
   the previous item.
-- **"Your organisation lets only the people it assigned use Cellucid"**
-  (`AADSTS50105`), or **"Your organisation's sign-in policy does not let this
+- **"Your organization lets only the people it assigned use Cellucid"**
+  (`AADSTS50105`), or **"Your organization's sign-in policy does not let this
   browser or device sign in to Cellucid"** (Conditional Access, `AADSTS53003`).
   Ask your IT administrator, or use **Use another account**.
 - **"Microsoft does not accept this site's sign-in (AADSTS…)"** or **"Google
@@ -642,7 +661,7 @@ The sign-in step sits under the **Link or server** bar and in a notification
   match the page (a redirect address, the client): open Cellucid at
   www.cellucid.com.
 - **"Your Google Workspace administrator does not allow Cellucid for this
-  account"**, or Google's window said **"Access blocked"**. Your organisation
+  account"**, or Google's window said **"Access blocked"**. Your organization
   restricts third-party apps. Click **Use another account** (a personal Google
   account works), or ask your administrator, with the steps in
   [Google Workspace accounts](16_private_drive_onedrive.md#google-workspace-accounts-administrator-approval).

@@ -62,7 +62,7 @@ disagrees replaces the row, it does not sit beside it.
    its warm-up. A message's time is its worker's busy time, measured in the
    pool's thread. The decoder with the most bytes per busy millisecond over
    all its phases, **the warm-up included**, wins: a person's reads are
-   short, so a decoder fast only once optimised is charged its cold cost. A read's chunk arriving mid-phase voids the phase.
+   short, so a decoder fast only once optimized is charged its cold cost. A read's chunk arriving mid-phase voids the phase.
    Chunks small enough to travel together are not kept as samples, so their
    keys stay with the prior.
 5. **Every non-reference decoder is checked against the reference, but
@@ -116,7 +116,7 @@ disagrees replaces the row, it does not sit beside it.
 |---|---|---|---|
 | 2026-10-28 | DEFLATE stays on the platform's sliced stream as the reference. | Fastest on one core in every engine (h5py chunks 439 / 275 / 413 MB/s Chromium / Firefox / WebKit) against a whole-chunk stream (135 / 171 / 84) and fflate (213 / 160 / 80). | An own inflater in JavaScript. |
 | 2026-10-29 | Zstandard, LZ4 and Blosc decoded by their own libraries (zstd 1.5.6, lz4 1.10.0, c-blosc 1.21.6) compiled to WebAssembly by a repository script. | The libraries are the format references (zstd checksums verified, LZ4's end-of-block rule enforced) and win 1.3 to 4.2× on one core in Chromium and WebKit (zstd 1.7×, LZ4 3.4 to 3.7×, Blosc-LZ4 1.3 to 1.5×, bit shuffle 4.2×). | emscripten builds, a runtime, WASI, committed upstream source. |
-| 2026-10-29 | Build pinned and reproducible: zig 0.13.0 (SHA-256 per host from ziglang.org), release tarballs by the SHA-256 their release pages publish (c-blosc publishes none: its tag archive's digest as Homebrew pins it), `wasm32-freestanding`, SIMD, no C library. | `--check` rebuilds byte for byte; the test pins the module and its licences by digest. | Unpinned toolchains, a module nobody can rebuild. |
+| 2026-10-29 | Build pinned and reproducible: zig 0.13.0 (SHA-256 per host from ziglang.org), release tarballs by the SHA-256 their release pages publish (c-blosc publishes none: its tag archive's digest as Homebrew pins it), `wasm32-freestanding`, SIMD, no C library. | `--check` rebuilds byte for byte; the test pins the module and its licenses by digest. | Unpinned toolchains, a module nobody can rebuild. |
 | 2026-10-29 | fflate 0.8.2 vendored unchanged as the second DEFLATE decoder. | Firefox's `DecompressionStream` contends across threads on small chunks: one worker 292 to 310 MB/s, eight 159 to 160 in total; fflate at eight Firefox workers 882. | Choosing the inflater by engine name. |
 | 2026-10-29 | The JavaScript decoders stay as each family's second decoder (`formats/zarr/codecs/javascript/`). | Firefox runs them faster than its WebAssembly, for zstd, LZ4 and Blosc alike (below). | Deleting a decoder that still wins on one engine. |
 | 2026-10-29 | `'wasm-unsafe-eval'` added to the app page's `script-src` only. | Compiling WebAssembly needs it; workers inherit the page's policy. JavaScript evaluation stays refused. | `'unsafe-eval'`; granting it on other pages. |
@@ -193,7 +193,7 @@ path's check (decision above, removed; r6 confirms).
 ## Known limits and open items
 
 - **Firefox and WebAssembly.** Firefox runs these WebAssembly decoders 3 to
-  5× slower than its JavaScript decoders (engine behaviour, measured above);
+  5× slower than its JavaScript decoders (engine behavior, measured above);
   the probe keeps the JavaScript decoders there.
 - **Firefox `DecompressionStream` on small chunks** contends across threads
   (an engine property); fflate is chosen there by measurement.
@@ -208,7 +208,7 @@ path's check (decision above, removed; r6 confirms).
   slower in every engine × codec; repeated runs are open.
 - **Compiled-module sharing** (above) is open until its Chromium failure is
   understood.
-- **`.mtx.zst` text matrices** are not recognised by the input-format
+- **`.mtx.zst` text matrices** are not recognized by the input-format
   registry (three repositories).
 - **bz2 and LZMA** decode at 25 to 66 MB/s (rare in stores; left).
 - **R's zstd files**: R 4.5.3 builds here (and conda-forge's) lack zstd, so
@@ -218,7 +218,7 @@ path's check (decision above, removed; r6 confirms).
 
 | Concern | Module(s) | Tests |
 |---|---|---|
-| WebAssembly build, pins, licences | `cellucid/scripts/build-wasm-codecs.mjs`, `cellucid/scripts/wasm-codecs/`, `cellucid/assets/wasm/codecs.wasm`, `cellucid/assets/wasm/LICENSES/` | `cellucid/tests/wasm-codecs-contract.test.mjs` |
+| WebAssembly build, pins, licenses | `cellucid/scripts/build-wasm-codecs.mjs`, `cellucid/scripts/wasm-codecs/`, `cellucid/assets/wasm/codecs.wasm`, `cellucid/assets/wasm/LICENSES/` | `cellucid/tests/wasm-codecs-contract.test.mjs` |
 | Loading and calling the module | `formats/io/wasm-codecs.js`, `cellucid/assets/workers/scripts.js` | `wasm-codecs-contract`, `cellucid/tests/worker-bundles-contract.test.mjs` (the module among the workers' assets) |
 | Decoder lists, priors, probe | `formats/io/decoder-choice.js` | `cellucid/tests/formats-decode-pool.test.mjs` |
 | Kept decisions | `formats/io/decoder-memory.js`, `app/ui/modules/kept-stores-dialog.js` | `formats-decode-pool`, `cellucid/tests/kept-stores-dialog.test.mjs` |

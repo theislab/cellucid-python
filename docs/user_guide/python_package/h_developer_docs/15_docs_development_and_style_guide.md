@@ -151,7 +151,7 @@ This is not a style preference. A bare backtick is inline literal text, so
 Sphinx does not resolve it, does not check that the target exists, and does not
 turn it into a link. A `{doc}` role does all three, and the docs build runs with
 `-W`, so a `{doc}` target that does not exist **fails the build**. Written in
-backticks, the same wrong target renders as plain grey text and ships silently:
+backticks, the same wrong target renders as plain gray text and ships silently:
 a reference to `k_sessions_sharing/index` survived in the highlighting section
 long after the directory was renamed to `l_sessions_sharing/`, because nothing
 was ever asked to resolve it.

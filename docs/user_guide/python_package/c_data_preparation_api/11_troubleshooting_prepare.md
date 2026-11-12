@@ -24,7 +24,7 @@ on disk. The message names the argument, what was found, and usually the fix.
 | Message | Cause and fix |
 |---|---|
 | `dataset_id ... must be 1-180 ASCII bytes, start with an ASCII letter or digit ...` | Use letters, digits, `.`, `_` and `-` only, e.g. `"pbmc-3k-v1"`. |
-| `dataset_name is displayed verbatim, so it must not carry characters that have no glyph ...` | Remove leading/trailing spaces or invisible characters from the text named. |
+| `dataset_name is displayed verbatim, so it must not carry characters that have no glyph ...` | Remove the invisible character it names from the text named (white space at the ends of a name, description, citation or source is removed for you; a URL's is not). |
 | `citation_text is required whenever citation_url is supplied.` (or `source_name` / `source_url`) | A link needs its text. |
 | `... must be an absolute http(s) address` | Use a full `https://...` address. |
 
@@ -55,7 +55,7 @@ on disk. The message names the argument, what was found, and usually the fix.
 
 | Message | Cause and fix |
 |---|---|
-| `Connectivity matrix must be exactly symmetric: a directed neighbour graph ...` | A directed graph (Seurat's `RNA_nn`, Scanpy's `distances`): pass a symmetric one (`obsp['connectivities']`, Seurat's `RNA_snn`), or symmetrize: `(g + g.T) / 2`. A diagonal (each cell its own neighbour, as in `RNA_snn`) is left out, never refused. |
+| `Connectivity matrix must be exactly symmetric: a directed neighbor graph ...` | A directed graph (Seurat's `RNA_nn`, Scanpy's `distances`): pass a symmetric one (`obsp['connectivities']`, Seurat's `RNA_snn`), or symmetrize: `(g + g.T) / 2`. A diagonal (each cell its own neighbor, as in `RNA_snn`) is left out, never refused. |
 | `Connectivity weights must all be non-negative.` | Pass connectivities, not signed or distance-like values. |
 | `Vector field 'velocity' on embedding 'pca': the viewer binds a vector field to the embedding 'X_<basis>' it is named for ('velocity_umap' to 'X_umap'), so the embedding needs an 'X_<basis>' key. ...` | Name the embedding `X_<basis>` (`X_pca`) ({doc}`08_vector_fields_velocity_displacement`). |
 | `Vector field 'velocity' on embedding 'X_umap' has 3 columns, and 'X_umap' has 2: a vector field has one component per embedding column.` | Pass an array exactly as wide as its embedding. |

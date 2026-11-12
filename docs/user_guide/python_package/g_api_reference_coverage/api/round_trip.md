@@ -131,6 +131,19 @@ cellucid.pull(adata, "~/Downloads/cellucid-exports")   # a folder, a file, or a 
   rule.
 - **Pushed columns.** A field this notebook pushed comes back only with
   `include_pushed=True`: `adata` holds it already.
+- **Colors.** A column's colors go with it, where Scanpy keeps them
+  (`uns["<column>_colors"]`, under the name the column is written to): a
+  categorical field gets the colors it is shown in, one a category in its
+  order — from a live viewer, the colors its view in focus shows (each
+  categorical result carries them, `colors`); from a session file, in the
+  view in focus, a category's color the person or an agent chose, else its
+  `palette`, else Cellucid's own category colors; any other column a pull
+  writes gets none (colors left under its name described another column and
+  are removed), and a column a viewer pull removes takes its colors with it.
+  The obs-column CSV carries no colors. A session file saved by a viewer
+  given another `dataset_id=` than the one the object declares is pulled with
+  that id: `cellucid.pull(adata, path, dataset_id=...)`. The rule is the apply's
+  ({ref}`apply-column-colors`); R writes the same.
 - **One call, one write.** Every column is built first and `obs` changes
   once: a pull that fails leaves `adata` as it was. A MuData takes the
   columns on its global `obs`.
@@ -151,7 +164,7 @@ session's gene sets; the renames are the apply's to write.
 | Export | File | Read back as |
 |---|---|---|
 | Highlights › **CSV** | a `highlight` column `cellucid_highlight__<group id>` per group of the page (`true`/`false`), a row per open cell | one `bool` column per group |
-| a field's **Export** | the field under its name, of kind `categorical` or `continuous`, a row per open cell | a `category` or `float` column |
+| a field's **Export** | the field under its name, of kind `categorical` (with its categories in the field's order) or `continuous`, a row per open cell | a `category` column with the field's categories in its order, or a `float` column |
 | Highlights › **.h5ad** | the highlighted cells as an AnnData, in the dataset's own order (ascending original position): obs names, every obs field (continuous ones as `float32` or `float64`, as the viewer holds them), each group as a `bool` column, the genes by identifier (the var index; the shown names in `var['symbol']` when they differ), the expression rows (CSR, `float32`) of the matrix the data mapping reads, the embeddings shown (`float32` or `float64`, as stored). A key an HDF5 file cannot name -- one holding `/`, or `.` -- is written renamed (`/` as `_`), and the app says which | `anndata.read_h5ad` |
 | a gene set editor's **Export**, Marker genes › GMT | GMT, genes by identifier | {func}`read_gmt`, `uns["cellucid"]["gene_sets"]` |
 | Save session | `.cellucid-session` | {func}`apply_cellucid_session_to_anndata` |
@@ -161,6 +174,7 @@ An obs-column CSV declares itself, so nothing is guessed from its values:
 ```text
 obs_name,leiden,cellucid_highlight__highlight_1,score
 kind,categorical,highlight,continuous
+categories,"[""10"",""0"",""2""]",,
 AAACCTG-1,0,true,0.25
 AAACGGG-1,10,false,
 ```
@@ -168,8 +182,18 @@ AAACGGG-1,10,false,
 The header row names the columns (`obs_name` first); the kind row (`kind`
 first) gives each column's kind: `highlight` (`true`, `false`, or empty for
 unknown), `categorical` (labels -- `0`, `1`, `10` or `True` stay labels;
-empty: no category) or `continuous` (numbers; empty: no value). A CSV
-without a kind row is refused, saying how to add one. A cell the file does
+empty: no category) or `continuous` (numbers; empty: no value). The
+categories row (`categories` first) lists each `categorical` column's
+categories in the field's order, as a JSON array of strings in one CSV cell,
+and is empty for the other kinds. The column is read back with exactly
+those categories, in that order -- a trajectory's order, or a category no
+cell holds (`2` above), comes back as the field had it, never in the order
+the rows happen to show. A label the list does not name, a list that is not
+a JSON array of distinct strings, a categorical column without a list and
+another column with one are refused, naming the column. A CSV without a
+kind row or a categories row is refused, saying what the first rows hold.
+The categories travel as text (as the cells do), and whether they are
+ordered does not travel: the `.h5ad` export keeps both. A cell the file does
 not list is unknown (`<NA>`, or missing), as an unopened cell of a subsample;
 a cell the file names that `adata` does not have is refused, naming it.
 
@@ -205,14 +229,16 @@ Dot plot offer it under **From notebook**, and it is saved with the session
 ## The wire (for developers)
 
 Results travel on the viewer channel ({doc}`../../e_jupyter_hooks/05_architecture_viewer_channel`,
-protocol schema 4, `viewer-protocol.json`):
+protocol schema 5, `viewer-protocol.json`):
 
 - the `result` event (binary): a header `{type, epoch, revision,
   kind, id, nObs, meta, cells, values}` and a body of `cells` original
   positions (`uint32`, strictly ascending, none when `cells` is `null`) then
   `values` (one per named cell, or per cell of the dataset when `cells` is
   `null`; a code type's largest value is "no category", `NaN` "no value").
-  Kinds: `highlight`, `categorical`, `continuous`, `geneSet` (`genes` by
+  Kinds: `highlight`, `categorical` (`key`, `categories`, `colors` — one
+  `#rrggbb` a category, the colors its view in focus shows it in — and
+  `origin`), `continuous`, `geneSet` (`genes` by
   identifier, the var index, and `symbols`, the names shown in the same
   order when a var column names the genes, else `null`), `visibility`
   (`visible`), `subset` (`open`, the open cells);

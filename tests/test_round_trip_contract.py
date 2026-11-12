@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ from _serverless_viewer import serverless_viewer
 
 import cellucid
 import cellucid.jupyter as jupyter
+from cellucid._category_colors import default_category_color
 from cellucid.anndata_session._results import field_push_params, read_obs_names
 from cellucid.jupyter import _wire as wire
 
@@ -99,7 +101,8 @@ def _viewer_results(*, open_cells: list[int] | None = None) -> list[dict[str, An
         _result("subset", "open", {"digest": "0123456789abcdef"}, cells=open_cells),
         _highlight("highlight_1", [0, 2]),
         _highlight("highlight_2", [3], label="Picked"),
-        _result("categorical", "user_cat_1", {"key": "annotation", "categories": ["B", "T"], "origin": "user"},
+        _result("categorical", "user_cat_1", {"key": "annotation", "categories": ["B", "T"],
+                                              "colors": ["#123456", "#0077c8"], "origin": "user"},
                 cells=open_cells, values=cats),
         _result("continuous", "signature:T score", {"key": "T score", "origin": "analysis"},
                 cells=[1, 3], values=np.array([0.5, -1.0], dtype=np.float32)),
@@ -144,7 +147,9 @@ class FakeViewer:
         outcome: Any = None
         if message["action"] == "field.push":
             meta = (
-                {"key": params["key"], "categories": params["categories"], "origin": "notebook"}
+                {"key": params["key"], "categories": params["categories"],
+                 "colors": [default_category_color(index) for index in range(len(params["categories"]))],
+                 "origin": "notebook"}
                 if params["kind"] == "categorical"
                 else {"key": params["key"], "origin": "notebook"}
             )
@@ -164,7 +169,7 @@ class FakeViewer:
         body = bytearray(json.dumps(outcome).encode("utf-8"))
         self.viewer._handle_frontend_message({
             "type": "action_result", "requestId": message["requestId"],
-            "step": {"id": "s1", "label": message["action"]}, "body": body,
+            "step": {"id": "s1", "label": message["action"]}, "unrecorded": None, "body": body,
         })
         return True
 
@@ -211,6 +216,10 @@ def test_one_pull_writes_every_highlight_label_and_score_with_one_naming_scheme(
     assert set(adata.uns["cellucid"]["pulled"]) == set(summary.columns)
     assert adata.uns["cellucid"]["pulled"]["annotation"] == {
         "kind": "categorical", "id": "user_cat_1", "pulled_from": "viewer", "key": "annotation", "origin": "user"}
+    # The colors the viewer shows the field in (its result carries them, RCC-1);
+    # a column of no categories takes none.
+    assert adata.uns["annotation_colors"] == ["#123456", "#0077c8"]
+    assert not any(key.endswith("_colors") for key in adata.uns if key != "annotation_colors")
 
 
 def test_a_second_pull_replaces_its_own_columns_and_removes_the_gone_ones(connected) -> None:
@@ -246,13 +255,13 @@ def test_prune_removes_only_what_the_viewer_no_longer_holds(connected) -> None:
 def test_a_file_pull_and_a_viewer_pull_keep_each_others_columns(connected, tmp_path: Path) -> None:
     viewer, _fake = connected()
     adata = _adata()
-    (tmp_path / "groups.csv").write_text("obs_name,groups\nkind,categorical\ncell-0,a\ncell-1,b\n", encoding="utf-8")
+    (tmp_path / "groups.csv").write_text('obs_name,groups\nkind,categorical\ncategories,"[""a"",""b""]"\ncell-0,a\ncell-1,b\n', encoding="utf-8")
     cellucid.pull(adata, tmp_path / "groups.csv")
     summary = viewer.pull(adata)
     assert "groups" in adata.obs and summary.removed == []
     assert adata.uns["cellucid"]["pulled"]["groups"]["pulled_from"] == "groups.csv"
     # A file column of a name the viewer wants is another source's: a conflict.
-    (tmp_path / "annotation.csv").write_text("obs_name,annotation\nkind,categorical\ncell-0,a\n", encoding="utf-8")
+    (tmp_path / "annotation.csv").write_text('obs_name,annotation\nkind,categorical\ncategories,"[""a""]"\ncell-0,a\n', encoding="utf-8")
     with pytest.raises(ValueError, match="'annotation'"):
         cellucid.pull(adata, tmp_path / "annotation.csv")
 
@@ -541,29 +550,67 @@ def test_the_shared_gmt_fixture_reads_as_the_web_app_and_r_read_it() -> None:
 
 
 def test_the_shared_obs_column_csv_fixture_keeps_every_declared_kind() -> None:
-    path = _shared_fixture("obs_columns.csv", "b0da8ee441532a3ac2199e9e22f827c82002c4e63ce1b7bec5fc3d4800ec41e9")
+    path = _shared_fixture("obs_columns.csv", "0353146eabba6a9fa76c565a5710dcce275471fcbfd7674f3a86d8c6e2799db2")
     adata = ad.AnnData(obs=pd.DataFrame(index=["c0", "c,1", "c2", "c3", "c4", "c5"]))
     summary = cellucid.pull(adata, path)
     obs = adata.obs
     assert str(obs["cellucid_highlight__highlight_1"].dtype) == "boolean"
     assert obs["cellucid_highlight__highlight_1"].tolist() == [True, False, True, pd.NA, False, pd.NA]
-    # Labels that read as numbers, or as True/False, stay labels.
-    assert list(obs["leiden"].cat.categories) == ["0", "1", "10"]
+    # Labels that read as numbers, or as True/False, stay labels; the
+    # categories are the categories row's, in its order (not the rows'),
+    # one no cell holds among them.
+    assert list(obs["leiden"].cat.categories) == ["10", "1", "0", 'unused, "quoted"']
     leiden = obs["leiden"].astype(object)
     assert leiden.where(leiden.notna(), None).tolist() == ["0", "1", "10", "1", None, None]
-    assert list(obs["flag"].cat.categories) == ["True", "False"]
+    assert list(obs["flag"].cat.categories) == ["False", "True"]
     flag = obs["flag"].astype(object)
     assert flag.where(flag.notna(), None).tolist() == ["True", "False", "True", None, "False", None]
     np.testing.assert_array_equal(obs["score"].to_numpy(), [0.5, np.nan, -1.25, 3.0, 1000.0, np.nan])
     assert {info["kind"] for info in summary.columns.values()} == {"highlight", "categorical", "continuous"}
 
 
+def test_a_fields_csv_keeps_the_fields_category_order_and_its_empty_categories(tmp_path: Path) -> None:
+    # F125: categories came back in the rows' order of first appearance,
+    # and a category no cell holds was lost.
+    path = tmp_path / "stage.csv"
+    path.write_text(
+        'obs_name,stage\nkind,categorical\ncategories,"[""Pre-endocrine"",""Progenitor"",""Endocrine"",""Unassigned""]"\n'
+        "cell-0,Endocrine\ncell-1,Progenitor\ncell-2,Pre-endocrine\ncell-3,\n", encoding="utf-8")
+    adata = _adata()
+    cellucid.pull(adata, path)
+    stage = adata.obs["stage"]
+    assert list(stage.cat.categories) == ["Pre-endocrine", "Progenitor", "Endocrine", "Unassigned"]
+    assert stage.astype(object).where(stage.notna(), None).tolist() == [
+        "Endocrine", "Progenitor", "Pre-endocrine", None, None, None]
+    # The categories row is the file's word on each column; anything else is refused.
+    for categories_row, cells, refusal in [
+        ('categories,"[""a""]"', "cell-0,b", "categorical column 'x' holds 'b'"),
+        ("categories,", "cell-0,a", "categorical column 'x' lists no categories"),
+        ('categories,"[""a"",1]"', "cell-0,a", "not a JSON array of strings"),
+        ('categories,"[""a"""', "cell-0,a", "not a JSON array of strings"),
+        ('categories,"{""a"":1}"', "cell-0,a", "not a JSON array of strings"),
+        ('categories,"[""a"",""a""]"', "cell-0,a", "lists the category 'a' twice"),
+        # A label is the categories row's exactly: " a" is not "a".
+        ('categories,"[""a""]"', "cell-0, a", "holds ' a'"),
+    ]:
+        path.write_text(f"obs_name,x\nkind,categorical\n{categories_row}\n{cells}\n", encoding="utf-8")
+        with pytest.raises(ValueError, match=re.escape(refusal)):
+            cellucid.pull(_adata(), path)
+    path.write_text('obs_name,x\nkind,continuous\ncategories,"[""a""]"\ncell-0,1\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="continuous column 'x' lists categories"):
+        cellucid.pull(_adata(), path)
+    # The two-row layout (no categories row) is not an obs-column CSV.
+    path.write_text("obs_name,x\nkind,categorical\ncell-0,a\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="categories row"):
+        cellucid.pull(_adata(), path)
+
+
 def test_the_web_apps_exports_pull_in_one_call(tmp_path: Path) -> None:
     (tmp_path / "highlight.csv").write_text(
-        "obs_name,cellucid_highlight__highlight_1\nkind,highlight\n" + "".join(
+        "obs_name,cellucid_highlight__highlight_1\nkind,highlight\ncategories,\n" + "".join(
             f"cell-{index},{'true' if index in {0, 2} else 'false'}\n" for index in range(N_OBS)), encoding="utf-8")
-    (tmp_path / "annotation.csv").write_text("obs_name,annotation\nkind,categorical\ncell-0,T\ncell-1,B\ncell-5,T\n", encoding="utf-8")
-    (tmp_path / "score.csv").write_text("obs_name,T score\nkind,continuous\ncell-3,1.5\ncell-1,\n", encoding="utf-8")
+    (tmp_path / "annotation.csv").write_text('obs_name,annotation\nkind,categorical\ncategories,"[""B"",""T""]"\ncell-0,T\ncell-1,B\ncell-5,T\n', encoding="utf-8")
+    (tmp_path / "score.csv").write_text("obs_name,T score\nkind,continuous\ncategories,\ncell-3,1.5\ncell-1,\n", encoding="utf-8")
     cellucid.write_gmt({"T": ["CD3E"]}, tmp_path / "markers.gmt")
     adata = _adata()
     summary = cellucid.pull(adata, tmp_path)
@@ -571,22 +618,23 @@ def test_the_web_apps_exports_pull_in_one_call(tmp_path: Path) -> None:
     assert obs["cellucid_highlight__highlight_1"].tolist() == [True, False, True, False, False, False]
     annotation = obs["annotation"].astype(object)
     assert annotation.where(annotation.notna(), None).tolist() == ["T", "B", None, None, None, "T"]
+    assert list(obs["annotation"].cat.categories) == ["B", "T"]
     np.testing.assert_array_equal(obs["T score"].to_numpy(), [np.nan, np.nan, np.nan, 1.5, np.nan, np.nan])
     assert summary.gene_sets == {"T": ["CD3E"]}
     # Again: the columns and gene sets it wrote are replaced, not conflicts.
     again = cellucid.pull(adata, tmp_path, on_conflict="suffix")
     assert set(again.columns) == set(summary.columns)
     assert list(adata.uns["cellucid"]["gene_sets"]) == ["T"]
-    (tmp_path / "bad.csv").write_text("obs_name,x\nkind,continuous\ncell-99,1\n", encoding="utf-8")
+    (tmp_path / "bad.csv").write_text("obs_name,x\nkind,continuous\ncategories,\ncell-99,1\n", encoding="utf-8")
     with pytest.raises(ValueError, match="not in this object"):
         cellucid.pull(adata, tmp_path / "bad.csv")
     (tmp_path / "bad.csv").write_text("obs_name,x\ncell-1,1\n", encoding="utf-8")
     with pytest.raises(ValueError, match="kind row"):
         cellucid.pull(adata, tmp_path / "bad.csv")
-    (tmp_path / "bad.csv").write_text("obs_name,x\nkind,continuous\ncell-1,one\n", encoding="utf-8")
+    (tmp_path / "bad.csv").write_text("obs_name,x\nkind,continuous\ncategories,\ncell-1,one\n", encoding="utf-8")
     with pytest.raises(ValueError, match="continuous column 'x' holds 'one'"):
         cellucid.pull(adata, tmp_path / "bad.csv")
-    (tmp_path / "bad.csv").write_text("obs_name,x\nkind,label\ncell-1,one\n", encoding="utf-8")
+    (tmp_path / "bad.csv").write_text("obs_name,x\nkind,label\ncategories,\ncell-1,one\n", encoding="utf-8")
     with pytest.raises(ValueError, match="of kind 'label'"):
         cellucid.pull(adata, tmp_path / "bad.csv")
 
@@ -611,6 +659,31 @@ def test_a_bool_column_is_pushed_with_the_labels_r_pushes() -> None:
     assert params["categories"] == ["true"]
 
 
+def test_identifiers_past_2_53_are_pushed_as_their_exact_text() -> None:
+    # As the viewer reads such a column (F116): text, never the nearest float32.
+    ids = np.array([2**60 + 1, 2**60 + 3, 2**60 + 1], dtype=np.int64)
+    params = field_push_params(ids, "donor_id", n_obs=3, obs_names=None)
+    assert params["kind"] == "categorical"
+    assert params["categories"] == [str(2**60 + 1), str(2**60 + 3)]
+    assert params["values"].tolist() == [0, 1, 0]
+    nullable = pd.Series(pd.array([2**62, None, 5], dtype="Int64"))
+    params = field_push_params(nullable, "donor_id", n_obs=3, obs_names=None)
+    assert params["categories"] == [str(2**62), "5"]
+    assert params["values"].tolist() == [0, 255, 1]
+    params = field_push_params(np.array([2**53 - 1, 0, 1], dtype=np.int64), "count", n_obs=3, obs_names=None)
+    assert params["kind"] == "continuous"
+
+
+def test_a_modality_column_of_identifiers_is_placed_on_the_cells_as_text() -> None:
+    from cellucid.anndata_session._mudata import _placed_column
+
+    rows = np.array([1, -1, 0])
+    placed = _placed_column(pd.Series(np.array([2**60 + 7, 2**60 + 9], dtype=np.int64)), rows)
+    assert list(placed) == [str(2**60 + 9), None, str(2**60 + 7)]
+    numbers = _placed_column(pd.Series(np.array([3, 4], dtype=np.int64)), rows)
+    assert numbers.dtype == np.float64
+
+
 def test_pull_reads_obs_names_of_a_file_alone(tmp_path: Path) -> None:
     path = tmp_path / "data.h5ad"
     _adata().write_h5ad(path)
@@ -626,6 +699,21 @@ def test_mudata_takes_the_pull_on_its_global_obs(connected) -> None:
         pytest.skip("the two modalities share their cells")
     viewer.pull(mdata)
     assert "cellucid_highlight__highlight_1" in mdata.obs
+
+
+@pytest.mark.parametrize("colors", [
+    ["#123456"],  # one short
+    ["#123456", "#0077C8"],  # not lowercase
+    ["#123", "#0077c8"],  # not #rrggbb
+    "#123456",  # not a list
+    None,
+])
+def test_a_categorical_results_colors_are_one_lowercase_hex_color_a_category(colors: Any) -> None:
+    meta = {"key": "annotation", "categories": ["B", "T"], "colors": colors, "origin": "user"}
+    with pytest.raises((ValueError, TypeError), match=r"colors must be one #rrggbb color"):
+        wire._require_result_meta("categorical", meta)
+    assert wire._require_result_meta("categorical", {**meta, "colors": ["#123456", "#0077c8"]})["colors"] == [
+        "#123456", "#0077c8"]
 
 
 def test_the_protocol_document_lists_every_result_kind() -> None:

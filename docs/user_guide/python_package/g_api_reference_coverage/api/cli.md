@@ -52,7 +52,7 @@ cellucid serve <data_path> [--port 8765] [--host 127.0.0.1] [--no-browser] [--qu
 Cellucid's own files are not datasets, and are refused before anything is
 served with the sentence the web app says for them (the registry's
 `cellucidFiles`): a `.cellucid-session` file is the history of one dataset
-(open its dataset, then load it in the web app, or read it with
+(open it in the web app, where its dataset opens with it, or read it with
 `cellucid.read_session()`), and a `.cellucid-library` file holds datasets of
 the web app's My datasets (import it there).
 
@@ -99,8 +99,8 @@ once from the start.
 | `--modality NAME` | The modality a multimodal dataset (a MuData) opens on | without it the file's own `modality`, else the first gene-expression modality; refused for an AnnData, which has one feature space |
 | `--embedding-1d`, `--embedding-2d`, `--embedding-3d KEY[:COLUMNS]` | The `obsm` array (and 0-based columns) of a dimension slot | |
 | `--normalize-embeddings`, `--no-normalize-embeddings` | Scale every embedding into the viewer's coordinate range, or show the coordinates the store holds | without either, the file's own `normalizeEmbeddings`, else scaled |
-| `--knn KEY` | The `obsp` matrix drawn as the neighbour graph, usually `connectivities` | read only when a view draws it |
-| `--gene-id-column COLUMN` | The `var` column (`raw.var` with `--expression raw`) whose values name the genes | the var index when omitted |
+| `--knn KEY` | The `obsp` matrix drawn as the neighbor graph, usually `connectivities` | read only when a view draws it |
+| `--var-gene-id-column COLUMN` | The `var` column (`raw.var` with `--expression raw`) whose values name the genes | the var index when omitted |
 | `--expression X\|raw\|layer:NAME` | Where gene expression is read | |
 
 Every AnnData launch option is checked against the store's metadata before the
@@ -168,7 +168,7 @@ nothing to plot…`, listing every `obsm` entry and why it was not used.
 
 ## `--knn KEY`
 
-Names the `obsp` matrix the viewer draws as the neighbour graph. Without it the
+Names the `obsp` matrix the viewer draws as the neighbor graph. Without it the
 viewer draws `obsp['connectivities']` when the store has one. Either way the
 graph is read the first time a view draws edges, never at startup.
 
@@ -281,7 +281,7 @@ An import that fails is not one condition, and the advice differs:
 
 ## Troubleshooting
 
-### Symptom: “Unable to detect format”
+### Symptom: “… is not a file Cellucid opens” or “… is not a folder Cellucid reads”
 Fix:
 - Provide a path that is:
   - a file whose name a format names (`.h5ad`, `.zip`, `.h5mu`, `.loom`, `.h5`,

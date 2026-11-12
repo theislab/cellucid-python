@@ -26,7 +26,7 @@ Usage:
 
 Communication (bidirectional):
     Python → Frontend:
-        - one method per action of the catalogue (viewer.color_by(),
+        - one method per action of the catalog (viewer.color_by(),
           viewer.highlight_cells(), viewer.history_get(), ...), each returning
           an ActionRequest; viewer.act(type, **params) for any of them
         - viewer.push() (a pandas column as a field)
@@ -38,6 +38,8 @@ Communication (bidirectional):
 
     Frontend → Python:
         - ActionRequest.result(): an action's outcome, a read's result
+          (ActionRequest.unrecorded, and an ActionNotRecordedWarning, say why
+          a change made no history step)
         - @viewer.on_selection
         - @viewer.on_hover
         - @viewer.on_click
@@ -60,19 +62,21 @@ The module is a package. Its submodules are:
 ``_wire``
     Exact value checks for every message on the viewer channel.
 ``_actions``
-    The action catalogue (``cellucid/action_catalog.json``, the web app's
+    The action catalog (``cellucid/action_catalog.json``, the web app's
     document byte for byte) and the one conversion of every action's
     parameters; :data:`OMIT`.
 ``_actions_generated``
     :class:`ViewerActions`: one method per action, written by
-    ``scripts/generate_actions.py`` from the catalogue (never by hand).
+    ``scripts/generate_actions.py`` from the catalog (never by hand).
 ``_hooks``
-    :class:`HookRegistry` and :class:`ViewerState`.
+    :class:`HookRegistry`, :data:`HOOK_EVENTS` (the events a hook takes) and
+    :class:`ViewerState`.
 ``_history``
     :class:`LiveHistory` (``viewer.history``) and :class:`LoadSessionRequest`.
 ``_viewer``
     :class:`AnnDataViewer` (the viewer API, and a browser-tab viewer),
-    :class:`ActionRequest`, :class:`SessionRequest` and
+    :class:`ActionRequest`, :class:`ActionError`,
+    :class:`ActionNotRecordedWarning`, :class:`SessionRequest` and
     :func:`show_anndata`, notebook-context detection, the viewer-channel
     bridge, and interpreter-exit cleanup.
 ``_widget``
@@ -85,9 +89,10 @@ from typing import TYPE_CHECKING, Any
 from ._actions import OMIT, Omit, action_catalog
 from ._actions_generated import ViewerActions
 from ._history import LiveHistory, LoadSessionRequest
-from ._hooks import HookCallback, HookRegistry, ViewerState
+from ._hooks import HOOK_EVENTS, HookCallback, HookRegistry, ViewerState
 from ._viewer import (
     ActionError,
+    ActionNotRecordedWarning,
     ActionRequest,
     AnnDataViewer,
     SessionRequest,
@@ -110,8 +115,10 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "HOOK_EVENTS",
     "OMIT",
     "ActionError",
+    "ActionNotRecordedWarning",
     "ActionRequest",
     "AnnDataViewer",
     "HookCallback",

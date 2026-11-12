@@ -66,7 +66,7 @@ JavaScript memory and the GPU — not CPU speed:
 
 - **System RAM** (the tab's memory): about 18–19 bytes per cell for a 2D
   embedding and 23–24 for 3D once loaded, plus about 4 bytes per cell for each
-  field or gene you colour by.
+  field or gene you color by.
 - **GPU memory (VRAM)**: about 13 bytes per cell in 2D and 17 in 3D. On
   computers with unified memory (Apple silicon) both come out of the same RAM.
 - **At the largest sizes, count the whole footprint.** With levels of detail
@@ -123,7 +123,9 @@ that device.
 - A camera frames the same data on every screen shape: the 45° field of view
   applies to the plot's shorter side, so on a phone held upright a sample's
   preset or the default view shows across what a landscape screen shows down,
-  and nothing is cut off at the sides. A landscape screen is unchanged.
+  and nothing is cut off at the sides. A landscape screen is unchanged. Each
+  view of a grid takes its own pane's shape the same way: two views side by
+  side make two upright panes, which show a wide 2-D map whole.
 - On a touch screen the small icon buttons grow to fingertip size, and the
   controls that otherwise wait for a mouse to hover over them (the analysis
   rows' copy buttons, the highlight page tabs' buttons, plot toolbars) are always

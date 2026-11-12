@@ -31,12 +31,12 @@ SCope, LoomExperiment, loomR and SeuratDisk.
 | SCope's compound `Embedding`, `Embeddings_X` / `Embeddings_Y` | `X_embedding`, `X_embedding_<id>` |
 | `CellID` | the cell names |
 | `Gene` (repeats allowed) | the gene names, made unique as for any file |
-| `/col_graphs/<name>` | a neighbour graph |
+| `/col_graphs/<name>` | a neighbor graph |
 | `/attrs` (Loom 3) or the file's attributes (Loom 2) | `uns`; `title` names the dataset |
 
 Loom 2.0.1 stores text as ASCII with character references (`&#233;` for
 `é`); Cellucid shows the text it stands for. A file written with the matrix
-as cells × genes (loomR's order) is recognised by the length of its
+as cells × genes (loomR's order) is recognized by the length of its
 attributes and read without transposing.
 
 ```{figure} ../../../_static/screenshots/data_loading/loom-dataset-box.png
@@ -64,6 +64,14 @@ sc.tl.umap(adata)
 adata.write_h5ad("cells.h5ad")
 ```
 
+A file is recognized as Loom by its attribute groups (`col_attrs`,
+`row_attrs`), whatever its name. One without a two-dimensional `/matrix` is
+refused as a Loom file that is not laid out as its format requires, naming
+what is at `/matrix` (nothing, a group, or an array of another shape). The
+same holds for a 10x matrix missing `data`, `indices` or `indptr`, and an
+HDF5 file or Zarr store holding none of the formats Cellucid reads is said
+to be that, listing them.
+
 ---
 
 ## 10x Cell Ranger: `filtered_feature_bc_matrix.h5` and `outs/`
@@ -82,12 +90,12 @@ Ranger computes a UMAP, a t-SNE, a PCA and clusterings beside it, in the
    `kmeans_<k>_clusters`) is a categorical field.
 
 ```{figure} ../../../_static/screenshots/data_loading/tenx-outs-window.png
-:alt: The whole Cellucid window after a Cell Ranger outs/ folder was opened with Open… › Folder…: the Dataset box reads "10x Cell Ranger outs folder · this computer", and the canvas shows Cell Ranger's UMAP coloured by its clustering, gene_expression_clusters.
+:alt: The whole Cellucid window after a Cell Ranger outs/ folder was opened with Open… › Folder…: the Dataset box reads "Cell Ranger outs/ folder · this computer", and the canvas shows Cell Ranger's UMAP colored by its clustering, gene_expression_clusters.
 :width: 1440px
 
 A Cell Ranger `outs/` folder opened with **Open… › Folder…**: the Dataset box
 reads *Cell Ranger outs/ folder · this computer*, the view is Cell Ranger's
-UMAP, and it is coloured by Cell Ranger's own clustering,
+UMAP, and it is colored by Cell Ranger's own clustering,
 `gene_expression_clusters`, chosen under **Categorical obs**.
 ```
 

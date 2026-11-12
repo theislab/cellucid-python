@@ -57,7 +57,7 @@ A short notice says what is shown now and its place in the cycle, for example
 `2D · t-SNE (2 of 3)`. When no embedding of that dimension is turned on, the
 notice says so — `No 1D embedding is on. Turn one on in Session › Data
 mapping.` — and nothing changes. The shortcut sheet (`?`) lists the keys as
-`1D, 2D, 3D embedding · again: next`.
+`Embedding · again: next`.
 
 ---
 
@@ -69,7 +69,7 @@ Each view keeps its own embedding:
 - a kept view a 2D t-SNE,
 - another kept view three principal components in 3D.
 
-Cells, highlights and selections are shared; colouring, filters, camera,
+Cells, highlights and selections are shared; coloring, filters, camera,
 navigation mode, centroid labels and vector fields stay with each view.
 Sessions keep each view's embedding. See
 {doc}`04_view_layout_live_snapshots_small_multiples`.
@@ -81,7 +81,7 @@ Sessions keep each view's embedding. See
 ### Changes
 
 - **Point positions** change to the coordinates of the new embedding.
-- **Centroid labels** move to the new embedding's category centres.
+- **Centroid labels** move to the new embedding's category centers.
 - **The navigation mode**, when the dimension changes: 3D selects **Orbit**,
   1D and 2D select **Planar** — unless you chose a mode for this view in that
   dimension before; see below.
@@ -95,7 +95,7 @@ Sessions keep each view's embedding. See
 ### Does not change
 
 - The dataset, the cells, highlights and selections.
-- The view's field, filters and colours.
+- The view's field, filters and colors.
 - The camera position: every embedding is scaled to the same box.
 - **A navigation mode you chose for this view.** A view you set to Free-fly in
   3D flies again whenever it shows a 3D embedding.
@@ -133,8 +133,8 @@ face-on rather than at an angle.
 :alt: The same window after choosing UMAP · 1D in the Shows picker: the cells are spread along one axis, and the Navigation Mode select has followed the view to Planar.
 :width: 1440px
 
-**1D**. Every cell keeps its colour but has only one coordinate, so the whole
-dataset becomes a coloured line — an ordering, not a map. `Mode` is `Planar`
+**1D**. Every cell keeps its color but has only one coordinate, so the whole
+dataset becomes a colored line — an ordering, not a map. `Mode` is `Planar`
 here too: only a 3D embedding gets Orbit.
 ```
 

@@ -14,19 +14,29 @@
 //               nothing and exit non-zero on any difference
 //
 // Ports: the application is served by the web repository's own browser-test
-// server, so this honours the same two variables it does —
+// server, so this honors the same two variables it does —
 // CELLUCID_BROWSER_TEST_PORT and CELLUCID_BROWSER_TEST_SAMPLE_PORT — and adds
 // CELLUCID_DOCS_CATALOG_PORT (default: main port + 2) for the sample catalog
 // host (`cellucid-datasets/anndata/`, read through `?sampleCatalog=`).
 // Set them when another run already owns the default 4173/4174.
 //
+// Programs: scenarios that run Python, R or `cellucid serve` say so in
+// `requires` (see `REQUIREMENTS` in `scenarios.mjs`). Before anything starts,
+// each program the selected scenarios need is found — CELLUCID_DOCS_PYTHON,
+// CELLUCID_DOCS_RSCRIPT, CELLUCID_CLI, else `python3`, `Rscript`, `cellucid`
+// on the PATH — and checked for what it must load, and the run stops naming
+// whatever is missing.
+//
 // ---------------------------------------------------------------------------
 // THE FIVE THINGS THIS EXISTS TO GUARANTEE
 //
 // 1. DETERMINISM. The same scenario produces the same bytes. Fixed viewport,
-//    fixed device scale factor, fixed colour scheme, fixed locale and time
-//    zone, reduced motion, a seeded `Math.random` (the renderer's particle
-//    system and parts of the analysis layer draw from it), Playwright's own
+//    fixed device scale factor, fixed color scheme, fixed locale and time
+//    zone, reduced motion (the application then holds every script-drawn
+//    mover still: the velocity overlay is a still picture of the flow, the
+//    smoke and the highlight pulse hold), a seeded `Math.random` (generated
+//    element ids and window placement draw from it), a `performance.now()` a scenario can
+//    hold across a measured duration (`installHoldableClock`), Playwright's own
 //    `animations: 'disabled'`, and — the part that actually does the work — a
 //    settle loop that recaptures until two consecutive frames are byte-equal
 //    before anything is written. A WebGL canvas is not settled because a
@@ -101,7 +111,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 import { clearOverlay, OVERLAY_ROOT_ID, paintOverlay } from './overlay.mjs';
-import { SCENARIOS } from './scenarios.mjs';
+import { beginScenarioRequirements, checkRequirements, SCENARIOS } from './scenarios.mjs';
 import { startCatalogServer } from './serve-catalog.mjs';
 
 const run = promisify(execFile);
@@ -110,6 +120,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_ROOT = path.resolve(HERE, '..', '..');
 const PUBLISHED_SCREENSHOTS = path.join(DOCS_ROOT, '_static', 'screenshots');
 const MANIFEST_PATH = path.join(HERE, 'captures.json');
+/** The topic of the scenarios that prove the tool and are never published. */
+const PROOF_TOPIC = '_proof';
 
 // The workspace layout is a sibling checkout per repository. Both are
 // overridable so the tool is not welded to one machine's directory names.
@@ -313,13 +325,13 @@ async function startApplicationServer(ports) {
 }
 
 // ---------------------------------------------------------------------------
-// Page-side helpers (serialised into the browser; they close over nothing)
+// Page-side helpers (serialized into the browser; they close over nothing)
 // ---------------------------------------------------------------------------
 
 /**
  * Replace `Math.random` with a seeded generator before any application code
- * runs. The renderer's particle overlay and parts of the analysis layer draw
- * from it, so an unseeded run produces a different picture every time.
+ * runs. Generated element ids and window placement draw from it, so an
+ * unseeded run produces a different picture every time.
  *
  * @param {number} seed
  */
@@ -335,12 +347,40 @@ function installSeededRandom(seed) {
 }
 
 /**
- * Read the bounding rectangles of a list of selectors, in CSS pixels relative
- * to the viewport.
- *
- * @param {string[]} selectors
- * @returns {Array<{x: number, y: number, width: number, height: number}>}
+ * The page's `performance.now()`, which a scenario can hold: `{ clock:
+ * 'hold' }` stops it where it is, `{ clock: 'advance', ms }` moves the held
+ * clock on by exactly `ms`, `{ clock: 'release' }` lets it run again at real
+ * speed from where it was held (never backwards). An image that prints a
+ * measured duration ("Canceled after 1.5 s") then prints the scenario's
+ * fixed amount, not how fast the host ran the steps. Unheld, it is the real
+ * clock. Workers keep their own clocks; `Date` is `fixedTime`'s.
  */
+function installHoldableClock() {
+  const realNow = performance.now.bind(performance);
+  let offset = 0;
+  let held = null;
+  performance.now = () => (held === null ? realNow() - offset : held);
+  Object.defineProperty(window, '__captureClock', {
+    configurable: false,
+    enumerable: false,
+    value: Object.freeze({
+      hold() {
+        if (held === null) held = realNow() - offset;
+      },
+      advance(ms) {
+        if (held === null) throw new Error('The capture clock advances only while held.');
+        if (!(Number.isFinite(ms) && ms >= 0)) throw new RangeError('The capture clock advances by a finite, non-negative amount.');
+        held += ms;
+      },
+      release() {
+        if (held === null) return;
+        offset = realNow() - held;
+        held = null;
+      },
+    }),
+  });
+}
+
 /**
  * Viewport-relative CSS rectangles for a list of selectors.
  *
@@ -452,6 +492,36 @@ function anchorPoint(rect, at, dx, dy) {
   return { x: point[0] + dx, y: point[1] + dy };
 }
 
+/**
+ * Wait until startup is either showing the welcome overlay or done without
+ * it, and close the overlay unless it is to be kept (Escape, as a person
+ * does). It must be *waited for* before Escape is sent: the overlay paints
+ * before its key handler is wired, and an early Escape is swallowed, which
+ * leaves the overlay covering every later capture. Startup holds what waits
+ * for the welcome ("Continue where you left off?", a sample view's notices)
+ * until it closes, so a page reloaded by a step settles through here too
+ * (`{ reload: true }`).
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{keep?: boolean}} [options]
+ * @returns {Promise<boolean>} whether the overlay was shown
+ */
+async function settleWelcome(page, { keep = false } = {}) {
+  const welcome = page.locator('#welcome-modal');
+  await page.waitForFunction(
+    () => document.getElementById('welcome-modal')?.open === true
+      || document.documentElement.dataset.startupPhase === 'ready',
+    undefined,
+    { timeout: 120_000 }
+  );
+  if (!(await welcome.isVisible())) return false;
+  if (!keep) {
+    await page.keyboard.press('Escape');
+    await welcome.waitFor({ state: 'hidden' });
+  }
+  return true;
+}
+
 async function applyStep(page, step) {
   if (typeof step.run === 'function') return step.run(page);
   if ('waitFor' in step) {
@@ -497,7 +567,7 @@ async function applyStep(page, step) {
       step.select,
       step.label !== undefined ? { label: step.label } : step.value
     );
-    // Assert the effect, not the call. A screenshot captioned "coloured by
+    // Assert the effect, not the call. A screenshot captioned "colored by
     // clusters" that shows "Field: None" is the precise documentation defect
     // this tool exists to prevent, so a discarded selection must fail loudly.
     // Some controls are rebuilt while the choice is applied (the Shows picker
@@ -547,13 +617,28 @@ async function applyStep(page, step) {
       [selector, 'openSection' in step]
     );
   }
+  if ('clock' in step) {
+    // The page's held clock (`installHoldableClock`).
+    if (step.clock === 'hold') return page.evaluate(() => window.__captureClock.hold());
+    if (step.clock === 'advance') {
+      return page.evaluate(ms => window.__captureClock.advance(ms), step.ms);
+    }
+    if (step.clock === 'release') return page.evaluate(() => window.__captureClock.release());
+    throw new Error(`Unrecognized clock step: ${JSON.stringify(step)}`);
+  }
+  if ('reload' in step) {
+    // The same page opened again in this browser, through startup as the
+    // first opening went (`settleWelcome`).
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    return settleWelcome(page);
+  }
   if ('wait' in step) {
     // Present for scenes with no observable ready signal. Every use is recorded
     // in the manifest, because a timeout is an admission that the scenario has
     // no deterministic anchor yet.
     return page.waitForTimeout(step.wait);
   }
-  throw new Error(`Unrecognised step: ${JSON.stringify(step)}`);
+  throw new Error(`Unrecognized step: ${JSON.stringify(step)}`);
 }
 
 function clipFromRects(rects, padding, selectors, viewport) {
@@ -592,12 +677,192 @@ async function resolveClip(page, shot) {
   for (const selector of selectors) {
     await page.waitForSelector(selector, { state: 'visible' });
   }
-  return clipFromRects(
-    await readRects(page, selectors),
-    shot.padding ?? 0,
-    selectors,
-    viewport
-  );
+  await revealSubject(page, selectors);
+  return settledClip(page, selectors, shot.padding ?? 0, viewport);
+}
+
+/**
+ * Bring every part of the subject inside the viewport.
+ *
+ * The capture is of the viewport, so a subject that runs past its edge was
+ * clamped to it and photographed cut off, at the right size and with no
+ * error: a sidebar section opened low in the sidebar lost its last rows
+ * (`export-labels` ended at "Legend: Right", `core-camera-path-configured`
+ * at Rotation interpolation, with the rows their captions name below the
+ * fold). Each subject that is not wholly in view is scrolled into it, the
+ * least distance that shows it whole (`block: 'nearest'`), as its own
+ * scroller allows; `settledClip` then refuses one that still does not fit.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string[]} selectors
+ */
+async function revealSubject(page, selectors) {
+  for (const selector of selectors) {
+    await page.locator(selector).first().evaluate(element => {
+      const box = element.getBoundingClientRect();
+      const view = element.ownerDocument.defaultView;
+      if (box.top < 0 || box.left < 0 || box.bottom > view.innerHeight || box.right > view.innerWidth) {
+        element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    });
+  }
+}
+
+/**
+ * The crop without a sliver of what is beside the subject.
+ *
+ * The padding frames the subject with a few pixels of its background, and
+ * where the next control sits closer than that it took the top of that
+ * control's words too: `choose-local-data-control` ended on half of the
+ * Stored row's "1 connection speed", `correlation-results` on half of the
+ * hint under Run (bug hunt F74). Each side of the padding stops where the
+ * nearest text or control outside the subject begins (never inside the
+ * subject itself), so the frame holds the subject and its own background.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string[]} selectors
+ * @param {{x: number, y: number, width: number, height: number}} clip
+ */
+async function trimAtNeighbors(page, selectors, clip) {
+  // The subjects are the elements `readRects` measured: the first match of
+  // each selector through a Playwright locator, so `:has-text(…)` and
+  // `>> nth=-1` name the same element here as there (`document.querySelector`
+  // refused both and failed every capture whose crop used them).
+  const handles = [];
+  try {
+    for (const selector of selectors) {
+      handles.push(await page.locator(selector).first().elementHandle());
+    }
+    return await page.evaluate(([subjects, clip, overlayId]) => {
+      const boxes = subjects.map(element => element.getBoundingClientRect());
+      const inner = {
+        top: Math.min(...boxes.map(box => box.top)),
+        bottom: Math.max(...boxes.map(box => box.bottom)),
+        left: Math.min(...boxes.map(box => box.left)),
+        right: Math.max(...boxes.map(box => box.right)),
+      };
+      let top = clip.y;
+      let bottom = clip.y + clip.height;
+      let left = clip.x;
+      let right = clip.x + clip.width;
+      // The capture's own pointer and rings (`overlay.mjs`) are not the page's.
+      const overlay = document.getElementById(overlayId);
+      const inSubject = node => subjects.some(subject => subject.contains(node))
+        || overlay?.contains(node) === true;
+      const visible = element => {
+        const style = getComputedStyle(element);
+        return style.visibility !== 'hidden' && Number(style.opacity) > 0;
+      };
+      const ink = [];
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        if (node.textContent.trim() === '' || inSubject(node) || !visible(node.parentElement)) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        ink.push(...range.getClientRects());
+      }
+      for (const element of document.body.querySelectorAll('input, select, textarea, button, img, svg, canvas')) {
+        if (inSubject(element) || subjects.some(subject => element.contains(subject)) || !visible(element)) continue;
+        ink.push(...element.getClientRects());
+      }
+      for (const rect of ink) {
+        if (rect.width === 0 || rect.height === 0) continue;
+        const across = rect.right > left && rect.left < right;
+        const along = rect.bottom > top && rect.top < bottom;
+        if (!across || !along) continue;
+        if (rect.top >= inner.bottom - 0.5) bottom = Math.min(bottom, Math.max(inner.bottom, rect.top));
+        else if (rect.bottom <= inner.top + 0.5) top = Math.max(top, Math.min(inner.top, rect.bottom));
+        else if (rect.left >= inner.right - 0.5) right = Math.min(right, Math.max(inner.right, rect.left));
+        else if (rect.right <= inner.left + 0.5) left = Math.max(left, Math.min(inner.left, rect.right));
+      }
+      const x = Math.ceil(left);
+      const y = Math.ceil(top);
+      return { x, y, width: Math.floor(right) - x, height: Math.floor(bottom) - y };
+    }, [handles, clip, OVERLAY_ROOT_ID]);
+  } finally {
+    await Promise.all(handles.map(handle => handle.dispose()));
+  }
+}
+
+/**
+ * The crop, measured once the layout under it is final.
+ *
+ * A step returns when its condition is true, which is not when the page has
+ * finished laying out what it caused. Two things still move a subject after
+ * that, and both were measured mid-way before:
+ *
+ * - CSS transitions. The capture context asks for reduced motion, and the
+ *   app's reduced-motion rule (`base/_accessibility.css`) gives every
+ *   element `transition-duration: 0.01ms` with the initial
+ *   `transition-property: all`, so every property change — a menu placed
+ *   above the page (`open-data-menu.js` sets its `left`/`top`), a height set
+ *   from a custom property — is a transition that holds the old value until
+ *   the next animation frame. The open menus of `loading-open-menu` and
+ *   `state-history-menu` were measured at 0,0, where their transition
+ *   started, and photographed under their buttons.
+ * - Layout that follows layout: a `ResizeObserver` that draws again in the
+ *   next frame. The history graph sized itself one frame late (above), showed
+ *   a scrollbar for that frame, wrapped a label to two lines, and settled
+ *   18 px shorter once the observer drew it again
+ *   (`sessions-save-restore-01-session-controls`).
+ *
+ * So the crop is read only when no transition is running and its rectangle
+ * is the same on two reads a two-frame turn apart. `assertCropStillFramed`
+ * still guards the time the image takes to settle.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string[]} selectors
+ * @param {number} padding
+ * @param {{width: number, height: number}} viewport
+ */
+async function settledClip(page, selectors, padding, viewport) {
+  const deadline = Date.now() + 30_000;
+  let previous = null;
+  for (;;) {
+    await page.evaluate(async () => {
+      for (;;) {
+        const running = document.getAnimations().filter(
+          animation => animation instanceof CSSTransition && animation.playState === 'running'
+        );
+        if (running.length === 0) break;
+        await Promise.all(running.map(animation => animation.finished.catch(() => {})));
+      }
+      // Whatever a frame's observers scheduled runs in the next one.
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    });
+    const rects = await readRects(page, selectors);
+    const outside = rects.some(rect => (
+      rect.y < -0.5 || rect.x < -0.5
+        || rect.y + rect.height > viewport.height + 0.5
+        || rect.x + rect.width > viewport.width + 0.5
+    ));
+    const clip = clipFromRects(rects, padding, selectors, viewport);
+    if (
+      previous !== null &&
+      ['x', 'y', 'width', 'height'].every(key => previous[key] === clip[key])
+    ) {
+      // Settled. Only the padding may be clamped by the viewport: a subject
+      // cut by its edge would be photographed cut off.
+      if (outside) {
+        throw new Error(
+          `${JSON.stringify(selectors)} does not fit the ${viewport.width}x${viewport.height} ` +
+            `viewport (${rects.map(rect => `${Math.round(rect.width)}x${Math.round(rect.height)}` +
+            `+${Math.round(rect.x)}+${Math.round(rect.y)}`).join(', ')}), so the image would be ` +
+            'cut off at its edge. Collapse what is around it, crop a smaller part, or give ' +
+            'the scenario a taller `viewport`.'
+        );
+      }
+      return trimAtNeighbors(page, selectors, clip);
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `${JSON.stringify(selectors)} kept moving for 30 s ` +
+          `(${previous.width}x${previous.height}+${previous.x}+${previous.y}, then ` +
+          `${clip.width}x${clip.height}+${clip.x}+${clip.y}); the crop has no final place.`
+      );
+    }
+    previous = clip;
+  }
 }
 
 /**
@@ -630,12 +895,12 @@ async function assertCropStillFramed(page, shot, clip) {
   const selectors = cropSelectors(shot);
   let after;
   try {
-    after = clipFromRects(
+    after = await trimAtNeighbors(page, selectors, clipFromRects(
       await readRects(page, selectors),
       shot.padding ?? 0,
       selectors,
       page.viewportSize()
-    );
+    ));
   } catch (error) {
     throw new Error(
       `${JSON.stringify(selectors)} left the frame while the image settled, ` +
@@ -706,7 +971,7 @@ async function paint(page, scenario, clip) {
  *
  * The pointer is drawn with its tip on a control, and the arrow extends
  * 22x32 CSS px down and to the right of the tip (a press adds a 30 px ring
- * centred on it). A control at the edge of its crop — a button at the bottom
+ * centered on it). A control at the edge of its crop — a button at the bottom
  * of a panel — used to leave half an arrow in the picture. The crop is still
  * named by its selectors; only the pointer can widen it, and never past the
  * viewport.
@@ -740,18 +1005,6 @@ async function settledScreenshot(page, clip, settle) {
     caret: 'hide',
     type: 'png',
   };
-  if (settle?.frames !== undefined) {
-    // An animated scene never stops changing. Advancing a fixed number of
-    // frames from a seeded start is the only reproducible anchor available, and
-    // the manifest records that this image is frame-pinned rather than settled.
-    await page.evaluate(async frames => {
-      for (let index = 0; index < frames; index += 1) {
-        await new Promise(resolve => requestAnimationFrame(() => resolve()));
-      }
-    }, settle.frames);
-    return { bytes: await page.screenshot(options), settled: false };
-  }
-
   const attempts = settle?.attempts ?? SETTLE_DEFAULT.attempts;
   const gapMs = settle?.gapMs ?? SETTLE_DEFAULT.gapMs;
   let previous = await page.screenshot(options);
@@ -817,6 +1070,7 @@ async function captureScenario(browser, scenario, urls) {
   // result depend on what ran before it — which is the exact property this tool
   // exists to eliminate.
   const viewport = viewportOf(scenario);
+  beginScenarioRequirements(scenario);
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
     isMobile: viewport.touch,
@@ -829,6 +1083,14 @@ async function captureScenario(browser, scenario, urls) {
   });
   context.setDefaultTimeout(45_000);
   await context.addInitScript(installSeededRandom, RANDOM_SEED);
+  await context.addInitScript(installHoldableClock);
+  // A scenario whose image prints the time of day (a history step's
+  // details, "Kept in this browser from …") pins the page's clock, or the
+  // same scenario produces a different image every minute. Only `Date` is
+  // pinned; timers and animation frames keep real time.
+  if (scenario.fixedTime !== undefined) {
+    await context.clock.setFixedTime(new Date(scenario.fixedTime));
+  }
 
   const page = await context.newPage();
   const consoleErrors = [];
@@ -902,9 +1164,7 @@ async function captureScenario(browser, scenario, urls) {
 
     // The welcome overlay is part of first-run, and a scenario that wants it
     // says so; every other scenario dismisses it the way the browser suite
-    // does. It must be *waited for* before Escape is sent: the overlay paints
-    // before its key handler is wired, and an early Escape is swallowed, which
-    // leaves the overlay covering every later capture.
+    // does (`settleWelcome`).
     // A startup that names its data exactly (a `?data=` link, a server)
     // keeps onboarding hidden, so the overlay is waited for only until
     // startup is either showing it or done without it. A scenario whose
@@ -912,19 +1172,8 @@ async function captureScenario(browser, scenario, urls) {
     // the empty viewer — says `awaitStartup: false` and waits for its own
     // subject instead.
     if (scenario.awaitStartup !== false) {
-      const welcome = page.locator('#welcome-modal');
-      await page.waitForFunction(
-        () => document.getElementById('welcome-modal')?.classList.contains('hidden') === false
-          || document.documentElement.dataset.startupPhase === 'ready',
-        undefined,
-        { timeout: 120_000 }
-      );
-      if (await welcome.isVisible()) {
-        if (scenario.keepWelcome !== true) {
-          await page.keyboard.press('Escape');
-          await welcome.waitFor({ state: 'hidden' });
-        }
-      } else if (scenario.keepWelcome === true) {
+      const shown = await settleWelcome(page, { keep: scenario.keepWelcome === true });
+      if (!shown && scenario.keepWelcome === true) {
         throw new Error(`${scenario.id}: the welcome overlay never opened.`);
       }
     }
@@ -1114,6 +1363,12 @@ async function main() {
     );
   }
 
+  // What the selected scenarios run besides the browser (`requires`:
+  // `python3`, `Rscript`, `cellucid`, and what each must load) is checked
+  // before anything starts, and a missing one is named here rather than as a
+  // traceback inside the first scenario that runs it.
+  const programs = await checkRequirements(selected);
+
   const ports = await resolvePorts();
   const { chromium } = require('playwright');
 
@@ -1132,6 +1387,7 @@ async function main() {
       env: { ...process.env, LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' },
     });
     await assertDecimalPointLocale(browser);
+    for (const line of programs) process.stdout.write(`program: ${line}\n`);
     await shootAll({ browser, ports, catalogServer, selected, flags, checking });
   } finally {
     await browser?.close();
@@ -1220,7 +1476,7 @@ async function pinNumberLocale() {
  *
  * The rendered text of a number field lives in a closed user-agent shadow
  * tree, so script cannot read it; pixels can. The same value is drawn in a
- * text field (which never localises) and in a number field with identical
+ * text field (which never localizes) and in a number field with identical
  * metrics. Equal bytes mean the number field wrote "1234.05".
  *
  * @param {import('@playwright/test').Browser} browser
@@ -1329,6 +1585,15 @@ async function shootAll({ browser, ports, catalogServer, selected, flags, checki
               'commit. Recapture from a clean tree to fix the record.\n'
           );
         }
+      } else if (flags.emit && record.topic === PROOF_TOPIC) {
+        // A `_proof` scenario shows that the tool works; no page shows it,
+        // so it is never published (an image of one under
+        // `_static/screenshots/` is an orphan the Python contract suite
+        // refuses). `--out` writes it; `check` compares it.
+        process.stdout.write(
+          `  ${scenario.id}  not emitted: a ${PROOF_TOPIC} scenario is never published.\n`
+        );
+        continue;
       } else {
         const directory = flags.emit
           ? path.join(PUBLISHED_SCREENSHOTS, record.topic)

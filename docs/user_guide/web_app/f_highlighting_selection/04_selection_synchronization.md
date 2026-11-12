@@ -61,7 +61,7 @@ People typically expect:
 - Are still subject to visibility: each panel will only show highlights for cells that are visible in that panel (filters apply per view).
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/share-highlight-across-views.png
-:alt: Two 3D panels of the same dataset side by side with the sidebar closed, each under a title chip (1 · UMAP 3D · cell_type, 2 · UMAP 3D · cell_type): the left panel at the default close-up camera, the right panel zoomed out and rotated; the cells confirmed by one lasso drawn in the left panel are drawn in the highlight colour in both.
+:alt: Two 3D panels of the same dataset side by side with the sidebar closed, each under a title chip (1 · UMAP 3D · cell_type, 2 · UMAP 3D · cell_type): the left panel at its default camera, the right panel zoomed out and rotated; the cells confirmed by one lasso drawn in the left panel are drawn in the highlight color in both.
 :width: 1440px
 
 One lasso, drawn once in one panel, shown in two. The panels are looking at the
@@ -74,7 +74,7 @@ There is no separate “cross-highlighting” feature to switch on, and no contr
 that links or unlinks panels for highlighting. A highlight is one list of cell
 indices held once for the whole dataset, and every panel packs its own draw
 buffer from that same list on every frame. Propagation is the default and the
-only behaviour; the only thing that stops a highlight appearing in a panel is
+only behavior; the only thing that stops a highlight appearing in a panel is
 that panel not drawing the cell (see below).
 
 Analysis plots are not part of this: highlighting a set of cells in the
@@ -110,7 +110,7 @@ properties of that panel and neither of them a property of the highlight:
    dataset a zoomed-out panel draws a subset; highlights are packed from the
    same subset. Zooming in brings them back with no change to membership.
 
-Everything else — camera angle, embedding dimension, coloured field, render
+Everything else — camera angle, embedding dimension, colored field, render
 mode — has no effect on which cells are highlighted.
 
 ### Common confusion patterns (and the mental fix)

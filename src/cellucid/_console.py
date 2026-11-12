@@ -1,4 +1,4 @@
-"""Encoding-safe writes for user-facing console output."""
+"""Encoding-safe, at-once writes for user-facing console output."""
 
 from __future__ import annotations
 
@@ -23,9 +23,15 @@ def console_print(
     sep: str | None = " ",
     end: str | None = "\n",
     file: TextIO | None = None,
-    flush: bool = False,
 ) -> None:
-    """Print once, escaping only characters unsupported by the target stream.
+    """Print once, escaping only characters unsupported by the target stream,
+    and flush it: the line reaches the person at once.
+
+    Python block-buffers standard output when it is not a terminal -- a file,
+    a pipe, a process manager, ``nohup``, an IDE's run panel -- so a line
+    written and not flushed waits there while a server runs: ``cellucid serve
+    data.h5ad > serve.out`` printed its steps but not its Viewer URL until it
+    stopped. Every line the person must see goes through here.
 
     Python's Windows console streams can use single-byte encodings such as
     CP1252. User-controlled names and paths, as well as decorative output
@@ -45,5 +51,4 @@ def console_print(
     stream = sys.stdout if file is None else file
     text = sep.join(str(value) for value in values) + end
     stream.write(_text_for_console_stream(text, stream))
-    if flush:
-        stream.flush()
+    stream.flush()

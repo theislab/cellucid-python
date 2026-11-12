@@ -12,7 +12,6 @@ cross-writer test holds the two writers to one store.
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 import warnings
 from pathlib import Path
@@ -23,7 +22,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import zarr
-from _web_root import web_file
+from _web_root import node_executable, web_file
 from scipy import sparse
 
 from cellucid import prepare, restore_original_order, subsample_cells
@@ -369,9 +368,7 @@ process.stdout.write(JSON.stringify({ all, part }));
 def test_the_web_app_opens_a_uniform_subsample_as_the_prefix_of_the_rows(
     tmp_path: Path, name: str, output_format: str, zarr_format: int | None
 ) -> None:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("Node is not installed: the web reader cannot run")
+    node = node_executable("the web reader")
     web_root = web_file("assets/js/data/anndata/priority-layout.js").parents[4]
     arguments = {**_inputs(), "priority_seed": 0}
     if zarr_format is not None:
@@ -436,9 +433,7 @@ _WEB_MUDATA_PREFIX = _WEB_PREFIX.replace(
 
 def test_the_web_app_opens_a_mudata_prefix_with_every_modalitys_first_rows(tmp_path: Path) -> None:
     md = pytest.importorskip("mudata")
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("Node is not installed: the web reader cannot run")
+    node = node_executable("the web reader")
     web_root = web_file("assets/js/data/anndata/priority-layout.js").parents[4]
     rng = np.random.default_rng(8)
     names = [f"c{i}" for i in range(500)]

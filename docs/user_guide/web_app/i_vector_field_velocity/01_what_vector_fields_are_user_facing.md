@@ -17,7 +17,7 @@ Cellucid’s **vector field overlay** draws an animated **particle flow** on top
 ## The same view, overlay off and on
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/01-embedding-without-overlay.png
-:alt: The Pancreas 2D embedding coloured by cell_type, with the Vector field block ringed in the sidebar and its Show overlay box unchecked.
+:alt: The Pancreas 2D embedding colored by cell_type, with the Vector field block ringed in the sidebar and its Show overlay box unchecked.
 :width: 1440px
 
 **Off.** This is the ordinary point cloud. The **Vector field** block is
@@ -31,7 +31,10 @@ is unchecked, and no vector data has been downloaded yet.
 
 **On.** The same cells, same camera. Checking `Show overlay` fetches the vector
 payload, allocates the particle system, and starts the animation. The bright
-streaks are particle *trails*, not cells and not arrows.
+streaks are particle *trails*, not cells and not arrows. With the operating
+system's reduce motion setting on, nothing moves: the overlay draws the same
+trails as one still picture ({doc}`05_performance_and_quality`); the
+documentation's images are captured that way.
 ```
 
 ---
@@ -117,22 +120,22 @@ Concretely:
   `Turbulence`, a divergence-free noise term added to the motion. It ships
   **on**, at `0.30` of its `0–1` range. Set it to `0` before reading the field's
   geometry.
-- **Coherence between neighbouring streaks is real.** Neighbouring cells whose
+- **Coherence between neighboring streaks is real.** Neighboring cells whose
   vectors agree produce parallel streaks; disagreement produces a visible mess.
   That contrast — coherent versus incoherent — is the honest signal here.
 
-### What the colour and the size mean
+### What the color and the size mean
 
-Particle colour is the magnitude of the spawn cell's vector, divided by the
+Particle color is the magnitude of the spawn cell's vector, divided by the
 **largest magnitude in this field for this dimension**, clamped to `0..1`, and
 looked up in `Color scheme`. Particle size carries the same quantity, and the
 per-frame step length is proportional to the raw magnitude times `Flow speed`.
 
 Two consequences:
 
-- **The ramp is relative to this exact payload.** The same colour in two
+- **The ramp is relative to this exact payload.** The same color in two
   datasets, or in the same dataset at two different embedding dimensions, does
-  not mean the same magnitude. There is deliberately no numeric legend or colour
+  not mean the same magnitude. There is deliberately no numeric legend or color
   bar for it: the number would have no interpretable unit.
 - **Very slow cells are under-represented.** Particles below a floor magnitude
   are discarded outright, and slow particles are recycled sooner than fast ones.
@@ -143,7 +146,7 @@ Two consequences:
 
 | It does not show | Why |
 |---|---|
-| A rate, a speed, or a time | The stored numbers are normalised embedding units per arbitrary step. `Flow speed` is a display gain you choose. |
+| A rate, a speed, or a time | The stored numbers are normalized embedding units per arbitrary step. `Flow speed` is a display gain you choose. |
 | Any motion out of the embedding plane | The vectors on disk are already a projection. The component of the high-dimensional velocity that the embedding cannot express is gone before Cellucid sees the data. |
 | A trajectory, lineage, or transition probability | Nothing in the renderer integrates the field or follows a cell. |
 | Magnitudes comparable across dimensions or datasets | See above; and for the built-in Pancreas sample the 1D payload is on a different scale from the 2D and 3D payloads. |
@@ -169,7 +172,7 @@ keep drawing it.
 In the web app UI:
 
 - If the dataset has **no vector fields**, the **Vector field** block will not appear.
-- If the dataset has vector fields but none for the **embedding the view shows**, the block appears, but **Show overlay** is disabled and the UI names the embeddings that have one (e.g., “Vector fields are bound to X_umap, X_umap_3d. Show one of them in this view to enable.”).
+- If the dataset has vector fields but none for the **embedding the view shows**, the block appears, but **Show overlay** is disabled and the UI names the embeddings that have one (e.g., “Vector fields are bound to UMAP · 2D, UMAP · 3D. Show one of them in this view to enable.”).
 
 ---
 
@@ -200,8 +203,8 @@ relative magnitudes:
   stores it as it is.
 - The app applies **one isotropic scale factor** at load — the same one it
   applies to the embedding the field is bound to. No filtering, no smoothing,
-  no unit-normalisation, no per-cell rescaling. It then computes one global
-  maximum magnitude, used only for colour and size.
+  no unit-normalization, no per-cell rescaling. It then computes one global
+  maximum magnitude, used only for color and size.
 
 So **relative magnitudes are preserved end to end** and **absolute units are
 lost**. What arrives on disk is what gets drawn, up to a single multiplier.
@@ -255,6 +258,23 @@ Common causes:
 
 Start with conservative settings (shorter trails, low turbulence) and verify row order/basis alignment.
 
+### Where each group is heading, in numbers
+
+The flow is read by eye. An agent (or a notebook: Python
+`vector_field_summary`, R `cellucid_vector_field_summary()`) can also read it
+per category of a field with **Summarize where cells are heading**
+(`vector-field.summary`): for each category, its mean speed against the
+average cell, how aligned its arrows are (0 every way, 1 all one way), the
+mean direction (in words on a 2-D view), and which categories its arrows lead
+into. Each cell's arrow is shared among its 30 nearest cells in the
+embedding by how directly it points at each, as scVelo's velocity graph
+shares it among neighbors in gene space. It is read from the arrows as drawn
+in the embedding the view shows, so it inherits what that embedding does to
+the flow: compare it with a 3-D or another embedding before trusting a
+direction. An agent tuning the overlay also takes pictures of the screen
+(`view.picture` with `source: "screen"`), the flow included, since a figure
+leaves the flow out.
+
 ---
 
 ## Next steps
@@ -270,3 +290,4 @@ Start with conservative settings (shorter trails, low turbulence) and verify row
 - `cellucid/assets/js/data/vector-field-manager.js`
 - `cellucid/assets/js/app/ui/modules/velocity-overlay-controls.js`
 - `cellucid/assets/js/rendering/overlays/velocity/velocity-overlay.js`
+- `cellucid/assets/js/app/reads/vector-field.js` (the summary read)

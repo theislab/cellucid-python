@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from _serverless_viewer import serverless_viewer
+from _stand_in_server import StandInServer
 from _viewer_channel_client import (
     BINARY,
     TEXT,
@@ -42,7 +43,7 @@ REQUEST_ID = "security-contract-request"
 #: The digest of ``tests/fixtures/viewer_protocol.json``: the web app's
 #: ``tests/fixtures/viewer-protocol.json`` byte for byte. The web app and
 #: cellucid-r pin the same one.
-VIEWER_PROTOCOL_SHA256 = "3a38ca81ac9a906dbc995727a73e94f52a1a0dd3fa7a71d500817d45c5fdfb6d"
+VIEWER_PROTOCOL_SHA256 = "c117822a5d87df03439fdbed9af460617764b59d9e560ba7c0e519ec5f708dae"
 
 
 def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], dict[str, object]]]:
@@ -118,15 +119,27 @@ def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], 
             {
                 "type": "action_result",
                 "requestId": "action-request",
-                "step": {"id": "s3", "label": "Coloured by leiden"},
+                "step": {"id": "s3", "label": "Colored by leiden"},
+                "unrecorded": None,
                 "body": bytearray(b'{"groups":2}'),
             },
-            {"requestId": "action-request", "step": {"id": "s3", "label": "Coloured by leiden"}, "outcome": {"groups": 2}},
+            {
+                "requestId": "action-request",
+                "step": {"id": "s3", "label": "Colored by leiden"},
+                "unrecorded": None,
+                "outcome": {"groups": 2},
+            },
         ),
         (
             "action_result",
-            {"type": "action_result", "requestId": "read-request", "step": None, "body": bytearray(b"null")},
-            {"requestId": "read-request", "step": None, "outcome": None},
+            {"type": "action_result", "requestId": "read-request", "step": None, "unrecorded": None, "body": bytearray(b"null")},
+            {"requestId": "read-request", "step": None, "unrecorded": None, "outcome": None},
+        ),
+        (
+            # A change that made no step, and why: it was so already.
+            "action_result",
+            {"type": "action_result", "requestId": "same-request", "step": None, "unrecorded": "unchanged", "body": bytearray(b"null")},
+            {"requestId": "same-request", "step": None, "unrecorded": "unchanged", "outcome": None},
         ),
         (
             "result_removed",
@@ -321,6 +334,24 @@ def _damaged_session_file() -> bytes:
     return bytes(data)
 
 
+def _deeply_nested_session_file(depth: int = 5_000) -> bytes:
+    """The fixture with one eager value replaced by lists nested ``depth``
+    deep: JSON, nested past what the reader follows (Python's recursion, in
+    its JSON parser or in the reader's own walk, wherever it ends first; no
+    Cellucid writes one). The text is written as text, never parsed here."""
+    from _session_files import frame, payload, store, unframe
+
+    manifest, chunks = unframe(_session_file())
+    index = next(i for i, meta in enumerate(manifest["chunks"]) if meta["kind"] == "values")
+    meta = manifest["chunks"][index]
+    values = json.loads(payload(meta, chunks[index]))
+    values[next(iter(values))] = "DEEP"
+    text = json.dumps(values).replace('"DEEP"', "[" * depth + "]" * depth, 1)
+    kept = {key: value for key, value in meta.items() if key not in ("codec", "storedBytes", "uncompressedBytes")}
+    manifest["chunks"][index], chunks[index] = store(kept, text.encode("utf-8"))
+    return frame(manifest, chunks)
+
+
 @pytest.fixture(autouse=True)
 def _restore_routing_registries() -> Iterator[None]:
     event_snapshot = dict(channel._event_callbacks)
@@ -337,9 +368,12 @@ def test_routing_functions_expose_only_the_authenticated_current_contract() -> N
         "viewer_id",
         "viewer_token",
         "callback",
-        # Hears a page take the channel and the page holding it let it go
-        # (the agent calls it was running then fail at once).
-        "on_socket",
+        # Hears the page holding the channel let it go (the agent calls it
+        # was running then fail at once).
+        "on_page_gone",
+        # The cells of the dataset the viewer shows: the bound of every cell
+        # and binary body its events name (R9Z-3).
+        "cell_count",
     ]
     assert list(inspect.signature(channel.unregister_event_callback).parameters) == [
         "viewer_id",
@@ -747,9 +781,8 @@ def _known_agent_events() -> dict[str, dict[str, object]]:
     return {
         "agent_tools": {"type": "agent_tools", "requestId": "a1", "body": bytearray(b'[{"name": "color_by"}]')},
         "agent_result": {"type": "agent_result", "requestId": "a2", "body": bytearray(b'{"content": [], "isError": false}')},
-        "agent_asking": {"type": "agent_asking", "requestId": "a2", "message": "Claude Code (local) asks to colour.", "detail": None},
+        "agent_asking": {"type": "agent_asking", "requestId": "a2", "message": "Claude Code (local) asks to color.", "detail": None},
         "agent_answered": {"type": "agent_answered", "requestId": "a2", "allowed": True},
-        "agent_tools_changed": {"type": "agent_tools_changed"},
     }
 
 
@@ -773,10 +806,6 @@ def test_every_agent_event_reaches_the_agent_port_and_never_the_notebook() -> No
 
 def test_no_published_event_is_refused_by_the_validator_as_an_unknown_type() -> None:
     for event_type in wire._protocol_capability_document()["events"]:
-        if wire._INBOUND_EVENT_FIELDS[event_type] == frozenset({"type"}):
-            # An event of its type alone (`agent_tools_changed`) is whole as it is.
-            wire._require_inbound_jupyter_event({"type": event_type})
-            continue
         with pytest.raises((TypeError, ValueError)) as rejection:
             wire._require_inbound_jupyter_event({"type": event_type})
         # The stripped-down probe must fail on its missing fields, never on the
@@ -864,23 +893,10 @@ def test_display_failure_rolls_back_started_server_and_viewer_registries(
 ) -> None:
     instances: list[object] = []
 
-    class StartedServer:
-        def __init__(self, **_kwargs: object):
-            self.port = 43123
-            self.dataset_id = "demo"
-            self.server_info = {"n_cells": 3}
-            self.stop_calls = 0
+    class StartedServer(StandInServer):
+        def __init__(self, **kwargs: object):
+            super().__init__(**{**kwargs, "port": 43123})
             instances.append(self)
-
-        @property
-        def url(self) -> str:
-            return f"http://127.0.0.1:{self.port}"
-
-        def start_background(self) -> None:
-            return None
-
-        def stop(self) -> None:
-            self.stop_calls += 1
 
     def fail_display(_viewer: object) -> None:
         raise RuntimeError("display failed")
@@ -1077,6 +1093,139 @@ def test_the_first_frame_must_be_exactly_hello(first: dict[str, object]) -> None
         socket_.send_json(first)
         code, _reason = socket_.receive_close()
         assert code == 1008
+
+
+def test_a_socket_that_never_says_hello_is_closed_and_holds_no_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    # cellucid-r closes it after .viewer_hello_seconds; before, Python held
+    # the connection's thread for as long as the peer kept it open.
+    monkeypatch.setattr(channel, "HELLO_SECONDS", 0.3)
+    monkeypatch.setattr(websocket_module, "CLOSE_DRAIN_SECONDS", 0.2)
+    with _viewer_on_a_server() as (_viewer, _server, http_server, port):
+        socket_ = FakeViewer(port)
+        assert socket_.receive_close() == (1008, "No hello frame was received")
+        _wait_until(lambda: _open_connections(http_server) == 0)
+
+
+def test_a_binary_first_frame_is_refused_from_its_header_unread(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A frame declaring a gibibyte, of which a few bytes come: refused at
+    # once, before the socket said who it is (it was read to its end before).
+    monkeypatch.setattr(websocket_module, "CLOSE_DRAIN_SECONDS", 0.2)
+    with _viewer_on_a_server() as (_viewer, _server, http_server, port):
+        socket_ = FakeViewer(port)
+        socket_.sock.sendall(struct.pack("!BBQ", 0x80 | BINARY, 0x80 | 127, 1 << 30) + b"\0" * 4 + b"x" * 64)
+        assert socket_.receive_close() == (1008, "The first frame must be the text frame 'hello'")
+        _wait_until(lambda: _open_connections(http_server) == 0)
+
+
+def test_a_hello_nested_past_the_interpreter_closes_the_channel_as_a_protocol_violation() -> None:
+    # Within the text frame limit, and deeper than Python's JSON parser
+    # follows: refused as malformed (before: RecursionError, a traceback on
+    # the kernel's stderr for each such socket, and a 1001 close).
+    with _channel_viewer() as (_viewer, port):
+        socket_ = FakeViewer(port)
+        socket_.send_frame(TEXT, b"[" * 200_000)
+        code, reason = socket_.receive_close()
+        assert (code, reason) == (1008, "The hello frame is nested more deeply than this package reads")
+
+
+def test_a_binary_header_length_allocates_only_what_arrives() -> None:
+    # Four bytes naming a 4 GiB header, then a few bytes and the frame's end:
+    # the buffer was allocated (and zeroed) at the size named before a byte
+    # of it arrived.
+    import tracemalloc
+
+    with _channel_viewer() as (viewer, port):
+        socket_ = _connect(port, viewer)
+        tracemalloc.start()
+        try:
+            socket_.send_binary(struct.pack("<I", 0xFFFF_FFFF) + b'{"type"')
+            assert socket_.receive_close() == (1008, "Binary message ended early")
+            _current, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert peak < 16 * 1024 * 1024
+
+
+def test_a_body_frame_length_allocates_only_what_arrives() -> None:
+    # R9Z-3 (F122): a frame header naming 256 MiB, of which an event header
+    # and a few body bytes arrive before the page stops: the body was
+    # allocated (and zeroed) at the frame's length before a byte of it came.
+    import socket as socket_module
+    import tracemalloc
+
+    claimed = 256 * 1024 * 1024
+    with _channel_viewer() as (viewer, port):
+        socket_ = _connect(port, viewer)
+        payload = binary_event({"type": "agent_result", "requestId": "r1"}, b'{"content":')
+        tracemalloc.start()
+        try:
+            socket_.sock.sendall(struct.pack("!BBQ", 0x80 | BINARY, 0x80 | 127, claimed) + b"\0\0\0\0" + payload)
+            time.sleep(0.3)
+            socket_.sock.shutdown(socket_module.SHUT_WR)
+            _wait_until(lambda: not channel.viewer_is_connected(viewer._viewer_id, viewer._viewer_token))
+            _current, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert peak < 16 * 1024 * 1024
+
+
+def _ready_viewer_socket(viewer: jupyter.AnnDataViewer, port: int, n_obs: int) -> FakeViewer:
+    socket_ = _connect(port, viewer)
+    socket_.send_json({"type": "ready", "n_cells": n_obs, "n_obs": n_obs, "dimensions": 2})
+    _wait_until(lambda: viewer.state.ready is not None and viewer.state.ready["n_obs"] == n_obs)
+    return socket_
+
+
+def test_cells_and_bodies_past_the_dataset_are_refused_before_they_are_read() -> None:
+    # R9Z-3: what a page names is bounded by the dataset the viewer shows
+    # (cellucid-r's .check_event_cells): a selection of more cells than it
+    # has, a cell beyond it, a result for a dataset of another size, a hover
+    # beyond it. Before, each was delivered (a selection's obs names then
+    # failed with an IndexError in the notebook) or read whole.
+    result_header = {
+        "type": "result", "epoch": "0" * 16, "revision": 1, "kind": "highlight", "id": "g1", "nObs": 5,
+        "meta": {}, "cells": 1, "values": None,
+    }
+    cases = [
+        (binary_event({"type": "selection", "source": "lasso"}, struct.pack("<4I", 0, 1, 2, 3)),
+         (1009, "Binary message longer than the 12 bytes it can hold")),
+        (binary_event({"type": "selection", "source": "lasso"}, struct.pack("<2I", 0, 7)),
+         (1008, "A selection names cell 7, and the dataset has 3")),
+        (binary_event(result_header, struct.pack("<I", 0)),
+         (1008, "A result names a dataset of 5 cells, and this one has 3")),
+        (binary_event({**result_header, "nObs": 3, "cells": 9}, struct.pack("<I", 0)),
+         (1008, "A result's cells must be a count of at most its nObs, or null")),
+    ]
+    with _channel_viewer() as (viewer, port):
+        for payload, close in cases:
+            socket_ = _ready_viewer_socket(viewer, port, 3)
+            socket_.send_binary(payload)
+            assert socket_.receive_close() == close
+        socket_ = _ready_viewer_socket(viewer, port, 3)
+        socket_.send_json({"type": "hover", "cell": 9, "position": None})
+        assert socket_.receive_close() == (1008, "A hover names cell 9, and the dataset has 3")
+        assert viewer.state.selection is None
+        # Within the dataset, the same events arrive.
+        socket_ = _ready_viewer_socket(viewer, port, 3)
+        socket_.send_binary(binary_event({"type": "selection", "source": "lasso"}, struct.pack("<3I", 0, 1, 2)))
+        _wait_until(lambda: viewer.state.selection is not None)
+        assert viewer.state.selection == {"cells": [0, 1, 2], "source": "lasso"}
+
+
+def test_the_result_body_bound_names_the_widest_value_the_wire_carries() -> None:
+    assert max(dtype.itemsize for dtype in wire._VALUE_DTYPES.values()) == channel._WIDEST_VALUE_BYTES
+    assert wire._SELECTION_CELL_DTYPE.itemsize == channel._CELL_INDEX_BYTES
+
+
+def test_an_event_nested_past_the_interpreter_is_refused_as_malformed() -> None:
+    deep: Any = 0
+    for _ in range(5_000):
+        deep = [deep]
+    with pytest.raises(ValueError, match="nested more deeply than this package reads"):
+        wire._require_inbound_jupyter_event({"type": "click", "cell": deep, "button": 0, "shift": False, "ctrl": False})
+    body = ("[" * 5_000 + "]" * 5_000).encode("utf-8")
+    with pytest.raises(ValueError, match="nested more deeply|not UTF-8 JSON"):
+        wire._require_inbound_jupyter_event({"type": "agent_result", "requestId": "a", "body": body})
 
 
 def test_commands_sent_before_the_viewer_connects_arrive_in_order_once() -> None:
@@ -1379,6 +1528,74 @@ def test_an_invalid_session_bundle_fails_the_wait_at_once_and_leaves_no_file() -
         assert channel.viewer_is_connected(viewer._viewer_id, viewer._viewer_token)
 
 
+def test_a_session_nested_past_the_reader_is_refused_in_a_sentence_and_leaves_no_file() -> None:
+    # Before: the interpreter's RecursionError escaped the channel's thread,
+    # the person's session stayed in the temporary folder, and the wait ran
+    # to its timeout.
+    with _channel_viewer() as (viewer, port):
+        viewer._displayed = True
+        viewer.state.ready = {"n_cells": 2, "n_obs": 2, "dimensions": 2}
+        socket_ = _connect(port, viewer)
+        before = set(Path(tempfile.gettempdir()).glob("cellucid-session-*"))
+        failure: list[BaseException] = []
+
+        def capture() -> None:
+            try:
+                viewer.request_session().result(timeout=10)
+            except BaseException as error:
+                failure.append(error)
+
+        worker = threading.Thread(target=capture)
+        worker.start()
+        request = socket_.receive_json()
+        started = time.monotonic()
+        socket_.send_binary(
+            binary_event(
+                {"type": "session_bundle", "requestId": request["requestId"]},
+                _deeply_nested_session_file(),
+            )
+        )
+        worker.join(timeout=10)
+        assert time.monotonic() - started < 5
+        assert failure and "nested more deeply than this package reads" in str(failure[0])
+        assert set(Path(tempfile.gettempdir()).glob("cellucid-session-*")) == before
+        assert channel.viewer_is_connected(viewer._viewer_id, viewer._viewer_token)
+
+
+def test_a_session_bundle_whose_read_fails_unexpectedly_leaves_no_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The written part holds the person's session: whatever ends its read
+    # (before: anything but the expected errors left it in the temp folder).
+    import cellucid.session as session_module
+
+    def broken(_path: Path) -> None:
+        raise RuntimeError("a defect while reading")
+
+    monkeypatch.setattr(session_module, "CellucidSession", broken)
+    with _channel_viewer() as (viewer, port):
+        viewer._displayed = True
+        viewer.state.ready = {"n_cells": 2, "n_obs": 2, "dimensions": 2}
+        socket_ = _connect(port, viewer)
+        before = set(Path(tempfile.gettempdir()).glob("cellucid-session-*"))
+        # The channel ended with the defect: the wait runs to its timeout.
+        worker = threading.Thread(target=lambda: pytest.raises(TimeoutError, viewer.request_session().result, timeout=3))
+        worker.start()
+        request = socket_.receive_json()
+        socket_.send_binary(binary_event({"type": "session_bundle", "requestId": request["requestId"]}, _session_file()))
+        assert socket_.receive_close()[0] == 1001
+        worker.join(timeout=10)
+        assert set(Path(tempfile.gettempdir()).glob("cellucid-session-*")) == before
+
+
+def test_a_session_file_nested_past_the_reader_is_refused_in_a_sentence(tmp_path: Path) -> None:
+    from cellucid.session import TOO_DEEP_SESSION_MESSAGE, CellucidSession
+
+    path = tmp_path / "deep.cellucid-session"
+    path.write_bytes(_deeply_nested_session_file())
+    with pytest.raises(ValueError) as refusal:
+        CellucidSession(path)
+    assert str(refusal.value) == TOO_DEEP_SESSION_MESSAGE
+
+
 def test_a_session_bundle_cut_off_by_the_network_leaves_no_file() -> None:
     with _channel_viewer() as (viewer, port):
         viewer._displayed = True
@@ -1598,6 +1815,7 @@ def test_the_python_declarations_are_the_shared_viewer_protocol() -> None:
             assert payload == {
                 "requestId": example["header"]["requestId"],
                 "step": example["header"]["step"],
+                "unrecorded": example["header"]["unrecorded"],
                 "outcome": example["outcome"],
             }
         elif example["header"]["type"] in {"agent_tools", "agent_result"}:
@@ -1658,18 +1876,18 @@ def test_the_shared_viewer_protocol_is_pinned() -> None:
 def test_actions_inside_a_turn_carry_it_and_turns_do_not_nest() -> None:
     with _channel_viewer() as (viewer, port):
         socket_ = _connect(port, viewer)
-        with viewer.turn("  Normalise   and cluster ") as turn_id:
+        with viewer.turn("  Normalize   and cluster ") as turn_id:
             assert re.fullmatch(r"python-[0-9a-f]{12}", turn_id)
             colored = viewer.color_by(field={"source": "obs", "key": "leiden"})
             highlighted = viewer.highlight_cells(cells=[1], color="#00ff00")
-            nested = pytest.raises(RuntimeError, match='A turn \\("Normalise and cluster"\\) is open already; turns do not nest.')
+            nested = pytest.raises(RuntimeError, match='A turn \\("Normalize and cluster"\\) is open already; turns do not nest.')
             with nested, viewer.turn("Inner"):
                 pass
         after = viewer.history_undo()
         first = socket_.receive_command()
-        assert (first["requestId"], first["turn"], first["turnLabel"]) == (colored.request_id, turn_id, "Normalise and cluster")
+        assert (first["requestId"], first["turn"], first["turnLabel"]) == (colored.request_id, turn_id, "Normalize and cluster")
         second = socket_.receive_command()
-        assert (second["requestId"], second["turn"], second["turnLabel"]) == (highlighted.request_id, turn_id, "Normalise and cluster")
+        assert (second["requestId"], second["turn"], second["turnLabel"]) == (highlighted.request_id, turn_id, "Normalize and cluster")
         third = socket_.receive_command()
         assert (third["action"], third["turn"], third["turnLabel"]) == ("history.undo", None, None)
         assert third["requestId"] == after.request_id

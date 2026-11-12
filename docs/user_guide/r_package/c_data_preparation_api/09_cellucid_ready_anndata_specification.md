@@ -38,6 +38,8 @@ name.zarr/
   uns/                                  dict
     title                               string
     cellucid/                           dict: the dataset's description
+    <column>_colors                     string-array: Scanpy's colors of a categorical
+                                        obs column (from obs_colors, or the object's)
 ```
 
 Every group has a `.zgroup` (`{"zarr_format": 2}`); every AnnData element
@@ -87,6 +89,7 @@ when the axis it indexes has 2^31 entries.
 | `source` | dict: `name`, and `url` when supplied | when `source_name` is supplied |
 | `defaults` | dict, below | when any default is set |
 | `outlierQuantiles` | dict, below | when `latent_key` is supplied |
+| `totalCounts` | dict `{field, over}` (several modalities: one per modality, by name): the obs field of each cell's total count, `over` `"all genes"` (named by `total_counts`), `"source panel"` (named by `total_counts`, with `total_counts_over = "source panel"`) or `"stored genes"` (`obs['total_counts']`, `<f8`, each row's sum over the stored genes) | when `X` holds counts ({ref}`total-counts-spec`) |
 | `priority` | dict: `seed`, `specVersion` (`1`), `nObs` (the cell count it was written for), `levels` | unless `priority_seed = NULL` |
 
 `uns['title']` repeats the name, so tools that read a file's title (CELLxGENE
@@ -127,7 +130,7 @@ filter reads instead of computing them from the whole latent space:
 | `fields` | dict of float32 arrays, one value per cell | one entry per `obs` column the viewer shows as categorical (a factor, a character column, a logical column with or without `NA`), in `obs` column order, for a column with a category of at least `minPoints` cells |
 
 A cell's value is the share of its category at its distance from the
-category's centre or closer, as float32; `NaN` for `NA` and for a category of
+category's center or closer, as float32; `NaN` for `NA` and for a category of
 fewer than `minPoints` cells. `?cellucid_prepare` (section *Outlier
 quantiles*) states the rule, which Python's `cellucid.prepare()` and the web
 app follow bit for bit.
@@ -163,7 +166,7 @@ and its `zarr.json` (Zarr format 3):
   (`numcodecs.shuffle` is outside its specification), so there the array is
   compressed with the specification's `blosc` codec: byte shuffle and zlib
   level 6 in a Blosc frame, the frame c-blosc writes.
-  The similar high bytes of neighbouring values then compress together: the
+  The similar high bytes of neighboring values then compress together: the
   gene indices of a sparse `X` shrink by about a third, embeddings and graph
   weights by 7-9%. The expression values themselves -- `X/data`, or a dense
   `X` -- are not shuffled: real expression values repeat whole, which deflate
@@ -269,7 +272,7 @@ Python's element for element (`tests/testthat/test-cross-writer.R`).
 
 A reader of the store (anndataR, zellkonverter, Python's anndata) sees the
 cells in the stored order; `cellucid_restore_original_order()` puts a
-`data.frame`, Seurat object (every assay, reduction, graph, neighbour index
+`data.frame`, Seurat object (every assay, reduction, graph, neighbor index
 and its identities) or SingleCellExperiment read from it back in the order
 given. It reads the order from the priority record where those importers keep
 `uns` (`metadata(x)$cellucid$priority`, a Seurat object's
@@ -305,7 +308,7 @@ name.zarr/
   var/                                  every modality's feature names, in mod-order (no columns)
   obsm/                                 shared embeddings and vector fields, and
     <modality>                          bool (n_cells, 1): the cells the modality measured
-  obsp/connectivities/                  the shared neighbour graph
+  obsp/connectivities/                  the shared neighbor graph
   varm/  varp/                          empty
   uns/                                  title and cellucid (as in an AnnData; defaults may name modality)
                                         (the cells, and each modality's rows, in priority order)

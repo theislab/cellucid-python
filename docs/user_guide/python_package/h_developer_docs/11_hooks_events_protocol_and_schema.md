@@ -45,9 +45,9 @@ exactly the keys of their type
 | `ping` | `type`, `requestId` | `pong` |
 | `debug_snapshot` | `type`, `requestId` | `debug_snapshot` |
 | `freeze` | `type` | nothing (the host stopped) |
-| `agent_list` | `type`, `requestId`, `connection` | `agent_tools` (binary: the MCP tools for that connection) |
+| `agent_list` | `type`, `requestId`, `connection` | `agent_tools` (binary: the MCP tools, the same whatever the person's settings) |
 | `agent_call` | `type`, `requestId`, `tool`, `args`, `agent`, `connection` | exactly one `agent_result` (binary: the MCP tool result, an error included), with `agent_asking` / `agent_answered` while the person is asked |
-| `agent_cancel` | `type`, `requestId` | the call's `agent_result` (stopped: a change rolled back, a question withdrawn) |
+| `agent_cancel` | `type`, `requestId` | the call's `agent_result` (stopped: a change rolled back, but a playing camera path stopped where it is with its step kept; a question withdrawn) |
 | `agent_answer` | `type`, `requestId`, `allowed` | the person answered the card's question in the agent's app (Allow once or Deny) |
 
 The four `agent_*` commands carry a local agent connection (`cellucid mcp`,
@@ -57,11 +57,11 @@ those events to the viewer's agent port (`_agent_link.py`), never to the
 notebook's hooks ({doc}`../../web_app/p_developer_docs/31_local_agent_connection`).
 
 - **`action` is the one command that changes or reads the viewer's state.**
-  `action` names one action of the catalogue by its dotted type (`color.by`,
+  `action` names one action of the catalog by its dotted type (`color.by`,
   `highlight.cells`, `history.get`, …) and `params` are its parameters; the
   viewer checks them with the action's schema and dispatches the action with
   origin `host` and the host's name (`python`, `jupyter`, `r`), so it takes
-  the path a person's control takes and is one step of the history, labelled
+  the path a person's control takes and is one step of the history, labeled
   as the notebook's. Schema 2's state commands -- `setColorBy`,
   `setVisibility`, `highlight`, `clearHighlights`, `resetCamera`,
   `setDataMapping`, `setGeneSet`, `setField` -- are gone: they are the
@@ -104,7 +104,7 @@ notebook's hooks ({doc}`../../web_app/p_developer_docs/31_local_agent_connection
   `welcome`; a frame that failed to go out whole stays queued, so nothing is
   sent twice
 
-### The action catalogue, one document in three repositories
+### The action catalog, one document in three repositories
 
 The actions are defined once, in the web app (`assets/js/app/actions/`), and
 the packages are generated from them: the web repository's
@@ -121,7 +121,7 @@ parameter descriptions as its docstring); `tests/test_action_catalog.py`
 fails while that module differs from what the script writes, so an action
 added in the web app cannot be missing from Python (or R) unnoticed.
 `_actions.py` checks and converts every action's parameters by the
-catalogue, the same way for every action.
+catalog, the same way for every action.
 
 ### Frontend → Python (events)
 
@@ -131,13 +131,14 @@ catalogue, the same way for every action.
 - binary frames for `selection`, `result`, `action_result` and
   `session_bundle`: a little-endian `uint32` header length, a UTF-8 JSON
   header (`{"type": "selection", "source"}`, a result's header,
-  `{"type": "action_result", "requestId", "step"}`, or
+  `{"type": "action_result", "requestId", "step", "unrecorded"}`, or
   `{"type": "session_bundle", "requestId"}`), then the body
 - an `action_result`'s body is the action's outcome as UTF-8 JSON (`null`
   for nothing to report, a read's result otherwise): a binary frame, because
   a read's result is as large as it asks for (a picture of a view, the values
   of many cells) and a text event holds at most 1 MiB; `step` is the history
-  step the action made, `{id, label}`, or `null`
+  step the action made, `{id, label}`, or `null`, and `unrecorded` why a
+  change made none (`null` beside a step and for a read)
 - a selection's body is the selected row indices as little-endian `uint32`,
   strictly ascending, one or more; the server reads it into one buffer
   (unmasked in place, no second copy), checks it
@@ -280,7 +281,15 @@ Meaning:
 Expected keys (after Python decoded the body, `_wire._decode_action_result`):
 - `requestId`: the action's request
 - `step`: `{id, label}` of the history step it made, or `null` (a read, or a
-  change that changed nothing)
+  change that made none)
+- `unrecorded`: why a change made no step -- `"unchanged"` (it was so
+  already), `"retracted"` (it put back the step just before it, which was
+  taken out), `"off"` (the History settings leave this kind of change out),
+  `"paused"` (recording is paused), `"elsewhere"` (another tracker was shown
+  meanwhile), `"no-history"` (the dataset's history has not started) -- or
+  `null` beside a step and for an action that is no change (a read, a move of
+  the history); any other value, or a reason beside a step, is refused
+  (`_wire._ACTION_UNRECORDED`, the shared fixture's `action.unrecorded`)
 - `outcome`: the body's JSON: a change's outcome (counts, names, ids) or a
   read's result; finite numbers only
 
@@ -460,9 +469,9 @@ so that it can never be sniffed the way a version would be:
                "debug_snapshot", "freeze", "load_session", "ping", "requestSessionBundle"],
   "binaryCommands": ["action", "load_session"],
   "events": ["action_result", "agent_answered", "agent_asking", "agent_result", "agent_tools",
-             "agent_tools_changed", "click", "color_by", "command_error", "data_mapping",
-             "debug_snapshot", "history_changed", "hover", "pong", "ready", "result",
-             "result_removed", "results", "selection", "session_bundle", "session_loaded"]
+             "click", "color_by", "command_error", "data_mapping", "debug_snapshot",
+             "history_changed", "hover", "pong", "ready", "result", "result_removed",
+             "results", "selection", "session_bundle", "session_loaded"]
 }
 ```
 

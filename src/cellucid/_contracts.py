@@ -141,9 +141,30 @@ def _require_display_text(value: object, *, label: str, allow_empty: bool) -> st
     return value
 
 
+#: The white space prose loses at either end: ASCII white space, the Unicode
+#: space separators, the line and paragraph separators and the byte order
+#: mark. The web app's ``PROSE_EDGE`` (``data/anndata-cellucid-metadata.js``)
+#: and cellucid-r's ``.prose_edge_pattern``.
+PROSE_EDGE = re.compile(
+    "^[\t\n\v\f\r\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+"
+    "|[\t\n\v\f\r\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$"
+)
+
+
+def _require_prose_text(value: object, *, label: str, allow_empty: bool) -> str:
+    """Descriptive text -- a dataset's name, description, citation text,
+    source name -- trimmed (:data:`PROSE_EDGE`), then drawable as stored
+    (:func:`_require_display_text`): a space typed at either end of a
+    paragraph is removed, never refused, as the web app reads it.
+    Identifiers keep the strict rule."""
+    if isinstance(value, str):
+        value = PROSE_EDGE.sub("", value)
+    return _require_display_text(value, label=label, allow_empty=allow_empty)
+
+
 def _require_dataset_name(value: object, *, label: str = "dataset_name") -> str:
-    """Require one exact unpadded, nonblank human-readable dataset name."""
-    return _require_display_text(value, label=label, allow_empty=False)
+    """Require one nonblank human-readable dataset name, trimmed (:func:`_require_prose_text`)."""
+    return _require_prose_text(value, label=label, allow_empty=False)
 
 
 def _require_dataset_id(value: object, *, label: str = "dataset_id") -> str:

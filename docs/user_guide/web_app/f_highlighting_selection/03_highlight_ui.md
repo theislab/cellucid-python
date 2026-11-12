@@ -87,7 +87,7 @@ choosing one:
   finger lands on without moving view focus, as `Alt+click` does.
 - Turning it on shows a **Combine** choice of **Intersect**, **Add** and
   **Subtract** (one segmented control), which stands in for the modifiers a finger cannot press: **Intersect** is a
-  plain `Alt` gesture (and is the “replace” behaviour of the annotation tool on
+  plain `Alt` gesture (and is the “replace” behavior of the annotation tool on
   categorical fields), **Add** is `Shift+Alt`, **Subtract** is `Ctrl/Cmd+Alt`.
   A held `Shift` or `Ctrl/Cmd` key still wins over the button.
 - Two fingers always navigate: pinch to zoom, move both to pan. A second finger
@@ -136,7 +136,7 @@ When the bar shows:
   it off.
 - On a phone it hides while the full-screen menu is open.
 
-It is centred in the part of the plot the sidebar leaves uncovered (the same
+It is centered in the part of the plot the sidebar leaves uncovered (the same
 area the multiview grid is laid out in, so the bar and the panels always
 agree), and notifications stack above it rather than covering it. A finger on the bar never
 reaches the plot, so tapping or dragging on it never starts a selection or moves
@@ -168,7 +168,11 @@ Typical editing behavior:
 - clicking away (blur) commits the current text.
 
 ### Recolor a page
-Each page tab has a color indicator (a small color swatch).
+Each page tab has a color indicator (a small color swatch). A new page takes
+the next of the page colors that can be told apart from every page's color
+(the rule in [the legend](../d_fields_coloring_legends/04_legend_behavior.md)),
+so a page made after another was deleted, or after a recolor, never repeats a
+page's color.
 
 Click it to open a color picker and choose a new color.
 
@@ -190,17 +194,17 @@ Rules:
 You can create a derived page by dragging one page tab onto another, or by
 pressing the `⋈` control on a tab.
 
-On drop, the UI offers:
-- **Intersection (∩)**: cells that are in *both* pages (enabled groups only)
-- **Union (∪)**: cells that are in *either* page (enabled groups only)
+On drop, the UI offers, for each other page:
+- **∩ Intersection with** *page*: cells that are in *both* pages (enabled groups only)
+- **∪ Union with** *page*: cells that are in *either* page (enabled groups only)
 
 This creates a new page whose name reflects the operation (e.g. `Page A ∩ Page B`).
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/compare-highlight-pages.png
-:alt: The Highlighting panel with two page tabs ringed, their names shortened — Page 1 with a blue swatch carrying 826, and the active Page 2 with a red swatch carrying 267, each with a combine (⋈) and a delete (×) control — the list reading 267 cells highlighted with one Proximity (267 cells) (267) group, and the pointer on the button that adds another page.
+:alt: The Highlighting panel with two page tabs ringed — Page 1 with a blue swatch carrying 826, and the active Page 2 with a red swatch carrying 267, each with a combine (⋈) and a delete (×) control — the list reading 267 cells highlighted above CSV, .h5ad and Clear buttons and one group row, Proximity, with its count 267, and the pointer on the button that adds another page.
 :width: 534px
 
-Two pages. Each tab carries a colour swatch, the page name, and that page's
+Two pages. Each tab carries a color swatch, the page name, and that page's
 total membership. Only the active tab's groups are listed below and only they
 are rendered — which is why “Clear did nothing” is almost always “Clear worked,
 on the other page”.
@@ -275,7 +279,7 @@ Beside **Clear**, while cells are highlighted:
   and every obs field (your own fields included; continuous ones as `float32`
   or `float64`, as Cellucid holds them; a categorical keeps whether its
   categories are ordered, its labels in their own type -- integers stay
-  integers, `True`/`False` stay booleans -- and the colours shown, as Scanpy's
+  integers, `True`/`False` stay booleans -- and the colors shown, as Scanpy's
   `uns['<field>_colors']`), each group as a boolean column, the genes, the
   expression rows of the matrix the data mapping reads, and the embeddings
   shown, as stored. Only the highlighted cells' names and embedding rows are
@@ -289,8 +293,12 @@ Beside **Clear**, while cells are highlighted:
   arrive, so the export holds one part at a time while the next is
   downloaded. Its genes are their identifiers (the var
   index, as `adata.var_names` holds them), with the names Cellucid shows in
-  `var['symbol']` when they differ. A field name an HDF5 file cannot hold (one with
-  `/` in it, or `.`) is written renamed, and Cellucid says which. anndata,
+  `var['symbol']` when they differ. A field name a store cannot hold (one with
+  `/` or another character no file name holds, `.`, a name longer than 255
+  bytes, or one differing from another only in letter case) is written in its
+  portable form (`CD4/CD8` as `CD4_CD8`, a second `sex` as `sex_2`; the rule of
+  {doc}`../../python_package/c_data_preparation_api/09_cellucid_ready_anndata_specification`),
+  and Cellucid says which. anndata,
   Scanpy, h5py, cellucid-python and Cellucid itself read it.
 
 Both list the cells in the dataset's own order (ascending original
@@ -311,7 +319,10 @@ a CSV of obs names and values; a gene set editor's **Export** writes its sets
 as GMT, genes by identifier. A Cellucid CSV declares each column in its second
 row -- `kind`, then `highlight`, `categorical` or `continuous` -- so labels
 such as `0`, `10` or `True` come back as labels, never as numbers or groups,
-and a cell the file does not list comes back unknown. `cellucid.pull(adata, path)` in Python and `cellucid_pull(object,
+and lists each categorical's categories in its third row (`categories`, then
+the field's categories in its order), so they come back in the field's
+order, a category no cell holds among them. A cell the file does not list
+comes back unknown. `cellucid.pull(adata, path)` in Python and `cellucid_pull(object,
 path)` in R read any of these files back onto the object in one call
 ({doc}`../../python_package/g_api_reference_coverage/api/round_trip`).
 
@@ -339,10 +350,10 @@ Common reasons “visible < total”:
 
 At the bottom of the **Highlighting** section there is a collapsed accordion
 headed `Create categorical`. It turns the pages you have built into an ordinary
-categorical observation field — one you can then colour by, filter on, and use
+categorical observation field — one you can then color by, filter on, and use
 as the field for annotation-based selection.
 
-It is always present. It is greyed out only until a dataset is loaded.
+It is always present. It is grayed out only until a dataset is loaded.
 
 ### The short version
 
@@ -354,7 +365,14 @@ It is always present. It is greyed out only until a dataset is loaded.
 4) Press **Create**.
 
 A notification confirms it: `Created "<your name>" (<N> categories)`, and the
-new field appears alongside the dataset's own obs fields. Colour by it and
+new field appears alongside the dataset's own obs fields and is shown at once
+(the view is colored by it, as after **Group** or **Duplicate**; **Undo**
+removes it and brings back the coloring before). The preview lists exactly
+the categories made, in the colors they take: each page's category in its
+page's color (the swatch on its row, which recolors the page), so one page is
+one color in the builder, the preview, the legend and every view; a category
+of overlapping or uncovered cells takes the category palette's color of its
+place. A session keeps those colors with the field. Color by it and
 **Show centroids** / **Show labels** mark each category at the mean position of
 its cells, in whichever dimension the view shows; switching the dimension moves
 the labels with the embedding.
@@ -368,24 +386,38 @@ non-overlapping pages that covers every cell will show neither.
   `Overlapping cells` with four choices: **First page** (the default),
   **Last page**, **New label** — one shared category, `Overlap` unless you rename
   it — and **Each intersection**, which makes a separate category per overlap
-  combination and asks you to name each one. Only enabled groups count towards a
+  combination and asks you to name each one. Only enabled groups count toward a
   page's membership here, exactly as for page combine.
 - **Cells in no page at all.** A section reports `<n> cells not in any page` and
-  offers `Label for uncovered cells`, `Unassigned` by default. Clear that box if
-  you would rather those cells carry no label.
+  offers, under `Cells on no page`, **Take one label** (`Label for uncovered
+  cells`, `Unassigned` by default; clear that box if you would rather those
+  cells carry no label) or **Keep their `<column>` category** for any
+  categorical column: each such cell keeps its label there, so splitting one
+  label of an annotation is a page per new label and one **Create** (a page
+  label that is one of that column's categories joins it). The label box then
+  names the cells that column leaves without a category (`Label where it has
+  none`). When the pages hold every cell there is no such section.
 
 :::{note}
-**Limits and refusals** (the **Create** button stays disabled and prints the reason):
+**Limits and refusals** (the **Create** button stays disabled; what is still
+to do is a gray hint, a refusal is in red):
 
-- at least one page must be added — `Add at least one highlight page`
-- the column name must be non-empty, free of leading and trailing whitespace,
-  and must not contain `:`
+- at least one page must be added — `Add a highlight page to start.`
+- the column needs a name — `Name the new column.`
+- each page's label (and the labels of overlaps and of uncovered cells)
+  follows the rule of every category label you give: one line, no leading or
+  trailing whitespace, no control or zero-width character —
+  `Page 1: "<label>" cannot be a category label: …`
+- the name follows the rule of every field name (a rename's, **Group**'s, the
+  Python and R writers'): no leading or trailing whitespace and no control or
+  zero-width character — `"<name>" cannot be a field name: …`; `:` is allowed
+  (ATAC peaks such as `chr1:100-200`)
 - the name must not collide with a visible obs field —
-  `A visible observation field named "<name>" already exists`
-- **Each intersection** supports at most 32 pages: a cell's combination of pages
-  is one bit per page in a 32-bit mask, and the session stores each
-  intersection's label under that mask. The other strategies take any number of
-  pages.
+  `A field named "<name>" exists already; choose another name.`
+- every strategy, **Each intersection** included, takes any number of pages.
+  The intersection categories come after the pages' own, those of two pages
+  first, then three, and so on; the session stores each intersection's label
+  under its pages' positions joined by `+` (`0+2` for the first and third page).
 
 Fields made this way are saved in a `.cellucid-session` and restored with it, so
 a collaborator opening your session on the same dataset gets the same column.

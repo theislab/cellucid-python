@@ -125,7 +125,7 @@ def describe_non_finite(
     """Why one array cannot be stored as finite float32, counted rather than named.
 
     ``positions`` is ``False`` for a sparse matrix, whose stored non-zero
-    entries have no index the caller would recognise; the counts are still
+    entries have no index the caller would recognize; the counts are still
     exactly what was found. cellucid-r's ``.describe_non_finite()`` takes the
     same argument for the same reason.
 
@@ -168,7 +168,7 @@ def _worded(counts: _NonFiniteCounts, shape: tuple[int, ...], subject: str, *, p
         )
     return (
         f"{subject}: of {counts.total:,} {scope}, {counts.counted()}.{where} "
-        "Cellucid stores finite float32, because a colour scale has no "
+        "Cellucid stores finite float32, because a color scale has no "
         "position for an infinity and no value for a magnitude float32 "
         "cannot hold."
     )

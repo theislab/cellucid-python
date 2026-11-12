@@ -41,7 +41,7 @@ identified by its preprint DOI and its data portal; the adult-heart study
 E-MTAB-12916 shares none of its donors.
 
 Each file holds its embeddings in `obsm`. The four human atlases each carry a
-1D, 2D, and 3D UMAP computed from one shared neighbour graph (`X_umap_1d`,
+1D, 2D, and 3D UMAP computed from one shared neighbor graph (`X_umap_1d`,
 `X_umap_2d`, `X_umap_3d`), the first two components of the unintegrated PCA
 (`X_pca`), and the integrated latent space the graph was built on (`scvi`, or
 `scanvi` for Suo), which is the dataset's `latentKey`; Garcia, He, and Kanemaru
@@ -69,10 +69,18 @@ to one shared module, `pinned_build.py`:
   source file, or reads a local copy passed with `--source`.
 - `build_atlas.py --dataset <id>` builds `suo`, `garcia`, `he`, and `kanemaru`
   with one recipe: it reads the integration output, applies the published cell
-  subset (Suo only), curates `obs`, computes one neighbour graph on the
+  subset (Suo only), sums each cell's total count over every gene of the
+  integration output (its 8,192 genes) into `obs['total_counts']`, curates
+  `obs`, computes one neighbor graph on the
   integrated latent space with its 1D, 2D, and 3D UMAPs, single-threaded and
-  seeded, names the genes, and writes the Cellucid-ready AnnData with
-  `cellucid.prepare(format="zarr")`. It reads its inputs from
+  seeded, names the genes (only those that resolve to a symbol are
+  published), and writes the Cellucid-ready AnnData with
+  `cellucid.prepare(format="zarr", total_counts="total_counts",
+  total_counts_over="source panel")`, which records the totals as
+  `uns['cellucid']['totalCounts']` (`"over": "source panel"`: the source holds
+  8,192 genes and no whole-transcriptome totals, so the totals cover that
+  panel, not the whole cell). Pancreas sums its totals over all 27,998 source
+  genes before its highly variable selection (`"over": "all genes"`). Each store's totals are pinned by digest. It reads its inputs from
   `--source-dir`, which defaults to `$CELLUCID_ANNDATA_DIR` and otherwise to a
   `.anndatas/` directory beside the repository.
 
@@ -99,7 +107,7 @@ in is recorded once, in `sources/build-environment.json`, together with
   it. The four atlases also pin, by size and SHA-256, the upstream gene
   identifier list and the Ensembl-to-symbol table their gene names come from.
 - **The analysis** — the parameters and digests of everything the build
-  derives: the neighbour graph and the embeddings, the gene-naming census of the
+  derives: the neighbor graph and the embeddings, the gene-naming census of the
   four atlases, and the velocity projections of Pancreas.
 - **The output** — the `uns['cellucid']` the store carries, the published
   expression matrix (shape, stored values and digest), and the file count,

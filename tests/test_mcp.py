@@ -3,7 +3,7 @@
 - ``src/cellucid/mcp_tools.json`` is the web connector's tool list for this
   package's own ``action_catalog.json`` (written by the web repository's
   ``node scripts/generate-action-catalog.mjs``, which pins the same digest
-  in ``tests/mcp-tools-document-contract.test.mjs`` while the catalogues
+  in ``tests/mcp-tools-document-contract.test.mjs`` while the catalogs
   agree; cellucid-r pins it in ``tests/testthat/test-mcp.R``).
 - ``tests/fixtures/local_agents.json`` is shared with cellucid-r byte for
   byte: the agents folder, the record, the endpoint, the app names and the
@@ -12,7 +12,7 @@
 - The agent commands and events of the viewer channel, a viewer's agent
   port, its publication on this computer, and the MCP server itself over
   stdio (initialize, tools/list, tools/call, errors, cancellation, the
-  person asked in the app, a changed tool list) against a fake page.
+  person asked in the app, a tool list that never changes) against a fake page.
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ from typing import Any
 import pytest
 from _serverless_viewer import serverless_viewer
 from _viewer_channel_client import TEXT, FakeViewer, binary_event
+from _web_root import rendered_by_web
 
 import cellucid._agent_link as agent_link
 import cellucid._mcp_core as core
@@ -44,15 +45,15 @@ from cellucid.anndata_server import AnnDataServer
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = Path(__file__).parent / "fixtures" / "local_agents.json"
 
-#: The digest of ``mcp_tools.json``: the web connector's tools for this package's catalogue.
-MCP_TOOLS_SHA256 = "3cf96bc8a522b98661693099ce113d484c2f182505f3b500a085cab218b7dc38"
+#: The digest of ``mcp_tools.json``: the web connector's tools for this package's catalog.
+MCP_TOOLS_SHA256 = "65b1e61533966676c2fb60f5c307cc00b43b0db952f044dc72fa8839297ffaa0"
 
 #: The digest of ``local_agents.json``; cellucid-r pins the same one.
-LOCAL_AGENTS_SHA256 = "bd2a7ea96353837a23e072adae53af97d4fe2a8fec528977d716bfc2f476696f"
+LOCAL_AGENTS_SHA256 = "f5a5f265380c9566ccfa5f5bb67165fb95261d4da8f4ac792c179b4b4d75ad00"
 
 REGENERATE = (
     "regenerate it: node scripts/generate-action-catalog.mjs in the web repository writes "
-    "the catalogue and mcp_tools.json together; pin the digest it prints"
+    "the catalog and mcp_tools.json together; pin the digest it prints"
 )
 
 
@@ -74,6 +75,12 @@ needs_sdk = pytest.mark.skipif(not _has_sdk(), reason="the MCP SDK (cellucid[mcp
 # =============================================================================
 # The generated tools and the shared fixture
 # =============================================================================
+
+
+def test_mcp_tools_json_is_the_list_the_web_apps_source_makes_now() -> None:
+    """Against the web app's source (``renderMcpTools``), not only a pinned digest."""
+    shipped = (ROOT / "src" / "cellucid" / "mcp_tools.json").read_text(encoding="utf-8")
+    assert rendered_by_web("scripts/generate-action-catalog.mjs", "renderMcpTools") == shipped, REGENERATE
 
 
 def test_mcp_tools_json_is_the_web_connectors_list_for_this_packages_catalogue() -> None:
@@ -100,6 +107,23 @@ def test_mcp_tools_json_is_the_web_connectors_list_for_this_packages_catalogue()
         assert name in names, name
 
 
+def test_the_local_instructions_name_the_notebook_calls_that_bring_the_agents_work_back() -> None:
+    """A local agent told the person to run ``cellucid.pull()``, which does not exist (live-8
+    L26-6): the instructions name the calls that apply the viewer's session, and they exist."""
+    from cellucid.jupyter import AnnDataViewer
+
+    text = core.mcp_tools_document()["instructions"]
+    for call in ("viewer.request_session()", "viewer.apply_session_to_anndata(adata, request)", "plan.apply()"):
+        assert call in text, call
+    assert callable(AnnDataViewer.request_session) and callable(AnnDataViewer.apply_session_to_anndata)
+    from cellucid.anndata_session._apply import ApplyPlan
+
+    assert callable(ApplyPlan.apply)
+    # The R calls it names are cellucid-r's (checked there against its own functions).
+    for call in ("cellucid_apply_session(object, cellucid_request_session(viewer))", "cellucid_apply_plan(plan)"):
+        assert call in text, call
+
+
 def test_a_stale_tools_document_is_refused_by_name(monkeypatch: pytest.MonkeyPatch) -> None:
     core.mcp_tools_document.cache_clear()
     real = core.resources.files
@@ -115,7 +139,7 @@ def test_a_stale_tools_document_is_refused_by_name(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(core.resources, "files", lambda package: Package(real(package)))
     try:
-        with pytest.raises(core.McpToolsDocumentError, match="another action catalogue"):
+        with pytest.raises(core.McpToolsDocumentError, match="another action catalog"):
             core.mcp_tools_document()
     finally:
         core.mcp_tools_document.cache_clear()
@@ -156,8 +180,15 @@ def test_the_agents_folder_follows_the_user_cache_and_its_override(monkeypatch: 
     monkeypatch.setenv("CELLUCID_AGENTS_DIR", str(tmp_path))
     assert agent_link.agents_dir() == tmp_path
     monkeypatch.setenv("CELLUCID_AGENTS_DIR", "relative/folder")
-    with pytest.raises(ValueError, match="absolute"):
+    with pytest.raises(agent_link.AgentsFolderError, match="absolute"):
         agent_link.agents_dir()
+    # Refused as a shared folder is: nothing found, and the agent reads why
+    # (cellucid-r's sentence), where a ValueError ended cellucid mcp at start.
+    with pytest.raises(agent_link.AgentsFolderError, match="absolute"):
+        agent_link.discover_viewers()
+    session = core.LocalAgentSession()
+    assert session.link() is None
+    assert session.status()["advice"] == "CELLUCID_AGENTS_DIR must be an absolute path"
     monkeypatch.delenv("CELLUCID_AGENTS_DIR")
     folder = agent_link.agents_dir()
     assert folder.parts[-2:] == ("cellucid", "agents")
@@ -174,8 +205,11 @@ def test_agent_commands_serialize_as_the_viewer_protocol_has_them() -> None:
     protocol = json.loads((Path(__file__).parent / "fixtures" / "viewer_protocol.json").read_text(encoding="utf-8"))
     for name in ("agent_list", "agent_call", "agent_cancel", "agent_answer"):
         assert wire._COMMAND_MESSAGE_FIELDS[name] == frozenset(protocol["commands"][name])
-    for name in ("agent_asking", "agent_answered", "agent_tools_changed"):
+    for name in ("agent_asking", "agent_answered"):
         assert wire._INBOUND_EVENT_FIELDS[name] == frozenset(protocol["events"][name])
+    # Exactly the agent events the protocol has: nothing says the tool list changed.
+    agent_events = {name for name in [*protocol["events"], *protocol["binaryEvents"]] if name.startswith("agent_")}
+    assert agent_events == wire._AGENT_EVENT_TYPES == {"agent_tools", "agent_result", "agent_asking", "agent_answered"}
     for name in ("agent_tools", "agent_result"):
         assert wire._INBOUND_EVENT_FIELDS[name] == frozenset(protocol["binaryEvents"][name]) | {"body"}
     assert frozenset(protocol["agent"]["connectionFields"]) == wire._AGENT_CONNECTION_FIELDS
@@ -253,7 +287,7 @@ class FakePage:
     def __init__(self, port: int, viewer: Any, *, tools: list[dict[str, Any]] | None = None) -> None:
         self.socket = FakeViewer(port, timeout=30)
         assert self.socket.hello(viewer._viewer_id, viewer._viewer_token) == {"type": "welcome"}
-        self.tools = tools if tools is not None else [{"name": "color_by", "title": "Colour", "description": "From the page.", "inputSchema": {"type": "object"}, "annotations": {}}]
+        self.tools = tools if tools is not None else [{"name": "color_by", "title": "Color", "description": "From the page.", "inputSchema": {"type": "object"}, "annotations": {}}]
         self.commands: queue.Queue[dict[str, Any]] = queue.Queue()
         self.ask: set[str] = set()
         self.hold: set[str] = set()
@@ -293,9 +327,6 @@ class FakePage:
 
     def result(self, request_id: str, result: dict[str, Any]) -> None:
         self.socket.send_binary(binary_event({"type": "agent_result", "requestId": request_id}, json.dumps(result).encode()))
-
-    def tools_changed(self) -> None:
-        self.socket.send_json({"type": "agent_tools_changed"})
 
     def next_command(self, kind: str, timeout: float = 10.0) -> dict[str, Any]:
         deadline = time.monotonic() + timeout
@@ -431,10 +462,6 @@ def test_a_remote_link_drives_a_published_viewer_and_hears_it_stop() -> None:
             assert link.describe()["connected"] is True
             connection = {"id": "local-remote", "client": None}
             assert link.list_tools(connection, timeout=10) == page.tools
-            changed = threading.Event()
-            link.add_tools_listener(changed.set)
-            page.tools_changed()
-            assert changed.wait(10)
             heard, listener = _listen()
             link.start_call("local-remote-1", "color_by", {}, "Cursor", connection, listener)
             assert heard.get(timeout=10)[0] == "result"
@@ -615,7 +642,8 @@ def test_the_server_without_a_viewer_lists_the_generated_tools_and_says_what_is_
     try:
         answer = client.initialize()["result"]
         assert answer["serverInfo"]["name"] == "cellucid" and answer["serverInfo"]["title"] == "Cellucid"
-        assert answer["capabilities"]["tools"] == {"listChanged": True}
+        # The list never changes while the server runs, and it says so.
+        assert answer["capabilities"]["tools"] == {"listChanged": False}
         assert answer["instructions"] == core.mcp_tools_document()["instructions"]
         client.send({"id": 2, "method": "tools/list"})
         tools = client.reply(2)["result"]["tools"]
@@ -641,7 +669,41 @@ def test_the_server_without_a_viewer_lists_the_generated_tools_and_says_what_is_
 
 
 @needs_sdk
-def test_the_server_drives_a_published_viewer_cancels_asks_in_the_app_and_hears_the_list_change(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_tool_list_is_the_same_whatever_the_page_does_and_is_never_said_to_change() -> None:
+    """The person's settings are told to the agent after its tool results,
+    never in its tool list (L26-9): a list change makes the app rewrite its
+    cached prompt and drop the earlier reasoning. So the list an agent gets is
+    the generated one before a page opens, the same once a page (whatever its
+    settings) took the channel, reloaded or was replaced, and no
+    ``notifications/tools/list_changed`` is ever sent."""
+    document = core.mcp_tools_document()
+    generated = [*document["tools"], document["statusTool"]]
+    with _published_viewer() as (viewer, port):
+        client = StdioClient(_server_env())
+        pages: list[FakePage] = []
+        try:
+            assert client.initialize()["result"]["capabilities"]["tools"] == {"listChanged": False}
+            client.send({"id": 2, "method": "tools/list"})
+            assert client.reply(2)["result"]["tools"] == generated
+            # A page takes the channel, reloads, and is replaced by another: a
+            # page lists the same tools whatever the person's settings in it.
+            pages.append(FakePage(port, viewer, tools=document["tools"]))
+            pages[-1].close()
+            pages.append(FakePage(port, viewer, tools=document["tools"]))
+            pages.append(FakePage(port, viewer, tools=document["tools"]))
+            client.send({"id": 3, "method": "tools/list"})
+            assert client.reply(3)["result"]["tools"] == generated
+            pages[-1].next_command("agent_list")
+            with pytest.raises(queue.Empty):
+                client.next(lambda message: message.get("method") == "notifications/tools/list_changed", timeout=2)
+        finally:
+            for page in pages:
+                page.close()
+            assert client.close() == 0
+
+
+@needs_sdk
+def test_the_server_drives_a_published_viewer_cancels_asks_and_asks_in_the_app(monkeypatch: pytest.MonkeyPatch) -> None:
     with _published_viewer() as (viewer, port):
         page = FakePage(port, viewer)
         page_gone = _page_gone(viewer, monkeypatch)
@@ -684,9 +746,6 @@ def test_the_server_drives_a_published_viewer_cancels_asks_in_the_app_and_hears_
             client.send({"id": asked_again["id"], "result": {"action": "decline"}})
             assert page.next_command("agent_answer")["allowed"] is False
             assert client.reply(7)["result"]["isError"] is True
-            # The person's settings changed: the app is told to list the tools again.
-            page.tools_changed()
-            client.next(lambda message: message.get("method") == "notifications/tools/list_changed")
             # The page goes: a call says so in one sentence.
             page.close()
             assert page_gone.wait(30)
@@ -728,7 +787,7 @@ def test_a_call_the_app_cancels_while_it_is_still_being_sent_is_stopped_in_the_p
             assert client.reply(3)["result"] == {}
             sent_back.set()
             assert page.next_command("agent_cancel")["requestId"] == request_id
-            # Cancelled: the app is not answered (a ping after it is, and nothing before it).
+            # Canceled: the app is not answered (a ping after it is, and nothing before it).
             client.send({"id": 4, "method": "ping"})
             client.reply(4)
             assert not any(message.get("id") == 2 for message in client._held)
@@ -794,26 +853,21 @@ def test_without_the_sdk_cellucid_mcp_says_how_to_install_it(monkeypatch: pytest
 # =============================================================================
 
 
-def test_a_page_that_goes_mid_call_fails_the_call_and_a_page_back_says_the_list_may_differ() -> None:
+def test_a_page_that_goes_mid_call_fails_the_call() -> None:
     """A reload or a closed tab: the call it was running gets no answer, so it
-    fails at once with the page-gone sentence (never a hang); the page that
-    takes the channel again tells whoever lists the tools."""
+    fails at once with the page-gone sentence (never a hang)."""
     with _published_viewer() as (viewer, port):
         page = FakePage(port, viewer)
         page.hold.add("slow")
-        changed = threading.Event()
-        viewer._agent_port.add_tools_listener(changed.set)
         heard, listener = _listen()
         connection = {"id": "local-x", "client": None}
         viewer._agent_port.start_call("local-x-1", "slow", {}, "A", connection, listener)
         page.next_command("agent_call")
         page.close()
         assert heard.get(timeout=10) == ("failed", {"reason": agent_link.PAGE_GONE})
-        changed.clear()
         page = FakePage(port, viewer)
         page.hold.add("slow")
         try:
-            assert changed.wait(10), "a page back tells the tool listeners"
             # A page replacing the one holding the channel (opened again elsewhere) fails its calls too.
             heard, listener = _listen()
             viewer._agent_port.start_call("local-x-2", "slow", {}, "A", connection, listener)
@@ -838,8 +892,6 @@ def test_a_page_reload_mid_call_is_answered_through_cellucid_mcp() -> None:
             page.close()
             page = FakePage(port, viewer)
             assert client.reply(2, timeout=30)["result"] == {"content": [{"type": "text", "text": core.refusal_text(agent_link.PAGE_GONE)}], "isError": True}
-            # The page back: the app is told to list the tools again.
-            client.next(lambda message: message.get("method") == "notifications/tools/list_changed")
         finally:
             page.close()
             assert client.close() == 0
@@ -903,7 +955,7 @@ def test_a_silent_consumer_is_swept_its_calls_cancelled_and_its_events_let_go(mo
             page.next_command("agent_call")
             published = agent_link._endpoint.viewers[viewer._viewer_id]  # type: ignore[union-attr]
             with published.lock:
-                published.consumers["gone"].events.append({"type": "agent_tools_changed"})
+                published.consumers["gone"].events.append({"type": "agent_failed", "requestId": "gone-0", "reason": "not read"})
                 published.consumers["gone"].seen -= agent_link.CONSUMER_IDLE_SECONDS + 1
                 published.sweep()
                 assert "gone" not in published.consumers
@@ -1044,6 +1096,37 @@ def test_a_command_with_a_length_that_is_no_number_is_refused() -> None:
         connection.putheader("Content-Length", "many")
         connection.endheaders()
         assert connection.getresponse().status == 400
+
+
+def test_a_command_nested_past_the_interpreter_is_refused_as_no_command() -> None:
+    import http.client
+
+    with _published_viewer() as (_viewer, _port):
+        record = agent_link.discover_viewers()[0]
+        parts = urllib_parse.urlsplit(record["endpoint"])
+        body = b"[" * 200_000
+        connection = http.client.HTTPConnection(parts.hostname, parts.port, timeout=5)
+        connection.request("POST", parts.path + "/command", body=body, headers={"Authorization": f"Bearer {record['token']}"})
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read()) == {"error": "A command is one JSON object."}
+
+
+def test_a_connection_to_the_endpoint_that_sends_nothing_is_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Anyone on this computer may connect without the token: an idle
+    # connection held its thread for as long as it stayed open.
+    import socket
+
+    monkeypatch.setattr(agent_link._EndpointHandler, "timeout", 0.3)
+    with _published_viewer() as (_viewer, _port):
+        parts = urllib_parse.urlsplit(agent_link.discover_viewers()[0]["endpoint"])
+        with socket.create_connection((parts.hostname, parts.port), timeout=10) as idle:
+            started = time.monotonic()
+            assert idle.recv(1) == b""
+            assert time.monotonic() - started < 5
+    assert agent_link._EndpointHandler.timeout == 0.3
+    monkeypatch.undo()
+    assert agent_link._EndpointHandler.timeout == agent_link.CONNECTION_IDLE_SECONDS
 
 
 @needs_sdk

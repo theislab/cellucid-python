@@ -4,7 +4,7 @@
 **Time:** 20–40 minutes  
 **What you'll learn:**
 - The exact "saved vs not saved" list for `.cellucid-session` files
-- The fifteen parts of the state each step records
+- The sixteen parts of the state each step records
 - Which parts depend on the dataset and why an identity mismatch refuses everything
 - How to check a load quickly
 
@@ -37,20 +37,22 @@ includes it ({doc}`../m_state_history/06_sharing_and_replay`):
 conversations, agents or times; **Steps only** writes the steps without cells
 or values, a plan to replay on any dataset.
 
-At every step, these fifteen parts are kept:
+At every step, these sixteen parts are kept:
 - **cells to open**: every cell or a subsample, and how many cells genes are
   read for ({doc}`../b_data_loading/21_subsampled_loading`);
 - **data mapping**: which stored embeddings and arrays are plotted and read
   ({doc}`../b_data_loading/13_data_mapping`);
+- **expression values**: whether the genes are shown and analyzed normalized
+  to 10,000 counts per cell and/or `log1p` (Data mapping › Expression values);
 - **fields and labels**: renamed fields and categories, deleted fields, and
   fields you made or a notebook pushed, with their values;
 - **gene sets**: made in the app or pushed by a notebook;
 - **views**: the kept views, their layout, the focused view, linked cameras,
   the embedding each view shows, centroid points and labels;
-- **active field**: what each view is coloured by, a field or a gene;
+- **active field**: what each view is colored by, a field or a gene;
 - **filters**, per view: hidden categories, continuous ranges, outlier and
   missing-value filters, and **filter by cell count**;
-- **colours**, per view: category colours, colour maps, colour ranges, log
+- **colors**, per view: category colors, color maps, color ranges, log
   scale, Gray for zero;
 - **hidden cells**, per view: cells hidden one by one;
 - **highlights**: highlight pages and their groups of cells;
@@ -128,11 +130,21 @@ is open with other cells
 ### Data mapping
 
 The embeddings that are turned on and the default of each dimension, and every
-other choice under **Session › Data mapping** (modality, neighbour graph, gene
+other choice under **Session › Data mapping** (modality, neighbor graph, gene
 names, expression matrix and its transform, highly variable genes, latent
 space, vector fields). It is put back right after the cells and before the
 views, so every view the session names can be shown; see
 {doc}`../b_data_loading/13_data_mapping`.
+
+### Expression values
+
+Whether the genes are normalized to 10,000 counts per cell and log-transformed
+(**Session › Data mapping › Expression values**), as asked. Put back right after
+the data mapping and before the views, so a view colored by a gene, its color
+range and its filter are restored in the values they were set in; restoring a
+normalized state reads each cell's total first (an obs column, else every gene
+once). A session saved before this part existed opens with the values as
+stored.
 
 ### Views and cameras
 
@@ -146,21 +158,21 @@ views, so every view the session names can be shown; see
 
 Each view is saved from its own state, whichever view is selected when you
 save: saving with a kept view selected still records the live view's own
-colouring field and filters as the live view's.
+coloring field and filters as the live view's.
 
-### Active field, filters, colours and hidden cells (per view)
+### Active field, filters, colors and hidden cells (per view)
 
-- what each view is coloured by: an observation field or a gene;
+- what each view is colored by: an observation field or a gene;
 - filters: hidden categories, continuous ranges, the outlier filter of a
   categorical field and its threshold, missing values hidden, a field's filter
   switched off, and **filter by cell count** (a category keeping only some of
   its cells shown);
-- colours: category colours, colour maps, colour ranges, log scale, Gray for
+- colors: category colors, color maps, color ranges, log scale, Gray for
   zero;
 - cells hidden one by one.
 
 Only what differs from how the field opened is recorded, so a session stays
-small however many fields you looked at. A colour range is measured against
+small however many fields you looked at. A color range is measured against
 the data, not against the filter.
 
 ### Fields and labels
@@ -177,12 +189,12 @@ field comes back, so its labels sit exactly where they were.
 ### Gene sets and highlights
 
 - gene sets, with their names, descriptions and genes;
-- highlight pages (name, colour) and their groups (label, on or off, and the
+- highlight pages (name, color) and their groups (label, on or off, and the
   exact cells, by original position).
 
 ### Camera path
 
-Keyframes, timing, interpolation, **Loop playback** and **Autoplay**, and an
+Keyframes with their holds, timing, interpolation, **Loop playback** and **Autoplay**, and an
 explicitly empty path. A camera path saved with **Autoplay** on starts playing
 once the load is done; otherwise it stays stopped.
 
@@ -199,8 +211,17 @@ and overlays. A restore applies each exactly as a choice made by hand.
 - Every **Figure Export** setting is saved: plot size and preset, the frame,
   background, font and text sizes, title and axis labels, axes, legend and its
   position, orientation, depth sorting, reference grid, selection emphasis,
-  colourblind preview, download format, DPI, SVG strategy, and **Export all
+  colorblind preview, download format, DPI, SVG strategy, and **Export all
   views**.
+- Saved settings are read one at a time. A value this version of Cellucid
+  cannot use — a control removed since the file was saved, a choice the
+  control no longer offers, a Figure Export value no version has — keeps
+  the setting as it is shown, and one notice says which (`2 saved settings
+  could not be used and stay as shown`, each with its reason under
+  **Details**); every other setting is restored. A setting added since the
+  file was saved keeps its value. Figure Export settings saved by an earlier
+  version are read in today's terms (an SVG strategy left unchosen is
+  **Full vector**).
 
 :::{note}
 "Captured by id" means the control's DOM identifier is the key, not the label
@@ -210,8 +231,10 @@ session restores.
 Restoring a control writes its value and then fires the event its owner
 listens for, and the owner's own handler is what passes the value on. This is
 why a restored control and the thing it drives must never disagree: if the
-owner refuses the value, the whole load fails instead of leaving the panel
-showing something the viewer never accepted.
+owner refuses a value it was handed, the whole load fails instead of leaving
+the panel showing something the viewer never accepted. (A value the control
+does not offer is never handed to it: it is one of the settings the notice
+names, above.)
 :::
 
 :::{note}
@@ -312,7 +335,7 @@ This is the "don't expect it to come back" list.
 ### Rendering buffers
 
 Sessions do **not** store GPU buffers, such as:
-- per-cell colour buffers
+- per-cell color buffers
 - transparency buffers
 - other derived rendering caches
 
@@ -348,8 +371,11 @@ After you load a session, check in this order:
    - A mismatch refuses the load. Open the dataset the message names, then load
      the unchanged file again.
 2) **Did the load finish?**
-   - The progress notification must end as **Loaded** with **Session fully
-     restored.**
+   - The load must end in a notice reading **Session fully restored.**
+   - **Session restored but for N parts** names each part that could not be
+     put back (left as it was shown), one sentence each, with the failure's
+     words under **Details**; a part saved by another version of Cellucid
+     that this one cannot read says so.
    - A progress card still running is not success.
 3) **Is the history there?**
    - **State › History** lists the steps, with the step shown marked;

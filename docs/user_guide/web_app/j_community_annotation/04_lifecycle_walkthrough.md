@@ -84,7 +84,7 @@ carries it. Every collaborator signs in as themselves.
 
 ## Step 4 — Choose the annotation repository
 
-Once the Cellucid GitHub App is installed on the account or organisation that
+Once the Cellucid GitHub App is installed on the account or organization that
 owns the repository, the repositories it can see are listed for you.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-03-install-app.png
@@ -97,7 +97,7 @@ you are on. **Add repo** opens GitHub so you can enable more; **Reload** picks u
 what you changed without restarting the wizard.
 ```
 
-The list is paged and filterable because an organisation can expose thousands of
+The list is paged and filterable because an organization can expose thousands of
 repositories. If your repository is missing, it is almost always because the
 GitHub App has not been given access to it — use **Add repo**, then **Reload**.
 
@@ -153,7 +153,7 @@ change locally; publishing writes it to `annotations/config.json`.
 ```
 
 Threshold is stored as a signed fraction and edited as whole percent. Its full
-range is −100 % to +100 %, because the underlying confidence score is itself
+range is −100% to +100%, because the underlying confidence score is itself
 signed: a column can be configured to accept a label that more people opposed
 than supported, which is almost never what you want but is representable.
 
@@ -167,7 +167,7 @@ The out-of-the-box defaults, when a column has no explicit settings, are
 Once a column is open for annotation it is badged everywhere it is offered.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-08-votable-badge.png
-:alt: The Categorical obs select holding clusters, prefixed by a ballot-box badge marking it open for voting, and the legend beneath it: each category with its consensus label (Beta cell under Beta) and its up and down vote counts.
+:alt: The Categorical obs select holding clusters, prefixed by a ballot-box badge marking it open for voting, and the legend beneath it: each category with its consensus label (Beta cell under Beta, a dash under the others) and its up and down vote counts.
 :width: 496px
 
 The 🗳️ badge in the **Categorical obs** dropdown marks a column that is open for
@@ -223,7 +223,8 @@ follows from three comparisons, in this order.
 :alt: The voting view for the Beta cluster with a banner reading "Pending (1 voter)", one suggestion card (Beta cell, its ontology id, marker and evidence, one upvote), and the New suggestion form below.
 :width: 988px
 
-**Pending** — fewer voters than the column's minimum. Here one person has voted
+**Pending** — no voter yet, or fewer voters than the column's minimum. Here
+one person has voted
 and the column requires three, so no confidence figure is reported at all; the
 banner names only the shortfall. The label is still shown, because the work is
 real, but it is not yet a decision.
@@ -235,7 +236,7 @@ real, but it is not yet a decision.
 
 **Consensus** — enough voters, one clear leader, and confidence at or above the
 threshold. Four people voted, all four supported *Beta cell* and none opposed
-it, so confidence is 100 %.
+it, so confidence is 100%.
 ```
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-12-disputed.png
@@ -278,8 +279,8 @@ resolved: state the evidence, not the conclusion.
 ### Proposing a label
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-13-new-suggestion.png
-:alt: The New suggestion form filled in with a label, an ontology id and marker genes, with Search CAP, Search Ontology and Search Markers buttons beside the fields and Add and Clear buttons below, and the pointer on Add.
-:width: 1040px
+:alt: The New suggestion form filled in with a label, an ontology id and marker genes, with Search CAP, Search ontology and Search markers buttons beside the fields and Add and Clear buttons below, and the pointer on Add.
+:width: 1020px
 
 **New suggestion** takes a label plus three optional pieces of evidence: an
 ontology id, marker genes, and free text. The three search buttons look the
@@ -360,7 +361,7 @@ does not; ask the author for write access or to allow forking.
 ### Your role cannot be determined
 
 ```{figure} ../../../_static/screenshots/community_annotation/state-repository-unreadable.png
-:alt: The whole application window with the Community Annotation panel back in its disconnected state and a notification explaining that the user's role for the repository could not be determined and that the annotation repo was disconnected.
+:alt: The whole application window with the Community annotation section back in its disconnected state and a notification explaining that the user's role for the repository could not be determined and that the annotation repo was disconnected.
 :width: 1440px
 
 If GitHub cannot tell Cellucid what your permissions are — the repository was

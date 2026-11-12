@@ -73,8 +73,9 @@ different scale in each, because one scales rotation and the other pan.
 :alt: The Navigation block with Mode set to Free-fly: Look sensitivity and Move speed sliders with their readouts, Invert look axes and Projectile shooting, and Capture pointer with its (i).
 :width: 488px
 
-**Free-fly** — two sliders, three checkboxes, and the pointer-lock checkbox
-that does not exist in the other two modes.
+**Free-fly** — two sliders and three checkboxes, the last of them the
+pointer-lock checkbox (`Capture pointer`) that does not exist in the other two
+modes.
 ```
 
 :::{note}
@@ -258,8 +259,8 @@ A session saves every view's camera and mode.
 ## Edge cases (things that surprise people)
 
 - **Right-click is disabled / triggers context menu**: Cellucid prevents the default context menu on the canvas, but some browser extensions can interfere.
-- **Scroll wheel scrolls the page instead of zooming**: click the canvas once so it has focus, then scroll again.
-- **Keyboard controls do nothing**: if a dropdown/slider is focused, keys may be captured; click the canvas (or press `Esc`) to return focus.
+- **Scroll wheel scrolls the page instead of zooming**: the wheel zooms the view under the pointer, whatever has focus; with the pointer over the sidebar or a panel it scrolls that instead.
+- **Keyboard controls do nothing**: a text field or a dropdown keeps the keys typed in it (a dropdown's letters choose its options), and a dialog its own. Click the plot, or use the key for what you chose ({kbd}`G` for Free-fly). A slider, a checkbox or a button never holds the keys.
 - **Pointer lock “won’t enable”**: pointer lock requires a user gesture and can be blocked in iframes or by browser policy.
 
 ---

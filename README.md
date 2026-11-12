@@ -32,10 +32,10 @@ Cellucid is a browser-first viewer for exploring large single-cell datasets in r
   `cellucid.pull(adata, "exports/")` reads the web app's CSV, GMT, `.h5ad` and
   session exports
 - **Every action is a method**: everything a person can do in the viewer --
-  colour, filter, highlight, rename, move the camera, run an analysis, read
+  color, filter, highlight, rename, move the camera, run an analysis, read
   the history -- is one method of the viewer (`viewer.color_by(...)`,
   `viewer.highlight_cells(...)`, `viewer.history_get()`), generated from the
-  web app's action catalogue and recorded as a step of the viewer's history
+  web app's action catalog and recorded as a step of the viewer's history
 - **Sessions**: `viewer.request_session()` brings the viewer's whole history
   (session format 4) into Python as a `cellucid.CellucidSession`, and
   `cellucid.read_session(path)` reads any session file the web app saves
@@ -116,7 +116,7 @@ Then work in the viewer and, in the next cell, bring it all back:
 `viewer.pull(adata)`. Seven runnable notebooks, each with an R twin and an
 "Open in Colab" badge, walk through the round trip — one line in any notebook,
 pulling highlights, labels and scores back, pushing clusters and gene sets
-in, the web app's exports, re-analysing a selection, subsampled views:
+in, the web app's exports, re-analyzing a selection, subsampled views:
 [Cellucid in your pipeline](https://docs.cellucid.com/en/latest/user_guide/python_package/f_notebooks_tutorials/06_cellucid_in_your_pipeline_python_and_r.html).
 
 To share or host a dataset, write a Cellucid-ready AnnData once. It is still a

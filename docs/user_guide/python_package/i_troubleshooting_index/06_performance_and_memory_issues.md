@@ -24,7 +24,7 @@ timed.
 
 Read the last line the terminal printed. A direct AnnData server runs four
 numbered steps and reads only metadata before it binds, so each step is short
-except two that are labelled:
+except two that are labeled:
 
 | Last line | What is running | What to do |
 | --- | --- | --- |

@@ -26,13 +26,17 @@ same column again, whatever suffix it took; a viewer pull removes a column
 only when the viewer no longer holds its result (``prune``); a column another
 source wrote, or Cellucid did not write, is a conflict (``on_conflict``). The
 column rules -- dtype, missing values, a subsample's unopened cells as
-``<NA>`` -- are :mod:`._columns`', shared with
-:func:`~cellucid.apply_cellucid_session_to_anndata`.
+``<NA>``, the colors in ``uns['<column>_colors']`` that go with a column (a
+categorical field: the colors it is shown in -- a live viewer's result
+carries them, a session file's are read by :mod:`._colors`; none otherwise,
+and a column removed takes its colors) -- are :mod:`._columns`',
+shared with :func:`~cellucid.apply_cellucid_session_to_anndata`.
 """
 
 from __future__ import annotations
 
 import copy
+import json
 import os
 import re
 import warnings
@@ -45,6 +49,8 @@ import numpy as np
 import pandas as pd
 
 from .._anndata_files import is_mudata
+from .._contracts import _require_dataset_id
+from .._exact_integers import as_exact_text, holds_unsafe_integers
 from .._plural import plural
 from ._columns import categorical_column, continuous_column, membership_column, write_columns
 from ._records import _ColumnPlan
@@ -62,6 +68,10 @@ OBS_NAME_COLUMN = "obs_name"
 KIND_ROW = "kind"
 #: What a column of an obs-column CSV holds (its kind row).
 CSV_KINDS = ("highlight", "categorical", "continuous")
+#: The first cell of an obs-column CSV's third row, which lists each
+#: categorical column's categories in the field's order (a JSON array of
+#: strings; empty for the other kinds).
+CATEGORIES_ROW = "categories"
 #: Where a pull read a result: the live viewer (a file's results carry the
 #: file's name).
 VIEWER_SOURCE = "viewer"
@@ -324,12 +334,16 @@ def _open_cells(results: Iterable[ViewerResult]) -> np.ndarray | None:
 
 @dataclass(frozen=True)
 class _Candidate:
-    """One column a pull would write: the result it holds, the name it wants."""
+    """One column a pull would write: the result it holds, the name it wants,
+    and the colors it is shown in when the pull knows them (a session file's
+    categorical field, :mod:`._colors`; ``uns['<column>_colors']`` under the
+    name it is written to)."""
 
     key: _ResultKey
     wanted: str
     values: pd.Series
     info: dict[str, Any]
+    colors: tuple[str, ...] | None = None
 
 
 def _result_candidates(
@@ -360,6 +374,7 @@ def _result_candidates(
     for result in sorted(results, key=lambda item: (item.kind, item.revision)):
         key = (result.source, result.kind, result.id)
         meta = result.meta
+        colors: tuple[str, ...] | None = None
         provenance = {"kind": result.kind, "id": result.id, "pulled_from": result.source}
         if result.kind == "highlight":
             if not highlights:
@@ -390,6 +405,10 @@ def _result_candidates(
                     missing_code=int(np.iinfo(result.values.dtype).max),
                     index=index,
                 )
+                # The colors the viewer shows it in (a live viewer's result
+                # carries them; an obs-column CSV's does not).
+                shown = meta.get("colors")
+                colors = None if shown is None else tuple(shown)
             else:
                 values = continuous_column(result.values, cells=result.cells, n_obs=n_obs, index=index)
             info = {**provenance, "key": meta["key"], "origin": origin}
@@ -401,7 +420,7 @@ def _result_candidates(
             info = provenance
         else:
             continue
-        candidates.append(_Candidate(key=key, wanted=wanted, values=values, info=info))
+        candidates.append(_Candidate(key=key, wanted=wanted, values=values, info=info, colors=colors))
     return candidates, skipped
 
 
@@ -425,7 +444,8 @@ def _name_candidates(
         written_by[str(column)] = key[0]
     naming = _Naming(on_conflict=on_conflict, existing=columns, ours=ours, written_by=written_by)
     plans = [
-        _ColumnPlan(name=naming.name(candidate.wanted, candidate.key), values=candidate.values, metadata=candidate.info)
+        _ColumnPlan(name=naming.name(candidate.wanted, candidate.key), values=candidate.values, metadata=candidate.info,
+                    colors=candidate.colors)
         for candidate in candidates
     ]
     if naming.conflicts:
@@ -601,9 +621,39 @@ def apply_results(
 # ---------------------------------------------------------------------------
 
 
+def _csv_categories(listed: str, name: str, kind: str, source: str) -> list[str] | None:
+    """A column's cell of the categories row: a categorical's categories in
+    the field's order (a JSON array of distinct strings), nothing for the
+    other kinds."""
+    if kind != "categorical":
+        if listed != "":
+            raise ValueError(f"{source}: the {kind} column {name!r} lists categories; only a categorical column does")
+        return None
+    if listed == "":
+        raise ValueError(
+            f"{source}: the categorical column {name!r} lists no categories "
+            f"(its cell of the {CATEGORIES_ROW!r} row holds them, as a JSON array of strings)"
+        )
+    try:
+        categories = json.loads(listed)
+    except ValueError:
+        categories = None
+    if not isinstance(categories, list) or not all(isinstance(category, str) for category in categories):
+        raise ValueError(
+            f"{source}: the categories of the categorical column {name!r} are not a JSON array of strings: {listed!r}"
+        )
+    seen: set[str] = set()
+    for category in categories:
+        if category in seen:
+            raise ValueError(f"{source}: the categorical column {name!r} lists the category {category!r} twice")
+        seen.add(category)
+    return categories
+
+
 def _csv_column_result(
     name: str,
     kind: str,
+    categories: list[str] | None,
     column: pd.Series,
     positions: np.ndarray,
     n_obs: int,
@@ -612,9 +662,10 @@ def _csv_column_result(
     revision: int,
 ) -> ViewerResult:
     """One CSV column as the result its kind row declares: ``highlight``
-    (``true``/``false``; empty is unknown), ``categorical`` (labels; empty is
-    no category) or ``continuous`` (numbers; empty is no value). A cell the
-    file does not list is unknown, or has no value."""
+    (``true``/``false``; empty is unknown), ``categorical`` (labels, each one
+    of ``categories`` exactly, the categories row's list, kept in its order;
+    empty is no category) or ``continuous`` (numbers; empty is no value). A
+    cell the file does not list is unknown, or has no value."""
     text = column.astype(str).str.strip()
     present = (text != "").to_numpy()
     order = np.argsort(positions, kind="stable")
@@ -647,12 +698,20 @@ def _csv_column_result(
             kind="continuous", id=name, revision=revision, n_obs=n_obs, meta={"key": name, "origin": "user"},
             cells=positions[order].astype(np.uint32), values=numbers[order], column=name, source=source,
         )
-    categories = list(dict.fromkeys(text[present].tolist()))
-    lookup = {category: code for code, category in enumerate(categories)}
+    assert categories is not None
+    # Each label exactly as written (the categories row lists it so), never
+    # trimmed; an empty cell has no category.
+    labels = column.astype(str)
+    labeled = (labels != "").to_numpy()
+    found = pd.Categorical(labels, categories=pd.Index(categories, dtype=object)).codes.astype(np.int64)
+    unlisted = labeled & (found < 0)
+    if unlisted.any():
+        raise ValueError(
+            f"{source}: the categorical column {name!r} holds {labels.iloc[int(np.flatnonzero(unlisted)[0])]!r}, "
+            f"which its categories (the {CATEGORIES_ROW!r} row) do not list"
+        )
     dtype = _code_dtype(len(categories))
-    missing = np.iinfo(dtype).max
-    codes = np.array([lookup[value] if keep else missing for value, keep in zip(text, present, strict=True)],
-                     dtype=dtype)
+    codes = np.where(labeled, found, np.iinfo(dtype).max).astype(dtype)
     return ViewerResult(
         kind="categorical", id=name, revision=revision, n_obs=n_obs,
         meta={"key": name, "categories": categories, "origin": "user"},
@@ -663,16 +722,23 @@ def _csv_column_result(
 def read_obs_csv(path: str | os.PathLike[str], obs_names: pd.Index) -> list[ViewerResult]:
     """Read an obs-column CSV the web app exports: a header row (``obs_name``,
     then each column's name), a kind row (``kind``, then each column's kind:
-    ``highlight``, ``categorical`` or ``continuous``), then a row per cell.
-    A cell the file does not list is unknown; a name this object does not
-    have is refused."""
+    ``highlight``, ``categorical`` or ``continuous``), a categories row
+    (``categories``, then each categorical column's categories in the
+    field's order as a JSON array of strings, empty for the other kinds),
+    then a row per cell. A categorical's categories are the categories row's,
+    in its order, those no cell holds too; a label it does not list is
+    refused. A cell the file does not list is unknown; a name this object
+    does not have is refused."""
     path = Path(path).expanduser()
     with path.open(encoding="utf-8", newline="") as handle:
         frame = pd.read_csv(handle, dtype=str, keep_default_na=False, header=None)
-    if frame.shape[0] < 2 or frame.shape[1] < 1 or frame.iloc[0, 0] != OBS_NAME_COLUMN or frame.iloc[1, 0] != KIND_ROW:
+    if (frame.shape[0] < 3 or frame.shape[1] < 1 or frame.iloc[0, 0] != OBS_NAME_COLUMN
+            or frame.iloc[1, 0] != KIND_ROW or frame.iloc[2, 0] != CATEGORIES_ROW):
         raise ValueError(
-            f"{path.name}: an obs-column CSV starts with a header row whose first cell is {OBS_NAME_COLUMN!r} "
-            f"and a kind row whose first cell is {KIND_ROW!r} (then each column's kind: {', '.join(CSV_KINDS)})"
+            f"{path.name}: an obs-column CSV starts with a header row whose first cell is {OBS_NAME_COLUMN!r}, "
+            f"a kind row whose first cell is {KIND_ROW!r} (then each column's kind: {', '.join(CSV_KINDS)}) "
+            f"and a categories row whose first cell is {CATEGORIES_ROW!r} (then each categorical column's "
+            "categories, as a JSON array of strings)"
         )
     header = [str(value) for value in frame.iloc[0]]
     kinds = [str(value) for value in frame.iloc[1]]
@@ -681,7 +747,11 @@ def read_obs_csv(path: str | os.PathLike[str], obs_names: pd.Index) -> list[View
             raise ValueError(f"{path.name}: the column {name!r} is of kind {kind!r}, not one of {', '.join(CSV_KINDS)}")
     if len(set(header)) != len(header):
         raise ValueError(f"{path.name}: a column is named twice")
-    rows = frame.iloc[2:].reset_index(drop=True)
+    categories = [
+        _csv_categories(str(listed), name, kind, path.name)
+        for name, kind, listed in zip(header[1:], kinds[1:], frame.iloc[2, 1:], strict=True)
+    ]
+    rows = frame.iloc[3:].reset_index(drop=True)
     names = rows[0]
     if names.duplicated().any():
         raise ValueError(f"{path.name}: the cell {names[names.duplicated()].iloc[0]!r} is listed twice")
@@ -695,7 +765,8 @@ def read_obs_csv(path: str | os.PathLike[str], obs_names: pd.Index) -> list[View
         )
     return [
         _csv_column_result(
-            header[number], kinds[number], rows[number], positions.astype(np.int64), len(obs_names),
+            header[number], kinds[number], categories[number - 1], rows[number], positions.astype(np.int64),
+            len(obs_names),
             source=path.name, revision=number,
         )
         for number in range(1, len(header))
@@ -774,6 +845,7 @@ def pull(
     field_prefix: str = "",
     on_conflict: str = "error",
     prune: bool = True,
+    dataset_id: str | None = None,
 ) -> PullSummary:
     """Write what was made in Cellucid onto ``adata`` in one call, in place.
 
@@ -785,6 +857,18 @@ def pull(
     var index, ``adata.var_names`` -- and, from a viewer whose data mapping
     names the genes by a var column (such as ``feature_name``), the names it
     shows for them (``symbols``).
+
+    A column's colors go with it as Scanpy keeps them,
+    ``uns['<column>_colors']`` under the name it is written to: a categorical
+    field gets the colors it is shown in, one a category in its order -- from
+    a live viewer, the colors its view in focus shows it in (the result
+    carries them); from a session file, its view in focus's recolors, else its
+    ``palette`` (a field made from highlight pages: its pages' colors), else
+    Cellucid's own category colors, as
+    :func:`~cellucid.apply_cellucid_session_to_anndata` writes them; any other
+    column written gets none (colors held under its name described another
+    column, and are removed), and a column a viewer pull removes takes its
+    colors with it.
 
     Parameters
     ----------
@@ -801,8 +885,11 @@ def pull(
         all, with no waiting -- or what the web app exports with no
         notebook: obs-column ``.csv`` files (a header row, ``obs_name``
         then each column's name; a kind row, ``kind`` then each column's
-        kind, ``highlight``, ``categorical`` or ``continuous``; a row per
-        cell; each column written as named), ``.gmt`` gene sets and
+        kind, ``highlight``, ``categorical`` or ``continuous``; a
+        categories row, ``categories`` then each categorical column's
+        categories in the field's order as a JSON array of strings, empty
+        for the other kinds; a row per cell; each column written as named,
+        a categorical with the categories row's categories in its order), ``.gmt`` gene sets and
         ``.cellucid-session`` files (the state the session shows, its active
         tracker's head: its highlight groups, user-defined fields and gene
         sets, checked against ``adata`` as an apply checks it;
@@ -831,6 +918,11 @@ def pull(
         highlight deleted since). A result left out of this pull
         (``highlights=False``, a pushed field) keeps its column, and files
         never remove anything.
+    dataset_id : str, optional
+        For ``.cellucid-session`` files: the id the object was shown under,
+        when the viewer was given another than the one it declares
+        (``uns['cellucid']['id']``), as
+        :func:`~cellucid.apply_cellucid_session_to_anndata` takes it.
 
     Returns
     -------
@@ -851,6 +943,8 @@ def pull(
     from ..jupyter._viewer import AnnDataViewer
 
     if isinstance(source, AnnDataViewer):
+        if dataset_id is not None:
+            raise TypeError("dataset_id names the id .cellucid-session files were saved under; a viewer's pull takes none.")
         source._require_viewer_order(adata)
         return apply_results(
             adata,
@@ -875,6 +969,7 @@ def pull(
         {"highlight_prefix": highlight_prefix, "field_prefix": field_prefix},
         on_conflict,
     )
+    shown_as = None if dataset_id is None else _require_dataset_id(dataset_id, label="dataset_id")
     paths = export_paths(source)
     results, sessions = results_of_files(paths, adata)
     candidates, skipped = _result_candidates(
@@ -887,7 +982,7 @@ def pull(
         # as an apply checks it; its names are then settled with every other
         # column of this pull (on_conflict, reuse). A pull writes results;
         # renaming the object's own columns is apply_cellucid_session_to_anndata's.
-        columns, session_sets = session_columns(path, adata)
+        columns, session_sets = session_columns(path, adata, shown_as=shown_as)
         for column in columns:
             kind = str(column.metadata["kind"])
             if (kind == "highlight" and not highlights) or (kind != "highlight" and not fields):
@@ -896,7 +991,8 @@ def pull(
             wanted = f"{highlight_prefix}{result_id}" if kind == "highlight" else f"{field_prefix}{column.metadata['key']}"
             info = {**column.metadata, "id": result_id, "pulled_from": path.name}
             assert column.values is not None
-            candidates.append(_Candidate(key=(path.name, kind, result_id), wanted=wanted, values=column.values, info=info))
+            candidates.append(_Candidate(key=(path.name, kind, result_id), wanted=wanted, values=column.values, info=info,
+                                         colors=column.colors))
         taken = {name for _, name, _ in sets}
         for entry in session_sets:
             sets.append((
@@ -989,8 +1085,9 @@ def field_push_params(values: Any, key: str, *, n_obs: int, obs_names: pd.Index 
     some, the rest without a value), or a ``RangeIndex`` of every cell in
     order. An array or list is one value per cell, in order. Categorical,
     string, object and bool values make a categorical (a bool's labels are
-    ``"false"`` and ``"true"``, as cellucid-r pushes them); numbers a
-    continuous field.
+    ``"false"`` and ``"true"``, as cellucid-r pushes them), and so do integers
+    holding identifiers past 2^53 (their exact decimal texts, as the viewer
+    reads such a column); numbers a continuous field.
     """
     if isinstance(values, pd.Series):
         series = values
@@ -1030,6 +1127,11 @@ def field_push_params(values: Any, key: str, *, n_obs: int, obs_names: pd.Index 
             "of them; push a Series indexed by obs names, or one value per cell in order"
         )
     dtype = series.dtype
+    if holds_unsafe_integers(series):
+        # Identifiers past 2^53 are their exact decimal text, as the viewer
+        # reads such a column (``_exact_integers``).
+        series = as_exact_text(series)
+        dtype = series.dtype
     if dtype.kind == "b" or isinstance(dtype, pd.BooleanDtype):
         # A boolean column's labels are "false" and "true", in every language.
         labels = series.map({False: "false", True: "true"})

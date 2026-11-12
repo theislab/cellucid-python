@@ -102,7 +102,7 @@ All paths are under `cellucid/assets/js/`.
 7. **Genes read for: one control, one path** (`app/ui/modules/gene-read-control.js`,
    in Session › Subsampling below Cells to open). The share of the *open*
    cells a gene is read for, on a slider that snaps to steps: the share read
-   now, then 1, 5, 10, 25, 50 and 100 % of the open cells above it
+   now, then 1, 5, 10, 25, 50 and 100% of the open cells above it
    (`geneReadSteps`), the last held to the most cells whose gene index is
    kept here (`AnnDataReader.geneSampleCost` `index.fits`, asked when the
    control is first used, not while the dataset opens: pricing reads the
@@ -114,13 +114,13 @@ All paths are under `cellucid/assets/js/`.
    room at that moment, then calls `readGenesForMoreCells`, which grows the
    sample in doubling steps (`growthSegmentBounds`), each step reading only
    the rows it adds: the cells read are kept, never read again. **Stop** (and
-   the notification's Cancel) keeps what is read. 100 % is what was *Read for
+   the notification's Cancel) keeps what is read. 100% is what was *Read for
    all cells*; there is no other path. The gene's legend and an analysis's
    gene sample line are links to it (`createGeneReadLink`,
    `createGeneReadNote`, `revealGeneReadControl`, which opens the Session
    panel and its Subsampling section, `ui/modules/session-sections.js`
    `expandSessionSection`). The share is of the open cells, so it follows
-   Cells to open: 100 % is every open cell, and a share lowered there lowers
+   Cells to open: 100% is every open cell, and a share lowered there lowers
    it. A session records the sample read (`genes.cells`,
    `session/cell-subset-record.js`): a growth stopped, or under way when the
    session is saved, records the cells read by then.
@@ -137,7 +137,7 @@ All paths are under `cellucid/assets/js/`.
      a column (obs, codes, `obsm`, dense matrices) is read row by row in the
      open rows' file order (`rowWaves`: the rows ascending and the view row
      of each, `CellRows.byRow`), each row one copy to its place, with no
-     pieces listed or ordered: a 50 % uniform share of a 10M-cell `.h5ad`
+     pieces listed or ordered: a 50% uniform share of a 10M-cell `.h5ad`
      took 4.7-7.0 s for its first view against every cell's 0.9 s, and
      takes 0.9-1.0 s. Runs are ordered by source row with a radix order
      (`rankedOrder`), never a comparison sort.
@@ -175,7 +175,7 @@ All paths are under `cellucid/assets/js/`.
     the opening is held: whole, in one read of each array at its first gene,
     when the gene-index memory budget holds it (counted in that share), then
     every gene from memory; otherwise the genes asked for together are read
-    as one range per run of neighbouring genes, never one read per gene (a
+    as one range per run of neighboring genes, never one read per gene (a
     10M-cell revisit's DE read each gene's piece on its own: 71.7 s against
     16.0 s from an index built in memory). A run whose reading is priced
     above building it again (`rebuildMs`, at the read rate measured in the
@@ -212,7 +212,7 @@ All paths are under `cellucid/assets/js/`.
       growth reads the same bytes in more readings, a loaded round trip
       each (and from chunks shows every cell again in its order), so over
       any priced link a share opens whole; it grows only on the page's
-      measured cost of showing cells, with no link to pay. Measured, 50 %
+      measured cost of showing cells, with no link to pay. Measured, 50%
       uniform of 10M cells, local web host: grown from chunks all 5M at
       4.5 s, whole 2.8 s.
     - Every cell of a file in its own order does not grow. It opens in its
@@ -246,7 +246,7 @@ All paths are under `cellucid/assets/js/`.
       keeps its gap bytes until it ends, within the fetched-bytes budget.
     - A categorical column whose dictionary has more categories than open
       cells, and would cost more than one policy request, reads its codes
-      first, then only the present labels and colours (`reader.js`
+      first, then only the present labels and colors (`reader.js`
       `_readPresentCategorical`).
 15. **The subsampling specification** is shared byte for byte with Python and
     R: {doc}`19_subsampling_specification`.
@@ -255,42 +255,43 @@ All paths are under `cellucid/assets/js/`.
 
 | Date | Decision | Why | Rules out |
 | --- | --- | --- | --- |
-| 2026-10-27 | `blocks` is the default method, aligned to about four chunks of the dominant array | a run of neighbours is a run of storage: a block share reads about its share of the bytes | a uniform default on a file in its own order (10 % of HLCA's cells touch 45 % of `X`'s chunks) |
+| 2026-10-27 | `blocks` is the default method, aligned to about four chunks of the dominant array | a run of neighbors is a run of storage: a block share reads about its share of the bytes | a uniform default on a file in its own order (10% of HLCA's cells touch 45% of `X`'s chunks) |
 | 2026-10-27 | a subsample opens in its priority order | its first `m` cells are a sample at every `m`, so growth and segment indexing append | rereading on growth |
 | 2026-10-28 | a share that rounds below two cells is refused with the reason, never made larger | exact cells: sessions, links, Python and R name the same set | silent changes to the cell set |
 | 2026-10-28 | large row-stored atlases open **all cells the device can hold**. A gene is read for a stated sample sized to the gene-time target, and the other cells wait until the user chooses *Read for all cells* (its cost shown). Analyses say which cells they used | the map costs bytes a cell; a gene of a CSR file costs each cell's whole row | sizing the map by what a gene costs |
 | 2026-10-28 | the gene sample is the first `g` open cells in the opening's priority order. Every cell of a file in its own order opens in its default `blocks` order. A session records `genes` only while a sample is in effect, and one saved with every cell read restores with a fitted sample | the sample is then exactly a `blocks` subsample, and kept indexes of earlier visits count | a silent multi-GB read on restore |
 | 2026-10-28 | anything kept is filed under a version (content name, else size plus modification time or a strong ETag), checked before any kept byte is used | a changed file must never be served from what was kept | keeping by size or name alone |
-| 2026-10-29 | genes on a sample: unread cells fade, read cells drawn on top and larger ({doc}`28_decisions_rendering_layers`) | unread cells should not look like 0 | the same grey for 0 and not read |
+| 2026-10-29 | genes on a sample: unread cells fade, read cells drawn on top and larger ({doc}`28_decisions_rendering_layers`) | unread cells should not look like 0 | the same gray for 0 and not read |
 | 2026-10-30 | speed and smaller downloads outrank memory, as long as memory is counted and bounded | the owner's priority | trading time or downloads for memory |
 | 2026-10-30 | **the share-cost rule** in every metric (network, memory, rendering, analysis, opening); s/n is the ideal, not a rule | a person choosing a smaller share expects it to be cheaper | any planner path where a share costs more than the whole |
-| 2026-10-30 | the rule is judged on the costs a person meets: time, download, memory, rendering and analysis work. The request count is a means | a 1 % share's obs names made 575 requests against every cell's 530, but took 30.6 s against 37.9 s and downloaded 75.7 MB against 77.9 MB | spending bytes to save requests (see Tried and reverted) |
+| 2026-10-30 | the rule is judged on the costs a person meets: time, download, memory, rendering and analysis work. The request count is a means | a 1% share's obs names made 575 requests against every cell's 530, but took 30.6 s against 37.9 s and downloaded 75.7 MB against 77.9 MB | spending bytes to save requests (see Tried and reverted) |
 | 2026-10-30 | the first gene is priced to half the gene time; the rest is read by measured top-up steps | the opening's link is a lower bound (CELLxGENE atlases priced at 20 s were read in 6-15 s) | one fixed sample from an early price |
 | 2026-10-30 | block size comes from one ladder: the base from the layout, the rung from what is kept and the link, and a revisit keeps its rung | a size taken from the open-time link stayed at the storage block on first visits, and revisits then chose another size and read their cells again | sizes that do not nest |
-| 2026-10-30 | spread shares open in every cell's block order, with their own cells filtered in | in its own order each of a 1 % share's first cells lay in a chunk of its own: 71 cells in 10.7 s, against every cell's 1,572,326 in 5.5 s | a share's sample costing more than the whole |
-| 2026-10-30 | a 50 % share's slow first gene is fixed by cutting the CPU of the store-order pass, not by opening in file order | file order would make a larger share on a later visit read its kept index again | the file-order design |
+| 2026-10-30 | spread shares open in every cell's block order, with their own cells filtered in | in its own order each of a 1% share's first cells lay in a chunk of its own: 71 cells in 10.7 s, against every cell's 1,572,326 in 5.5 s | a share's sample costing more than the whole |
+| 2026-10-30 | a 50% share's slow first gene is fixed by cutting the CPU of the store-order pass, not by opening in file order | file order would make a larger share on a later visit read its kept index again | the file-order design |
 | 2026-10-30 | levels of detail rank a cell by its identity under the share's seed | the same cells come first in every order, step and revisit | ranking by open position |
 | 2026-10-30 | a read on the gene sample checks its row pointers once a run: the most first rows known covered are kept per matrix (pointers held only grow) | markers at 50M read whole columns a few genes at a time (about 3,750 reads), and each read walked the sample's rows twice to ask whether its pointers were held: about 290 s on the reader alone | a per-read coverage walk |
 | 2026-10-30 | a cell-subset run (differential expression) is priced over the run, not read by read: the gene stream passes the run's remaining genes (`runGenes`) down to `getMatrixCellSubset`, which prices rows every read, an index pass once, or the cells kept once, and takes the cheapest | read by read, every batch of a 10M run re-decoded the cells' rows (about 64 GB decoded for one run) | a second ask before keeping the cells; charging an unbuilt index's whole pass to every batch |
 | 2026-10-30 | a run that reads genes first stops and settles the gene sample's background top-up (`DataState.holdGeneSample`); a person's *Read for all cells* is left alone | the top-up grew the sample under a running DE, which then failed as invalidated | runs racing the top-up |
 | 2026-10-30 | a share lowered and raised back comes back in its order with the gene sample it was read for (the gene time's, grown by its top-up, or the count a person read), never fitted again | fitted again at that moment's measured link and decode rate, a 50M store's sample of 4.49M became every cell (markers 15.4 → 62.3 s, a reader worker of 8.7 GB) and a 10M store's markers went 7.8 → 80.7 s | re-pricing the same cells on each Apply |
-| 2026-10-30 | categories read the present codes only when the dictionary is larger than the open cells | a 1 % share of a column of 1,029,016 categories sent every label to the page | whole dictionaries at every share |
+| 2026-10-30 | categories read the present codes only when the dictionary is larger than the open cells | a 1% share of a column of 1,029,016 categories sent every label to the page | whole dictionaries at every share |
 | 2026-10-31 | a cell subset is read through the first rows of each gene (`_sparseColumnRows`) only where those rows are fewer than the gene's (`_readsFewerColumnRows`: segments ending before the last, or prefix counts below every row); any other read takes the route priced over the run, and a read within a gene sample takes it by the sample's columns (only its rows' pointers are read) | a share raised back to every cell opens in the share's order with its gene index in segments, and two groups of every cell read each batch through the first rows of every gene: whole columns, every gene of the read at once, unpriced (1M: DE 9.0 s against 1.5 s; with no gene index yet, a read of 8,610 genes failed after 3 min 50 s for lack of memory) | the first-rows read for cells that reach the last segment |
-| 2026-10-31 | a radix sort's digit has no more values than the keys sorted (`radix-order.js` `digitBitsOf`, 16 bits at most) | a gene's few hundred entries put in open order (`fileOrderedAccess`) walked 65,536 counters a pass: 6 s of a 30,000-gene DE at 1M | a fixed 16-bit digit |
+| 2026-10-31 | a radix sort's digit has no more values than the keys sorted (`radix-order.js` `digitPlanOf`, 16 bits at most; the passes and the digit width chosen for the fewest counts walked) | a gene's few hundred entries put in open order (`fileOrderedAccess`) walked 65,536 counters a pass: 6 s of a 30,000-gene DE at 1M | a fixed 16-bit digit |
 | 2026-10-31 | a run's cell subset is checked once (`_checkedCells`: distinct, in range, its largest) and compared on each later read | a 10M DE reads 1.9M cells about 400 times; checked, bounded by the gene sample, by the rows read and by a prefix each read, they were 8.5 of the reader's 9 s | walking the cells again each read |
 | 2026-11-06 | every rate measured of the machine or the link that a plan weighs is read through one module, `utils/machine.js` (`measureOf`): the link the reader plans on (`plannedLink`), the decoding rate, the order time, the kept-read rate, the index pass rates, the opening cost, the cores. A test or a benchmark holds them (`holdMachine`) on the page, and a thread hands what it holds to every worker it starts (`worker-script.js` `handToWorkers`) | the pins beside each measurement (`pinDecodingRate`, `pinOrderMadeMs`, `holdShownCells`) reached no worker from a page, and the link, the kept-read rate and the pass rates had none, so browser specs planned on whatever a loaded runner measured | a pin of its own beside a measurement; a spec asserting a plan on a measured link |
 | 2026-10-31 | once a run's cells are kept (`_keptCellSubset`), a later read of them is a copy and nothing else (`_heldCellSubset`): no row view, pointer check or named rows again | every cell open with a gene sample (a local 10M CSR file: 8.1M sampled), a DE's groups reach past the sample; each of ~470 reads still made a row view of 2M rows and walked its pointers' coverage three times before copying (0.6 s a read): DE 4 s on the pushed tree, 180–360 s here | per-read work on kept cells |
 | 2026-10-31 | a gene stream over some cells starts a read once half the memory gate is free, or every task left fits (`gene-stream-runner.js` `roomToRead`) | a read over some cells costs its cells whatever its genes; started as each task left the gate, a 10M DE of two groups (1.9M cells) made ~15,000 reads: 54 s against the pushed tree's 4 s (it read whole columns, a task a worker a read) | a read a task |
-| 2026-10-31 | a subsample view's rows are priced at the stored chunks they lie in (`matrix-access.js` `touchedChunkBytes`: a view chunk touched costs the stored chunk it is part of, decoded whole), | priced at the view's part of each chunk, a 10 % uniform share's groups (lying in every stored chunk) read by their rows cost 5× what was priced (10M CSR: 161 MB priced, 750 MB read and decoded) | pricing a view's rows at its own part of each chunk |
-| 2026-10-31 | a run keeping a subsample's cells by their rows reads them in store order (`reader.js` `_subsetInStoreOrder`: the cells' file rows ascending through the open rows' store-order matrix, each stored chunk decoded once, the entries put back at the cells' positions) | read in open order, a spread share's rows made each read of the run's pipeline decode nearly every stored chunk again: a 50 % uniform share's DE groups (944,727 cells) read 7.5 GB of a 2.6 GB 10M CSR file (39–41 s; now 0.18 GB, 5.7 s; every cell 0.22 GB, 5.2 s) | reading a share's rows in open order |
+| 2026-10-31 | a subsample view's rows are priced at the stored chunks they lie in (`matrix-access.js` `touchedChunkBytes`: a view chunk touched costs the stored chunk it is part of, decoded whole), | priced at the view's part of each chunk, a 10% uniform share's groups (lying in every stored chunk) read by their rows cost 5× what was priced (10M CSR: 161 MB priced, 750 MB read and decoded) | pricing a view's rows at its own part of each chunk |
+| 2026-10-31 | a run keeping a subsample's cells by their rows reads them in store order (`reader.js` `_subsetInStoreOrder`: the cells' file rows ascending through the open rows' store-order matrix, each stored chunk decoded once, the entries put back at the cells' positions) | read in open order, a spread share's rows made each read of the run's pipeline decode nearly every stored chunk again: a 50% uniform share's DE groups (944,727 cells) read 7.5 GB of a 2.6 GB 10M CSR file (39–41 s; now 0.18 GB, 5.7 s; every cell 0.22 GB, 5.2 s) | reading a share's rows in open order |
 | 2026-10-31 | every stored row open in another order (a share raised back to every cell in its order) takes every stored row's kept index for the rows past the carried ones (`_restrictsWhole`, kept runs past `start` only), its genes placed by the open rows' runs when there are fewer runs than a gene's entries (`restrictedAccess` `entriesByRun`: no lookup scattered through memory, no sort) | the rows past the share's were indexed again by a pass of their own (10M Zarr: 27 MB read and decoded, marker genes 2.7 → 5.3 s when no gene was shown before) while every cell's index was kept; placed by a lookup of each row and a sort, a markers run's 30,000 genes cost 1.0 s (Node), by runs 0.6 s | a second index of every cell after the round trip |
-| 2026-10-31 | a file on this computer, or a host on it (a loopback origin: `cellucid serve`, Python's and R's served stores), prices the first gene as this machine at rest whatever its link measured: at no less than a disk's rate (`LOCAL_POLICY`, 1 GB/s), at its shortest round trip, no time a request beyond it (`host-link-memory.js` `pricingLink` `thisMachinePricing`; a local file's link snapshot carries its priced rate and `onThisMachine`) | an opening's metadata reads measure a fraction of such a link (a 10M-cell store on a loopback host in Chromium: 45 MB/s from 0.9 MB, Zarr v3 9 MB/s from 51 KB); priced at that, every cell's first gene (read in about 6 s by the last pushed commit) was priced at 15-37 s, and genes were read for 32-68 % of the cells, the first differential expression on them | the gene sample on this computer from the opening's lower bound; pricing a host here as measured once a read slowed by the machine's own load counts as filling the link, or at its round trip under load (5 of 6 openings of 10M-cell stores with the machine busy sampled 19,779-1,947,096 cells, the first DE following the sample); a notebook kernel priced as this computer (it may run across the internet) |
-| 2026-10-31 | a share's choice between every stored row's index restricted to it and its own pass in store order weighs, besides the index's and the view's work, each path's placement of a gene in open order (`wholeIsCheaper`, `PassRates.placing`): per entry over the index built and each gene answered once; unmeasured, the whole for two thirds of the entries or more | every stored row's index places every stored row's entries of each gene, twice a half share's: a 50 % uniform share of a 10M-cell store took 1.3-1.7x on it what its own pass took (Chromium; first gene CSR 7.7 / Zarr 6.4 s against 6.0 / 4.5 s, marker genes 11.6 / 12.4 s against 8.0 / 7.4 s; every cell's first gene 6.0 / 4.9 s), the same values | weighing the index pass alone (a gene was taken to cost the same after either) |
+| 2026-10-31 | a file on this computer, or a host on it (a loopback origin: `cellucid serve`, Python's and R's served stores), prices the first gene as this machine at rest whatever its link measured: at no less than a disk's rate (`LOCAL_POLICY`, 1 GB/s), at its shortest round trip, no time a request beyond it (`host-link-memory.js` `pricingLink` `thisMachinePricing`; a local file's link snapshot carries its priced rate and `onThisMachine`) | an opening's metadata reads measure a fraction of such a link (a 10M-cell store on a loopback host in Chromium: 45 MB/s from 0.9 MB, Zarr v3 9 MB/s from 51 KB); priced at that, every cell's first gene (read in about 6 s by the last pushed commit) was priced at 15-37 s, and genes were read for 32-68% of the cells, the first differential expression on them | the gene sample on this computer from the opening's lower bound; pricing a host here as measured once a read slowed by the machine's own load counts as filling the link, or at its round trip under load (5 of 6 openings of 10M-cell stores with the machine busy sampled 19,779-1,947,096 cells, the first DE following the sample); a notebook kernel priced as this computer (it may run across the internet) |
+| 2026-10-31 | a share's choice between every stored row's index restricted to it and its own pass in store order weighs, besides the index's and the view's work, each path's placement of a gene in open order (`wholeIsCheaper`, `PassRates.placing`): per entry over the index built and each gene answered once; unmeasured, the whole for two thirds of the entries or more | every stored row's index places every stored row's entries of each gene, twice a half share's: a 50% uniform share of a 10M-cell store took 1.3-1.7x on it what its own pass took (Chromium; first gene CSR 7.7 / Zarr 6.4 s against 6.0 / 4.5 s, marker genes 11.6 / 12.4 s against 8.0 / 7.4 s; every cell's first gene 6.0 / 4.9 s), the same values | weighing the index pass alone (a gene was taken to cost the same after either) |
 | 2026-10-31 | a gene placed from every stored row's entries tests each against a bit of the segment's open rows before looking its open row up (`openRowBits`) | the open rows' table is 40 MB at 10M stored rows and each lookup a cache miss; half of a half share's entries are of rows not open (Node: 18.8 → 13.8 ns an entry) | a lookup of every entry |
-| 2026-10-31 | the gene sample is grown from one control, **Genes read for** in Session › Subsampling (below Cells to open): a percent of the open cells on a slider snapping to steps (the share now, 1, 5, 10, 25, 50, 100 %, held to the index's room), its cost said and priced again as the link changes, Read / Stop; 100 % is the former *Read for all cells*, and the legend's and analyses' lines only link to it | owner, on HLCA ("Gene read for 3.8K of 2.3M cells", only *Read for all cells*, 9.1 GB, ~11 h): not reading all is fine, but the share must be choosable in the UI; reading changes colouring and analyses alike, so it sits with the reading controls, one place | a second size control (in the legend or an analysis); a count slider (the percent of the open cells reads as Cells to open does) |
+| 2026-10-31 | the gene sample is grown from one control, **Genes read for** in Session › Subsampling (below Cells to open): a percent of the open cells on a slider snapping to steps (the share now, 1, 5, 10, 25, 50, 100%, held to the index's room), its cost said and priced again as the link changes, Read / Stop; 100% is the former *Read for all cells*, and the legend's and analyses' lines only link to it | owner, on HLCA ("Gene read for 3.8K of 2.3M cells", only *Read for all cells*, 9.1 GB, ~11 h): not reading all is fine, but the share must be choosable in the UI; reading changes coloring and analyses alike, so it sits with the reading controls, one place | a second size control (in the legend or an analysis); a count slider (the percent of the open cells reads as Cells to open does) |
 | 2026-10-31 | growing the gene sample reads only the rows of the cells it adds, in doubling steps, so it never costs more than reading that share from scratch (the share-cost rule applied to growth) | the cells already read are kept; a step that read them again would make a growth cost more than a fresh read of its size | regrowing from 0 to a new size |
-| 2026-10-31 | a matrix read after its map (MatrixMarket) is read in one pass per opening, sized to the cells a progressive opening grows to; a pass serves every caller, stops only when none waits, is replaced by a larger one asked meanwhile, and the share it replaces is let go (one kept per folder version) | each growth step (499 → 998 → 1,996 → 3,000 cells) asked for its own share, and a pass reads the stream to its share's last cell, nearly all of it in priority order: the 3,000-cell spec folder read its matrix 4 times and kept 4 shares; a 1M-cell folder 11 times (996 MB of a 90.6 MB `.mtx.gz`), its genes at 24.8-25.8 s against 6.8-7.5 s at once (now 1 pass, 90.6 MB, 6.5-6.8 s: Measurements) (CI WebKit, where the folder opens progressively, failed `text-matrix-stream.spec`) | a pass a step; a smaller pass let finish before a larger one (the rest of one reading and a whole other); a cancelled caller stopping the pass others wait for |
+| 2026-10-31 | a matrix read after its map (MatrixMarket) is read in one pass per opening, sized to the cells a progressive opening grows to; a pass serves every caller, stops only when none waits, is replaced by a larger one asked meanwhile, and the share it replaces is let go (one kept per folder version) | each growth step (499 → 998 → 1,996 → 3,000 cells) asked for its own share, and a pass reads the stream to its share's last cell, nearly all of it in priority order: the 3,000-cell spec folder read its matrix 4 times and kept 4 shares; a 1M-cell folder 11 times (996 MB of a 90.6 MB `.mtx.gz`), its genes at 24.8-25.8 s against 6.8-7.5 s at once (now 1 pass, 90.6 MB, 6.5-6.8 s: Measurements) (CI WebKit, where the folder opens progressively, failed `text-matrix-stream.spec`) | a pass a step; a smaller pass let finish before a larger one (the rest of one reading and a whole other); a canceled caller stopping the pass others wait for |
 | 2026-10-31 | a run's genes per task follow the genes' bytes as read (`run-tuner.js`: the densest form until a read is measured, sized again at each read and each shrink of the budget) | held at the densest form (8 B a cell of 1.9M) against what the run's context leaves of the share, a 10M-cell differential expression went one gene a task: 30,000 tasks, deliveries and page messages (traced: 30,040 against the pushed tree's 168), every-cell DE 1.2x the pushed tree's; marker genes likewise | a task size fixed at the run's start |
+| 2026-11-11 | a growth step of a store folder on a web host (its version its metadata's validators) asks that version beside its own reads, not before them: the step reads through the held store while the `HEAD` of `.zmetadata` is out, and is kept only once the folder is known unchanged; found changed (or failing while it was), it stops, is discarded and the folder is opened anew (`anndata-reader-worker.js` `open`, F170) | each step waited one round trip in series for the check (Suo on 3G: 0.3 s × 5 of a 40 s opening, about 4%; R9P-1); nothing read of a changed folder is ever shown, as with the check first: a change before the check's answer is seen by it, one after it would be missed by a check made first too | checking once per opening (a folder rewritten between steps would be mixed into one dataset) |
 
 ## Measurements that justify it
 
@@ -314,9 +315,9 @@ Share against every cell, first gene, measured in the same hour:
 
 | Case | Every cell | Share |
 | --- | --- | --- |
-| 10M CSR `.h5ad`, emulated S3 (230 ms, 20 MB/s, HTTP/1.1), Node, 1 % uniform | 347,913 cells, 8.04 s, 18.7 MB, 193 req | before 53 cells, 11.13 s, 4.4 MB, 280 req; after 3,488 cells (= s/n), 8.16 s, 18.4 MB, 193 req |
-| TS, real S3, Node, 1 % uniform | 1.0 | time 0.40-0.56, bytes 0.16-0.24, requests 0.50-0.65 |
-| full HLCA, real S3, Node, 1 % uniform | 1.0 | time 0.78, bytes 0.19, requests 0.82 |
+| 10M CSR `.h5ad`, emulated S3 (230 ms, 20 MB/s, HTTP/1.1), Node, 1% uniform | 347,913 cells, 8.04 s, 18.7 MB, 193 req | before 53 cells, 11.13 s, 4.4 MB, 280 req; after 3,488 cells (= s/n), 8.16 s, 18.4 MB, 193 req |
+| TS, real S3, Node, 1% uniform | 1.0 | time 0.40-0.56, bytes 0.16-0.24, requests 0.50-0.65 |
+| full HLCA, real S3, Node, 1% uniform | 1.0 | time 0.78, bytes 0.19, requests 0.82 |
 | TS / full HLCA, Chromium, before spread shares used the block order | 8.1 s / 6.1 s | 12.2 s / 17.5 s (the break that design fixes) |
 | full HLCA / TS, Firefox, same run | 7.1 s / 10.3 s | 13.5 s / 6.1 s |
 
@@ -324,19 +325,19 @@ Synthetic stores (Node unless named; 20 ms / 50 MB/s HTTP/2 emulated):
 
 | Case | Result |
 | --- | --- |
-| 10M CSR `.h5ad`, 10 % uniform first gene | 517 MB → 266 MB (= every cell's) once spread rows became one store-order segment |
-| 10M, 50 % uniform first gene, `genes: 'all'` | CSR 16.8 → 7.50 s (every cell 6.76 s); sharded Zarr v3 10.16 s (7.75); dense rows 4.89 s (3.77); bytes ≤ every cell's on all three |
-| 4M CSR `.h5ad`, 50 % uniform, after the pass's CPU cut | 5.06 → 4.69 s, every cell 4.83 s |
+| 10M CSR `.h5ad`, 10% uniform first gene | 517 MB → 266 MB (= every cell's) once spread rows became one store-order segment |
+| 10M, 50% uniform first gene, `genes: 'all'` | CSR 16.8 → 7.50 s (every cell 6.76 s); sharded Zarr v3 10.16 s (7.75); dense rows 4.89 s (3.77); bytes ≤ every cell's on all three |
+| 4M CSR `.h5ad`, 50% uniform, after the pass's CPU cut | 5.06 → 4.69 s, every cell 4.83 s |
 | 10M opening, every cell in a cell order (150 ms / 5 MB/s HTTP/1.1) | first view 344 → 48 requests and open 1,512 → 659 ms, once rows were read in store order |
-| 10M growth (`createSubsampleCache`) | priority file growth steps 566 → 46 ms; uniform 50 % growth 1,310 → 186 ms; blocks 50 % 827 → 125 ms |
+| 10M growth (`createSubsampleCache`) | priority file growth steps 566 → 46 ms; uniform 50% growth 1,310 → 186 ms; blocks 50 % 827 → 125 ms |
 | 50M sharded Zarr v3, Chromium (Metal, loopback) | markers 15.4 s (a 1,800 s timeout before the row-pointer coverage fix), DE 10.2 s, signature 2.2 s, dot plot 1.2 s |
-| 50M and 10M Zarr after a share round trip (10 % then 100 % in place), Chromium | 50M DE 70.3 s (reader 1.8 GB, no allocation failure), markers 62.3 s, signature 4.5 s; 10M DE 83.6 s, markers 80.7 s, signature 1.6 s |
+| 50M and 10M Zarr after a share round trip (10% then 100% in place), Chromium | 50M DE 70.3 s (reader 1.8 GB, no allocation failure), markers 62.3 s, signature 4.5 s; 10M DE 83.6 s, markers 80.7 s, signature 1.6 s |
 | Node, the reader on a 50M gene sample (9.49M cells), whole columns 8 genes a read | 2,000 genes 22.0 s before; 30,000 genes 3.4 s / 83 MB after the coverage fix (10M: 1,600 genes 19.4 → 2.6 s) |
 | Node, 10M CSR `.h5ad`, DE on 1.89M cells over a simulated link | about 13-17 ms a gene (400-500 s for 30,000 genes) → 30,000 genes 14.2 s / 192 MB once priced over the run |
 | Node, 2M CSR `.h5ad`, emulated link, share lowered and raised back | 40 MB/s: raise 352,680 cells at rung 15,624 (priced again, 53 s) → 1,690,543 cells at rung 7,812 with the first opening's fit; 15 MB/s: 1,695,490 → 1,086,048 (= the first opening); the raise's first gene reads nothing new |
 | 10M rich CSR `.h5ad` DE in Chromium (gene sample 8.35M) | 218.6 s (321 s on a sample, 660 s without one, before); markers 4.5 s |
-| 3M Zarr, 1 % uniform obs names | heap 931 → 8 MB |
-| a column of 1,029,016 categories (1.2M-cell CELLxGENE atlas, real S3), 1 % uniform | labels sent to the page 1,029,016 → 12,050, worker heap 216 → 94 MB, same 38.9 MB downloaded |
+| 3M Zarr, 1% uniform obs names | heap 931 → 8 MB |
+| a column of 1,029,016 categories (1.2M-cell CELLxGENE atlas, real S3), 1% uniform | labels sent to the page 1,029,016 → 12,050, worker heap 216 → 94 MB, same 38.9 MB downloaded |
 | 2,058,652-cell MatrixMarket stream (GEO, Node) | first view 19.8 s / 106 MB, against at least 7 min for the whole 3.95 GB stream |
 
 Growing the gene sample against a fresh read of the same size (Node, the
@@ -351,14 +352,14 @@ the growth alone is 0.88× of the fresh read in bytes, requests and time.
 | Store, link | Sample → grown to | Grown: bytes, requests, time | Fresh read of that size: bytes, requests, time |
 | --- | --- | --- | --- |
 | 200K cells, every cell (blocks order), 0.4 MB/s | 19,654 → 196,540 | 28.9 MB, 222, 72.6 s | 32.8 MB, 255, 82.1 s |
-| 200K cells, 50 % uniform share, 0.4 MB/s | 9,875 → 98,750 | 29.2 MB, 224, 73.2 s | 33.1 MB, 257, 82.8 s |
+| 200K cells, 50% uniform share, 0.4 MB/s | 9,875 → 98,750 | 29.2 MB, 224, 73.2 s | 33.1 MB, 257, 82.8 s |
 
 Its estimate before Read (`geneSampleCost`) priced the growth at 30.9 MB and
-77.3 s: 7 % and 6.5 % above what it read and took.
+77.3 s: 7% and 6.5% above what it read and took.
 On the full HLCA (Census S3, Chromium on the GPU, 2026-10-31) the first gene
-was read for 6,449 of 2,282,447 cells (0.28 %); Genes read for offered 1 %
+was read for 6,449 of 2,282,447 cells (0.28%); Genes read for offered 1%
 (22,824 cells: 70 MB, ~25 s) up to 240,000 cells, the most whose gene index
-this device keeps (994 MB, ~5 min), not 100 %; opening and the first gene
+this device keeps (994 MB, ~5 min), not 100%; opening and the first gene
 downloaded 49 MB.
 
 A MatrixMarket folder opened at once and progressively (showing a cell
@@ -403,11 +404,11 @@ runs used local files.
 | What | When | Why it went | What would change it |
 | --- | --- | --- | --- |
 | HDF5 string heaps loaded as one union after every piece | 2026-10-28 | 10M at 150 ms: 86.2 → 68.8 s, but 100M at 20 ms HTTP/2 got slower (72.0 → 87.7 s): a barrier on a fast link | — |
-| Fixed batches of a round of the link's requests | 2026-10-28 | 100M HTTP/2 87.1 s, against 71.8 s with no batching | replaced 2026-10-29 by the room rule, now in `HeapStream`: load when the link has a free slot, gather while requests queue (10M 150 ms 77.0 s; 20 ms HTTP/2 within 2 % of no batching) |
+| Fixed batches of a round of the link's requests | 2026-10-28 | 100M HTTP/2 87.1 s, against 71.8 s with no batching | replaced 2026-10-29 by the room rule, now in `HeapStream`: load when the link has a free slot, gather while requests queue (10M 150 ms 77.0 s; 20 ms HTTP/2 within 2% of no batching) |
 | Never fetching again any byte inside a gap | 2026-10-30 | no duplicate bytes, but more requests (5 → 8 in the HDF5 gene pricing test, about 1,000 more at 10M over HTTP/1.1) | — |
-| A request budget per heap run for obs names | 2026-10-30 | 0.1 % share 4.95 → 7.69 s and 241 → 376 MB | — |
+| A request budget per heap run for obs names | 2026-10-30 | 0.1% share 4.95 → 7.69 s and 241 → 376 MB | — |
 | Asking held heap bytes at once; a window bounded by file span | 2026-10-30 | every cell 436 → 566 MB; no gain | — |
-| A whole heap collection asked up front when its tail was expected to hold a kept name | 2026-10-30 | 15-25 % fewer requests, 0.5-16 MB more bytes | knowing a collection's size before its first read |
+| A whole heap collection asked up front when its tail was expected to hold a kept name | 2026-10-30 | 15-25% fewer requests, 0.5-16 MB more bytes | knowing a collection's size before its first read |
 | A uniform share's gene-index segments merged into one in open order | 2026-10-30 | 1,019 MB against 517 MB | the store-order segment |
 | Dropping the decoded-chunk cache during scans | 2026-10-30 | one chunk read again at every slab boundary | — |
 | A single versioned file (a Census `.h5ad`) taken over by version at a growth step | 2026-10-30 | the gene list hung in Node; now done for folders only | the hang traced |
@@ -415,13 +416,13 @@ runs used local files.
 
 ## Known limits and open items
 
-- **CPU on fast links:** a 50 % share's first gene reads through every
+- **CPU on fast links:** a 50% share's first gene reads through every
   stored row's index (item 9): at 4M and 5M cells, on a near-zero-latency
   link and at 20 ms / 50 MB/s, 1.00–1.04× every cell's in a loaded machine's
   run-to-run noise (same bytes, same requests, the same pass), where its own
-  pass took 1.4×. A 50 % share's edges still place them on its cells after
+  pass took 1.4×. A 50% share's edges still place them on its cells after
   the last line ({doc}`24_decisions_graph_edges_at_scale`): about 1.03×
-  every cell's at 5M. The 10M emulated S3 1 % share took 1.015× every
+  every cell's at 5M. The 10M emulated S3 1% share took 1.015× every
   cell's time on identical reads (its kept rows' pointers are read before
   its pass, a step every cell's pipelined pass does not wait for).
 - **Share round trips (fixed 2026-10-30, browser re-measure pending):** a
@@ -436,24 +437,24 @@ runs used local files.
   share (the kept index serves it).
 - Per-read O(cells) work remains in DE at 10M (the distinct-cells check and
   the DE cells' list copied to the reader on each read).
-- The top-up prices the requests of scattered rows about 2× too low: a TS 1 %
+- The top-up prices the requests of scattered rows about 2× too low: a TS 1%
   share's top-up made 1,487 requests against 847 priced, 1.19× every cell's.
   Absolute request prices for Zarr folders are low as well.
 - A smaller share does not reuse a larger share's kept store-order run on a
-  later visit; it indexes again. Applying 1 % → 10 % of a share in a cell
+  later visit; it indexes again. Applying 1% → 10% of a share in a cell
   order is a new reading, not a growth in place.
 - Some limits come from the file's layout. A gene-major (CSC) file reads a
   gene's whole column at any share. String heaps and uniform shares of
   row-chunked arrays reach every chunk, so their bytes stay near the whole.
-- Memory at a 50 % uniform share stays above every cell's (5M: 711 against
+- Memory at a 50% uniform share stays above every cell's (5M: 711 against
   599 MB peak buffers) because row pointers are held several times. It is
   counted and released.
 - Not built yet: 16-bit gene-index positions, an early partial picture within
   the first gene's read, keeping a cut-short conversion or text-matrix pass,
   and genes on the cells read so far during a pass.
 - Not yet read or traced: browser proofs of spread shares in the block order
-  (Chromium and Firefox, TS and HLCA at 1 % and 10 % uniform), and a WebKit
-  crash on the second visit of a 1 % uniform share.
+  (Chromium and Firefox, TS and HLCA at 1% and 10% uniform), and a WebKit
+  crash on the second visit of a 1% uniform share.
 - The kept-index code changed after revision 2 (store-order runs, kept values).
   `KEPT_INDEX_REVISION` is raised once when this is committed, which removes
   every user's kept gene indexes once. The revision tests still pin a digest
@@ -463,19 +464,19 @@ runs used local files.
 
 ## Known issues (pre-commit)
 
-Defects, regressions and unverified behaviour known when this version was
+Defects, regressions and unverified behavior known when this version was
 committed (2026-10-30), each with where it is recorded above. An item is
 removed in the change that fixes or verifies it.
 
-- **A half share's marker genes:** a 50 % uniform share of a 10M-cell store finds marker genes in 7.1-8.4 s (`.h5ad` CSR) and 7.2 s (Zarr v3 sharded) against 3.8-4.1 s and 3.0 s for every cell after its first gene (Chromium, same hour, 2026-10-31); its first gene reads in 1.08-1.10x (CSR) and 0.84-0.88x (Zarr) every cell's, values exact. The rest is each gene's entries put in the share's open order, on the reader worker alone: traced, 4.5 s of its 7.5 s (a radix sort of each gene's entries by open row 2.2 s, the lookup of each entry's open row 1.3 s, the segments' copy 0.6 s), work every cell's genes, already in open order, never do. Placement over every stored row's index cost more (1.3-1.7x, see Decisions), so a half share now takes its own pass. Removing it needs analyses that take a gene's entries in stored order with each worker holding the groups by stored row, or spread shares opened in store order: not built.
+- **A half share's marker genes:** a 50% uniform share of a 10M-cell store finds marker genes in 7.1-8.4 s (`.h5ad` CSR) and 7.2 s (Zarr v3 sharded) against 3.8-4.1 s and 3.0 s for every cell after its first gene (Chromium, same hour, 2026-10-31); its first gene reads in 1.08-1.10x (CSR) and 0.84-0.88x (Zarr) every cell's, values exact. The rest is each gene's entries put in the share's open order, on the reader worker alone: traced, 4.5 s of its 7.5 s (a radix sort of each gene's entries by open row 2.2 s, the lookup of each entry's open row 1.3 s, the segments' copy 0.6 s), work every cell's genes, already in open order, never do. Placement over every stored row's index cost more (1.3-1.7x, see Decisions), so a half share now takes its own pass. Removing it needs analyses that take a gene's entries in stored order with each worker holding the groups by stored row, or spread shares opened in store order: not built.
 - **A gene sample on this computer with every core busy:** a source on this computer is priced as the computer at rest (see Decisions: a disk's rate, its shortest round trip), and openings right after other runs, or with four CPU-bound processes beside the browser, read the first gene for every cell (10 of 10, Chromium, 2026-10-31). With ten CPU-bound processes on the ten cores, 1 of 10 openings (a 10M-cell `.h5ad` on a loopback host) measured even its shortest round trip at 900 ms (1.5-12 ms otherwise), priced every cell's first gene at 47.7 s and read it for 1,610,169 of 10M cells. Pricing this computer's round trip from a prior (as its rate is from a disk's) would remove it; it changes the progressive opening's and the block rung's prices too, so it is left for a decision. The same measurement is what failed browser specs on loaded runners (2026-11-06): one request of a 238 KB file answered 370 ms late prices the first gene of 1,500 of its cells at 36 round trips, though the reader holds every byte of the file from that one request, and reads genes for a sample of them (`tests/browser/held-machine.spec.mjs`). The specs now hold the link they plan on ({doc}`14_testing_ci_and_release_process`, `utils/machine.js`); the app's pricing is as it was. Two cheaper remedies than a prior were seen and not made: a read whose bytes the reader already holds could be priced as no request; and a share's gene index kept under its own order could be looked for before a sample is fitted (today only the sample's cell order is, so a later visit that reads genes for a sample -- a slower link, a busier machine -- indexes the matrix again instead of reading the index an earlier visit kept for every cell: shown in Chromium with the decoding rate held slow on the later visit only).
 - **Share round trips:** the fix (the same cells come back with their order and gene sample) is verified in Node only; the 10M and 50M browser runs of the fixed tree are not taken.
-- **Spread shares in every cell's block order:** in the browser proofs (Chromium and Firefox; Tabula Sapiens and HLCA over S3 at 1 % and 10 % uniform and every cell, two visits each, no page error) a share's first picture costs what every cell's does (the opening's metadata) and once more: Tabula Sapiens 1 % 12.4 s against 10.9 s for every cell (Chromium), HLCA 1 % 17.1 s against 14.7 s (Firefox); single runs over S3, not separated from its noise. Revisits draw every share in 1.2–1.9 s. The harness's DE read at 1 % reported 2–4 cells read (the gene sample's cells in the two groups), against 138–406 for every cell.
+- **Spread shares in every cell's block order:** in the browser proofs (Chromium and Firefox; Tabula Sapiens and HLCA over S3 at 1% and 10% uniform and every cell, two visits each, no page error) a share's first picture costs what every cell's does (the opening's metadata) and once more: Tabula Sapiens 1 % 12.4 s against 10.9 s for every cell (Chromium), HLCA 1 % 17.1 s against 14.7 s (Firefox); single runs over S3, not separated from its noise. Revisits draw every share in 1.2–1.9 s. The harness's DE read at 1% reported 2–4 cells read (the gene sample's cells in the two groups), against 138–406 for every cell.
 - **CSC `.h5ad` over a slow link (40,000 cells, 150 ms, 5 MB/s):** 100 genes read in 3.3 s / 122 requests on the live tree and the checkpoint alike, 2.5 s / 81 requests in one checkpoint run (the plan follows the link measured from the opening's few reads), 2.8 s / 100 requests at the last push; the DE read 1.8 s (2.8 s at the last push).
 - **WebKit:** every app run records the page error "Fetch API cannot load http: /127.0.0.1:<port>/ due to access control checks" (the harness's page port); not traced to the app or the harness.
 - **A background top-up on a closed reader** (after Apply) logs "this._root is null"; nothing is affected.
-- **Top-up pricing:** the top-up prices the requests of scattered rows about 2× too low (Tabula Sapiens 1 %: 1,487 requests against 847 priced, 1.19× every cell's).
-- **Kept data removed once (0.9.7):** `KEPT_INDEX_REVISION` is 9 and `KEPT_STORE_REVISION` 13 (`transcode/space.js`; 9 and 13 only because the rates a plan weighs are now read through `utils/machine.js`, in code both digests cover: the same indexes and stores): the browser copy's shared Zarr writer and element layer, the `older-layouts.js` fix for a table anndata 0.7 kept in `uns`, NFD names found in either form, the `<i8` integer scalars and MuData `obsmap` written as a `dict` raised both (`KEPT_STORE_REVISION` 9 and 10 only for the input-format registry's messages, and 11 only for the shared request code's rate-limit rule, which the transcoders' code digest covers: the same stores), so every user's kept gene indexes and converted R and MatrixMarket stores are removed once on the first visit ({ref}`browser-anndata-copy`).
+- **Top-up pricing:** the top-up prices the requests of scattered rows about 2× too low (Tabula Sapiens 1%: 1,487 requests against 847 priced, 1.19× every cell's).
+- **Kept data removed once (0.9.7):** `KEPT_INDEX_REVISION` is 10 and `KEPT_STORE_REVISION` 15 (`transcode/space.js`; 9 and 13 only because the rates a plan weighs are now read through `utils/machine.js`, 10 only for a Zarr store on a web host remembering the objects its host answered as absent, 14 only for the one test of "this machine", `utils/loopback.js`, and 15 only for the host fault of a request no answer arrived for, `byte-source.js` `unansweredFault`, in code the digests cover: the same indexes and stores): the browser copy's shared Zarr writer and element layer, the `older-layouts.js` fix for a table anndata 0.7 kept in `uns`, NFD names found in either form, the `<i8` integer scalars and MuData `obsmap` written as a `dict` raised both (`KEPT_STORE_REVISION` 9 and 10 only for the input-format registry's messages, and 11 only for the shared request code's rate-limit rule, which the transcoders' code digest covers: the same stores), so every user's kept gene indexes and converted R and MatrixMarket stores are removed once on the first visit ({ref}`browser-anndata-copy`).
 - **A later run of a measured analysis kind takes up to about two and a half times as long to its final result:** once an analysis kind's cost is measured (`progressive-cells.js` `AnalysisCostModel`, kept in memory and in this browser's storage), a later run of it (the same page, or a revisit in the same browser) runs a first pass on a sample and then the pass on every cell. The full pass costs what a single run does, so the time to the final result is that plus the sample pass: 10M-cell Zarr store, every cell, Chromium, a second run on the same page: differential expression 3.0 s → 7.3 s, marker genes 3.3 s → 4.2 s. The figures recorded here before (markers 16 s and DE 36 s after a share round trip) were mostly not this: the harness's `--single-pass` never cleared the costs (it looked the module up in the page's resource timing buffer, which a 10M page fills before the module loads), and the reads after a round trip were slow of their own (fixed: see Decisions, 2026-10-31). Fix in phase 4: the full pass reuses the sample pass's work, or the sample pass is skipped when the full pass is priced short.
 
 ## Where the code and tests live
@@ -497,7 +498,7 @@ removed in the change that fixes or verifies it.
 | Text-matrix streams, one pass a progressive opening | `data/anndata/transcode/matrix-market.js`, `data/anndata-reader-worker.js` (`ensureMatrixShare`, `swapOntoShare`), `data/anndata/reader.js` (`shareRows`) | `text-matrix-stream-contract`, browser `text-matrix-stream.spec` |
 
 `cellucid/scripts/efficiency-floor/share-grid.mjs` measures every downstream
-at 1, 10 and 50 % shares against every cell, in the whole app.
+at 1, 10 and 50% shares against every cell, in the whole app.
 
 ## Related pages
 

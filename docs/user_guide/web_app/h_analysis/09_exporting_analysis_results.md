@@ -46,7 +46,7 @@ Goal: export **one plot** for reporting and **one table** for re-analysis.
 
 1) Run the analysis you care about (Detailed / Correlation / DE / Gene Signature / Marker Genes / Dot plot / Composition)
 2) Open the expanded view
-   - click `⤢ Expand` in the result's action row
+   - click **Expand** in the result's action row
 3) In the expanded view, use the export buttons
    - `PNG` / `SVG` for plots
    - `CSV` for tables
@@ -69,10 +69,18 @@ Exports are attached to the **analysis result view**, not to the overall app.
 
 Typical patterns:
 - **Detailed / Correlation / DE / Gene Signature / Marker Genes / Dot plot / Composition**: every
-  mode that produces an expandable result renders a `⤢ Expand` button in its
+  mode that produces an expandable result renders an **Expand** button in its
   action row; export from the modal it opens. The button is the only way in —
   the preview itself is not clickable.
 - **Quick**: no formal “export” controls (use it as a summary; screenshot if needed).
+
+An agent writes the same table on request ("export that table as a CSV"): the
+action `analysis.export` (Python `analysis_export`, R
+`cellucid_analysis_export()`) writes the file the expanded view's `CSV` button
+writes, for Correlation, DE, Gene Signature, Marker Genes (the shown markers,
+or with `all` every gene of every group, as **All genes CSV**), Dot plot and
+Composition, after you allow writing a file. A result that is out of date is
+refused with the reason, as the button refuses it.
 
 In the expanded view you should see an `Export:` row with buttons:
 - `PNG`
@@ -100,7 +108,9 @@ This section is deliberately explicit so you can build downstream tooling.
     - `cell_index`: the cell's row in the whole dataset in its original order
       (0-based), also when a subsample is open
     - `<variable>`: the exported value: the number, or the category label for
-      a categorical variable (empty for a missing value)
+      a categorical variable (empty for a missing value). A gene's column names
+      the values it holds when they are not as stored (Data mapping ›
+      Expression values): `Ins1 · log1p(norm.)`, `Ins1 · norm.`, `Ins1 · log1p`
 
 :::{note}
 This is always the schema. The plot type on screen changes the picture, never
@@ -124,8 +134,10 @@ so even a half-million-row export does not hold up the page while it is built.
   - Columns:
     - `page`
     - `method` (`pearson` or `spearman`)
-    - `x_type`, `x_key` (what X is)
-    - `y_type`, `y_key` (what Y is)
+    - `x_type`, `x_key`, `x_label` (what X is; `x_label` names its values as
+      the plot's axis does, a gene's with their units when they are not as
+      stored: `Ins1 · log1p(norm.)`)
+    - `y_type`, `y_key`, `y_label` (what Y is)
     - `r`, `r_squared`
     - `p_value`
     - `n` (paired values used)
@@ -145,12 +157,16 @@ The exported CSV statistics (`r`, `p_value`, `n`) are computed on the full paire
       holds — Ensembl ids for a CELLxGENE file)
     - `symbols` (the name the viewer shows; only when it differs from the
       identifier for some gene)
-    - `scores` (Wilcoxon z, or Welch’s t)
+    - `scores` (Wilcoxon z, or Welch’s t; with **Replicates**, limma’s moderated t)
     - `logfoldchanges` (as **Fold change from** chose)
     - `pvals`, `pvals_adj` (Benjamini–Hochberg or Bonferroni)
     - `pct_nz_group`, `pct_nz_reference` (share of Group A’s / Group B’s cells not zero, 0–1)
-    - `auroc` (Wilcoxon)
-    - `mean_a`, `mean_b`, `n_a`, `n_b` (each group’s mean, and its cells with a measured value)
+    - `auroc` (Wilcoxon; empty with **Replicates**)
+    - `mean_a`, `mean_b`, `n_a`, `n_b` (each group’s mean, and its cells with a
+      measured value; with **Replicates**, the mean of its samples’ values
+      (log₂-CPM for counts) and its samples in the fit for that gene). With
+      cells as observations and Expression values on, the two means' columns
+      name the values they are in: `mean_a · log1p(norm.)`, `mean_b · log1p(norm.)`
   - A gene that was not tested has empty statistics.
 
 :::{important}
@@ -164,7 +180,8 @@ Record them yourself (file rename, notes, or session).
 - **CSV export:** one row per scored cell and gene set.
   - Filename: `gene_signature_scores.csv`
   - Columns:
-    - `page`
+    - `page` (the highlight page), or `group` (the category, when scored per
+      category of a **Group by** field)
     - `set` (the gene set’s name)
     - `cell_index` (the cell's row in the whole dataset in its original
       order, 0-based)
@@ -213,16 +230,21 @@ one group).
 - **CSV export:** one row per group and gene, unscaled means.
   - Filename: `dot_plot.csv`
   - Columns: `group`, `gene`, `gene_group` (the gene set), `mean`,
-    `fraction_expressing`, `n_cells`
+    `fraction_expressing`, `n_cells`, `n_measured` (the group's cells with a
+    value of the gene). With Expression values on, the means' column names
+    the values they are in: `mean · log1p(norm.)`
   - See {doc}`13_analysis_mode_dot_plot`.
 
 ### Composition
 
 - **CSV export** (expanded view): with a condition, one row per cell type.
   - Filename: `composition_results.csv`
-  - Columns: `cell_type`, `mean_proportion_<condition>` per condition,
-    `log2_ratio`, `test`, `statistic`, `pvalue`, `pvalue_adjusted`,
-    `n_samples_<condition>` per condition
+  - Columns: `cell_type`, `cells`, `proportion`, `mean_proportion_<condition>`
+    per condition, `log2_ratio`, `test`, `statistic`, `p_value`, `p_adjusted`,
+    `n_samples_<condition>` per condition (the samples its mean is over),
+    `n_pairs` (paired tests: the samples the test took in each condition), and
+    `proportion_<sample>` per sample (or condition); the rows and values of the
+    result an agent reads, most significant first
   - Without a condition it downloads the counts instead.
 - **Counts CSV** (under the summary): `composition_counts.csv`, `cell_type` and
   one column of cell counts per sample (or condition).

@@ -5,8 +5,8 @@
 
 A Seurat object with several assays, or a SingleCellExperiment with alternative
 experiments, is viewed and written as a **Cellucid-ready MuData**: one
-modality per assay, the cells' metadata, embeddings and neighbour graph shared.
-The viewer adds a **Modality** choice to Data mapping; gene search, colour by
+modality per assay, the cells' metadata, embeddings and neighbor graph shared.
+The viewer adds a **Modality** choice to Data mapping; gene search, color by
 gene, markers and dot plots then read the chosen modality.
 
 ```r

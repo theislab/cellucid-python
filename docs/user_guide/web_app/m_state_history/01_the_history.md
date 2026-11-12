@@ -16,23 +16,27 @@
 
 Every change you make to the dataset shown becomes one step of its history:
 
-- colouring by a field or a gene, and every colour setting (a category's
-  colour, a colour map, log scale, the colour range);
+- coloring by a field or a gene, and every color setting (a category's
+  color, a color map, log scale, the color range);
 - a filter: hiding categories, a range, an outlier filter, missing values,
   keeping only some cells of a category, hiding the categories with fewer
   cells than a count ({doc}`../e_filtering/index`);
 - labels: renaming or merging categories, renaming or deleting a field, a new
   field made from highlights or written by a notebook;
 - highlights: a confirmed selection, a highlight page made, renamed or
-  recoloured;
+  recolored;
 - views: a kept view, the multiview layout, the selected view, linked cameras,
   the embedding a view shows;
 - the camera: one step per move, so a drag, a scroll and a pan in a row on the
-  same view become one step;
+  same view become one step; a camera path you play is one step where it comes
+  to rest (paused, stopped or ended), and an agent's play is its own step (a
+  looping one when it starts, then one where it is stopped): nothing is
+  recorded on the way, also when you undo or an agent works while it plays;
 - settings in the sidebar (point size, background, navigation, overlays): one
-  step per setting, so dragging a slider is one step;
-- the figure export settings, and the camera path (its keyframes, duration,
-  loop and playback);
+  step per setting, so dragging a slider is one step, and a drag (or a camera
+  move) brought back to where it began is no step at all;
+- the figure export settings, and the camera path (its keyframes, holds,
+  durations, loop and playback);
 - the layout: docking or floating a panel, an analysis window's size and
   place, opening or closing a sidebar section, the theme;
 - an analysis: opening its window, its options, its view and plot, running
@@ -61,7 +65,7 @@ Not a step:
 
 :::{note}
 Labels follow the history. Going back to a step shows the category names,
-merged categories, colours and fields as they were at that step, and each
+merged categories, colors and fields as they were at that step, and each
 branch has its own. An analysis result comes back as it was when you go back
 to it; it is not computed again.
 :::
@@ -76,7 +80,7 @@ line down the left is the path to the step shown; the steps of other branches
 hang off it ({doc}`02_branches_trackers_and_comparing`).
 
 Each step's row has a mark on the line, one short sentence saying what the
-step did ("Coloured by cell_type", "Hid Ductal and Alpha of cell_type",
+step did ("Colored by cell_type", "Hid Ductal and Alpha of cell_type",
 "Kept 500 cells of Beta in cell_type"), a badge naming who took it when it was
 not you (an agent's name and model such as **Claude · Sonnet 4.6**,
 **Python**, **R**), and how long ago (`now`, `4 min`, `2 h`, `3 d`, then the
@@ -97,8 +101,11 @@ wraps.
 | `⧉` | steps merged into one, a fresh start after the history was cleared, or a state shared without its history |
 
 **Folded runs.** Consecutive steps that only present the analysis (camera
-moves, panels, open sections, colours that do not change what is coloured by
-or filtered) fold into one row such as `Camera ×6 · Layout ×2`. Folding is for
+moves, panels, open sections, colors that do not change what is colored by
+or filtered) fold into one row that says what they did, as their own rows do:
+`Hid T cells of cell_type · Showed T cells of cell_type`, or
+`Moved the camera of View 1 ×6 · Docked Visualization · 3 more steps` (the
+first two changes, the same change once with how many times). Folding is for
 reading only: undo still goes step by step, and expanding the row shows each
 step. A step with a note, a bookmark, a branch starting from it or a stale
 result never folds.
@@ -149,7 +156,7 @@ The rows follow one rule, in the sidebar, in the branch map and on a phone:
 | Show the step | Double-click it (double-tap on a phone), or select it and press `Enter` |
 | Open its details | `›` at the end of the row, or `Space` |
 | Expand a branch, turn, group or run | `▸`, or `→` |
-| Open the row's menu | Right-click it (the menu opens at the pointer), `Shift+F10`, or `⋯` in its details |
+| Open the row's menu | Right-click it (the menu opens at the pointer), `Shift+F10`, or **More…** in its details |
 
 Showing a step puts back the dataset as it was right after that step. Nothing
 is lost: every later step stays in the graph, faded, to show again, and redo
@@ -162,44 +169,35 @@ walks back to them one by one. If you act from there, a new branch starts
 |---|---|
 | **By** | Who took it: *You* (or your name, {ref}`history-settings`), an agent's name with its model, *Python*, *R*; **turn ↗** opens the agent's conversation |
 | **When** | The time it was taken, how many changes it merged (a drag is one step), how long it took when that was long, and its branch |
-| ⚠ **Stale since…** | For a step whose result no longer matches its inputs: which later step changed them, and, for an analysis or a highlight of a category or a range, **Run again** |
+| ⚠ **Stale:** | For a step whose result no longer matches its inputs: each input that changed, with the later step that changed it, and, for an analysis or a highlight of a category or a range, **Run again** |
 | ⚠ **No longer applies:** | Why a step stopped applying (a step it needed was deleted) |
 | **Stands for** | For a step that holds only values: what it stands for (changes made while recording was paused, steps merged into one, a state shared without its history) |
 | **Code**, or the parameters | The step's line of pseudocode (`⧉` copies it), or what it was given, by name: the field, the categories, the gene, the number of cells, the seed |
 | **Changed** | The parts of the state it changed (*Filters*, *Colors*, *Camera*, *Fields and labels*, …); **What changed ›** compares the state before and after it |
 | **Bookmark** | Its bookmark, `★ name` |
 | **View** | **Show this step's view**: each view's camera put where the step kept it, nothing else changed (a camera step while camera moves are recorded; applied even while they are not, {ref}`history-settings`) |
-| **Notes** | Its notes, with **+ Note** to add one |
+| **Notes** | Its notes, with **Add note** to add one |
 
-Under them: **Show**, **Branch here**, **Compare…** and `⋯` (the row's menu:
+Under them, as quiet text actions (the details sit inside the list, so their
+actions are lighter than the panel's buttons): **Show**, **Branch here**,
+**Compare…** and **More…** (the row's menu:
 **Bookmark…**, **Revert**, **Branch without this step**, **Copy code**,
 **Group…**, **Merge into one step…**, **Delete…**).
 
 ```{figure} ../../../_static/screenshots/state_history/history-step-details.png
-:alt: The History block of the State section after three steps, with the second step shown by a double-click: the line under the recording switch and the branch Main reads 3 steps · 1 undone, the step shown is marked in the graph, and its details, opened with ›, say who took it, when and on which branch, its code (keep_cells with the field, category, count and seed), what it changed with What changed ›, + Note, and Shown, Branch here, Compare… and ⋯.
+:alt: The History block of the State section after three steps, with the second step shown by a double-click: the line under the recording switch and the branch Main reads 3 steps · 1 undone, the step shown is marked in the graph, and its details, opened with ›, say who took it, when and on which branch, its code (keep_cells with the field, category, count and seed), what it changed (Filters) with What changed ›, Show this step’s view, Add note, and Shown, Branch here, Compare… and More….
 :width: 496px
 
 The second of three steps shown, with its details open: who took it, when, its parameters, what it changed, and its buttons.
 ```
 
-**Keyboard.** The graph is one stop of `Tab`; the **i** button of **History**
-lists the same keys.
-
-| Keys | Do |
-|---|---|
-| `↑` `↓` | move between rows (`Shift`: select several) |
-| `→` `←` | open or close a branch, turn, group or run |
-| `Enter`, or double-click | show the step |
-| `Space`, or `›` | open its details |
-| `Alt+↑` `Alt+↓` | show the step before or after |
-| `F2` | rename (a branch, a group, a bookmark) |
-| `Delete` | delete (asks first) |
-| `Shift+F10` | the row's menu |
-| `[` `]` | the previous or next fork |
-| `Ctrl+G` (`⌘G`) | group the steps selected |
-| `Ctrl+Shift+B` (`⇧⌘B`) | branch from the step selected |
-| `/` | search ({doc}`05_recording_groups_notes_and_cleanup`) |
-| `Ctrl+Z`, `Ctrl+Shift+Z` | undo, redo |
+**Keyboard.** The graph is one stop of `Tab`. Its keys (moving between rows,
+opening a branch, showing a step, its details, renaming, deleting, the row's
+menu, the previous or next fork, grouping, branching, searching with `/`, and
+`Esc`) are listed under **History list** in
+{doc}`../o_accessibility_privacy_security/03_keyboard_shortcuts`, from the same
+table as the in-app Keyboard shortcuts panel and the **i** button of
+**History**.
 
 ---
 
@@ -238,10 +236,18 @@ A step's result is kept with the inputs it read: an analysis's cells,
 filters and genes, the cells a highlight of a category or a range took from
 the view, the values a copied field or a kept view was made from. When a
 later step changes one of them, the result is **stale**: the status line
-shows `⚠ 1 stale`, and the step's details say which step changed what
-(`⚠ Stale since step 7 (“Hid Alpha of cell_type”): Filters changed.`).
-Renaming a category or a field never makes a result stale. Click `⚠ 1 stale`
-to see every stale step.
+shows `⚠ 1 stale`, and the step's details name each input that changed with
+the step that changed it
+(`⚠ Stale: Filters changed at step 7 (“Hid Alpha of cell_type in View 1”). Highlights changed at step 9 (“Highlighted T cells”).`).
+Renaming a category or a field never makes a result stale, nor does
+focusing another view. A result follows the view it was made in: keeping
+another view, or changing another view's filters or hidden cells, leaves it
+current, since none of the cells it used changed. Click `⚠ 1 stale` to see
+every stale step.
+
+With several views open, a step that changed some of them, not all, names
+them, as the Compare views list does (*Colored by gene Sox9 in View 2
+"Early"*), in the history, the step's details and the methods text.
 
 **Run again**, in the details, brings the result up to date as a new step.
 It is offered only where doing the same again does that:
@@ -254,9 +260,11 @@ It is offered only where doing the same again does that:
   cells, nothing changes; if it shows none of them, it is refused and the
   group keeps its cells.
 
-Other stale steps (a copied field, a kept view, a keyframe) offer no **Run
-again**: doing them again would add a second one of what they made. Make it
-again yourself if you want it up to date.
+Other stale steps (a copied field, a kept view) offer no **Run again**: doing
+them again would add a second one of what they made. Make it again yourself if
+you want it up to date. A camera path keyframe is never stale: it is the camera
+it was saved at, so moving the camera afterwards, as building a path does,
+changes nothing it holds.
 
 ---
 
@@ -287,7 +295,7 @@ The opening cannot be deleted. **Undo** in the notification, or **Restore** in
 Two other ways to take a step's effect out:
 
 - **Revert** adds a new step that puts back what the step changed; the step
-  itself stays. It is greyed out, saying why, when a later step on the path
+  itself stays. It is grayed out, saying why, when a later step on the path
   shown changed the same part of the state, when the step changed nothing, or
   when it is not on the path to the step shown.
 - **Branch without this step** starts a new branch from the step before it and
@@ -301,7 +309,7 @@ Two other ways to take a step's effect out:
 An AI agent you allow to work in Cellucid (in the chat bar, or connected from
 Claude, ChatGPT or a local tool such as Claude Code), and a Python or R
 notebook that drives the viewer, add their steps to the same history,
-labelled with who took them:
+labeled with who took them:
 
 - An agent's steps from one request are one **turn** (`◆`): a row with the
   agent's name and model and how many steps it took, its steps under it. Its
@@ -318,9 +326,9 @@ labelled with who took them:
   permission settings allow, because a change made while paused cannot be
   undone on its own, and its activity line starts with `⏸`.
 - When History settings leave camera moves (or panels, windows and theme) out
-  of the history, every agent's tool list says so ("Camera moves are not
-  recorded in this history"), so it knows such a change makes no step and
-  Undo does not take it back.
+  of the history, every agent is told so with your settings ("Camera moves
+  are not recorded in this history"), so it knows such a change makes no
+  step and Undo does not take it back.
 - A notebook's steps carry **Python** or **R**. A notebook reads the history
   and moves it the way the buttons do: `viewer.history_get()`,
   `viewer.history_undo()`, `viewer.history_redo()` and
@@ -353,7 +361,9 @@ A history you load from a session file keeps who took each step.
 - **Another dataset.** Opening another dataset ends this history in the tab.
   It is kept in this browser while **Autosave in this browser** is on, and
   reopening the dataset offers to continue it
-  ({doc}`03_saved_states_and_autosave`).
+  ({doc}`03_saved_states_and_autosave`). While its steps are not kept
+  (Autosave off, no storage, no room) and not saved, opening another dataset
+  or leaving the page asks first.
 - **The same dataset on other cells.** Changing **Cells to open** keeps the
   history: it is a step of it.
 

@@ -43,24 +43,25 @@ legend shows 20 to 100% of that fraction.
 
 - **Group by**: the categorical field whose groups are the rows. The default is
   the field the cells are colored by, when it is categorical and not named
-  like a sample; otherwise the first categorical field named like a cell type
-  or cluster; otherwise the
+  like a sample; otherwise the best field named like a cell type, then another
+  annotation, a lineage, then clusters (the ranks of
+  {doc}`../d_fields_coloring_legends/02_field_selector_ux`); otherwise the
   first not named like a sample.
 - **Genes**: one or more named gene sets. Type or paste genes (commas,
   semicolons, spaces, tabs or new lines all separate), import a `.txt`,
   `.csv`, `.tsv` or `.gmt` file, or take **From markers** (one set per group of
-  the shown Marker genes result). Each set is a bracketed, labelled block of
+  the shown Marker genes result). Each set is a bracketed, labeled block of
   columns.
 
 Gene names match exactly, else by case when only one gene matches (`cd3e`
 becomes `CD3E`). Genes the dataset does not have are left out and listed on a
 `not found` chip; they never stop the run. With another **Expression matrix**
-the genes are matched against that matrix's own names (`raw` has its own), so a
+the genes are matched against that matrix's own names (`raw.X` has its own), so a
 gene only raw has is found there
 ([Expression matrix](08_analysis_mode_genes_panel.md#expression-matrix)).
 
 ```{figure} ../../../_static/screenshots/analysis/dotplot-result.png
-:alt: The Dot plot form with Group by clusters and one gene set, Set 1, holding eight pancreatic markers as chips (Krt19, Sox9, Neurog3, Fev, Ins1, Gcg, Sst, Ghrl), the box to add or paste more, Clear, Add set and Import, More options, the Run button, and under it the line the result opens with: 8 genes, 8 groups of clusters and the cell count.
+:alt: The Dot plot form with Group by clusters and one gene set, Set 1, holding eight pancreatic markers as chips (Krt19, Sox9, Neurog3, Fev, Ins1, Gcg, Sst, Ghrl), the box to add or paste more, Clear, Add set, Import and Export, More options, the Run button, and under it the line the result opens with: 8 genes, 8 groups of clusters and the cell count.
 :width: 468px
 
 **Group by** `clusters` and one gene set of eight pancreatic markers, entered
@@ -91,6 +92,16 @@ Under **More options → Values**:
 | Expressed above | a number, 0 by default | `expression_cutoff` |
 | Mean of expressing cells only | off / on | `mean_only_expressed` |
 
+The values averaged are those **Data mapping › Expression values** sets for
+the whole app (as stored by default; normalized to 10,000 counts per cell
+and/or `log1p`: scanpy's dot plot of `normalize_total(target_sum=1e4)` +
+`log1p` data with both on), so the dots agree with the coloring; see
+[Values tested](08_analysis_mode_genes_panel.md#values-tested). The expanded
+view's **Values** row and `about.values` say which, and the color bar names
+them when they are not as stored (`Mean expression · log1p(norm.)`), as the
+CSV's means column does (`mean · log1p(norm.)`) — the values of the run, so a
+stale result keeps its own.
+
 The mean, fraction and mean of expressing cells match `pl.dotplot`’s
 `dot_color_df` and `dot_size_df` (the web app’s test suite holds them to it,
 including a layer with negative values, where zeros are not expressed and the
@@ -114,7 +125,9 @@ Under **More options → Layout** (these redraw without reading again):
 - **Color map**: Reds, Viridis or Blues.
 - **Largest dot**: automatic (fitted to the room each row has) or 12–32 px.
 
-On a phone the plot keeps its size and its frame scrolls.
+Every gene and group is named, never one name on another: a panel or window too
+small for them (many groups, a phone) draws the plot as large as its names need
+and scrolls.
 
 ---
 
@@ -123,18 +136,21 @@ On a phone the plot keeps its size and its frame scrolls.
 - **Sidebar**: the plot, a `not found` chip when genes were left out, and
   **Score as signature**, which opens Gene signature with one signature per
   gene set.
-- **Expanded view** (⤢): the plot at full size, with a summary of the run.
+- **Expanded view** (**Expand**): the plot at full size, with a summary of the run, and
+  the Values and Layout options beside it (changed there, they change the form
+  too, and redraw without running).
 - **CSV** (in the expanded view): `dot_plot.csv`, one row per group and gene:
   `group, gene, gene_group, mean, fraction_expressing, n_cells, n_measured`
-  (unscaled means; `n_measured` the group’s cells with a value of the gene, which
-  the mean and the fraction are over).
+  (unscaled means, the column named with their values when they are not as
+  stored, `mean · log1p(norm.)`; `n_measured` the group’s cells with a value of
+  the gene, which the mean and the fraction are over).
 
 ```{figure} ../../../_static/screenshots/analysis/dotplot-expanded.png
-:alt: The expanded Dot plot of the eight pancreatic markers across the eight clusters: one row per cluster, dot colour the mean expression and dot size the fraction of cells expressing it, with its colour bar and size legend, Export, and a summary table below.
+:alt: The expanded Dot plot of the eight pancreatic markers across the eight clusters: one row per cluster, dot color the mean expression and dot size the fraction of cells expressing it, with its color bar and size legend, Export, and a summary table below.
 :width: 1440px
 
 The expanded dot plot: one row per cluster and one column per gene under its
-set's bracket, colour the mean expression and size the share of cells
+set's bracket, color the mean expression and size the share of cells
 expressing it. Each marker lights up its own cell type (Ins1 in Beta, Gcg in
 Alpha, Sst in Delta, Ghrl in Epsilon, Neurog3 in the endocrine progenitors).
 ```
@@ -149,7 +165,7 @@ Sessions save the options and the shown result.
 <!-- options:dotplot -->
 | Label | Default |
 |---|---|
-| Group by | The coloring field when it is not named like a sample, else the first categorical field named like a cell type or cluster, else the first not named like a sample |
+| Group by | The coloring field when it is not named like a sample, else the best field named like a cell type, annotation, lineage or cluster, else the first not named like a sample |
 | Genes | One empty set |
 | Groups to show | All |
 | Cells | All cells |

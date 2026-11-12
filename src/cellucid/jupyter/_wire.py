@@ -39,7 +39,7 @@ from ..data_mapping import DataMappingError, validate_data_mapping
 # Every command Python sends to the viewer as a JSON text frame, mapped to the
 # complete key set that command must carry (the shared fixture's ``commands``).
 # Everything that changes or reads the viewer's state is an ``action`` of the
-# catalogue (``action_catalog.json``): ``action`` names it by its dotted type,
+# catalog (``action_catalog.json``): ``action`` names it by its dotted type,
 # ``params`` are its parameters, and the viewer answers with one
 # ``action_result`` or ``command_error`` carrying the same ``requestId``. An
 # action names the notebook turn it belongs to (``turn``, its id, and
@@ -95,19 +95,40 @@ _ACTION_ARRAY_FIELDS = ("path", "type", "length")
 #: The keys of an ``action_result``'s ``step``: the history step it made.
 _ACTION_STEP_FIELDS = frozenset({"id", "label"})
 
-#: A dotted action type, as the catalogue names one (``color.by``).
+#: Why a change made no step of the history (an ``action_result``'s
+#: ``unrecorded``; None beside a step and for an action that is no change, a
+#: read), each with the sentence said after the call that asked
+#: (``viewer.color_by(...): ...``). The shared fixture's ``action.unrecorded``,
+#: word for word (the web app's ``VIEWER_ACTION_UNRECORDED``, cellucid-r's
+#: ``.viewer_action_unrecorded``); an agent is told the same reasons.
+_ACTION_UNRECORDED: dict[str, str] = {
+    "unchanged": "it changed nothing (it was so already), so no step was recorded.",
+    "retracted": "it put back what the step just before it changed, so that step was taken out and no step was recorded.",
+    "off": (
+        "done, but the History settings do not record this kind of change, so no step was recorded "
+        "and Undo does not take it back."
+    ),
+    "paused": "done, but the history's recording is paused, so no step was recorded and Undo does not take it back.",
+    "elsewhere": "done, but another tracker of the history was shown meanwhile, so no step was recorded.",
+    "no-history": "done, but the dataset's history has not started yet, so no step was recorded.",
+}
+
+#: A dotted action type, as the catalog names one (``color.by``).
 _ACTION_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\.[a-z][a-z0-9]*(?:-[a-z0-9]+)*)+$")
 
 #: The result kinds the viewer sends, with the exact keys of each ``meta``
 #: (the shared fixture's ``results.kinds``).
 _RESULT_META_FIELDS: dict[str, frozenset[str]] = {
     "highlight": frozenset({"label", "tool", "pageId", "pageName", "color", "enabled"}),
-    "categorical": frozenset({"key", "categories", "origin"}),
+    "categorical": frozenset({"key", "categories", "colors", "origin"}),
     "continuous": frozenset({"key", "origin"}),
     "geneSet": frozenset({"name", "description", "genes", "symbols", "origin"}),
     "visibility": frozenset(),
     "subset": frozenset({"digest"}),
 }
+
+#: A color the viewer shows a category in: ``#rrggbb`` in lowercase.
+_SHOWN_COLOR = re.compile(r"#[0-9a-f]{6}")
 
 #: The tools a highlight group is made with.
 _HIGHLIGHT_TOOLS = frozenset(
@@ -158,7 +179,7 @@ _INBOUND_EVENT_FIELDS: dict[str, frozenset[str]] = {
     "result": frozenset(
         {"type", "epoch", "revision", "kind", "id", "nObs", "meta", "cells", "values", "body"}
     ),
-    "action_result": frozenset({"type", "requestId", "step", "body"}),
+    "action_result": frozenset({"type", "requestId", "step", "unrecorded", "body"}),
     "hover": frozenset({"type", "cell", "position"}),
     "click": frozenset({"type", "cell", "button", "shift", "ctrl"}),
     "ready": frozenset({"type", "n_cells", "n_obs", "dimensions"}),
@@ -186,19 +207,16 @@ _INBOUND_EVENT_FIELDS: dict[str, frozenset[str]] = {
     # The answers to an agent's commands (``cellucid mcp``): its tools and a
     # call's MCP result arrive as binary frames whose body is UTF-8 JSON
     # (``tools``, ``result`` once read); the person being asked about a call,
-    # and their answer; the person's settings changing what a list says.
+    # and their answer.
     "agent_tools": frozenset({"type", "requestId", "body"}),
     "agent_result": frozenset({"type", "requestId", "body"}),
     "agent_asking": frozenset({"type", "requestId", "message", "detail"}),
     "agent_answered": frozenset({"type", "requestId", "allowed"}),
-    "agent_tools_changed": frozenset({"type"}),
 }
 
 #: Every agent event: delivered to the viewer's agent port
 #: (:class:`cellucid._agent_link.ViewerAgentPort`), never to the notebook's hooks.
-_AGENT_EVENT_TYPES = frozenset(
-    {"agent_tools", "agent_result", "agent_asking", "agent_answered", "agent_tools_changed"}
-)
+_AGENT_EVENT_TYPES = frozenset({"agent_tools", "agent_result", "agent_asking", "agent_answered"})
 
 #: What a ``history_changed`` says changed (the shared fixture's
 #: ``history.changeKinds``): a step recorded, the step shown moved, the
@@ -779,13 +797,19 @@ def _require_result_meta(kind: str, meta: object) -> dict[str, Any]:
         if type(color) is not str or len(color) != 7 or color[0] != "#" or any(
             character not in "0123456789abcdefABCDEF" for character in color[1:]
         ):
-            raise ValueError("highlight result color must be a six-digit hex colour")
+            raise ValueError("highlight result color must be a six-digit hex color")
         if type(meta["enabled"]) is not bool:
             raise TypeError("highlight result enabled must be true or false")
     elif kind in {"categorical", "continuous"}:
         _require_exact_message_text(meta["key"], label=f"{kind} result key", allow_whitespace=True)
         if kind == "categorical":
             _require_text_list(meta["categories"], label="categorical result categories", nonempty=True, whitespace=True)
+            # The colors it is shown in, in the view in focus: one #rrggbb a category, in their order.
+            colors = meta["colors"]
+            if type(colors) is not list or len(colors) != len(meta["categories"]) or any(
+                type(color) is not str or not _SHOWN_COLOR.fullmatch(color) for color in colors
+            ):
+                raise ValueError("categorical result colors must be one #rrggbb color (lowercase) a category, in order")
     elif kind == "geneSet":
         _require_exact_message_text(meta["name"], label="gene set result name", allow_whitespace=True)
         if type(meta["description"]) is not str:
@@ -890,8 +914,9 @@ def _reject_constant(name: str) -> Any:
 
 def _decode_action_result(message: dict[str, Any]) -> dict[str, Any]:
     """Read one ``action_result`` event: the request it answers, the history
-    step it made (``{id, label}`` or None) and its outcome, the UTF-8 JSON of
-    the frame's body."""
+    step it made (``{id, label}`` or None), why a change made none
+    (``unrecorded``: a key of :data:`_ACTION_UNRECORDED`, or None) and its
+    outcome, the UTF-8 JSON of the frame's body."""
     request_id = _require_exact_message_text(message["requestId"], label="action_result requestId")
     step = message["step"]
     if step is not None:
@@ -900,6 +925,11 @@ def _decode_action_result(message: dict[str, Any]) -> dict[str, Any]:
         _require_exact_event_fields(step, _ACTION_STEP_FIELDS, event_type="action_result step")
         _require_exact_message_text(step["id"], label="action_result step id")
         _require_exact_message_text(step["label"], label="action_result step label", allow_whitespace=True)
+    unrecorded = message["unrecorded"]
+    if unrecorded is not None and (type(unrecorded) is not str or unrecorded not in _ACTION_UNRECORDED):
+        raise ValueError(f"action_result unrecorded must be one of {', '.join(_ACTION_UNRECORDED)}, or None")
+    if step is not None and unrecorded is not None:
+        raise ValueError("action_result unrecorded must be None when the action made a step")
     body = message["body"]
     if not isinstance(body, bytes | bytearray):
         raise TypeError("An action_result body must be bytes")
@@ -908,15 +938,24 @@ def _decode_action_result(message: dict[str, Any]) -> dict[str, Any]:
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError(f"The outcome of action request {request_id} is not UTF-8 JSON") from error
     _require_exact_json_value(outcome, label="action_result outcome")
-    return {"type": "action_result", "requestId": request_id, "step": step, "outcome": outcome}
+    return {"type": "action_result", "requestId": request_id, "step": step, "unrecorded": unrecorded, "outcome": outcome}
 
 
 def _require_inbound_jupyter_event(message: object) -> tuple[str, dict[str, Any]]:
     """Validate one event from the viewer channel; return its type and payload.
 
     The payload is the event without ``type``: what the notebook's hooks
-    receive.
+    receive. An event nested more deeply than the interpreter follows (its
+    JSON body, or its fields) is refused as malformed (``ValueError``), as
+    every other event that breaks the rules is.
     """
+    try:
+        return _checked_inbound_event(message)
+    except RecursionError as error:
+        raise ValueError("Inbound viewer event is nested more deeply than this package reads") from error
+
+
+def _checked_inbound_event(message: object) -> tuple[str, dict[str, Any]]:
     if type(message) is not dict:
         raise TypeError("Inbound viewer event must be a native dictionary")
     # A selection's cells and a result's body are the binary body the
@@ -1001,8 +1040,6 @@ def _require_inbound_jupyter_event(message: object) -> tuple[str, dict[str, Any]
         _require_exact_message_text(message["requestId"], label="agent_answered requestId")
         if type(message["allowed"]) is not bool:
             raise TypeError("agent_answered allowed must be a native boolean")
-    elif event_type == "agent_tools_changed":
-        pass
     elif event_type == "result_removed":
         _require_epoch(message["epoch"], label="result_removed epoch")
         _require_positive_revision(message["revision"], label="result_removed revision")

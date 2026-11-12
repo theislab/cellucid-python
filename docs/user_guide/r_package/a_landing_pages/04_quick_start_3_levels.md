@@ -27,7 +27,7 @@ cellucid_stop(viewer)
 ```
 
 **What success looks like:** the 80 cells of `pbmc_small` on their t-SNE in the
-Viewer pane, coloured by `groups`. A SingleCellExperiment works the same way.
+Viewer pane, colored by `groups`. A SingleCellExperiment works the same way.
 More: {doc}`../d_viewing_loading/04_view_in_rstudio_positron`.
 
 ## Level 2 — Write a store to share (5 minutes)
@@ -77,7 +77,7 @@ list.files(store, all.files = TRUE, no.. = TRUE)
 
 `cellucid_prepare()` returns the store's absolute path (invisibly). **Open it:**
 {doc}`../d_viewing_loading/01_open_stores_in_cellucid_web_app`; Cellucid shows
-3 points, coloured by `cluster` or `score`.
+3 points, colored by `cluster` or `score`.
 
 ## Level 3 — Everything at once (15–30 minutes)
 
@@ -101,7 +101,7 @@ pca <- matrix(rnorm(n_cells * 20), n_cells)
 umap <- matrix(rnorm(n_cells * 2), n_cells)
 velocity <- matrix(rnorm(n_cells * 2, sd = 0.1), n_cells)
 
-# A symmetric neighbour graph with a zero diagonal
+# A symmetric neighbor graph with a zero diagonal
 knn <- rsparsematrix(n_cells, n_cells, density = 0.01)
 knn@x <- abs(knn@x)
 knn <- knn + t(knn)

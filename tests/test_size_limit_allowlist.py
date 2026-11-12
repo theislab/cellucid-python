@@ -47,6 +47,16 @@ ALLOWLIST: dict[str, tuple[str, str]] = {
         "FORMAT",
         "The largest finite float32; a larger magnitude would be stored as an infinity.",
     ),
+    "src/cellucid/_exact_integers.py:SAFE_INTEGER_MAX": (
+        "PLAT",
+        "The largest integer a JavaScript number (an IEEE 754 double) holds exactly, 2**53 - 1: "
+        "the viewer reads numbers as doubles, so a column past it is carried as exact text (F116).",
+    ),
+    "src/cellucid/prepare_data/_inputs.py:MAX_ELEMENT_NAME_BYTES": (
+        "PLAT",
+        "The longest file name every platform takes (255 bytes on Linux file systems, 255 UTF-8 "
+        "characters on macOS, 255 UTF-16 units on Windows); an element name is a Zarr file name.",
+    ),
     "scripts/normalize_sdist.py:MAX_NORMALIZED_SDIST_BYTES": (
         "PLAT",
         "PyPI's upload limit for one distribution file (100 MB).",

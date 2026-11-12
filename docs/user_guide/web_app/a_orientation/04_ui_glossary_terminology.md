@@ -20,7 +20,7 @@ This glossary is written to match the app UI language, even when a “technical�
 ## UI map (one screenshot you’ll reuse everywhere)
 
 ```{figure} ../../../_static/screenshots/web_app/window-orientation-map.png
-:alt: The whole application window with the Pancreas sample loaded, the sidebar showing Coloring & filtering with the embedding coloured by clusters, and the eight-row legend beside the matching colours on the canvas.
+:alt: The whole application window with the Pancreas sample loaded, the sidebar showing Coloring & filtering with the embedding colored by clusters, and the eight-row legend beside the matching colors on the canvas.
 :width: 1440px
 
 The vocabulary below maps onto this picture. **Sidebar** on the left,
@@ -28,6 +28,26 @@ The vocabulary below maps onto this picture. **Sidebar** on the left,
 **count line** in the *Filters* section of *Coloring & filtering* telling you
 how many of the dataset's cells are currently drawn.
 ```
+
+---
+
+## Panels and windows
+
+- **Docked / floating panel**: a sidebar section is docked in the sidebar. Its
+  ⧉ button (or dragging its header off the sidebar) undocks it into a floating
+  window over the plot; the dock button in that window's header puts it back
+  where it was.
+- **`Dock all`**: while any section floats, a button at the top of the
+  sidebar, below the logo, docks every floating section back into its place in
+  one step ("Dock all 3 panels"; with one, it names it: "Dock Navigation").
+  It is gone when nothing floats. Analysis windows are not sidebar sections and
+  stay where they are.
+- **Inside the screen**: a floating window — a sidebar section, an analysis
+  window or an analysis's expanded view — is never wider or taller than the
+  visible screen (below the sidebar's toggle; on a phone, above the panel's
+  bar and the on-screen keyboard); a taller content scrolls inside it. When
+  the window shrinks or the phone turns, every window is moved and cut to fit,
+  and widening it again gives each its own size back.
 
 ---
 
@@ -39,6 +59,9 @@ how many of the dataset's cells are currently drawn.
   for the current load; your own data opens from **Session › Open data** (see
   {doc}`../b_data_loading/01_loading_options_overview`). A startup whose address already names its data (a Python
   or R viewer, a `cellucid serve` server, or a `?data=` link) skips it.
+  It always comes first: what else the start asks or tells (**Continue where
+  you left off?**, a sample view's notices, which object of an R file to open)
+  waits until it is closed, never shown on top of it.
 - **Suo**: the sample catalog default. It may finish loading behind the welcome
   overlay before you choose another source, and opens in 3D on its default
   embedding.
@@ -83,7 +106,7 @@ keyboard and screen-reader behavior.
 - **`Render mode`**: the dropdown that decides how points are drawn. It has
   exactly two options: `Points`, the default, which draws one point per cell;
   and `Volumetric smoke cloud (beta)`, which draws a continuous density cloud,
-  coloured by the active field, instead. **“Smoke mode”** in these pages always
+  colored by the active field, instead. **“Smoke mode”** in these pages always
   means the second one.
 - **Maturity tag**: a small pill beside a control's label naming how finished
   the currently selected option is. It describes the option you chose, not the
@@ -105,10 +128,10 @@ what alpha means in practice for that mode.
   `Aurora (light)`) and **Dark** (`Black`, `Grid (dark)`, `Studio (dark)`,
   `Nebula (dark)`, `Abyss (dark)`, `Aurora (dark)`); the two lists pair up
   line by line, so `Nebula` is `Atelier`'s dark twin:
-  - `White` and `Black`: a plain colour, nothing drawn.
+  - `White` and `Black`: a plain color, nothing drawn.
   - `Grid (light)` and `Grid (dark)`: a matplotlib-style grid box
     of ruled walls around the data.
-  - `Studio (light)` (the default) and `Studio (dark)`: a calm stage on a neutral grey or
+  - `Studio (light)` (the default) and `Studio (dark)`: a calm stage on a neutral gray or
     charcoal. A 3D view in Orbit or Free-fly stands on a **floor**: one plane
     just under the lowest cell, ruled with hairlines that fade out long before
     its edge and with a soft pool of shade (light) or light (dark) under the
@@ -130,8 +153,8 @@ what alpha means in practice for that mode.
       contact shadow on the floor (in 2D, on the paper behind them) that
       follows filters and representation changes; seen from below the floor,
       the paper glows with the shadow showing through.
-    - `Nebula (dark)`: deep space, a nebula and a star field whose colours are
-      taken from the colours the cells are coloured by.
+    - `Nebula (dark)`: deep space, a nebula and a star field whose colors are
+      taken from the colors the cells are colored by.
     - `Abyss (light)` and `Abyss (dark)`: sunlit shallows over a caustic-lit
       sea floor, and the deep ocean with light shafts and glowing marine snow.
     - `Aurora (light)` and `Aurora (dark)`: a dawn sky with clouds and sun
@@ -141,7 +164,7 @@ what alpha means in practice for that mode.
     on the stage: every look keeps its large areas outside the lightness range
     of the category palettes, and stars behind the cells are dimmed. A look is
     prepared in the background the first time you choose it (a fraction of a
-    second; the stage shows the look's base colour meanwhile, then the look
+    second; the stage shows the look's base color meanwhile, then the look
     fades in) and costs nothing while the scene is still. The sky is prepared
     coarse first and sharpened in steps while the graphics processor keeps up,
     so it appears quickly on every machine and reaches full detail on a
@@ -157,7 +180,9 @@ what alpha means in practice for that mode.
 ## Data model terms
 
 - **Dataset**: the loaded data bundle (points + metadata + optional gene expression + optional connectivities/vector fields).
-- **Cell / point**: one row/observation rendered as a point. (The UI often says “points” because the viewer is generic.)
+- **Cell**: one row (observation) of the dataset, drawn as a point. The app counts
+  cells ("1,234 cells"); *point* names only the drawn mark (**Point size**, the
+  performance panel's **Visible points**).
 - **Gene / feature**: one variable/feature; used for gene expression coloring and some analyses.
 - **Embedding** (also *representation*): coordinates for points in 1D/2D/3D
   (UMAP/tSNE/PCA/etc). A dataset may carry several embeddings of one dimension
@@ -167,7 +192,7 @@ what alpha means in practice for that mode.
 - **Data mapping**: which stored arrays the dataset is drawn from — the
   embeddings that are turned on and the default of each dimension; under
   **Genes** the modality (of a MuData or a multi-assay object), the expression
-  matrix, gene names, values and highly variable genes; the neighbour graph,
+  matrix, gene names, values and highly variable genes; the neighbor graph,
   the latent space and the vector fields. Set under **Session › Data mapping**,
   a section collapsed by default whose header says what is mapped in one
   line ("3 embeddings · UMAP 2D")
@@ -234,10 +259,10 @@ is open is remembered in this browser, never in a session or the address)
   and removed in Manage…). Hidden while nothing is kept
   ({ref}`stored-in-this-browser`).
 - **`Subsampling`**: how much of the dataset is read, its header saying it
-  while collapsed ("100 % cells · genes 6 %"). It holds **`Cells to open`**
+  while collapsed ("100% cells · genes 6%"). It holds **`Cells to open`**
   (which of the dataset's cells are on the map: every one, or a seeded
   subsample) and **`Genes read for`** (of the open cells, how many each gene
-  is read for, for a file stored cell by cell; 100 % is every open cell),
+  is read for, for a file stored cell by cell; 100% is every open cell),
   with their **`Details`** ({doc}`../b_data_loading/21_subsampled_loading`).
 - **`Data mapping`**: which stored arrays the dataset is drawn from (above).
 
@@ -287,7 +312,7 @@ The words behind them:
   same dataset” for sessions and annotation.
   See {doc}`../b_data_loading/06_dataset_identity_why_it_matters`.
 - **AnnData**: the single-cell object Scanpy works with. Its parts that matter
-  to Cellucid are `obs` (one row per cell — the metadata you colour by), `var`
+  to Cellucid are `obs` (one row per cell — the metadata you color by), `var`
   (one row per gene), `obsm` (per-cell coordinate arrays, where embeddings and
   vector fields live), and `obsp` (per-cell-pair matrices, where the neighbor
   graph lives).
@@ -325,17 +350,17 @@ The two legends look nothing alike, and telling them apart at a glance is the
 fastest way to know what kind of field you are looking at:
 
 ```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
-:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a color swatch, a label, a cell count, a rename pencil and a delete bin.
 :width: 488px
 
 **Categorical legend** — checkboxes and swatches.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/legend-continuous-sscore.png
-:alt: The continuous legend for S_score: the Color scale (Viridis) bar with its two end values, Log color scale off and Rescale to range on, each with its (i), and below a rule the Visible range block with Live filtering on, Minimum and Maximum sliders, and Filter and Reset.
+:alt: The continuous legend for S_score: the Color scale (Viridis) bar with its two end values, Log color scale off and Rescale to range on, each with its (i), and below a rule the Visible range block with Live filtering on, Minimum and Maximum sliders, and Reset (Filter appears only with Live filtering off).
 :width: 488px
 
-**Continuous legend** — a colour bar and Min/Max sliders. A gene uses this one
+**Continuous legend** — a color bar and Min/Max sliders. A gene uses this one
 too.
 ```
 

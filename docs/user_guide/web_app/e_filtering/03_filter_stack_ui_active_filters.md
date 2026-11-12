@@ -79,11 +79,11 @@ a row do, and that filters belong to the view they were set in.
 ### Filter rows (what the UI contains)
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-one-row.png
-:alt: The Filters block reading Showing 1,876 of 3,696 cells above one row: a ticked checkbox, the text clusters: hiding Ductal, cut off with an ellipsis, and a remove cross at its right.
+:alt: The Filters block reading Showing 1,876 of 3,696 cells above one row: a ticked checkbox, the text clusters: hiding D… cut off with an ellipsis, the cell count 1,876, and a remove cross at its right.
 :width: 496px
 
-One row, left to right: the enable checkbox, the summary text, the `×` that
-removes it.
+One row, left to right: the enable checkbox, the summary text, the cell count,
+the `×` that removes it.
 ```
 
 Each filter row includes:
@@ -95,8 +95,10 @@ Each filter row includes:
 - a **text summary** (human-readable):
   - continuous range: `Field: min – max`, each bound to six significant
     figures, so a typed or slider bound reads exactly as applied
-  - categorical hides: `Field: hiding A, B, C, D` — at most four names, then
-    ` +N more`
+  - categorical hides: the smaller side named, `Field: hiding A, B, C, D` or,
+    when fewer categories are shown than hidden, `Field: showing only A, B`
+    (`Field: hiding every category` when none is) — at most four names, then ` +N more`;
+    **Missing** counts like a category when some open cell has no category
   - categories keeping only some of their cells (filter by cell count, the
     legend's count): `Field: keeping 200 of Beta` — at most two, then
     ` +N more`; on the same row as the field's hides, after them
@@ -113,10 +115,10 @@ read it. This is also why a `(disabled)` suffix is often invisible; see below.
 
 Disabled filters stay in the list. Internally their summary text gains a
 ` (disabled)` suffix, but the reliable visual cue is that **the whole row is
-greyed and struck through**:
+grayed and struck through**:
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-row-disabled.png
-:alt: The same three-row Filters list with the clusters hiding row unchecked under the pointer: that row is greyed and struck through while the other two stay black, and the count line above has risen.
+:alt: The same three-row Filters list with the clusters hiding row unchecked under the pointer: that row is grayed and struck through while the other two stay black, and the count line above has risen.
 :width: 496px
 
 The middle row is disabled. Its configuration is intact and one click restores
@@ -148,11 +150,11 @@ as it was ({doc}`../m_state_history/01_the_history`).
 When debugging, prefer **disable** first (safe and reversible). Use **remove** once you understand the cause.
 :::
 
-### Per-filter counts: “visible / available cells”
+### Per-filter counts: “visible of available cells”
 
-Some filters show a count suffix like:
-
-`• 12,345 / 56,789 cells`
+Some filters show, in a column of their own at the row's right end (never
+cut off by a long description), the number of cells they keep, `12,345`;
+pointing at it says of how many: `12,345 of 56,789 cells pass this filter`.
 
 Interpretation:
 
@@ -162,11 +164,11 @@ Interpretation:
 This is extremely useful for diagnosing which filter is “doing the work” in a large filter stack.
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-three-rows.png
-:alt: The Filters block holding three rows of different kinds at once: an S_score range row ending in its cell count, cut off with an ellipsis, a clusters hiding row, and a clusters: outlier ≤ 95% row with no count.
+:alt: The Filters block reading Showing 768 of 3,696 cells above three rows of different kinds: S_score: -0.146 – 1.… and clusters: hiding Du…, each cut off with an ellipsis and followed by the cell count 768, and clusters: outlier ≤ 95% with no count.
 :width: 496px
 
 Three filters of three different kinds on the same 3,696 cells. The first two
-carry a `visible / available` suffix; the outlier row carries none.
+carry a cell count in a column of their own; the outlier row carries none.
 ```
 
 :::{note}

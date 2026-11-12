@@ -31,7 +31,12 @@ is uploaded, and the dataset itself is never in it.
   branch it shows is ticked; tick or untick others (archived branches are
   not ticked);
 - **Notes and bookmarks** (ticked);
-- **Conversations** with agents, with how many there are (not ticked);
+- **Conversations** with agents, with how many there are (not ticked); a
+  conversation shared or saved while an agent's turn runs (an agent asked to
+  share "with our conversation") ends where the file took it, with a note
+  saying it was saved during that turn; opened, a conversation is received:
+  its turns offer no **Try again** and its agent's question no choices
+  (they were the sender's);
 - **Recently deleted** (not ticked).
 
 Then **Results** (**Include** the analysis results, or **Compute on open** from
@@ -80,11 +85,13 @@ by the same rules as `apply_cellucid_session_to_anndata()` in Python and
 | In the state | In the new file |
 |---|---|
 | A renamed field or category | The obs column or category renamed in place |
-| A field you made (labels, a copy, a pushed column) | One obs column, named by the field's key |
+| A field you made (labels, a copy, a pushed column) | One obs column, named by the field's key; a field of categories also keeps the colors it is shown in, `uns['<key>_colors']` (Scanpy's place for a column's colors): in the view in focus, the colors you or an agent gave its categories, the rest as it opens (a field made from highlight pages in its pages' colors, any other in Cellucid's own); a column without categories has none there |
+| The colors of a column renamed or relabeled | Carried with it: to the new name, and a merged category keeps its first category's color ({ref}`the full rule <apply-column-colors>`) |
+| A column of the dataset you or an agent recolored, in the view in focus | Its colors, `uns['<column>_colors']`, as it is shown: the categories recolored in their new colors, the rest as the column opens (the file's colors for it, else Cellucid's own), under the column's and categories' names after the save's renames; the plan's `column-colors` row says `write`, `unchanged`, or why not (a column that is not categorical, a modality's column, none of its categories there) |
 | A highlight group, on any page | One true/false obs column, `cellucid_highlight__<page>__<group>` |
 | A gene set | Kept in `uns['cellucid']['gene_sets']`, and one true/false var column, `cellucid_gene_set__<name>`, true on the genes the set lists |
-| Filters, colours, views, the camera, analyses | Not written: they are how the data was shown, not the data |
-| The save itself | One record added to `uns['cellucid']['history_applied']`, with the package `web`, the step applied and the SHA-256 of the "Current state only" session file of that state |
+| Filters, colors, views, the camera, analyses, the expression values | Not written: they are how the data was shown, not the data (X keeps its values); the colors of the fields you made, and of the dataset's columns recolored, go with their columns (above) |
+| The save itself | One record added to `uns['cellucid']['history_applied']`, with the package `web`, the step applied, its expression values (`expression`: `{normalize, log1p}`, what the genes were shown in) and the SHA-256 of the "Current state only" session file of that state |
 
 Everything else is copied as the dataset stores it: every cell, whichever
 cells are open, every layer, `raw`, every embedding and graph, every value
@@ -119,7 +126,7 @@ nothing.
 **While it runs**, a notification shows how much is read, with **Cancel**.
 It ends with one line, such as *Saved PBMC with this state.zarr.zip (412 MB):
 5 changes applied, 2 items left out (see Details).* **Details** lists
-everything left out, one line each: filters, colours and the other parts of
+everything left out, one line each: filters, colors and the other parts of
 the state that are not data, a gene set's genes missing from the dataset, and
 anything of the dataset the browser cannot copy.
 
@@ -191,7 +198,7 @@ a replay. The saving and loading details, refusals and limits are in
 ## Replay a history on another dataset
 
 A replay applies the steps of a saved history again, **by name**, on the
-dataset shown, in a new tracker: colour by the same field, hide the same
+dataset shown, in a new tracker: color by the same field, hide the same
 categories, keep the same genes. It is how you run the same workflow on your
 next sample. Start one from:
 
@@ -269,14 +276,15 @@ dataset, with the same marks for steps that do not apply.
 **Verify**, in a branch's menu, replays the branch from its start, on this
 dataset, into a scratch tracker that is not kept, and compares every part of
 the state at its end with the branch's last step (times and generated ids
-aside). It says either `“Main” reproduced exactly (14 steps).` or which parts
+aside: a field a step made again under a new id, with its colors and
+filters, is the same field). It says either `“Main” reproduced exactly (14 steps).` or which parts
 differ and from which step (`Not reproduced: Highlights differs from step 9
 (“…”).`). Use it before you publish a workflow.
 
 The replay runs on what you see, and at its end you are back on the step you
 were on. A step that could not run at all, because its field could not be read
 (the host is failing, or the store changed on its host), gives no verdict: it
-says `“Main” was not verified, because step 3 (“Coloured by sex”) could not
+says `“Main” was not verified, because step 3 (“Colored by sex”) could not
 run: …`, and nothing else changes. Verify again once the data can be read.
 
 ---

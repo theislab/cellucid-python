@@ -9,7 +9,7 @@ in Data mapping works, and what happens to cells a modality did not measure
 
 A **modality** is one feature space measured on the cells: RNA, surface
 proteins (ADT), chromatin peaks. Cellucid shows one modality's features at a
-time; the cells, their fields, embeddings and neighbour graph are shared.
+time; the cells, their fields, embeddings and neighbor graph are shared.
 
 ---
 
@@ -25,8 +25,8 @@ file ({doc}`14_open_from_link`). Files written by mudata 0.2 and later open,
 | the global `obs` | the fields |
 | each modality's own `obs` columns (`rna` › `leiden`) | fields named `<modality>:<column>` (`rna:leiden`), as mudata names a pulled column |
 | the global `obsm` (a joint embedding such as `X_wnn_umap`) | embeddings |
-| each modality's `obsm` (`rna` › `X_umap`) | embeddings named `rna:X_umap` |
-| the global `obsp`, each modality's `obsp` | neighbour graphs (`rna:connectivities`) |
+| each modality's `obsm` (`rna` › `X_umap`) | embeddings `rna:X_umap`, listed as `UMAP (rna)` |
+| the global `obsp`, each modality's `obsp` | neighbor graphs (`rna:connectivities`) |
 | `mod/<name>` | one modality each, in the file's `mod-order` |
 | the masks mudata keeps of which cells each modality measured | fields `<modality>:measured` |
 
@@ -37,7 +37,9 @@ those cells under **Missing**, an integer column (plain or nullable) stays an
 exact integer column with no value there, and a float column is NaN there.
 
 A modality's graph (`rna:connectivities`) joins the cells that modality
-measured; it is read from the modality as it is stored, a slab of cells at a
+measured. Without a global `obsp['connectivities']`, the dataset opens with
+the graph of the modality it opens on (see
+{doc}`13_data_mapping`, Neighbor graph); it is read from the modality as it is stored, a slab of cells at a
 time for the edges and by row for the KNN drag tool, and is never copied
 whole onto the dataset's cells.
 
@@ -76,11 +78,11 @@ which all follow the modality chosen. Choose one and click **Apply**.
 
 Choose a modality and click **Apply**. Expression, Gene names, Values and
 Highly variable genes then list that modality's matrices and columns, set to
-its defaults, and gene search, colouring by a gene, Marker genes,
+its defaults, and gene search, coloring by a gene, Marker genes,
 Differential expression and Dot plot read its features. Choosing back the
 modality in use restores its choices.
 
-A **cell the modality did not measure** has no value, not zero: coloured by a
+A **cell the modality did not measure** has no value, not zero: colored by a
 protein, it is drawn as missing, and an analysis does not count it as an
 expressed zero. Proteins measured on 36 of 44 cells read NaN on the other 8.
 

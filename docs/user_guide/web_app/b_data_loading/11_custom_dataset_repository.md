@@ -56,7 +56,7 @@ other), as GitHub resolves `HEAD`, without a request to find it; Cellucid never
 probes branch names.
 
 On success the dataset dropdown lists the catalog's datasets in place of the
-samples, labelled "Dataset from <host>", and the catalog's default one opens.
+samples, labeled "Dataset from <host>", and the catalog's default one opens.
 One line appears under the bar reading **Link**, the address and
 **Disconnect** — that line is how you tell a live connection from a path you
 merely typed. **Disconnect** brings the samples back.
@@ -65,10 +65,10 @@ merely typed. **Disconnect** brings the samples back.
 
 | Exact dataset ID | Contents | A useful first question |
 |---|---|---|
-| `synthetic-cell-types-2d` | 72 cells, 8 genes, four `obs` fields, two 2D embeddings, and a weighted neighbour graph | Do the three `cell_type` categories agree with their marker-gene patterns? |
-| `synthetic-development-3d` | 96 cells, 10 genes, five `obs` fields, a 3D embedding `X_branches`, a weighted neighbour graph, and the velocity field `velocity_branches` drawn over it | Does the vector field follow both developmental branches when you orbit the view? |
-| `synthetic-trajectory-1d` | 48 cells, 6 genes, four `obs` fields, a 1D embedding `X_trajectory`, a weighted neighbour graph, and the velocity field `velocity_trajectory` drawn over it | How do `pseudotime` and gene activity change along the line? |
-| `synthetic-citeseq` | 60 cells measured twice: a MuData of the modalities `rna` (8 genes) and `prot` (4 proteins), `cell_type` and `sample`, `X_umap` and `X_pca`, a weighted neighbour graph | Under **Data mapping › Genes › Modality**, does `CD19-ADT` in `prot` mark the cells `SYN-B-MARKER` marks in `rna`? ({doc}`19_multimodal_mudata`) |
+| `synthetic-cell-types-2d` | 72 cells, 8 genes, four `obs` fields, two 2D embeddings, and a weighted neighbor graph | Do the three `cell_type` categories agree with their marker-gene patterns? |
+| `synthetic-development-3d` | 96 cells, 10 genes, five `obs` fields, a 3D embedding `X_branches`, a weighted neighbor graph, and the velocity field `velocity_branches` drawn over it | Does the vector field follow both developmental branches when you orbit the view? |
+| `synthetic-trajectory-1d` | 48 cells, 6 genes, four `obs` fields, a 1D embedding `X_trajectory`, a weighted neighbor graph, and the velocity field `velocity_trajectory` drawn over it | How do `pseudotime` and gene activity change along the line? |
+| `synthetic-citeseq` | 60 cells measured twice: a MuData of the modalities `rna` (8 genes) and `prot` (4 proteins), `cell_type` and `sample`, `X_umap` and `X_pca`, a weighted neighbor graph | Under **Data mapping › Genes › Modality**, does `CD19-ADT` in `prot` mark the cells `SYN-B-MARKER` marks in `rna`? ({doc}`19_multimodal_mudata`) |
 | `synthetic-citeseq-seurat` | the same 60 cells as a Seurat object (`.rds`): assays `RNA` and `ADT`, reductions `pca` and `umap`, the graph `RNA_snn` | Does the object open as it was saved, with its assays as modalities? ({doc}`17_open_r_objects`) |
 
 Each dataset uses the navigation mode expected for its geometry: Planar in 1D
@@ -115,6 +115,7 @@ instead; Cellucid itself only reads the catalog folder.
   "datasets": [
     {
       "id": "study-a",
+      "name": "Study A (lung)",
       "path": "study-a.zarr/",
       "session": {
         "path": "study-a.cellucid-session",
@@ -132,7 +133,10 @@ The rules are deliberately strict:
 - `schema` is exactly `2`.
 - `default` is an exact dataset id present in `datasets`.
 - `datasets` is a non-empty array of entries holding `id`, `path` and,
-  optionally, `session`; nothing else.
+  optionally, `name` and `session`; nothing else. `name` is the dataset's
+  name as a person reads it (best its file's own, `uns['cellucid']['name']`):
+  the sample picker lists it and the opening card says it before the file is
+  read (without it, both show the id until the file's own name is read).
 - Every `id` is unique and follows the portable id rule (1–180 ASCII letters,
   digits, `.`, `_` or `-`, starting with a letter or digit, not ending with
   `.`). A file that states its own id (`uns['cellucid']['id']`) is listed under
@@ -208,7 +212,7 @@ then **Folder…** (or **File…** for an `.h5ad` or `.zarr.zip`), and choose
 - every intended dimension and its default navigation mode;
 - representative categorical and continuous `obs` fields;
 - at least one gene;
-- the neighbour graph, if the file has one;
+- the neighbor graph, if the file has one;
 - each vector field in each bound dimension.
 
 Repeat for every dataset. Opening a file does not read `datasets.json`, so this
@@ -291,7 +295,7 @@ the files still matter:
   (`prepare(gene_identifiers=..., obs_keys=...)`);
 - keep the expression matrix gene-major (CSC), as `prepare()` writes it, so one
   gene is one contiguous read;
-- prefer coarse categorical fields to high-cardinality ones, whose colours are not distinguishable;
+- prefer coarse categorical fields to high-cardinality ones, whose colors are not distinguishable;
 - preserve the original full analysis object outside the public files.
 
 GitHub blocks files larger than 100 MiB, so publish each dataset as a Zarr

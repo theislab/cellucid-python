@@ -18,7 +18,7 @@ og:description: "Cellucid is a free, open-source web app for interactive single-
 ```{raw} html
 <p class="cl-hero-tagline">See every cell. <span>Keep the biology in view.</span></p>
 <p class="cl-hero-lead">A GPU-accelerated single-cell viewer that runs in your
-browser. Move through hundreds of thousands of cells in 1D, 2D and 3D, colour
+browser. Move through hundreds of thousands of cells in 1D, 2D and 3D, color
 them by any gene, compare populations, and leave with a figure, a saved session
 or a link. Nothing to install: your files are read in place, never uploaded.</p>
 ```
@@ -59,16 +59,16 @@ Take the 60-second tour
          srcset="_static/screenshots/home/hero-light-1280.webp 1280w, _static/screenshots/home/hero-light-2400.webp 2400w"
          sizes="(min-width: 75rem) 70rem, 100vw"
          width="1280" height="889" decoding="async" loading="lazy"
-         alt="Cellucid in the light theme on the Studio backdrop: a 3D UMAP of the developing human immune system atlas (Suo), all 561,947 cells coloured by cell type, beside the Coloring and filtering panel, whose legend lists each cell type with its number of cells.">
+         alt="Cellucid in the light theme on the Studio backdrop: a 3D UMAP of the developing human immune system atlas (Suo), all 561,947 cells colored by cell type, beside the Coloring and filtering panel, whose legend lists each cell type with its number of cells.">
     <img class="only-dark"
          src="_static/screenshots/home/hero-dark-1280.webp"
          srcset="_static/screenshots/home/hero-dark-1280.webp 1280w, _static/screenshots/home/hero-dark-2400.webp 2400w"
          sizes="(min-width: 75rem) 70rem, 100vw"
          width="1280" height="889" decoding="async" loading="lazy"
-         alt="Cellucid in the dark theme on the Nebula backdrop: a 3D UMAP of the developing human immune system atlas (Suo), all 561,947 cells coloured by cell type, beside the Coloring and filtering panel, whose legend lists each cell type with its number of cells.">
+         alt="Cellucid in the dark theme on the Nebula backdrop: a 3D UMAP of the developing human immune system atlas (Suo), all 561,947 cells colored by cell type, beside the Coloring and filtering panel, whose legend lists each cell type with its number of cells.">
   </div>
   <figcaption>The developing human immune system atlas (Suo), all 561,947
-  cells in a 3D UMAP, coloured by cell type. It is one of the built-in
+  cells in a 3D UMAP, colored by cell type. It is one of the built-in
   samples: open Cellucid and it is the first thing you see.</figcaption>
 </figure>
 ```
@@ -87,8 +87,9 @@ Take the 60-second tour
 
 Open the app, pick a sample, or drop in your own file or folder. Everything
 runs in the browser.
-+++
+```{card-footer}
 Web app guide {octicon}`arrow-right;1em`
+```
 :::
 
 :::{grid-item-card} {octicon}`package;1.25em;sd-mr-2` Python
@@ -97,8 +98,9 @@ Web app guide {octicon}`arrow-right;1em`
 
 `pip install cellucid`. Prepare a Cellucid-ready AnnData, serve files from a
 workstation or cluster, and keep the viewer beside your notebook.
-+++
+```{card-footer}
 Python guide {octicon}`arrow-right;1em`
+```
 :::
 
 :::{grid-item-card} {octicon}`beaker;1.25em;sd-mr-2` R
@@ -107,8 +109,9 @@ Python guide {octicon}`arrow-right;1em`
 
 View a Seurat or SingleCellExperiment object in RStudio or Positron, or write
 the same Cellucid-ready AnnData from it.
-+++
+```{card-footer}
 R guide {octicon}`arrow-right;1em`
+```
 :::
 
 ::::
@@ -125,14 +128,15 @@ R guide {octicon}`arrow-right;1em`
 :class-card: cl-feature
 :class-header: cl-feature-media
 
+````{card-header}
 ```{raw} html
-<img class="only-light" src="_static/screenshots/home/feature-genes-light.webp" width="1080" height="750" loading="lazy" decoding="async" alt="The Pancreas 2D UMAP in the light theme, coloured by expression of the gene Ttr on a log colour scale (Viridis): brightest in the endocrine cells on the right, a darker gradient along the trajectory, and pale grey for the few cells with none; the colour bar is open in the sidebar.">
-<img class="only-dark" src="_static/screenshots/home/feature-genes-dark.webp" width="1080" height="750" loading="lazy" decoding="async" alt="The Pancreas 2D UMAP in the dark theme, coloured by expression of the gene Ttr on a log colour scale (Viridis): brightest in the endocrine cells on the right, a darker gradient along the trajectory, and pale grey for the few cells with none; the colour bar is open in the sidebar.">
+<img class="only-light" src="_static/screenshots/home/feature-genes-light.webp" width="1080" height="750" loading="lazy" decoding="async" alt="The Pancreas 2D UMAP in the light theme, colored by expression of the gene Ttr on a log color scale (Viridis): brightest in the endocrine cells on the right, a darker gradient along the trajectory, and pale gray for the few cells with none; the color bar is open in the sidebar.">
+<img class="only-dark" src="_static/screenshots/home/feature-genes-dark.webp" width="1080" height="750" loading="lazy" decoding="async" alt="The Pancreas 2D UMAP in the dark theme, colored by expression of the gene Ttr on a log color scale (Viridis): brightest in the endocrine cells on the right, a darker gradient along the trajectory, and pale gray for the few cells with none; the color bar is open in the sidebar.">
 ```
-^^^
-**Colour by any gene or field**
+````
+**Color by any gene or field**
 
-Search every gene in the file, or colour by any `obs` column, with legends you
+Search every gene in the file, or color by any `obs` column, with legends you
 can filter from.
 :::
 
@@ -142,12 +146,13 @@ can filter from.
 :class-card: cl-feature
 :class-header: cl-feature-media
 
+````{card-header}
 ```{raw} html
-<img class="only-light" src="_static/screenshots/home/feature-analysis-light.webp" width="1080" height="846" loading="lazy" decoding="async" alt="The expanded Marker genes window for cell_type in the light theme, over the blurred Pancreas embedding: a heatmap of z-scored expression with the eight cell types down the side and their top marker genes across, Export and Plot options beside it, and below, the summary statistics and a table of the top genes of the selected group.">
-<img class="only-dark" src="_static/screenshots/home/feature-analysis-dark.webp" width="1080" height="846" loading="lazy" decoding="async" alt="The expanded Marker genes window for cell_type in the dark theme, over the blurred Pancreas embedding: a heatmap of z-scored expression with the eight cell types down the side and their top marker genes across, Export and Plot options beside it, and below, the summary statistics and a table of the top genes of the selected group.">
+<img class="only-light" src="_static/screenshots/home/feature-analysis-light.webp" width="1080" height="883" loading="lazy" decoding="async" alt="The expanded Marker genes window for cell_type in the light theme, over the blurred Pancreas embedding: a heatmap of z-scored expression with the eight cell types down the side and their top marker genes across, Export and Plot options beside it, and below, the summary statistics and a table of the top genes of the selected group.">
+<img class="only-dark" src="_static/screenshots/home/feature-analysis-dark.webp" width="1080" height="883" loading="lazy" decoding="async" alt="The expanded Marker genes window for cell_type in the dark theme, over the blurred Pancreas embedding: a heatmap of z-scored expression with the eight cell types down the side and their top marker genes across, Export and Plot options beside it, and below, the summary statistics and a table of the top genes of the selected group.">
 ```
-^^^
-**Analyse what you selected**
+````
+**Analyze what you selected**
 
 Differential expression between the groups you highlighted, marker genes, dot
 plots and gene signatures, next to the embedding.
@@ -159,11 +164,12 @@ plots and gene signatures, next to the embedding.
 :class-card: cl-feature
 :class-header: cl-feature-media
 
+````{card-header}
 ```{raw} html
-<img class="only-light" src="_static/screenshots/home/feature-velocity-light.webp" width="1080" height="750" loading="lazy" decoding="async" alt="The Pancreas 2D UMAP in the light theme with the sidebar closed, coloured by cell type, and the RNA velocity overlay on: streaks of particles flowing along the embedding, brightest where the velocity is largest.">
-<img class="only-dark" src="_static/screenshots/home/feature-velocity-dark.webp" width="1080" height="750" loading="lazy" decoding="async" alt="The Pancreas 2D UMAP in the dark theme with the sidebar closed, coloured by cell type, and the RNA velocity overlay on: streaks of particles flowing along the embedding, brightest where the velocity is largest.">
+<img class="only-light" src="_static/screenshots/home/feature-velocity-light.webp" width="1080" height="750" loading="lazy" decoding="async" alt="The Pancreas 2D UMAP in the light theme with the sidebar closed, colored by cell type, and the RNA velocity overlay on: streaks of particles flowing along the embedding, brightest where the velocity is largest.">
+<img class="only-dark" src="_static/screenshots/home/feature-velocity-dark.webp" width="1080" height="750" loading="lazy" decoding="async" alt="The Pancreas 2D UMAP in the dark theme with the sidebar closed, colored by cell type, and the RNA velocity overlay on: streaks of particles flowing along the embedding, brightest where the velocity is largest.">
 ```
-^^^
+````
 **See where cells are going**
 
 Animate RNA velocity or any other vector field as particles that flow over the
@@ -176,14 +182,15 @@ embedding, in 2D or 3D.
 :class-card: cl-feature
 :class-header: cl-feature-media
 
+````{card-header}
 ```{raw} html
-<img class="only-light" src="_static/screenshots/home/feature-compare-light.webp" width="1080" height="750" loading="lazy" decoding="async" alt="Two equal panels in the light theme with the sidebar closed, both showing the Pancreas 3D embedding from one linked camera: on the left coloured by cell type, on the right by the S-phase score on a Viridis scale, each under a title chip naming its field.">
-<img class="only-dark" src="_static/screenshots/home/feature-compare-dark.webp" width="1080" height="750" loading="lazy" decoding="async" alt="Two equal panels in the dark theme with the sidebar closed, both showing the Pancreas 3D embedding from one linked camera: on the left coloured by cell type, on the right by the S-phase score on a Viridis scale, each under a title chip naming its field.">
+<img class="only-light" src="_static/screenshots/home/feature-compare-light.webp" width="1080" height="750" loading="lazy" decoding="async" alt="Two equal panels in the light theme with the sidebar closed, both showing the Pancreas 3D embedding from one linked camera: on the left colored by cell type, on the right by the S-phase score on a Viridis scale, each under a title chip naming its field.">
+<img class="only-dark" src="_static/screenshots/home/feature-compare-dark.webp" width="1080" height="750" loading="lazy" decoding="async" alt="Two equal panels in the dark theme with the sidebar closed, both showing the Pancreas 3D embedding from one linked camera: on the left colored by cell type, on the right by the S-phase score on a Viridis scale, each under a title chip naming its field.">
 ```
-^^^
+````
 **Compare views side by side**
 
-Keep a view, recolour the next, and link their cameras so one gesture moves
+Keep a view, recolor the next, and link their cameras so one gesture moves
 both.
 :::
 
@@ -204,7 +211,7 @@ Hide categories, set value ranges and drop outliers, and see the count as you go
 :link: user_guide/web_app/f_highlighting_selection/index
 :link-type: doc
 
-Lasso, click or drag through the neighbour graph to build named groups of cells.
+Lasso, click or drag through the neighbor graph to build named groups of cells.
 :::
 
 :::{grid-item-card} {octicon}`history;1.1em;sd-mr-2` Every step, kept and shared
@@ -249,7 +256,7 @@ the route that matches today’s question.
 :link: user_guide/web_app/d_fields_coloring_legends/index
 :link-type: doc
 
-Colour by a categorical `obs` field or a marker gene, then filter the noise
+Color by a categorical `obs` field or a marker gene, then filter the noise
 away and highlight a population without losing the surrounding context.
 :::
 
@@ -305,7 +312,7 @@ path.
 :link: user_guide/web_app/a_orientation/03_quick_tour_60_seconds
 :link-type: doc
 
-Enter, move, colour, keep a view, highlight and export, once each.
+Enter, move, color, keep a view, highlight and export, once each.
 :::
 
 :::{grid-item-card} {octicon}`git-branch;1.1em;sd-mr-2` Which workflow?
@@ -319,7 +326,7 @@ A short decision tree from the data you have to the route that fits.
 :link: user_guide/python_package/f_notebooks_tutorials/index
 :link-type: doc
 
-Notebooks from a first coloured embedding to velocity and session round trips.
+Notebooks from a first colored embedding to velocity and session round trips.
 :::
 
 :::{grid-item-card} {octicon}`book;1.1em;sd-mr-2` UI glossary

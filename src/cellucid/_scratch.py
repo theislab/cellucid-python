@@ -72,7 +72,7 @@ class Mapped(Protocol):
 
 
 def _process_alive(pid: int) -> bool:
-    """Whether process ``pid`` runs (on this machine), never signalling it
+    """Whether process ``pid`` runs (on this machine), never signaling it
     (``os.kill`` on Windows ends a process, whatever the signal). A process
     that runs but may not be asked (another user's) counts as running."""
     if pid <= 0:

@@ -23,6 +23,8 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from .._exact_integers import as_exact_text, holds_unsafe_integers
+
 
 def _placement(mdata: Any, name: str) -> np.ndarray:
     """Each global cell's 0-based row in modality ``name``, -1 where it measured none."""
@@ -36,6 +38,9 @@ def _placed_column(values: pd.Series, rows: np.ndarray) -> Any:
         codes = np.full(len(rows), -1, dtype=np.int64)
         codes[present] = values.cat.codes.to_numpy()[rows[present]]
         return pd.Categorical.from_codes(codes, dtype=values.dtype)
+    if holds_unsafe_integers(values):
+        # Identifiers past 2^53: their exact decimal text, as the viewer reads them.
+        values = as_exact_text(values)
     array = values.to_numpy()
     if array.dtype.kind in "iubf":
         placed = np.full(len(rows), np.nan, dtype=np.float64 if array.dtype.kind != "f" else array.dtype)

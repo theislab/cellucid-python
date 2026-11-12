@@ -61,10 +61,10 @@ on screen and the tool has nothing to work from. It says so rather than failing
 silently:
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-no-active-field-notice.png
-:alt: The Highlighting panel with the Annotation tool chosen and no field coloured, and the Selection (i) tip open, its first line ringed: "Color by a field first (Coloring & filtering), then Alt+click a cell."
+:alt: The Highlighting panel with the Annotation tool chosen and no field colored, and the Selection (i) tip open, its first line ringed: "Color by a field first (Coloring & filtering), then Alt+click a cell."
 :width: 762px
 
-With no coloured field the **Selection** (i) leads with an instruction
+With no colored field the **Selection** (i) leads with an instruction
 instead of the usual `Alt+click` invitation. In this state no press can select anything, so there is nothing to
 debug beyond choosing a field.
 ```
@@ -76,7 +76,7 @@ the field-less one answers *“That panel is not colored by a field, so there is
 nothing to select.”*
 
 The other three tools are unaffected: lasso, proximity and KNN are geometric or
-graph-based and do not read the coloured field at all.
+graph-based and do not read the colored field at all.
 
 ---
 
@@ -206,8 +206,8 @@ This approximates a 3D volume by combining multiple 2D “cuts”.
 ## KNN selection when the neighbor graph is missing
 
 **What you see**
-- Choosing KNN drag raises the notification “No neighbor graph available for this dataset”, and KNN selection does nothing.
-- Or, with a graph that has not finished loading: the first `Alt+click` only starts the load (“Loading neighbor graph for KNN mode”) and selects nothing.
+- Choosing KNN drag raises the notification “This dataset has no neighbor graph, so KNN drag cannot select by neighbors; use Proximity drag or Lasso.”, and KNN selection does nothing.
+- Or, with a graph that has not finished loading: the first `Alt+click` only starts the load (“Reading the neighbor graph”) and selects nothing.
 
 **Why**
 - KNN selection requires a connectivity graph.

@@ -177,7 +177,7 @@ See {doc}`../e_filtering/05_performance_considerations` for the filtering-specif
 - things are fast *after* loading, but slow at the moment data is requested.
 
 **Common triggers in Cellucid:**
-- the first genes of a large cell-major `.h5ad` opened in the browser, while its matrix is reorganised by gene,
+- the first genes of a large cell-major `.h5ad` opened in the browser, while its matrix is reorganized by gene,
 - remote server latency or throttled networks,
 - first-time loads of gene expression chunks (cold cache),
 - loading from slow disks / network drives / remote desktop mounts.
@@ -204,7 +204,7 @@ Most costs in Cellucid are not “mysterious”—they scale with a small set of
 | Number of views (1–4) | Each view draws every point again, so on a large dataset frame time grows with the view count; point size follows pane height, which only matters once points are large and overlapping | multiview stutters where one view is smooth; Level of detail fixes it |
 | Window pixel count (`width × height × dpr²`) | Overlays and post-processing scale with pixels | smoother when window is smaller |
 | `n_enabled_filters` | Each filter change re-derives visibility for every cell, testing each enabled filter | slider scrubbing becomes the main lag source |
-| Category count | Sorting labels, counts and colour mapping grow with it (the legend draws only the rows in view) | switching to the field slows; colours stop being distinguishable |
+| Category count | Sorting labels, counts and color mapping grow with it (the legend draws only the rows in view) | switching to the field slows; colors stop being distinguishable |
 | “First-time” loads | cold cache → extra I/O | first gene switch slow; second is faster |
 
 :::{important}
@@ -286,7 +286,7 @@ Once you find a fast, stable configuration:
   not (see the note above).
 - Smoke mode and vector overlays can be dramatically slower than points mode (they do more GPU work).
 - Navigating a heavily filtered view is *faster* than navigating the same
-  dataset unfiltered. Hidden cells are rejected before rasterisation, so they
+  dataset unfiltered. Hidden cells are rejected before rasterization, so they
   cost nothing to draw.
 
 ### Suspicious (worth troubleshooting)

@@ -145,6 +145,9 @@ again with **Open… › File…** (or **Folder…**):
 - it changed since it was opened here (another size or modification time,
   or for a folder any of its files): a changed file may hold another
   dataset, so it is not opened under the old one's name.
+- it cannot be read just now: in use by another program, or not on this
+  computer yet (a file in a cloud folder that has not downloaded); **Try
+  again** in a moment (the handle stays).
 
 A file that moved or changed has its handle forgotten; it stays in My
 datasets, to be chosen again. **Forget** in **My datasets › All…** forgets a
@@ -177,7 +180,7 @@ computer). Dropping the folder onto the viewer does the same.
 - Points appear quickly: opening reads the store's metadata, the observation
   table and the embedding shown first.
 - Field lists are populated.
-- A gene reads its own chunks when you colour by it.
+- A gene reads its own chunks when you color by it.
 
 ### Hidden metadata files
 A Zarr v2 store keeps its metadata in files whose names start with a dot
@@ -202,7 +205,7 @@ files … Drag the folder onto the page, or open its .zarr.zip." In Safari:
 - See {doc}`../i_vector_field_velocity/index`.
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
-:alt: The whole Cellucid window with the Pancreas sample coloured by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colours.
+:alt: The whole Cellucid window with the Pancreas sample colored by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colors.
 :width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
@@ -224,12 +227,12 @@ does.
 
 - Opening reads the metadata, the observation table and the embedding shown
   first, not the expression matrix.
-- A gene is read when you colour by it. When `X` is stored by gene (CSC) or
+- A gene is read when you color by it. When `X` is stored by gene (CSC) or
   dense, a gene reads only its own column.
 - When `X` is stored by cell (CSR, what Scanpy writes by default), a gene's
-  values are spread through the whole matrix, so Cellucid reorganises it by
+  values are spread through the whole matrix, so Cellucid reorganizes it by
   gene in the background right after opening and shows its progress. A gene
-  you choose meanwhile is answered by the same pass. The reorganised matrix is
+  you choose meanwhile is answered by the same pass. The reorganized matrix is
   kept in memory when it fits (a share of the memory the browser reports) and
   otherwise in the browser's private file storage on your disk, removed when
   the file is closed.
@@ -237,9 +240,9 @@ does.
 Practical consequences:
 - Memory holds what is shown: positions and the fields and genes in use, four
   bytes per cell each.
-- A very large CSR matrix takes a while to reorganise the first time; the
+- A very large CSR matrix takes a while to reorganize the first time; the
   progress notice says how far it is. A column-major (CSC) matrix needs no
-  reorganisation.
+  reorganization.
 - A browser without private file storage (some private windows) scans the file
   for each gene once a CSR matrix is too large for memory, which is slow; use
   a window with site storage there.
@@ -403,7 +406,7 @@ before any cell is read, as having no cell embedding
   same validation applies in all four. Where a browser policy blocks those
   pickers, the same click opens the file inputs instead.
 - **Permission prompts**: if you deny folder access, Cellucid cannot read files.
-- **Large `.h5ad`**: read from disk as each view needs it; a cell-major matrix is reorganised by gene in the background, with a progress notice.
+- **Large `.h5ad`**: read from disk as each view needs it; a cell-major matrix is reorganized by gene in the background, with a progress notice.
 - **Zarr ZIP root**: the archive must contain either root metadata at archive
   root or exactly one wrapper directory around the Zarr store.
 
@@ -416,7 +419,7 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 ### Symptom: “I chose Folder…, but nothing happens”
 
 **Likely causes (ordered)**
-1) **You dismissed the file chooser.** A cancelled selection is deliberately
+1) **You dismissed the file chooser.** A canceled selection is deliberately
    silent — Cellucid shows no error and keeps the dataset you already had.
 2) You denied folder access or a managed-browser policy blocked it.
 3) The UI is open in an embedded context that disallows folder access.
@@ -444,7 +447,7 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 - Watch the browser tab’s memory usage.
 
 **Fix**
-- For a cell-major (CSR) matrix, wait for the reorganisation progress notice
+- For a cell-major (CSR) matrix, wait for the reorganization progress notice
   to finish, or save the matrix column-major (CSC).
 - Or write a Cellucid-ready AnnData once with `prepare()` and open that.
 
@@ -556,7 +559,7 @@ For overlay UI behavior and deeper debugging, see:
 
 Your dataset is open. The next thing most people want is to see something in it:
 
-- **Colour the cells by a gene or a metadata column** →
+- **Color the cells by a gene or a metadata column** →
   {doc}`../d_fields_coloring_legends/index`, or the three-minute version in
   {doc}`../a_orientation/03_quick_tour_60_seconds`
 - **Hide the cells you are not looking at** → {doc}`../e_filtering/index`

@@ -21,7 +21,7 @@ If you just want to “select a cluster and save it”:
 
 | Page | Read it when |
 |---|---|
-| {doc}`01_highlight_mental_model` | You want to know how highlighting differs from filtering and colouring. |
+| {doc}`01_highlight_mental_model` | You want to know how highlighting differs from filtering and coloring. |
 | {doc}`02_selection_tools_document_each_tool` | You are choosing between lasso, proximity, KNN and annotation-based selection. |
 | {doc}`03_highlight_ui` | You need the button-by-button map, including `Create categorical`. |
 | {doc}`04_selection_synchronization` | You work across snapshots, or drive selection from Python/Jupyter. |

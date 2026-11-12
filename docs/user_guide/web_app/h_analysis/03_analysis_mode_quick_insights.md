@@ -103,7 +103,7 @@ full sort gives, not an approximation, no matter how large the selection is.
 From half a million finite values the selection runs on an analysis worker, so
 the page stays responsive while it does.
 
-**SD (population) is the population standard deviation** — it divides by *n*, not by *n − 1*, as its column says.
+**Pop. SD is the population standard deviation** — it divides by *n*, not by *n − 1*, as its column says (its hint says so in full).
 That matters if you are checking the number against pandas, whose
 `Series.std()` defaults to the *sample* standard deviation and divides by
 *n − 1*. On a page of a few thousand cells the difference is invisible; on a page
@@ -160,7 +160,7 @@ use {doc}`04_analysis_mode_detailed_analysis`.
 
 So a page with 50,000 cells may effectively contribute fewer values for a field
 with missingness. An `Inf` is a different matter: it is not a missing value and
-Quick refuses to summarise a column containing one, because a mean or a spread
+Quick refuses to summarize a column containing one, because a mean or a spread
 that silently swallowed an infinity would be meaningless. Fix the column
 upstream rather than looking for a setting.
 
@@ -222,7 +222,7 @@ on each section heading chooses which fields are shown; by default it is the
 first two of each kind.
 ```
 
-Quick is the only mode with **no expanded view** — there is no `⤢ Expand` button,
+Quick is the only mode with **no expanded view** — there is no **Expand** button,
 because there is no plot to enlarge and no table that would not already fit. If
 you need a distribution rather than a summary, that is
 {doc}`04_analysis_mode_detailed_analysis`.

@@ -35,10 +35,10 @@ Start with the web app user guide landing page: {doc}`../index`.
 - **Codebase map**: how `cellucid/index.html` boots the app and which folders correspond to state, UI, rendering, and data loading.
 - **State model**: `DataState`, events, per-view contexts, multi-page highlights, caches, and batch updates.
 - **Rendering pipeline**: the WebGL viewer, buffers, LOD, overlays (smoke + velocity), and performance footguns.
-- **Actions, state domains and the history**: the one action catalogue
-  every control, agent and Python or R host dispatches, the fifteen state
+- **Actions, state domains and the history**: the one action catalog
+  every control, agent and Python or R host dispatches, the sixteen state
   domains, the history's trackers, undo, branches and autosave, and how the
-  catalogue reaches Python, R and agents.
+  catalog reaches Python, R and agents.
 - **Persistence**: the one current `.cellucid-session` format (session format
   4: the history in one file, or the state only, or the steps only), its
   all-or-nothing load beside the person's trackers, starting views,

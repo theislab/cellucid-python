@@ -15,10 +15,9 @@ and state); there are no S4 classes or methods.
 | `cellucid_transition_drift()` | Computes the drift of every cell in an embedding's coordinates from a cell-cell transition matrix, a vector field to pass to `cellucid_prepare(vector_fields = )` | A double matrix as wide as the embedding |
 | `cellucid_view()`, `cellucid_serve()` | Open an object or a file in the viewer (Viewer pane or browser), or serve it for a browser elsewhere | The viewer, invisibly |
 | `cellucid_stop()`, `cellucid_stop_all()`, `cellucid_viewers()` | Stop one viewer, every viewer; list the running ones | The viewer; the number stopped; a list |
-| `cellucid_<action>()`: one function per action of the viewer, 146 of them, generated from the action catalogue -- `cellucid_color_by()`, `cellucid_highlight_cells()`, `cellucid_highlight_clear_all()`, `cellucid_cells_visibility_set()`, `cellucid_camera_reset()`, `cellucid_mapping_set()`, `cellucid_gene_set_save()`, `cellucid_category_rename()`, `cellucid_fields_list()`, `cellucid_history_get()`, `cellucid_history_undo()`, `cellucid_history_redo()`, `cellucid_history_jump()`, `cellucid_view_picture()`, … (each has its help page) | Everything a person can do in the viewer, and every read: one step of the viewer's history, labelled as R's; undo, redo and jumps move the history and record no step (Python's generated `viewer.<action>()` methods) | A request, invisibly; `cellucid_action_result()` collects its outcome |
-| `cellucid_act()`, `cellucid_action_result()` | Any action named in data, `cellucid_act(viewer, "color.by", field = ...)` (Python's `viewer.act()`); the outcome of a request (a read's result), or a stop with the viewer's reason | A request, invisibly; the outcome |
-| `cellucid_freeze()` | Freeze the viewer's last view (a command, not an action) | The viewer, invisibly |
-| `cellucid_on()`, `cellucid_off()`, `cellucid_selection()`, `cellucid_wait_ready()`, `cellucid_request_session()`, `cellucid_session_result()` | Events from the viewer: hooks, the last selection, readiness, the session (the viewer's history) | See {doc}`../d_viewing_loading/06_hooks_selection_and_sessions` |
+| `cellucid_<action>()`: one function per action of the viewer (the {doc}`action reference <../../web_app/p_developer_docs/30_action_reference>` counts them), generated from the action catalog -- `cellucid_color_by()`, `cellucid_highlight_cells()`, `cellucid_highlight_clear_all()`, `cellucid_cells_visibility_set()`, `cellucid_camera_reset()`, `cellucid_mapping_set()`, `cellucid_gene_set_save()`, `cellucid_category_rename()`, `cellucid_fields_list()`, `cellucid_history_get()`, `cellucid_history_undo()`, `cellucid_history_redo()`, `cellucid_history_jump()`, `cellucid_view_picture()`, … (each has its help page) | Everything a person can do in the viewer, and every read: one step of the viewer's history, labeled as R's; undo, redo and jumps move the history and record no step (Python's generated `viewer.<action>()` methods) | A request, invisibly; `cellucid_action_result()` collects its outcome |
+| `cellucid_act()`, `cellucid_action_result()` | Any action named in data, `cellucid_act(viewer, "color.by", field = ...)` (Python's `viewer.act()`); the outcome of a request (a read's result), or a stop with the viewer's reason; a change that made no history step warns why (class `cellucid_action_not_recorded`; `request$unrecorded`, Python's `ActionRequest.unrecorded`) | A request, invisibly; the outcome |
+| `cellucid_on()`, `cellucid_off()`, `cellucid_selection()`, `cellucid_wait_event()`, `cellucid_wait_ready()`, `cellucid_request_session()`, `cellucid_session_result()` | Events from the viewer: hooks (Python's `viewer.on_*()` and `register_hook()`), the last selection, the next event of a kind (`viewer.wait_for_event()`), readiness, the session (the viewer's history) | See {doc}`../d_viewing_loading/06_hooks_selection_and_sessions` |
 | `cellucid_turn()`, `cellucid_last_history_change()`, `cellucid_load_session()`, `cellucid_load_session_result()` | The viewer's history, live: every action sent while the code runs one turn of the history (Python's `viewer.turn()`); the latest `history_changed` (`viewer.history`); a session file pushed into the viewer, its trackers added beside the person's (`viewer.load_session()`) | The turn's id, invisibly; `list(kind, tracker, head, step, branch)` or `NULL`; a request, invisibly; `list(tracker = list(id, name), head)` |
 | `cellucid_read_session()`, `cellucid_conversations()` | A `.cellucid-session` file (session format 4) read and checked whole (a newer Cellucid's file refused as newer, never as damaged); the agent conversations it kept with a tracker (Python's `read_session()`, `CellucidSession.conversations()`) | A `cellucid_session`; a list of conversations |
 | `cellucid_trackers()`, `cellucid_tracker()`, `cellucid_branches()`, `cellucid_branch()`, `cellucid_groups()`, `cellucid_group()`, `cellucid_steps()`, `cellucid_step()`, `cellucid_step_state()`, `cellucid_step_diff()`, `cellucid_stale()`, `cellucid_notes()`, `cellucid_turns()`, `cellucid_journal()`, `cellucid_methods()`, `cellucid_pseudocode()` | The history a session holds: its trackers, branches, groups, steps (of each kind, squashed ones included), the state after a step, what differs between two steps, the stale results, notes, turns, the journal, and a branch as a methods paragraph and as pseudocode (Python's `cellucid.history`: `Tracker`, `Branch`, `Group`, `Step`) | Data frames (one row per record, the columns of Python's tables); records; a named list of state values; text |
@@ -39,12 +38,15 @@ cellucid_prepare(
   dataset_id = NULL,
   dataset_name = NULL,
   obs = NULL,
+  obs_colors = NULL,
   var = NULL,
   gene_expression = NULL,
   connectivities = NULL,
   vector_fields = NULL,
   modalities = NULL,
   gene_identifiers = NULL,
+  total_counts = NULL,
+  total_counts_over = NULL,
   dataset_description = NULL,
   citation_text = NULL,
   citation_url = NULL,
@@ -58,6 +60,7 @@ cellucid_prepare(
   normalize_embeddings = NULL,
   centroid_min_points = NULL,
   modality = NULL,
+  priority_seed = 0,
   zarr_format = NULL,
   force = FALSE
 )
@@ -81,6 +84,7 @@ and what a valid value is.
 | `out_path` | required | A folder ending in `.zarr` for `format = "zarr"`, a file ending in `.zarr.zip` for `format = "zarr.zip"`; a mismatch is refused with the path to write instead; missing parent folders are created | {doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification` |
 | `format` | required | `"zarr"` or `"zarr.zip"`. No default: a folder of many small files and one file suit different hosts, and only you know where the store goes. `"zarr"` writes a `.zarr` folder, for GitHub (no file over 100 MB, no LFS); `"zarr.zip"` writes the same store as one `.zarr.zip` file, for everything else: single-file hosts (Zenodo, Figshare, Hugging Face, S3, a lab server), local files, `cellucid serve` and Jupyter. There is no `"h5ad"`: this package writes no HDF5, so it needs no HDF5 library; Python's `cellucid.prepare(format = "h5ad")` writes `.h5ad`. | {doc}`../c_data_preparation_api/index` |
 | `zarr_format` | `NULL` (2) | `2` or `3`: the Zarr format of the store; anndata 0.8 and later read format 2, anndata 0.11 and later format 3, the web app both equally fast | {doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification` |
+| `priority_seed` | `0` | The seed of the priority order the cells are stored in (a whole number in [0, 2^32 - 1]), so a subsample of the store reads only its own cells; `NULL` stores them in the order given, with no priority record and no `obs['cellucid_original_position']` | {doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification` |
 | `force` | `FALSE` | `TRUE` replaces an existing store once the new one is complete; never a folder that is not a Zarr store | {doc}`../c_data_preparation_api/01_cellucid_prepare_overview` |
 
 ### Data
@@ -90,11 +94,14 @@ and what a valid value is.
 | `data` | `NULL` | A Seurat, SingleCellExperiment or SummarizedExperiment object whose contents are every other argument's default; several assays or alternative experiments write a Cellucid-ready MuData | {doc}`../e_integrations_recipes/index` |
 | `embeddings` | required without `data` | `obsm[<key>]`, float32, every column | {doc}`../c_data_preparation_api/03_embeddings_and_coordinates` |
 | `obs` | `NULL` | `obs`, every column | {doc}`../c_data_preparation_api/04_obs_cell_metadata` |
+| `obs_colors` | `NULL` | `uns['<column>_colors']`: Scanpy's colors of categorical `obs` columns, `list(cell_type = c("#1f77b4", ...))`, one a category in its order; from `data`, the colors the object holds for the columns written (`misc`, `metadata(x)`), those that cannot color them left out with a message; given, checked; `list()` writes none | {doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification` |
 | `var` | `NULL` | `var`, every column (requires `gene_expression`) | {doc}`../c_data_preparation_api/05_var_gene_metadata` |
 | `gene_expression` | `NULL` | `X`, cells x genes, gene-major float32, float64 for integer counts above 2^24 (`csc_matrix` for a sparse matrix, stored zeros dropped) | {doc}`../c_data_preparation_api/06_gene_expression_matrix` |
 | `connectivities` | `NULL` | `obsp['connectivities']`, float32 `csr_matrix` | {doc}`../c_data_preparation_api/07_connectivities_knn_graph` |
 | `vector_fields` | `NULL` | `obsm['<field>_<basis>']` for each embedding `X_<basis>` (`velocity_umap`) | {doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement` |
 | `gene_identifiers` | `NULL` | Narrows `X` and `var` to these genes, in this order | {doc}`../c_data_preparation_api/05_var_gene_metadata` |
+| `total_counts` | `NULL` | The `obs` column of each cell's total count over all genes (`"nCount_RNA"`; several modalities: `c(RNA = "nCount_RNA")`), recorded in `uns['cellucid']['totalCounts']`; `NULL` writes a counts `X`'s row sums as `obs['total_counts']` | {doc}`../c_data_preparation_api/06_gene_expression_matrix` |
+| `total_counts_over` | `NULL` | What that column covers: `NULL` is `"all genes"`; `"source panel"`, every gene of the source's gene panel (more than are stored, not the whole transcriptome); several modalities: one value, or `c(RNA = "source panel")` | {doc}`../c_data_preparation_api/06_gene_expression_matrix` |
 | `modalities` | `NULL` | The modalities of `data` to write, in order (all, the active assay or main experiment first, when `NULL`); one name writes an AnnData | {doc}`../d_viewing_loading/07_multimodal_assays` |
 
 ### What the dataset says about itself (`uns['cellucid']`)
@@ -133,7 +140,7 @@ An argument left at `NULL` writes no key, so the viewer keeps its own choice.
 | `fields` | dict | one float32 array of one value per cell for every `obs` column the viewer shows as categorical (a factor, a character column, a logical column with or without `NA`), in `obs` column order; only a column with a category of at least `minPoints` cells |
 
 Each value is the share of the cell's category at its distance from the
-category's centre in the latent space, or closer; `NaN` for `NA` and for a
+category's center in the latent space, or closer; `NaN` for `NA` and for a
 category under `minPoints` cells. `?cellucid_prepare` states the rule, which
 Python's `cellucid.prepare()` and the web app follow bit for bit.
 
@@ -199,7 +206,10 @@ cellucid_serve(data, ..., port = 8765L, host = "127.0.0.1", allowed_hosts = NULL
 ```
 
 `...` takes the arguments of `cellucid_prepare()` that choose what is shown
-(for a path: the identity and launch defaults). See
+(for a path: the identity and launch defaults, and `knn_key` and
+`expression_source` -- the `obsp` graph drawn and the matrix genes are read
+from, `"X"`, `"raw"` or `"layer:<name>"`, as Python's `serve_anndata()` takes
+them). See
 {doc}`../d_viewing_loading/04_view_in_rstudio_positron`,
 {doc}`../d_viewing_loading/05_serve_from_hpc_and_ssh` and
 {doc}`../d_viewing_loading/06_hooks_selection_and_sessions`; `?cellucid_view`

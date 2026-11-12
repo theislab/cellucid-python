@@ -88,7 +88,7 @@ inside the cluster network and not using a tunnel at all.
 That was a defect, now fixed: the wildcard was printed where a URL belonged.
 Current versions print the loopback origin plus the machine's own name. Through a
 tunnel, always use the loopback Viewer URL including its query —
-`http://127.0.0.1:8765/?anndata=true`.
+`http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true`.
 
 ### `421 Misdirected Request`
 
@@ -110,7 +110,7 @@ then start the tunnel *after* you know the number.
 ### Startup prints nothing for minutes
 
 A direct AnnData server reads only the store's metadata before it binds, so
-steps 1 to 3 are short. Two waits are labelled. A store holding arrays the
+steps 1 to 3 are short. Two waits are labeled. A store holding arrays the
 browser cannot decode is read once with anndata and written to a temporary
 `.h5ad`; step 1 says so:
 
@@ -154,7 +154,7 @@ messages:
 ### The neighbor-graph overlay is not there
 
 The viewer reads an `obsp` matrix only when a view draws the graph. Check which
-matrix it opened with under **Session › Data mapping › Neighbour graph**, or
+matrix it opened with under **Session › Data mapping › Neighbor graph**, or
 name one at launch with `--knn connectivities` (`knn_key="connectivities"` in
 Python); that costs no startup time.
 

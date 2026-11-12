@@ -12,7 +12,8 @@ You run a small local Python server that:
 - names the dataset and states the launch choices you made on the command line
 - establishes and serves the exact viewer generation on the same origin
 
-Then you open the exact **Viewer URL printed by the server** (`/?anndata=true`).
+Then you open the exact **Viewer URL printed by the server**
+(`/?viewer=true&viewerId=…&viewerToken=…&anndata=true`).
 
 This tutorial covers the routes where a Cellucid server serves the data: the
 terminal and the Python API (the full list: {doc}`01_loading_options_overview`).
@@ -70,38 +71,44 @@ cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-da
    it is:
 
 ```text
-http://127.0.0.1:8765/?anndata=true
+http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 ```
+
+   The `viewerId` and `viewerToken` are new each time the server starts. They
+   open the page's viewer channel, through which an agent app on this computer
+   can work in it (`cellucid mcp`); the address without them,
+   `http://127.0.0.1:8765/?anndata=true`, opens the same dataset with no
+   channel.
 
 3) Keep the terminal running while you use the viewer.
 4) Stop the server with **Ctrl+C**.
 
 The viewer does not watch the server: if the server stops while a viewer is
 open, what is already shown stays, and the next read it needs (a gene, a
-field, the neighbour graph) is asked again a few times and then fails with a
+field, the neighbor graph) is asked again a few times and then fails with a
 notification. Start the server again and open its address again to continue.
 
 ### What success looks like in the browser
 
 ```{figure} ../../../_static/screenshots/server/open-served-dataset.png
-:alt: Cellucid opened at the Viewer URL of cellucid serve, coloured by clusters: the Dataset box names the Pancreas sample with its cells and genes, "Zarr v2 folder" and the server's loopback address, and how much was read; the Link or server bar holds that address with one line under it reading Server, the address and Disconnect.
+:alt: Cellucid opened at the Viewer URL of cellucid serve, the Pancreas sample colored by clusters: the Dataset box names Pancreatic endocrinogenesis (scVelo) with 3.7K cells and 3.8K genes, "Zarr v2 folder · cellucid serve" and "98 KB read in 11 requests"; Sample dataset reads "—", the Link or server bar is empty, and the State section's history shows Opened and Colored by clusters.
 :width: 1440px
 
-The same server, opened at its printed Viewer URL. Two things tell you the
-connection is live rather than a leftover sample: the **Link or server** bar
-holds the server's address, and a line under it reads **Server**, the address
-and **Disconnect**. The **Dataset** box above describes the server's dataset,
-with the format and the server as its host (here the Pancreas sample's Zarr
-folder: `Zarr v2 folder · 127.0.0.1:<port>`; an `.h5ad` reads `h5ad file`),
-not the sample catalog.
+The same server, opened at its printed Viewer URL. The **Dataset** box
+describes the server's dataset, with its format and the program serving it as
+its host (here the Pancreas sample's Zarr folder: `Zarr v2 folder · cellucid serve`;
+an `.h5ad` reads `h5ad file`), and **Sample dataset** reads `—`: the dataset
+shown is not one of the samples. The **Link or server** bar stays empty — the
+page reaches the server through its viewer channel, not through an address
+typed into the bar.
 ```
 
 :::{important}
 **The banner prints two URLs, and they are not interchangeable.**
 
-- **Viewer URL** (`http://127.0.0.1:8765/?anndata=true`) goes in the
-  **browser address bar**. Opening it is the
-  whole workflow; the **Link or server** bar fills itself in.
+- **Viewer URL** (`http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true`)
+  goes in the **browser address bar**. Opening it is the whole workflow; the
+  **Link or server** bar is not involved and stays empty.
 - **Link or server** — the address bar under **Open data** in the Session
   panel — takes the server's address: the port alone (`8765`),
   `localhost:8765` or `127.0.0.1:8765` (its placeholder reads
@@ -134,7 +141,7 @@ What happens:
   never loaded into the server's memory.
 - The viewer reads it itself with HTTP range requests, as each view needs it:
   the obs columns and embeddings when the dataset opens, a gene when you color
-  by it, the neighbour graph when a view draws it, a vector field when the
+  by it, the neighbor graph when a view draws it, a vector field when the
   overlay shows it.
 - The store is published under a route named by the dataset id
   (`/_cellucid/anndata/<dataset_id>.h5ad`, `.zarr.zip`, or `.zarr/<key>`), so
@@ -175,7 +182,7 @@ Cellucid web UI cache: 100%|██████████| 590/590 [02:31<00:00
 ════════════════════════════════════════════════════════════
 
   Local URL:    http://127.0.0.1:8766
-  Viewer URL:   http://127.0.0.1:8766/?anndata=true
+  Viewer URL:   http://127.0.0.1:8766/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 
   Press Ctrl+C to stop
 
@@ -244,10 +251,10 @@ of them while the dataset is open, are on {doc}`13_data_mapping`.
 
 | CLI flag | Python keyword | Chooses |
 | --- | --- | --- |
-| `--embedding-1d`, `--embedding-2d`, `--embedding-3d KEY[:COLUMNS]` | `embedding_keys={"2d": "X_tsne"}` or `{"2d": ("X_pca", [0, 1])}` | The `obsm` array (and 0-based columns) of a dimension slot |
-| `--knn KEY` | `knn_key` | The `obsp` matrix drawn as the neighbour graph |
+| `--embedding-1d`, `--embedding-2d`, `--embedding-3d KEY[:COLUMNS]` | `embedding_defaults={"2d": "X_tsne"}` or `{"2d": ("X_pca", [0, 1])}` | The `obsm` array (and 0-based columns) of a dimension slot |
+| `--knn KEY` | `knn_key` | The `obsp` matrix drawn as the neighbor graph |
 | `--expression X\|raw\|layer:NAME` | `expression_source` | Where gene expression is read |
-| `--gene-id-column COLUMN` | `gene_id_column` | The `var` column (`raw.var` with `raw`) whose values name the genes |
+| `--var-gene-id-column COLUMN` | `var_gene_id_column` | The `var` column (`raw.var` with `raw`) whose values name the genes |
 | `--obs-key KEY` (repeat) | `obs_keys` | The `obs` columns shown, in this order |
 | `--modality NAME` | `modality` | The modality a MuData dataset opens on ({doc}`19_multimodal_mudata`) |
 | `--latent-key KEY` | `latent_key` | The `obsm` latent space (scVI, PCA) the outlier filter measures in |
@@ -276,10 +283,10 @@ Which `obsm` keys become embeddings:
   those, a bare `X_umap` — the key `sc.tl.umap()` writes — fills the slot of its
   own column count (1, 2, or 3). No key is renamed and your object is not
   modified.
-- Only when the default rule fills no slot does the viewer make a deterministic
-  best guess from the other `obsm` arrays — UMAP-like names first, latent
-  spaces such as PCA last — and report it as guessed. A ten-column array with no
-  narrower candidate is shown in 2D at columns 0 and 1.
+- Every slot neither you nor the default rule fills gets a deterministic best
+  guess from the other `obsm` arrays of exactly its width — UMAP-like names
+  first, latent spaces such as PCA last — reported as guessed. A ten-column
+  array is shown in 2D at columns 0 and 1 only when no slot is filled at all.
 
 No launch choice costs startup time. `--knn connectivities` names the graph
 the viewer draws; the viewer reads it the first time a view draws edges, and
@@ -345,7 +352,7 @@ usage: cellucid serve [-h] [--port PORT] [--host HOST] [--allowed-host HOST]
                       [--embedding-2d KEY[:COLUMNS]]
                       [--embedding-3d KEY[:COLUMNS]]
                       [--normalize-embeddings | --no-normalize-embeddings]
-                      [--knn KEY] [--gene-id-column COLUMN]
+                      [--knn KEY] [--var-gene-id-column COLUMN]
                       [--expression X|raw|layer:NAME]
                       data_path
 
@@ -419,7 +426,7 @@ options:
   --knn KEY             AnnData obsp matrix the viewer draws as the neighbor
                         graph, usually 'connectivities'; read only when a view
                         draws it
-  --gene-id-column COLUMN
+  --var-gene-id-column COLUMN
                         AnnData var column (raw.var with --expression raw)
                         whose values name the genes; the var index is used
                         when omitted
@@ -469,7 +476,7 @@ Examples:
     # Choose what is plotted: t-SNE in 2D, PCA components 1 and 2 in a second
     # run, and expression from a layer named by the gene-symbol column
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \
-        --embedding-2d X_tsne --expression layer:log1p --gene-id-column gene_symbols
+        --embedding-2d X_tsne --expression layer:log1p --var-gene-id-column gene_symbols
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \
         --embedding-2d X_pca:0,1
 
@@ -547,7 +554,7 @@ Key flags:
   - The viewer reads a vector field only when the overlay shows it.
 
 - `--knn KEY`:
-  - The `obsp` matrix the viewer draws as the neighbour graph, usually
+  - The `obsp` matrix the viewer draws as the neighbor graph, usually
     `connectivities`. The viewer reads it the first time a view draws edges, so
     it costs nothing at startup.
   - Passing a key the store does not have is an error, not silence.
@@ -567,7 +574,7 @@ Key flags:
     store's own `normalizeEmbeddings` is used, else scaling.
 
 - `--embedding-1d`, `--embedding-2d`, `--embedding-3d`, `--expression`,
-  `--gene-id-column`:
+  `--var-gene-id-column`:
   - The launch choices in the table under **Launch choices** above.
 
 - `--quiet, -q` and `--verbose, -v`:
@@ -685,7 +692,7 @@ Leave that SSH session open.
 ### Step 3 — Open Cellucid locally
 
 ```text
-http://127.0.0.1:8765/?anndata=true
+http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 ```
 
 Use the exact URL printed by the remote command.
@@ -734,11 +741,11 @@ in the job's output file:
 ════════════════════════════════════════════════════════════
 
   Local URL:    http://127.0.0.1:8765
-  Viewer URL:   http://127.0.0.1:8765/?anndata=true
+  Viewer URL:   http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 
   Bound to every network interface. From another machine:
   Machine URL:  http://compute-node-42:8765
-  Viewer URL:   http://compute-node-42:8765/?anndata=true
+  Viewer URL:   http://compute-node-42:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 
   Press Ctrl+C to stop
 
@@ -833,14 +840,14 @@ cellucid v0.9.6
       ✓ Metadata read
 
 [3/4] Checking launch choices...
-Error: knn_key names obsp['connectivities'], which this store does not have. obsp holds: []. Compute the neighbour graph with sc.pp.neighbors(adata), or leave knn_key unset.
+Error: knn_key names obsp['connectivities'], which this store does not have. obsp holds: []. Compute the neighbor graph with sc.pp.neighbors(adata), or leave knn_key unset.
 ```
 
 Every launch choice is checked the same way before the socket opens, and the
 message lists what the store does hold:
 
 ```text
-Error: embedding_keys['2d'] names obsm['X_tsne'], which this store does not have. obsm holds: ['X_umap'].
+Error: embedding_defaults['2d'] names obsm['X_tsne'], which this store does not have. obsm holds: ['X_umap'].
 Error: expression_source 'layer:counts' names a layer this store does not have. layers holds: [].
 Error: vector_field_default names field 'velocity', which this store does not declare. Its vector fields (obsm '<field>_<basis>' as wide as 'X_<basis>'): [].
 ```
@@ -888,7 +895,8 @@ copy the traceback into the report.
     `Error: Port 8765 is already in use on 127.0.0.1, …`.
   - Choose another port explicitly or use `--port 0`, which asks the operating
     system for a free one; the banner then prints the port it actually got, for
-    example `http://127.0.0.1:64088/?anndata=true`. Copy that URL.
+    example `http://127.0.0.1:64088/?viewer=true&viewerId=…&viewerToken=…&anndata=true`.
+    Copy that URL.
 
 - **`--host` names an address this machine does not have**:
   - The bind fails with `Error: Host '203.0.113.9' is not an address this
@@ -908,7 +916,7 @@ copy the traceback into the report.
   - The viewer draws `obsp['connectivities']` by default. A graph stored under
     another key (for example `scvi_connectivities`) is drawn when you name it
     with `--knn KEY` (CLI) or `knn_key="KEY"` (Python), or pick it under
-    **Session › Data mapping › Neighbour graph**.
+    **Session › Data mapping › Neighbor graph**.
 
 - **Windows firewall prompt**:
   - If you allow public network access accidentally, other machines may reach your server.
@@ -924,7 +932,8 @@ copy the traceback into the report.
     Cellucid itself, before the browser gets a chance to block the fetch:
     `An HTTPS Cellucid page requires an explicit HTTPS remote server URL`.
   - Always open the exact local Viewer URL printed by the server
-    (`/?anndata=true`), which serves the verified UI generation.
+    (`/?viewer=true&viewerId=…&viewerToken=…&anndata=true`), which serves the
+    verified UI generation.
   - Prefer an SSH tunnel when the kernel/server is remote.
 
 - **Vector fields only exist in one dimension**:
@@ -952,7 +961,7 @@ copy the traceback into the report.
 - Then copy the exact printed Viewer URL. For this command it should be:
 
   ```text
-  http://127.0.0.1:9000/?anndata=true
+  http://127.0.0.1:9000/?viewer=true&viewerId=…&viewerToken=…&anndata=true
   ```
 
 ---
@@ -962,7 +971,7 @@ copy the traceback into the report.
 **Likely causes**
 1) You typed the wrong URL (port mismatch).
 2) You pasted the **Viewer URL** into the **Link or server** bar. Its
-   `?anndata=true` query makes the bar open it as a link to data, not as a
+   `?…` query makes the bar open it as a link to data, not as a
    server; type `127.0.0.1:8765`, the port alone, or the **Local URL**
    (`http://127.0.0.1:8765`).
 3) The server is bound to `127.0.0.1` but you are trying to access it from another machine.
@@ -996,7 +1005,7 @@ copy the traceback into the report.
 - In Python: `print(adata.X is None)`, `print(adata.var.head())`.
 
 **Fix**
-- Use `show_anndata(..., gene_id_column="...")` in Jupyter.
+- Use `show_anndata(..., var_gene_id_column="...")` in Jupyter.
 - Or write the file with `prepare(var_gene_id_column="...")`.
 
 ---
@@ -1038,7 +1047,7 @@ For overlay UI behavior and deeper debugging, see:
 **Fix**
 - Cause 1: compute the graph first, for example with `sc.pp.neighbors(adata)`.
 - Cause 2: restart with `--knn KEY`, or `knn_key="KEY"` from Python, or pick it
-  under **Session › Data mapping › Neighbour graph**. A matrix that is not
+  under **Session › Data mapping › Neighbor graph**. A matrix that is not
   symmetric, such as `distances`, is refused when the viewer reads it.
 - Cause 3: write it again with `prepare(connectivities=...)`.
 

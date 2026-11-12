@@ -10,7 +10,9 @@ that are lines from their fork step to their tip, groups that are runs of
 consecutive steps holding whole turns, unique names, the head on the active
 branch's path, every note and turn accounted for; and what a session's scope
 says it holds). The messages are the web app's, word for word: a reader says
-them after "This session file is damaged: ".
+them after "This session file is damaged: ". One names its reader's own call
+instead of the agents' tool (:func:`no_step`: ``Tracker.steps``, where the web
+app says ``history_get``).
 
 Names (branches, groups, trackers, bookmarks) follow the model's rule: a
 name's stored form is NFC with the model's white space trimmed and each inner
@@ -113,7 +115,10 @@ def no_tracker(ref: str, names: Sequence[str]) -> str:
 
 
 def no_step(step: str, tracker: str) -> str:
-    return f'There is no step "{step}" in the tracker "{tracker}"; history_get lists its steps.'
+    """The web app's ``noStep`` with this package's call in place of the
+    agents' ``history_get``: a session read here lists its steps with
+    :attr:`cellucid.history.Tracker.steps` (cellucid-r: ``cellucid_steps()``)."""
+    return f'There is no step "{step}" in the tracker "{tracker}"; Tracker.steps lists its steps.'
 
 
 def no_group(ref: str, names: Sequence[str]) -> str:

@@ -22,6 +22,7 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
+from _web_root import sibling_file
 from anndata import AnnData
 
 from cellucid._server_base import (
@@ -34,7 +35,6 @@ from cellucid._server_base import (
 from cellucid.anndata_server import AnnDataServer
 from cellucid.prepare_data import prepare
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 REBOUND_HOST = "cellucid-rebind.evil.example"
 # The authority a jupyter-server-proxy front end forwards verbatim.
 PROXY_HOST = "hub.example.org"
@@ -212,9 +212,8 @@ def test_a_preflight_advertises_only_the_methods_the_server_answers() -> None:
 
     assert b"\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" in preflight
     assert post_status == 405
-    r_server = REPOSITORY_ROOT.parent / "cellucid-r" / "R" / "viewer-server.R"
-    if r_server.is_file():
-        assert '`Access-Control-Allow-Methods` = "GET, HEAD, OPTIONS"' in r_server.read_text(encoding="utf-8")
+    r_server = sibling_file("cellucid-r", "R/viewer-server.R")
+    assert '`Access-Control-Allow-Methods` = "GET, HEAD, OPTIONS"' in r_server.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(
@@ -526,7 +525,7 @@ def test_declaring_one_name_does_not_admit_any_other(tmp_path: Path) -> None:
 
 
 def test_the_proxy_authority_is_refused_without_the_declaration(tmp_path: Path) -> None:
-    """No opt-in means byte-identical behaviour to the loopback-only guard."""
+    """No opt-in means byte-identical behavior to the loopback-only guard."""
     with _prepared_server(tmp_path) as (_server, port):
         bare, _raw = _exchange(port, _request(STORE_ROUTE, [PROXY_HOST]))
         ported, _raw = _exchange(port, _request(STORE_ROUTE, [f"{PROXY_HOST}:{port}"]))
@@ -620,7 +619,7 @@ def _authorization(
         ("192.168.1.5", REBOUND_HOST, None, True),
         # A declaration is the operator stating the complete set of legitimate
         # names, which is exactly the knowledge a non-loopback bind lacked. It
-        # can only be supplied deliberately, so honouring it there is a strict
+        # can only be supplied deliberately, so honoring it there is a strict
         # tightening no existing deployment can be surprised by.
         ("0.0.0.0", PROXY_HOST, [PROXY_HOST], True),
         ("0.0.0.0", REBOUND_HOST, [PROXY_HOST], False),

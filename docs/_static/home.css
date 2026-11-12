@@ -4,12 +4,12 @@
    principles as the app's (cellucid/assets/css/README.md, "Site Design
    Principles"): one calm heading, one short sentence, clear actions with the
    first one filled, then the product itself. Square surfaces with quiet
-   edges, Inter at a flat scale with hierarchy from weight and colour, the
+   edges, Inter at a flat scale with hierarchy from weight and color, the
    theme's ink and cyan in light and dark, and no motion under
    `prefers-reduced-motion`.
 
    Every rule is scoped to a `cl-` class that only docs/index.md uses, or to
-   the article that contains `.cl-hero`, so no other page changes. Colours
+   the article that contains `.cl-hero`, so no other page changes. Colors
    come from the PyData theme variables that `custom.css` sets to the app's
    tokens. */
 

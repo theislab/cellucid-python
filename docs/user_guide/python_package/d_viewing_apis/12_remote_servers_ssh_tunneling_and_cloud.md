@@ -71,13 +71,13 @@ reachable here and not from anywhere else.
 In your local browser:
 
 ```text
-http://127.0.0.1:8765/?anndata=true
+http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 ```
 
 ```{note}
 This works because your browser connects to *your laptop* at `localhost:8765`, and SSH forwards that traffic to the remote machine’s `localhost:8765`.
-Use the exact Viewer URL printed by the remote command; it ends in
-`?anndata=true`.
+Use the exact Viewer URL printed by the remote command: its `viewerId` and
+`viewerToken` are new each time the server starts.
 ```
 
 ## Common variations
@@ -96,10 +96,10 @@ cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-da
 ssh -N -L 9000:127.0.0.1:9000 you@remote-host
 ```
 
-Then open:
+Then open the Viewer URL the banner printed:
 
 ```text
-http://127.0.0.1:9000/?anndata=true
+http://127.0.0.1:9000/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 ```
 
 Forward the same port number on both ends. A server bound to loopback answers
@@ -185,11 +185,11 @@ elsewhere on the network:
 ════════════════════════════════════════════════════════════
 
   Local URL:    http://127.0.0.1:8765
-  Viewer URL:   http://127.0.0.1:8765/?anndata=true
+  Viewer URL:   http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 
   Bound to every network interface. From another machine:
   Machine URL:  http://compute-node:8765
-  Viewer URL:   http://compute-node:8765/?anndata=true
+  Viewer URL:   http://compute-node:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 
   Press Ctrl+C to stop
 

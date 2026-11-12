@@ -80,7 +80,7 @@ persisted group inside a named page.
 
 **needs** — One orientation figure, because the page names three sub-areas
 ("Highlight mode", "Highlight pages", "Highlighted groups") the reader cannot yet
-locate. Load the **pancreas** sample (`?dataset=pancreas`), colour by `cell_type`,
+locate. Load the **pancreas** sample (`?dataset=pancreas`), color by `cell_type`,
 open the **Highlighting** accordion, confirm one small lasso so the group list is
 non-empty, and crop to `#highlighted-cells-section .accordion-content` at DPR 2. No
 cursor — this is a map, not an action. Three call-out labels overlaid (1 mode box,
@@ -112,7 +112,7 @@ can *select* (except the seed `Alt+click`).
 - Then **two real screenshots** to make the one-sentence claim ("Filters control
   visibility. Highlights control membership.") observable. **suo** sample
   (561,947 cells — LOD is actually active there, which the page talks about),
-  colour by `organ`, confirm an annotation selection on `Liver`. Shot A: crop to
+  color by `organ`, confirm an annotation selection on `Liver`. Shot A: crop to
   `#highlighted-groups` with the count reading `N cells highlighted`. Shot B:
   identical crop after adding a filter that hides Liver, count now reading
   `0 of N highlighted cells visible`. Cursor: none — the point is the text delta.
@@ -120,7 +120,7 @@ can *select* (except the seed `Alt+click`).
   `-b.png`, `:width: 246px` each, presented as a two-item `{grid}`.
 
 **notes** — Line 108 says "Cellucid currently renders highlighted cells using a single
-highlight style (halo/ring)" — verified true; groups carry no colour, pages do.
+highlight style (halo/ring)" — verified true; groups carry no color, pages do.
 Line 104 gives the auto label as `Lasso (12,345 cells)`. The stored label is exactly
 that (`lasso-selection.js:122`), but `highlight-summary-ui.js:151` re-appends the count,
 so the list actually renders `Lasso (12,345 cells) (12,345)`. Any new screenshot of the
@@ -147,8 +147,9 @@ radius circle, the KNN degree growth, the annotation range label.
 
 **notes — STALE-RISK** — Line 256 claims the UI indicates *"neighbor graph not
 available"*. That string does not exist anywhere in `cellucid/assets/js`. The real
-strings are `Neighbor graph ready (N edges)` (success toast, `main.js:3420`),
-`Failed to load neighbor graph` (failure toast), and the mode help line *"Neighbor
+strings are `Neighbor graph read: N edges` (the read's card, `main.js`
+`ensureConnectivityEdgesLoaded`), `The neighbor graph could not be read: …`
+(failure), and the mode help line *"Neighbor
 graph status appears in notifications."* (`mode-copy.js:13`). Do not caption a
 screenshot with the invented string.
 
@@ -156,7 +157,7 @@ Second, and more important: the page's "Practical fix — load connectivity/edge
 your dataset (often via a 'Show edges' toggle)" understates the real mechanism. In
 `highlight-renderer.js` (~line 3300) the **first `Alt+click` in KNN mode itself
 triggers the edge load and returns without selecting**. The user's first KNN gesture
-always appears to do nothing, then a toast arrives. That behaviour is undocumented and
+always appears to do nothing, then a toast arrives. That behavior is undocumented and
 is exactly what a screenshot should capture (Lifecycle A step 9).
 
 ---
@@ -164,7 +165,7 @@ is exactly what a screenshot should capture (Lifecycle A step 9).
 ## {doc}`/user_guide/web_app/f_highlighting_selection/03_highlight_ui`
 
 **explains** — The UI map: what each button in the Highlighting accordion does, how
-pages are created/renamed/recoloured/deleted/combined, how groups are
+pages are created/renamed/recolored/deleted/combined, how groups are
 enabled/removed/cleared, and how to read the "visible vs total" count.
 
 **has** — `none`. This is the page a wet-lab reader lands on to find a control, and it
@@ -182,7 +183,7 @@ contains no picture of any control.
    `.highlight-page-tab-input` is live with `Beta cells` typed. Crop
    `#highlight-pages-container`. Cursor on the tab name.
    `highlighting_selection/page-rename.png`, `:width: 246px`.
-3. *Recolour* — the `input[type=color]` swatch open on a page tab. Crop
+3. *Recolor* — the `input[type=color]` swatch open on a page tab. Crop
    `#highlight-pages-container` plus the native picker.
    `highlighting_selection/page-recolor.png`, `:width: 246px`.
 4. *Combine menu* — click `.highlight-page-tab-combine` (title "Combine with another
@@ -202,7 +203,7 @@ contains no picture of any control.
   the section's own existing screenshot, which shows the panel. The container
   `#category-builder-container` is hard-coded in `index.html` and
   `field-selector.js:1345-1359` constructs it unconditionally (it *throws* if already
-  initialised — there is no disabled path). Its on-screen label is **"Create
+  initialized — there is no disabled path). Its on-screen label is **"Create
   Categorical"**, not "Category builder". Rewrite as a documented feature.
 - Lines 108–115: combining pages is described as drag-and-drop only. There is also an
   explicit `.highlight-page-tab-combine` button on every tab. The button is the
@@ -221,7 +222,7 @@ event direction (selection fires on **confirm**, not on drag).
 **verdict** — **ADD** (2 figures).
 
 **needs** —
-1. *The same group, two panels* — **suo**, colour by `organ`, confirm one annotation
+1. *The same group, two panels* — **suo**, color by `organ`, confirm one annotation
    group on `Liver`. Enter grid multi-view with two panels; apply a filter in panel B
    that excludes `Liver`. Full window 1440×1000 at DPR 2, cropped to the canvas region
    only (exclude the sidebar) so both panels are side by side; panel A shows haloed
@@ -256,7 +257,7 @@ point).
 
 **needs** —
 1. *3D projection ambiguity, before/after* — the single most-explained and
-   least-shown idea in the section. **pancreas**, 3D mode, colour by `cell_type`.
+   least-shown idea in the section. **pancreas**, 3D mode, color by `cell_type`.
    Shot A: lasso drawn around what looks like one cluster, `Step 1: 890 cells`
    readout visible in an inset. Shot B: camera rotated ~90°, same confirmed set now
    visibly spanning two separated lobes. Crop the canvas only, 720×540 each,
@@ -266,7 +267,7 @@ point).
    `0 of 55,096 highlighted cells visible` and the group checkbox still ticked. Cursor
    on the checkbox to make it obvious the group is enabled.
    `highlighting_selection/zero-visible-highlighted.png`, `:width: 246px`.
-3. *KNN with no neighbour graph* — this **cannot be reproduced on any sample dataset**:
+3. *KNN with no neighbor graph* — this **cannot be reproduced on any sample dataset**:
    `suo`, `pancreas`, `garcia`, `he`, `kanemaru` all ship a `connectivity/` directory.
    Use the local fixture `cellucid/tests/browser/fixtures/catalog/current-ui.h5ad`
    (120 cells, no `connectivity/`). Select KNN drag, `Alt+click` a cell, capture the
@@ -291,7 +292,7 @@ whole audit).
 
 **needs** — The "What the app tells you" table (lines 54–60) quotes five exact strings
 that all render into the same element, `#highlight-mode-description`. Capture that one
-element five times and stack them into a single labelled composite:
+element five times and stack them into a single labeled composite:
 
 | Row | How to produce it | Dataset |
 | --- | --- | --- |
@@ -299,7 +300,7 @@ element five times and stack them into a single labelled composite:
 | `That gesture ended outside the view…` | Lasso, `Alt+drag`, release the mouse over the sidebar | pancreas |
 | `That cell has no value on that panel's field…` | Annotation based on a field with a missing-code sentinel, `Alt+click` a sentinel cell | he |
 | `That gesture did not change the selection.` | Lasso the identical polygon twice with `Alt` | pancreas |
-| `Color by a field first…` (Selection (i) open) | Annotation based with colour-by set to None | pancreas |
+| `Color by a field first…` (Selection (i) open) | Annotation based with color-by set to None | pancreas |
 
 Crop each to `#highlight-mode-description` (plus the `Step N:` line above it where
 present, since the doc says the readout distinguishes the two cases). Assemble into one
@@ -401,7 +402,7 @@ exact/asymptotic switch, tie-corrected Kruskal–Wallis). No broken references.
 
 ## {doc}`/user_guide/web_app/h_analysis/02_analysis_ui_overview`
 
-**explains** — Where Analysis lives, accordion behaviour (one mode open at a time),
+**explains** — Where Analysis lives, accordion behavior (one mode open at a time),
 auto-run vs explicit-run modes, the Compare pages selector, preview vs expanded modal,
 and what "Copy" (floating windows) does.
 
@@ -409,7 +410,7 @@ and what "Copy" (floating windows) does.
 appearance of the same file (see ``h/index``).
 
 **verdict** — **REPLACE** (the reused tabs shot) **+ ADD** (3 figures for the three
-behaviours the page describes and nothing shows).
+behaviors the page describes and nothing shows).
 
 **needs** —
 1. *Auto-run vs Run* — an A/B pair cropped to `#analysis-panel-correlation` (result
@@ -449,12 +450,12 @@ Native 246×546 → 1× DPR. Also at `11_screenshots.md:15`.
 composition on `sample_ID` and `organ`, statistics on `age` and `n_genes`, the
 `▶ Page Selection (Dynamic)` collapsible). Two problems to fix on recapture:
 - 1× DPR.
-- The composition bars render **greyscale**, which makes the "segment widths are
-  percent of cells" claim hard to read and looks broken beside the coloured page chips.
+- The composition bars render **grayscale**, which makes the "segment widths are
+  percent of cells" claim hard to read and looks broken beside the colored page chips.
   Verify against `quick-insights-ui.js` whether that is the intended palette before
   captioning it.
 
-Recapture on **suo**, `?dataset=suo`, colour by `organ`, one annotation-selected page
+Recapture on **suo**, `?dataset=suo`, color by `organ`, one annotation-selected page
 renamed `Liver`, crop `#analysis-panel-simple`, DPR 2, no cursor.
 Then **ADD** a second figure for the Dynamic/Manual distinction, which is the page's
 main failure mode: the `Page Selection` collapsible expanded with the **Manual** radio
@@ -513,7 +514,7 @@ Native 224×604 → 1× DPR. Also at `11_screenshots.md:35`.
 **verdict** — **REPLACE** — the current image demonstrates a degenerate case.
 
 **needs** — Three defects in the current file:
-- **`Page 1 (0)` is greyed out and deselected** — the user's own page is empty, so the
+- **`Page 1 (0)` is grayed out and deselected** — the user's own page is empty, so the
   only thing correlated is `Rest of Page 1`. The caption ("plots two continuous
   observation fields for the selected cells") describes a state that is not on screen.
 - The result reads **`r = -0.005`, `R² = 0.000***`** — a null correlation carrying
@@ -552,7 +553,7 @@ is the single largest gap in the section**, on the flagship statistical feature.
 **verdict** — **ADD** (5 figures), with a **STALE-RISK** flag.
 
 **needs** — All on **pancreas** (3,696 cells / 3,753 genes — DE completes in seconds,
-and `Ins1`/`Ins2`/`Iapp`/`Gcg` give a result a wet-lab reader recognises). Two named
+and `Ins1`/`Ins2`/`Iapp`/`Gcg` give a result a wet-lab reader recognizes). Two named
 pages: `Beta` (annotation-selected on `cell_type = Beta`) and `Alpha`.
 1. *The configured form* — `#analysis-panel-differential` before running: the
    `Select pages to compare:` label with `Page A:` and `Page B:` `<select>`s. Open
@@ -565,11 +566,11 @@ pages: `Beta` (annotation-selected on `cell_type = Beta`) and `Alpha`.
    genes`, a progress bar and **Cancel**; step names are literal, from
    `stats/multi-variable-analysis.js`). Crop `#analysis-panel-differential`. Cursor on
    **Cancel**. `analysis/de-running.png`, `:width: 246px`. Then click **Cancel** and
-   capture the calm cancelled state (`Differential expression cancelled`, `Cancelled
-   after …`, **Run again**): `analysis/de-cancelled.png`, `:width: 246px`.
+   capture the calm canceled state (`Differential expression canceled`, `Canceled
+   after …`, **Run again**): `analysis/de-canceled.png`, `:width: 246px`.
 3. *The volcano, expanded* — `.analysis-modal-content` after `⤢ Expand`:
-   `.analysis-modal-plot` with the volcano (up/down/not-significant colouring and
-   labelled top-N genes), the `PLOT OPTIONS` column with the p-value threshold, the
+   `.analysis-modal-plot` with the volcano (up/down/not-significant coloring and
+   labeled top-N genes), the `PLOT OPTIONS` column with the p-value threshold, the
    |log2FC| slider and the **Use FDR-corrected p-values** checkbox, the `Export:`
    row (PNG / SVG / CSV), the `SUMMARY STATISTICS` table and the
    `Top Differentially Expressed Genes` table with its Top 5/10/20/100/All select.
@@ -608,7 +609,7 @@ pages: `Beta` (annotation-selected on `cell_type = Beta`) and `Alpha`.
 ## {doc}`/user_guide/web_app/h_analysis/07_analysis_mode_gene_signature`
 
 **explains** — Gene signature scoring: comma-separated gene input, mean/sum/median
-scoring, z-score and min-max normalisation computed across all selected pages combined,
+scoring, z-score and min-max normalization computed across all selected pages combined,
 and the `gene_signature_scores.csv` export (page, score — no cell index).
 
 **has** — `analysis/gene-signature.png`, **line 176**, `:width: 224px`.
@@ -668,7 +669,7 @@ per-group BH denominators, the "genes tested / not tested" line, and the two CSV
 - ~~The 224 px preview heatmap is **illegible**.~~ **Fixed in the app**, not in the
   capture: `cellucid c177e77ce` thins a categorical axis to the labels its box can show
   and drops the rest whole, so the gene axis is now a handful of separated names rather
-  than a smear. The colour-bar tick labels below the `Z-score` bar still overprint — see
+  than a smear. The color-bar tick labels below the `Z-score` bar still overprint — see
   the standing defect noted at the end of this record.
 - ~~Group-by is `organ` on **suo**.~~ **Done** — both figures are `cell_type` on
   **pancreas**, 8 groups.
@@ -699,9 +700,9 @@ and neither is a capture problem:
   `category-code:0` in the picker beside `Ductal` on the heatmap row — it must be
   re-shot from the `analysis-marker-genes-expanded` scenario. It is embedded on
   {doc}`/user_guide/web_app/h_analysis/09_exporting_analysis_results`, which is the only page still using it.
-- The horizontal colour bar under the sidebar heatmap draws its tick labels on top of
+- The horizontal color bar under the sidebar heatmap draws its tick labels on top of
   one another. `tests/browser/analysis-plot-label-collisions.spec.mjs:144` measures
-  `.xaxislayer-above .xtick text` only, so colour-bar ticks are outside its acceptance.
+  `.xaxislayer-above .xtick text` only, so color-bar ticks are outside its acceptance.
 
 ---
 
@@ -731,18 +732,18 @@ the app draws the category name. Everything else on the page is settled.
   would photograph a window the app never opens at.
 
 ~~Then **ADD** the two shots that close the export loop.~~ **Both withdrawn.**
-- The browser download shelf renders a real local path and cannot be sanitised.
+- The browser download shelf renders a real local path and cannot be sanitized.
 - The terminal capture is forbidden outright: see *Never photograph a terminal.
   Transcribe it.* in ``00_capture_tooling_and_conventions``. The column list
   (`gene, meanA, meanB, log2FoldChange, pValue, adjustedPValue`) belongs in a verbatim
   ```` ```text ```` block if it is ever shown, not in an image. This record was missed
   by the sweep that withdrew the other four commissioned terminal captures.
 
-**notes** — All five CSV schemas were spot-checked against the serialisers and are
+**notes** — All five CSV schemas were spot-checked against the serializers and are
 accurate. The `⤢ Expand` claim ("the button is the only way in — the preview itself is
 not clickable") matches `createExpandButton`. The Marker Genes half of that check has
 since been re-verified against `_buildModalCSVExport`, which dispatches on
-`result.metadata.mode` and refuses an unrecognised one.
+`result.metadata.mode` and refuses an unrecognized one.
 
 ---
 
@@ -765,7 +766,7 @@ diagnostic).
    image. No cursor.
    `analysis/analysis-empty-no-pages.png`, `:width: 246px`.
 2. *Volcano hidden by thresholds* — an A/B pair of `.analysis-modal-plot` from the same
-   DE result: A at `|log2FC| ≥ 3` with almost no points coloured, B at `|log2FC| ≥ 0.5`
+   DE result: A at `|log2FC| ≥ 3` with almost no points colored, B at `|log2FC| ≥ 0.5`
    with the same run showing a populated volcano. This is the page's most-reported
    symptom and it is purely visual. Cursor on the threshold slider in A.
    `analysis/volcano-threshold-a.png` / `-b.png`, `:width: 420px` each.
@@ -808,7 +809,7 @@ Ranked-vs-Clustered mismatch from `08`.
 ## {doc}`/user_guide/web_app/o_accessibility_privacy_security/index`
 
 **explains** — Two-page router with a fast-path table (sensitive data / sharing
-sessions / colourblind figures) and two grid cards.
+sessions / colorblind figures) and two grid cards.
 
 **has** — `none`.
 
@@ -825,32 +826,32 @@ the two `{octicon}` glyphs — is theme-rendered and needs no capture.
 
 ## {doc}`/user_guide/web_app/o_accessibility_privacy_security/01_accessibility`
 
-**explains** — Colour/contrast defaults for a WebGL point cloud, the colourblind
+**explains** — Color/contrast defaults for a WebGL point cloud, the colorblind
 simulation in Figure Export, the `i` help-dialog keyboard contract, the global
 shortcut table, what keyboard cannot do, and motion-sensitivity guidance.
 
-**has** — `web_app/keyboard-shortcuts.png`, `:width: 516px`. Native 516×1242, a
-258 CSS px crop of `#shortcuts-section` captured at DPR 2 by the
-`accessibility-panel-keyboard-shortcuts` scenario. Not reused elsewhere in the
-docs.
+**has** — `web_app/keyboard-shortcuts.png`, `:width: 532px`. Native 532×2496, a
+266×1248 CSS px crop of `#shortcuts-section` (its seven groups) captured at DPR 2
+in a 1440×1300 window by the `accessibility-panel-keyboard-shortcuts` scenario.
+Not reused elsewhere in the docs.
 
 **verdict** — **ADD** 3. The **REPLACE** is done: see needs 1 below.
 
 ### Is accessibility screenshot-shaped? Partly — here is the honest split.
 
-**Warrants an image (visual state the reader must recognise):**
+**Warrants an image (visual state the reader must recognize):**
 - The **focus ring**. It is a single global rule —
   `:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px }`
   in `assets/css/base/_accessibility.css:15` — so one image teaches it everywhere. The
   page currently never shows what a focused control looks like.
-- The **`i` help dialog**, whose open/closed/focus-return behaviour is described in
+- The **`i` help dialog**, whose open/closed/focus-return behavior is described in
   eleven lines of prose (lines 137–152) and is trivially demonstrable in one shot.
-- The **colourblind simulation**, whose entire value proposition is a before/after of
+- The **colorblind simulation**, whose entire value proposition is a before/after of
   the same plot. Prose cannot do this at all.
 - The **shortcuts overlay** itself — but properly cropped (see below).
 
 **Does not warrant an image (and should not get one):**
-- **Screen-reader behaviour.** `aria-controls`, `aria-haspopup="dialog"`,
+- **Screen-reader behavior.** `aria-controls`, `aria-haspopup="dialog"`,
   `aria-expanded`, `role="dialog"`, accessible names — none of this is visible in a
   screenshot. A VoiceOver/NVDA rotor capture would show the assistive tool's UI, not
   Cellucid's, and would go stale with the AT's own releases. Keep this as prose, or as
@@ -859,7 +860,7 @@ docs.
   no picture.
 - **Motion sensitivity.** A still frame cannot convey motion; if evidence is wanted it
   is a short muted video or an animated comparison, not a PNG.
-- **Colourmap recommendations** (Viridis/Cividis vs rainbow). Better served by the
+- **Colormap recommendations** (Viridis/Cividis vs rainbow). Better served by the
   colormap documentation in `d_fields_coloring_legends` than by duplicating swatches
   here.
 
@@ -884,7 +885,7 @@ docs.
    which is the page's stated design intent ("without hiding the nearby action label").
    Use `#cinematic-navigation-info-btn`. Crop to the enclosing `.control-block`.
    `accessibility/info-dialog-open.png`, `:width: 300px`.
-4. **ADD the colourblind A/B** — the payload figure of this page. **suo**, colour by
+4. **ADD the colorblind A/B** — the payload figure of this page. **suo**, color by
    `organ` (9 categories, a genuinely hard case), Figure Export → `Show preview` ticked
    → the `Colorblind preview` select (`.figure-export-colorblind-select`, real options
    `Normal / Deuteranopia / Protanopia / Tritanopia`). Shot A `Normal`, shot B
@@ -902,11 +903,11 @@ its Highlighting block read `Shift + click — Add to selection`, while the rend
 requires `Alt` on every selection path (today one gate,
 `resolveSelectionGestureCombine` in `rendering/select-mode.js`, which also accepts
 Select mode in place of `Alt`) and the real binding is **`Shift+Alt`+click**. That was
-fixed in `index.html` — and pinned by `tests/keyboard-shortcut-panel-contract.test.mjs`,
-which now ties every row of the panel to the handler that serves it — before the
-recapture, so the current image ships the corrected panel and its five groups,
-including the second Highlighting `Esc` row, *Leave Select mode when nothing is
-in progress*.
+fixed before the recapture. The panel is now drawn from the one shortcut table
+(`assets/js/app/ui/onboarding/shortcut-table.js`), which the keys are answered from
+too, pinned by `tests/keyboard-shortcut-table-contract.test.mjs`; it has seven groups
+(History list and Moving by keys were added in round 9), so the image is due a
+recapture.
 
 ---
 
@@ -915,7 +916,7 @@ in progress*.
 **explains** — What leaves the machine per loading workflow, the three storage
 lifetimes (memory / HTTP cache / `localStorage` + `sessionStorage` + IndexedDB), how to
 clear traces, what session bundles and figure exports embed, and the DNS-rebinding
-`Host` validation with its `421 Misdirected Request` behaviour.
+`Host` validation with its `421 Misdirected Request` behavior.
 
 **has** — `none`.
 
@@ -972,14 +973,14 @@ The `--allowed-host` / `allowed_hosts=[...]` guidance and the
 | **S2′ empty** | `No selection`; step controls present; **Confirm disabled** |
 | **S3 abandoned** | one `<small>` notice appended under the readout; step counter unchanged, no undo spent |
 | **S4 confirmed** | step controls removed, focus returns to the pressed `[data-mode]` button; new `.highlight-item` in `#highlighted-groups-list`; `#highlight-count` updated |
-| **S5 page level** | tab strip rename input / colour input / `∩`/`∪` combine menu / Create Categorical |
+| **S5 page level** | tab strip rename input / color input / `∩`/`∪` combine menu / Create Categorical |
 
 **Standing capture conditions** for every step: viewport 1440×1000, DPR 2, light theme,
 sidebar at its default 246 CSS px. Dataset **pancreas** (`?dataset=pancreas`, 3,696
 cells, 8 `cell_type` categories, ships `connectivity/`) unless a step names another —
 small enough that individual points are hittable without LOD confusion, and its cell
-types are recognisable to a wet-lab reader. Steps needing LOD or scale use **suo**;
-the "no neighbour graph" step needs the local fixture.
+types are recognizable to a wet-lab reader. Steps needing LOD or scale use **suo**;
+the "no neighbor graph" step needs the local fixture.
 
 | # | Before | Action | After | Crop target | Cursor on | Filename (`_static/screenshots/highlighting_selection/`) |
 | --: | --- | --- | --- | --- | --- | --- |
@@ -987,22 +988,22 @@ the "no neighbour graph" step needs the local fixture.
 | 2 | S0 | Hold `Alt`, drag a closed loop around the Beta cluster — **capture mid-drag** | S1 — dashed polygon on canvas, enclosed points preview-haloed | canvas region only, 720×540 | polygon head (the moving vertex) | `life-02-lasso-mid-drag.png` |
 | 3 | S1 | Release over the plot | S2 — `Step 1: 1,062 cells`, step controls appear, Undo enabled, Confirm enabled | `.highlight-mode-box` | `#lasso-confirm-btn` | `life-03-step-1-controls.png` |
 | 4 | S2 (step 1) | Switch to 3D, rotate ~90°, `Alt`+lasso the same region | S2 — `Step 2: 640 cells` + `intersected` tag | `.highlight-mode-box` | none | `life-04-step-2-intersect.png` |
-| 5 | S2 (step 2) | `Shift+Alt`+lasso a neighbouring lobe | S2 — `Step 3: 812 cells` + `+added` tag | `.highlight-mode-box` | none | `life-05-step-3-union.png` |
+| 5 | S2 (step 2) | `Shift+Alt`+lasso a neighboring lobe | S2 — `Step 3: 812 cells` + `+added` tag | `.highlight-mode-box` | none | `life-05-step-3-union.png` |
 | 6 | S2 (step 3) | `Ctrl/Cmd+Alt`+lasso a corner | S2 — `Step 4: 705 cells` + `−removed` tag | `.highlight-mode-box` | none | `life-06-step-4-subtract.png` |
 | 7 | S2 (step 4) | Click **↩ Undo** | S2 back at step 3; **↪ Redo** now enabled | `#lasso-step-controls` (tight) | `#lasso-undo-btn` | `life-07-undo-redo.png` |
 | 8 | S2 | Click **Confirm** | S4 — group `Lasso (3 views) (812 cells) (812)` in the list, `812 cells highlighted`, step controls gone | `#highlighted-groups` | `#lasso-confirm-btn` (pre-click frame) | `life-08-confirmed-group.png` |
-| 9 | S4, no prior KNN use | Click `[data-mode="knn"]`, `Alt+click` a cell — **the first click loads edges and selects nothing** | toast `Neighbor graph ready (N edges)` | sidebar column + toast | the clicked cell | `life-09-knn-graph-loads.png` |
+| 9 | S4, no prior KNN use | Click `[data-mode="knn"]`, `Alt+click` a cell — **the first click loads edges and selects nothing** | toast `Neighbor graph read: N edges` | sidebar column + toast | the clicked cell | `life-09-knn-graph-loads.png` |
 | 10 | edges loaded | `Alt+click` a seed and drag upward | S1→S2 — degree grows in discrete steps, `Step 1: N cells` | canvas 720×540 + inset `.highlight-mode-box` | seed cell | `life-10-knn-degree-drag.png` |
 | 11 | S0 | Click `[data-mode="proximity"]`, `Alt+click` a cell, drag outward | S1 — radius circle overlay, points inside preview-haloed | canvas 720×540 | circle edge (the drag point) | `life-11-proximity-radius.png` |
-| 12 | S0, colour-by `cell_type` | Click `[data-mode="annotation"]`, `Alt+click` one Beta cell | S2 — the whole `Beta` category selected (`Alt` = replace on categorical) | canvas 720×540 + inset readout | the clicked cell | `life-12-annotation-categorical.png` |
-| 13 | S0, colour-by `S_score` (continuous) | `Alt+drag` vertically from a cell | S1 — **range preview label** near the pointer, band preview-haloed | canvas 720×540 | the range label | `life-13-annotation-range.png` |
+| 12 | S0, color-by `cell_type` | Click `[data-mode="annotation"]`, `Alt+click` one Beta cell | S2 — the whole `Beta` category selected (`Alt` = replace on categorical) | canvas 720×540 + inset readout | the clicked cell | `life-12-annotation-categorical.png` |
+| 13 | S0, color-by `S_score` (continuous) | `Alt+drag` vertically from a cell | S1 — **range preview label** near the pointer, band preview-haloed | canvas 720×540 | the range label | `life-13-annotation-range.png` |
 | 14 | various | Reproduce the five refusal messages (see the `06` record for triggers) | S3 ×5 | `#highlight-mode-description` ×5, stacked | none | `selection-notices.png` |
-| 15 | S4, one page | Double-click the tab name, type `Beta cells`, `Enter`; click the colour swatch, pick a colour | page renamed and recoloured | `#highlight-pages-container` | tab name (rename frame) | `life-15-page-rename-recolor.png` |
+| 15 | S4, one page | Double-click the tab name, type `Beta cells`, `Enter`; click the color swatch, pick a color | page renamed and recolored | `#highlight-pages-container` | tab name (rename frame) | `life-15-page-rename-recolor.png` |
 | 16 | Two pages `Beta cells`, `Alpha cells` | Click `.highlight-page-tab-combine` on `Beta cells` | combine menu: `∩ Intersection with Alpha cells` / `∪ Union with Alpha cells` | tab strip + floating menu | the `∩` option | `life-16-page-combine.png` |
 | 17 | Named pages exist | Open **Analysis → Quick** | header reads `Beta cells: 1,062 cells` — the named page is now the analysis unit | `#analysis-panel-simple` (top third) | none | `life-17-page-drives-analysis.png` |
 
 **Handover:** step 17 is deliberately the same frame that opens Lifecycle B. The two
-sequences should be captured in one session so the page names, colours and cell counts
+sequences should be captured in one session so the page names, colors and cell counts
 agree across sections F and H.
 
 **Cursor policy for this sequence.** Composite a cursor only where the pointer *is* the
@@ -1042,12 +1043,12 @@ which is what a capture script must target):
 
 **Standing capture conditions:** viewport 1440×1000, DPR 2, light theme. Dataset
 **pancreas** for every step (3,696 cells / 3,753 genes → DE and marker discovery finish
-in seconds; `Ins1`, `Ins2`, `Iapp`, `Gcg` are present and recognisable). Two pages
+in seconds; `Ins1`, `Ins2`, `Iapp`, `Gcg` are present and recognizable). Two pages
 prepared by Lifecycle A: **`Beta cells`** and **`Alpha cells`**.
 
 | # | Before | Action | After | Crop target | Cursor on | Filename (`_static/screenshots/analysis/`) |
 | --: | --- | --- | --- | --- | --- | --- |
-| 1 | Lifecycle A finished | — | Two named, coloured pages with non-zero counts | `#highlighted-cells-section .accordion-content` | none | `life-01-two-pages-ready.png` |
+| 1 | Lifecycle A finished | — | Two named, colored pages with non-zero counts | `#highlighted-cells-section .accordion-content` | none | `life-01-two-pages-ready.png` |
 | 2 | Analysis section closed | Open **Analysis** | All six modes listed, all collapsed, each with a copy button and chevron | `.analysis-accordion` (widened so descriptions do not truncate) | none | `analysis-panel-modes.png` |
 | 3 | — | Click **Quick** | Auto-run: `Beta cells: 1,062 cells`, Composition + Statistics, `▶ Page Selection (Dynamic)` | `#analysis-panel-simple` | `#analysis-header-simple` | `life-03-quick-autorun.png` |
 | 4 | — | Open **Detailed**; set `Categorical obs → cell_type`; select both pages; `Bar Plot` + Percentages | Grouped bars, both pages, no modebar tooltip in frame | `#analysis-panel-detailed` | the `Plot Type:` select | `detailed-categorical.png` |
@@ -1055,9 +1056,9 @@ prepared by Lifecycle A: **`Beta cells`** and **`Alpha cells`**.
 | 6 | — | Open **Correlation**; `X = S_score`, `Y = G2M_score`, `Color by = cell_type`, Pearson | Structured scatter with a real `r`, `n`, trend line — not a null result | `#analysis-panel-correlation` | `Correlation method:` select | `correlation-results.png` |
 | 7 | — | Open **Differential Expression**; open the `Page B:` select | Two `<optgroup>`s visible: **Pages** and **Wildcards** (`Rest of Beta cells`) | `#analysis-panel-differential` (top) | the open `Page B:` select | `de-page-selection.png` |
 | 9 | configured | Click `Run Differential Expression`; capture mid-run | Button reads `Running…`; the running box reads `Testing genes` with genes done of how many, and **Cancel** | `#analysis-panel-differential` | **Cancel** | `de-running.png` |
-| 10 | step 9 | Click **Cancel** | The box reads `Differential expression cancelled`, `Cancelled after …`, with **Run again**; no result | `#analysis-panel-differential` | **Run again** | `de-cancelled.png` |
+| 10 | step 9 | Click **Cancel** | The box reads `Differential expression canceled`, `Canceled after …`, with **Run again**; no result | `#analysis-panel-differential` | **Run again** | `de-canceled.png` |
 | 11 | run complete | — | Sidebar result: the volcano preview and the `⤢ Expand` button, and nothing else — `Top Differentially Expressed Genes` is drawn only in the modal (`de-analysis-ui.js:28`) | `.analysis-preview-container` ∪ `.analysis-expand-btn` | the `⤢ Expand` button | `de-sidebar-result.png` |
-| 12 | step 11 | Click `⤢ Expand` | Full modal: volcano with labelled top-N genes, threshold controls, FDR checkbox, `Export: PNG SVG CSV`, summary table, ranked table with Top 5/10/20/100/All | `.analysis-modal-content` | the `\|log2FC\|` threshold slider | `de-volcano-expanded.png` |
+| 12 | step 11 | Click `⤢ Expand` | Full modal: volcano with labeled top-N genes, threshold controls, FDR checkbox, `Export: PNG SVG CSV`, summary table, ranked table with Top 5/10/20/100/All | `.analysis-modal-content` | the `\|log2FC\|` threshold slider | `de-volcano-expanded.png` |
 | 13 | step 12 | Drag `\|log2FC\|` from 0.5 to 3 | A/B pair: populated volcano → nearly empty volcano | `.analysis-modal-plot` ×2, identical bounds | the slider (B frame) | `volcano-threshold-a.png` / `-b.png` |
 | 14 | step 12 | — | Tight crop of `.de-modal-stats`: `Genes tested (FDR denominator)` / `Not tested (< 10 cells with a value)` / `Significant (…)` / `Upregulated` / `Downregulated`, with *Not tested* non-zero | `.de-modal-stats` | none | `de-fdr-denominator.png` |
 | 15 | — | Open **Gene Signature**; paste `Ins1, Ins2, Iapp`; both pages; Mean expression; None; Violin | Two clearly separated violins + gene chips confirming all three resolved | `#analysis-panel-signature` | `Normalization:` select | `gene-signature.png` |
@@ -1089,7 +1090,7 @@ eight in the expanded view.
 # Cross-cutting recommendations
 
 1. **Fix the capture pipeline before capturing anything.** Every image in these three
-   sections is DPR 1 rendered at 1:1. Standardise on DPR 2 with `:width:` set to the
+   sections is DPR 1 rendered at 1:1. Standardize on DPR 2 with `:width:` set to the
    CSS width, and record the viewport, DPR, theme, dataset and app build in the two
    `*_screenshots.md` pages. That single change improves all 17 existing figure
    references.

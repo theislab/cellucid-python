@@ -36,8 +36,8 @@ cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-da
 # 3 — on your laptop: forward through the login node to that compute node
 ssh -N -L 8765:compute-node:8765 you@login-node
 
-# 4 — in your browser
-#     http://127.0.0.1:8765/?anndata=true
+# 4 — in your browser, the Viewer URL the banner printed
+#     http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 ```
 
 :::{important}
@@ -245,7 +245,7 @@ then `ssh -N cluster-view`. Update `compute-node` whenever your job moves.
 Open the **loopback** Viewer URL the banner printed:
 
 ```text
-http://127.0.0.1:12765/?anndata=true
+http://127.0.0.1:12765/?viewer=true&viewerId=…&viewerToken=…&anndata=true
 ```
 
 Yes -- `127.0.0.1`, even though you started the server with `--host 0.0.0.0`.

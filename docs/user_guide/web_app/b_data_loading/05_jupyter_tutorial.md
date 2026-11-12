@@ -108,14 +108,14 @@ proxy or `google.colab` call is involved.
 ### What success looks like
 
 ```{figure} ../../../_static/screenshots/jupyter/show-anndata-driven-from-python.png
-:alt: The Cellucid viewer driven from Python, after viewer.color_by(...) and viewer.highlight_cells(...) on the Ductal cells: the Pancreas sample coloured by clusters with the Ductal cells highlighted.
+:alt: The Cellucid viewer driven from Python, after viewer.color_by(...) and viewer.highlight_cells(...) on the Ductal cells: the Pancreas sample colored by clusters with the Ductal cells highlighted.
 :width: 1440px
 
-The viewer after Python called
+A Python `cellucid.AnnDataViewer` in a browser tab, after Python called
 `viewer.color_by(field={"source": "obs", "key": "clusters"})` and highlighted
-the Ductal cells. This capture was taken in a browser tab; in a
-notebook the same app sits *inside* the output cell, and scrolls with the
-notebook.
+the Ductal cells. The widget `show_anndata` returns is the same app with the
+same viewer API; in a notebook it sits *inside* the output cell, and scrolls
+with the notebook.
 ```
 
 Three things confirm the call worked:
@@ -207,7 +207,7 @@ followed by these exact keyword-only parameters:
 - `latent_key`: the `obsm` latent space (scVI, PCA) the outlier filter
   measures in; `None` takes the store's own default, else no latent space (the
   filter then waits for one chosen in **Data mapping**)
-- `gene_id_column`: `None` uses `var.index` (`raw.var.index` with
+- `var_gene_id_column`: `None` uses `var.index` (`raw.var.index` with
   `expression_source="raw"`); any non-blank string names that exact column
   (default: `None`). Empty values take the index name and repeated names are
   made unique (`MATR3`, `MATR3-1`)
@@ -217,7 +217,7 @@ followed by these exact keyword-only parameters:
   coordinate range (default `None`: the viewer's default, which scales them)
 - `centroid_min_points`: the fewest cells a category needs to get outlier
   quantiles (default `None`: 10)
-- `embedding_keys`: the `obsm` array a dimension shows by default, such as
+- `embedding_defaults`: the `obsm` array a dimension shows by default, such as
   `{"2d": "X_tsne"}` or `{"2d": ("X_pca", [0, 1])}` with 0-based columns
   (default: `None`, which uses `X_umap_1d`/`X_umap_2d`/`X_umap_3d` or a bare
   `X_umap`, then a deterministic best guess)
@@ -259,7 +259,7 @@ viewer = show_anndata(
     "data.h5ad",
     height=700,
     latent_key="X_pca",
-    gene_id_column="gene_symbols",
+    var_gene_id_column="gene_symbols",
     dataset_name="PBMC demo",
     dataset_id="pbmc-demo",
 )
@@ -291,12 +291,12 @@ viewer = show_anndata(
 Naming a matrix the store does not have raises before the viewer is shown:
 
 ```text
-knn_key names obsp['connectivities'], which this store does not have. obsp holds: []. Compute the neighbour graph with sc.pp.neighbors(adata), or leave knn_key unset.
+knn_key names obsp['connectivities'], which this store does not have. obsp holds: []. Compute the neighbor graph with sc.pp.neighbors(adata), or leave knn_key unset.
 ```
 
 A graph is checked when it is read: it must be symmetric, so the `distances`
 matrix `sc.pp.neighbors()` also writes is refused. Any other `obsp` graph can be
-chosen later under **Session › Data mapping › Neighbour graph**
+chosen later under **Session › Data mapping › Neighbor graph**
 ({doc}`13_data_mapping`).
 
 (vector-fields)=
@@ -402,7 +402,7 @@ If the overlay is missing in the UI and the list is empty:
 
 Once you have a `viewer`, you can drive UI state from Python: everything a
 person can do in the viewer is an action, and every action is a method (each
-a step of the viewer's history, labelled as the notebook's).
+a step of the viewer's history, labeled as the notebook's).
 
 Common actions:
 
@@ -430,7 +430,7 @@ not apply the action. Reads work the same way: `viewer.fields_list()`,
 `viewer.history_get()`, … ({doc}`../../python_package/e_jupyter_hooks/06_python_to_frontend_commands`).
 
 Actions sent inside a turn are one turn of the viewer's history: the State
-panel shows them as one group, labelled as this notebook's, and undoes them
+panel shows them as one group, labeled as this notebook's, and undoes them
 together:
 
 ```python
@@ -451,7 +451,7 @@ Cell indices refer to the **row order** of the dataset Cellucid shows.
 
 The *data mapping* says which stored arrays the viewer plots and reads: the
 embedding of each dimension slot, the bound vector fields, and for an AnnData
-source the neighbour graph, the gene names, the expression matrix and the
+source the neighbor graph, the gene names, the expression matrix and the
 latent space. The viewer reports it after the dataset loads, and
 `viewer.data_mapping` holds the latest report (read it in a later cell):
 
@@ -461,7 +461,7 @@ viewer.data_mapping["embeddings"]
 viewer.data_mapping_origin   # "default", "best_guess", "session", "user" or "notebook"
 ```
 
-To change it, name the arrays at launch (`embedding_keys=`, `knn_key=`,
+To change it, name the arrays at launch (`embedding_defaults=`, `knn_key=`,
 `expression_source=`, …) or use **Session › Data mapping** in the viewer.
 `viewer.mapping_set(...)` (the `mapping.set` action) changes the groups you
 name and leaves the others as they are, without waiting, in a notebook widget
@@ -545,6 +545,10 @@ summary.columns        # obs columns written: cellucid_highlight__<id>, your lab
 adata.uns["cellucid"]["gene_sets"]
 ```
 
+A label field keeps the colors it is shown in, in the view in focus (the
+colors you gave its categories, the rest as it opened), as Scanpy keeps a
+column's colors: `adata.uns["<key>_colors"]`.
+
 Related: `viewer.selection` (the last selection, with obs names),
 `viewer.subset(adata, "my group")` (a highlight group as a new AnnData),
 `viewer.gene_sets()`. Full reference:
@@ -586,7 +590,7 @@ report = plan.apply()                # writes the rows into adata, records the a
 The plan lists every label, field, gene set and highlight group the step
 holds, each `write`, `unchanged`, `replace` or `not-applied` (with why).
 Applying the same step again changes nothing. A column you made yourself is
-never replaced. Filters, colours, views and the camera are reported, not
+never replaced. Filters, colors, views and the camera are reported, not
 applied. Each apply that writes is recorded in
 `adata.uns["cellucid"]["history_applied"]` (`cellucid.history_applied(adata)`
 reads it). `viewer.load_session("my-study.cellucid-session")` pushes a saved
@@ -698,7 +702,8 @@ serve_anndata(
 )
 ```
 
-The address you open stays `http://127.0.0.1:8765/?anndata=true`. The full
+The address you open is the loopback Viewer URL it prints,
+`http://127.0.0.1:8765/?viewer=true&viewerId=…&viewerToken=…&anndata=true`. The full
 recipe is in
 {doc}`../../python_package/d_viewing_apis/12_remote_servers_ssh_tunneling_and_cloud`.
 
@@ -767,7 +772,7 @@ session collect `request.result()` (or
 - Compute UMAP (`sc.tl.umap(adata)` writes a two-column `X_umap`, which is read
   as 2D as written), or
 - name a usable array explicitly:
-  `show_anndata(adata, embedding_keys={"2d": "X_tsne"}, dataset_name=..., dataset_id=...)`.
+  `show_anndata(adata, embedding_defaults={"2d": "X_tsne"}, dataset_name=..., dataset_id=...)`.
 - If you show a `.h5ad` or Zarr store path rather than an in-memory object,
   re-save the file after a repair.
 
@@ -787,7 +792,7 @@ print(viewer.data_mapping["knn"])
 `None` means no neighbor graph is chosen.
 
 **Fix**
-- Choose the graph under **Session › Data mapping › Neighbour graph**, or
+- Choose the graph under **Session › Data mapping › Neighbor graph**, or
   recreate the viewer with `knn_key="<obsp key>"`.
 
 ### Symptom: “The cell runs for a long time before the viewer appears”
@@ -827,7 +832,7 @@ print(viewer.data_mapping["vectorFields"])
 - The names you want are in a different `var` column.
 
 **Fix**
-- Pass `gene_id_column="..."` to `show_anndata()`.
+- Pass `var_gene_id_column="..."` to `show_anndata()`.
 - Or write the file with `prepare(var_gene_id_column="...")`, which records it.
 
 ### Symptom: “Hooks don’t fire (selection events never reach Python)”

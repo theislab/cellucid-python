@@ -84,7 +84,7 @@ seu$picked <- colnames(seu) %in% sel$cell_names
 ## A cell run again
 
 A cell run again replaces its output, so the viewer it showed before is
-stopped: the object's matrices it held, its memoised arrays and its chunk
+stopped: the object's matrices it held, its memoized arrays and its chunk
 cache are let go (an object reassigned after `NormalizeData()` would
 otherwise stay in memory beside the new one), as cellucid-python stops the
 widget a re-run cell replaced. A viewer that another cell shows too stays.

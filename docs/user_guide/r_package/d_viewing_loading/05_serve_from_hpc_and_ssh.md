@@ -58,6 +58,8 @@ used or refused with what to do.
 ## Offline
 
 The web app is cached after the first download and is used as it is when
-www.cellucid.com cannot be reached. To copy it to a machine with no internet,
+www.cellucid.com cannot be reached, when every file still matches its
+checksums (the console says *Could not reach … ; serving the cached web app
+(build …)*); cellucid-python does the same. To copy it to a machine with no internet,
 copy the folder `file.path(tools::R_user_dir("cellucid", "cache"), "web")` and pass
 `web_cache_dir =` and `web_source_url = NULL`.

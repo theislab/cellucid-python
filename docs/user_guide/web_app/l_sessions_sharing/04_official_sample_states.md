@@ -24,7 +24,7 @@ catalog you publish ({doc}`../b_data_loading/02_local_demo_tutorial`).
    past it.
 
 Cellucid says nothing when it applies the view: it is part of opening the
-sample, not a session you loaded, so the camera and colours simply change.
+sample, not a session you loaded, so the camera and colors simply change.
 Only a view that cannot be applied is reported, once, as **Sample view
 unavailable** ("The dataset is open, but its published sample view could not
 be applied.").
@@ -54,7 +54,8 @@ or value:
   fingerprint is;
 - and, checked once its one step is read, its one state holds **neither the
   cells to open nor the layout**: which cells are open stays your choice (or
-  the link's), and your panels, sidebar and **theme** stay yours.
+  the link's), and your panels, sidebar and **theme** stay yours, as does
+  the viewer background (held in its settings, not put back).
 
 It is read like any other session file: the same signature, manifest and
 fingerprint checks, and the same check that the dataset has every field the
@@ -85,7 +86,7 @@ its rules:
    the catalog in a headless browser (its current starting view is put back,
    exactly as on the site), optionally turns on more embeddings
    (`--enable <obsm key>:<columns>`) and dispatches actions of the viewer
-   (`--action '{"type": …, "params": …}'`, repeatable, for example to colour
+   (`--action '{"type": …, "params": …}'`, repeatable, for example to color
    by a field or set the camera), and saves the history as a session file. You
    can instead open the sample in the app, frame the view by hand and choose
    **Share…** › **Save file**.
@@ -93,7 +94,7 @@ its rules:
    and publishes it. It reads the store's cell and gene counts and default
    data mapping and recomputes the cell-order digest from the store's
    coordinates, so a capture taken against other data is refused rather than
-   relabelled. The viewer's publish step (`trimToPublishedDefault`) then makes
+   relabeled. The viewer's publish step (`trimToPublishedDefault`) then makes
    the step shown the one state, drops every other step, and names the view
    with the identity the catalog serves the dataset under. It refuses a
    capture whose steps made content (highlights, gene sets, a camera path,
@@ -151,35 +152,37 @@ For what each sample is, what to cite, and how far its build is pinned, see
 
 Each built-in sample's starting view:
 
-- colours the view by the `cell_type` observation field;
+- colors the view by the `cell_type` observation field;
 - shows the dataset's default 3-D embedding in the 3-D **Orbit** camera, at a
   reviewed static position;
-- uses the **Studio (light)** background, the `Points` render mode and the
-  `Full (lighting + fog)` shader;
+- uses the `Points` render mode and the `Full (lighting + fog)` shader;
 - has one view, with no kept views, no filters, no highlights and no
   centroid labels; and
 - holds an empty camera path with **Autoplay** off.
 
-It does not set the theme: the theme is part of your layout, which a starting
-view leaves alone.
+It does not set the theme or the viewer background: the theme is part of your
+layout, which a starting view leaves alone, and the background is yours as the
+theme is. The file holds the background it was captured on (**Studio
+(light)**), because a state lists every setting, but it is not put back; a
+background you never picked follows the theme.
 
 The Pancreas view also turns on the first two components of its PCA as a 2-D
 embedding: that PCA is the dataset's latent space, which Cellucid does not
 list as an embedding on its own.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/official-01-sample-state-applied.png
-:alt: The whole application window shortly after the Pancreas built-in sample was chosen, showing the embedding coloured by cell type in a 3-D orbit view on the Studio (light) background, with the sidebar beside it.
+:alt: The whole application window shortly after the Pancreas built-in sample was chosen, showing the embedding colored by cell type in a 3-D orbit view on the Studio (light) background, with the sidebar beside it.
 :width: 1440px
 
 The Pancreas sample moments after it was chosen. Nothing was clicked beyond
 picking the sample: the dataset published first, then its verified starting
-view put the view into 3-D **Orbit** on the **Studio (light)** background with
-`cell_type` active, and the history started from it. **Share…** and **Load…**
+view put the view into 3-D **Orbit** with `cell_type` active (the light
+theme's default background, **Studio (light)**, is the page's own), and the history started from it. **Share…** and **Load…**
 were not involved.
 ```
 
-You can confirm these from the sidebar: **Visualization** shows the `Studio
-(light)` background and the `Points` render mode, the dataset opens on its 3-D
+You can confirm these from the sidebar: **Visualization** shows the `Points`
+render mode, the dataset opens on its 3-D
 embedding with the navigation mode set to orbit, and **State › History**
 starts at **Opened**.
 

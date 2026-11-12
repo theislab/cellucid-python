@@ -9,7 +9,9 @@ These are long-form, notebook-style tutorials for the **Cellucid Python package*
 These pages are written in **MyST** and live in `docs/user_guide/python_package/f_notebooks_tutorials/`.
 
 The runnable `.ipynb` entries use the real Pancreas H5AD checked into this
-repository (outside a clone, they download it once). The docs site does
+repository: the round-trip notebooks (41–47) download it once outside a
+clone; `prepare_pancreas` and `jupyter_pancreas` run from a clone of the
+repository, as their first cells say. The docs site does
 **not** execute notebooks during the build (`nb_execution_mode = "off"`), so
 run them in JupyterLab, VS Code or Colab to interact with the embedded viewer.
 ```
@@ -23,7 +25,7 @@ run them in JupyterLab, VS Code or Colab to interact with the embedded viewer.
 
 Seven runnable notebooks, each with an R twin, that open in Colab: show a
 dataset in one line, pull highlights, labels and scores back, push clusters
-and gene sets in, read the web app's exports, re-analyse a selection, and
+and gene sets in, read the web app's exports, re-analyze a selection, and
 work with subsampled views.
 :::
 

@@ -40,7 +40,7 @@ shift, `·₃₂` multiplication modulo 2^32.
 ## The rank of a cell
 
 ```
-fmix32(h):          # MurmurHash3's finaliser, a bijection on uint32
+fmix32(h):          # MurmurHash3's finalizer, a bijection on uint32
   h = h ^ (h >>> 16)
   h = h ·₃₂ 0x85ebca6b
   h = h ^ (h >>> 13)
@@ -97,7 +97,7 @@ size `k' > k`. Moving the slider up keeps every cell already shown.
 
 ### `blocks` (`blockSize` `B ≥ 1`)
 
-The cells are cut into blocks of `B` neighbours in file order: block `j` is
+The cells are cut into blocks of `B` neighbors in file order: block `j` is
 positions `[j·B, min(n, (j+1)·B))`, `0 ≤ j < ceil(n / B)`. Blocks are taken in
 order of `rank(seed, j)` (the block number ranked like a position), whole,
 until the next one would exceed `k`; that block contributes its first
@@ -226,10 +226,10 @@ Recorded: the embedding's key, its columns, `G`.
 
 ## Why `blocks` is sound
 
-`blocks` is cluster sampling: equal-size clusters of neighbouring cells,
+`blocks` is cluster sampling: equal-size clusters of neighboring cells,
 chosen uniformly at random (by rank). Every cell has the same chance to be
 kept, so proportions and means estimated from the subsample are unbiased.
-Only their variance grows with how alike neighbouring cells are: the design
+Only their variance grows with how alike neighboring cells are: the design
 effect is `1 + (m − 1)ρ` for blocks of `m` cells with intra-block
 correlation `ρ`. With thousands of small blocks it stays small; a file sorted
 by a category (a sample, a cell type) raises `ρ`, and the Session panel shows
@@ -465,8 +465,20 @@ under `cells.kept`, beside `cells.spec` (the specification: `method`, `nObs`,
 **Cells to open** (Session › Subsampling) is the action `cells.open`
 (`app/actions/definitions/mapping.js`, provided by
 `ui/modules/subsample-control.js`): `{mode: 'all'}` or `{mode: 'subsample',
-count, method, seed, …}`, one step of the dataset's history on the same
-tracker ({doc}`29_action_layer_domains_and_history`). Its value is the `cells`
+count | fraction, method, seed, …}`, one step of the dataset's history on the
+same tracker ({doc}`29_action_layer_domains_and_history`). Its cell parameters
+(`count` or `fraction`, one of them; `method`, `seed`, `field`, `allocation`,
+`embedding`) are defined once (`CELLS_TO_OPEN`, `definitions/params.js`) and
+`dataset.open` takes the same ones: opening another dataset with them makes
+them that opening's request (`setNextCellSubsetRequest`, as a link's subsample
+is), so it is read once at the asked share instead of opened whole and read
+again. Both check them with one function (`app/actions/targets/cells-to-open.js`
+`cellsToOpenRequestOf`): count and fraction together, a method's settings
+without a size, a size under {ref}`the fewest cells drawn <fewest-cells-open>`
+and a stratified subsample without its field are refused with the same
+sentence, and the request is exact (`strict`). A fraction of 1, or a count of
+every cell, opens every cell; `cells.open` makes a fraction its count of the
+open dataset (`countFromFraction`), `dataset.open` hands it to the reader. Its value is the `cells`
 state domain's (`app/state/domains/cells.js`): `open`, null for every cell or
 the subsample's specification with `k` the cells it grows to (it reproduces the
 same cells exactly, `strict`), and `genes`, the count of open cells genes were

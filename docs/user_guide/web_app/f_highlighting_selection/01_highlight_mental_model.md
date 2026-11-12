@@ -51,7 +51,7 @@ Dataset (N cells; fixed order)
 
 Renderer (per view):
   draw only visible cells in that view,
-  and add a highlight halo for cells that are “highlighted” on the active page.
+  and draw the cells “highlighted” on the active page as a cyan dot in a black ring.
 ```
 
 Two key consequences:
@@ -63,7 +63,7 @@ Two key consequences:
 Here is what that looks like once one selection has been confirmed:
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/04-view-highlighted-cells.png
-:alt: The whole window after confirming the lasso group: the 826 enclosed cells in the upper part of the left lobe are drawn in the highlight colour, and the Highlighting panel reports 826 cells highlighted with one Lasso group.
+:alt: The whole window after confirming the lasso group: the 826 enclosed cells in the upper part of the left lobe are drawn in the highlight color, and the Highlighting panel reports 826 cells highlighted with one Lasso group.
 :width: 1440px
 
 One confirmed group. The panel counts membership (`826 cells highlighted`); the
@@ -112,12 +112,20 @@ A highlight group is a named entry in the “Highlighted groups” list.
 
 In the current UI, groups are:
 - created by confirming a selection (lasso/proximity/KNN/annotation),
-- labeled automatically (e.g. `Lasso (12,345 cells)`),
+- named automatically by what they hold: an annotation selection by its
+  categories (`NK + ILCP`, `B, T, NK +2 more`) or its range (`n_genes 120 – 340`;
+  on a gene shown in other values than stored, with their units,
+  `Ins1 · log1p(norm.) 0.5 – 2.1`: Data mapping › Expression values),
+  the other tools by the tool (`Lasso`, `Proximity`, `KNN`); a second of one
+  name on a page is `Lasso (2)`. The list shows each group's cell count beside
+  its name, and **Create categorical** turns the names into its categories,
 - enabled/disabled and removable,
 - stored as an explicit list of cell indices.
 
 :::{note}
-Groups are not “colored labels” yet; Cellucid currently renders highlighted cells using a single highlight style (halo/ring).
+Groups are not “colored labels” yet; Cellucid renders every highlighted cell in one style: a cyan dot inside a black ring.
+The pair reads against any coloring and background (whatever color the cells around it have, it is far from
+the cyan or from the black), so a highlight stays visible on a map colored by the very field it was made from.
 Highlight pages have colors in the UI, but highlight groups do not.
 :::
 
@@ -311,7 +319,7 @@ Cellucid has a viewer channel to `cellucid-python` (over the notebook widget's
 connection, or one WebSocket, `/_cellucid/ws`, for a browser tab) that supports:
 - **Python → UI actions**: every action of the viewer is a Python method
   (e.g. `viewer.highlight_cells(cells=...)`, `viewer.color_by(field=...)`),
-  applied as a step of the history labelled as the notebook's
+  applied as a step of the history labeled as the notebook's
 - **UI → Python hooks** (e.g. `@viewer.on_selection`, `@viewer.on_click`, `@viewer.on_hover`)
 - **Results back in one call**: `viewer.pull(adata)` writes every highlight
   group (a `cellucid_highlight__<id>` column), label field and score onto `adata.obs`

@@ -50,6 +50,7 @@ from cellucid.anndata_session._apply import (
     gene_set_columns,
     history_applied,
 )
+from cellucid.anndata_session._colors import COLORS_NOTE
 from cellucid.history import NOTE_COLUMNS, STEP_COLUMNS, Diff
 from cellucid.session import (
     NOT_A_SESSION_FILE_MESSAGE,
@@ -70,9 +71,9 @@ EXPECTED_JSON = FIXTURES / "history_golden.expected.json"
 GOLDEN_STATE = FIXTURES / "history_golden_state.cellucid-session"
 #: The golden files' digests; the web app (``tests/history-golden-fixture.test.mjs``) and cellucid-r pin the same.
 DIGESTS = {
-    GOLDEN: "7118bfd010f4dbb7644223d28cd99d4142ed049338c4ed24ae4c0ab7b944ec96",
-    EXPECTED_JSON: "7df8be8f9fd7ff7cfc92a05bc7b68505b6b45284d4a9ebc3241dc5f92adddf44",
-    GOLDEN_STATE: "4a592d66a26bcf61a489d4c165e8395a0d4b22fe6f467ca106ab183f6034bb31",
+    GOLDEN: "9711bbc4dfd19fd91809a2ab3967cab54b6982c2a3907c73432200e72414ca4a",
+    EXPECTED_JSON: "8684353157ec936017b777c395e1d60342dcd4f393ef2a0648fe4a7891a67c34",
+    GOLDEN_STATE: "f9f0a6025679dacb91cbd00b0abd1cd6380ab1e829fa9ea529cbc59c1801e3dd",
 }
 REGENERATE = (
     "Run node scripts/generate-history-golden.mjs in the cellucid repository (it writes the three copies), "
@@ -302,7 +303,8 @@ def test_records_are_found_by_name_or_id_and_refused_naming_the_others(golden: C
     assert str(refused.value) == 'There is no branch "Gone"; the branches are "Main", "Without score", "Clusters", "Scratch" and "Tidy fork".'
     with pytest.raises(ValueError) as refused:
         tracker.step("s11")
-    assert str(refused.value) == 'There is no step "s11" in the tracker "Annotation"; history_get lists its steps.'
+    # The reader names its own call, not the agents' history_get.
+    assert str(refused.value) == 'There is no step "s11" in the tracker "Annotation"; Tracker.steps lists its steps.'
 
 
 def test_steps_carry_every_field_of_the_model(golden: CellucidSession) -> None:
@@ -339,7 +341,7 @@ def test_steps_carry_every_field_of_the_model(golden: CellucidSession) -> None:
         tracker.step("s15")
     analysis = tracker.step("s4")
     assert analysis.stale == {"cause": "s13", "domains": ["field-overlays"]}
-    assert set(analysis.reads) == {"cells", "mapping", "field-overlays", "views", "filters", "visibility", "highlights"}
+    assert set(analysis.reads) == {"cells", "mapping", "expression", "field-overlays", "views", "filters", "visibility", "highlights"}
     camera = tracker.step("s10")
     assert (camera.merged, camera.until - camera.at, camera.ms, camera.coalesce_key) == (3, 2000, None, "camera:View 1")
     flagged = tracker.step("s12")
@@ -535,7 +537,7 @@ def test_the_dataset_must_be_the_sessions(golden: CellucidSession) -> None:
 def test_only_what_the_chosen_step_uses_is_required(golden: CellucidSession) -> None:
     adata = golden_adata()
     adata.obs = adata.obs.rename(columns={"cell_type": "kind"})
-    # The bookmark colours by cell_type; the head colours by a gene.
+    # The bookmark colors by cell_type; the head colors by a gene.
     with pytest.raises(ValueError, match="The state at step s5 uses the obs column 'cell_type'"):
         golden.apply(adata, step="s5")
     head = golden.apply(adata)
@@ -621,6 +623,32 @@ def test_labels_rename_columns_and_categories_in_place(tmp_path: Path) -> None:
     assert adata.obs["label"].tolist() == ["x0", "y", "x0", "y", "x0", "y"]
 
 
+def test_labels_of_boolean_and_identifier_columns_are_the_viewers(tmp_path: Path) -> None:
+    """A boolean column's categories are false and true, and an integer column
+    holding identifiers past 2^53 has its exact decimal texts as categories,
+    as the viewer reads them (F116): a rename made in the viewer applies."""
+    first = 2**60
+    overlays = files.overlays(renamed_categories=[
+        {"source": "obs", "field": "flag", "category": True, "name": "kept"},
+        {"source": "obs", "field": "donor_id", "category": str(first + 1), "name": "donor B"},
+        {"source": "obs", "field": "count", "category": 1, "name": "one"},
+    ])
+    adata = _small()
+    adata.obs["flag"] = np.array([True, False, True, False, False, True])
+    adata.obs["donor_id"] = np.array([first + i for i in range(6)], dtype=np.int64)
+    plan = read_session(_write(tmp_path, {"set": {"field-overlays": overlays}})).apply(adata)
+    assert [(row.kind, row.name, row.column, list(row.from_), row.status) for row in plan.rows] == [
+        ("categories-renamed", "kept", "flag", ["true"], "write"),
+        ("categories-renamed", "donor B", "donor_id", [str(first + 1)], "write"),
+        # Integers all within 2^53 stay numbers.
+        ("categories-renamed", "one", "count", ["1"], "not-applied"),
+    ]
+    assert [row.cells for row in plan.rows if row.status == "write"] == [3, 1]
+    plan.apply()
+    assert adata.obs["flag"].tolist() == ["kept", "false", "kept", "false", "false", "kept"]
+    assert adata.obs["donor_id"].tolist() == [str(first), "donor B", *[str(first + i) for i in range(2, 6)]]
+
+
 def test_swapped_column_names_rename_at_once(tmp_path: Path) -> None:
     overlays = files.overlays(renamed_fields=[
         {"source": "obs", "key": "leiden", "name": "label"}, {"source": "obs", "key": "label", "name": "leiden"},
@@ -653,6 +681,318 @@ def test_user_fields_apply_by_kind(tmp_path: Path) -> None:
     assert np.isnan(adata.obs["pushed"].to_numpy()[[1, 2, 3, 5]]).all()
     assert adata.obs["copy of count"].tolist() == [0, 1, 2, 3, 4, 5]
     assert "deleted one" not in adata.obs
+
+
+def test_a_user_category_fields_palette_is_read_and_checked(tmp_path: Path) -> None:
+    # The colors a field made from highlight pages opens with (its pages'), one
+    # #rrggbb a category, or null (F124).
+    made = {**files.user_category("user_cat_1", "annotation", ["a", "b"], [0, 1, 255, 0, 1, 0]),
+            "palette": ["#dc2626", "#16a34a"]}
+    plan = read_session(_write(tmp_path, {"set": {"field-overlays": files.overlays(user_fields=[made])}})).apply(_small())
+    assert [row.status for row in plan.rows] == ["write"]
+    for palette in (["#dc2626"], ["#DC2626", "#16a34a"], ["red", "#16a34a"], "#dc2626"):
+        bad = {**made, "palette": palette}
+        with pytest.raises(ValueError, match=r"palette must be null or one #rrggbb color a category"):
+            read_session(_write(tmp_path, {"set": {"field-overlays": files.overlays(user_fields=[bad])}})).apply(_small())
+
+
+def test_a_field_of_the_intersections_of_41_pages_applies(tmp_path: Path) -> None:
+    # Each intersection combines any number of pages (F269); the session keys
+    # its label by its pages' positions ("0+1+...+40"), a record of labels;
+    # the column is its codes.
+    pages = [{"pageId": f"page_{p}", "label": f"P{p}"} for p in range(41)]
+    every = "+".join(str(p) for p in range(41))
+    categories = [f"P{p}" for p in range(41)] + ["First two", "Every page"]
+    for labels in ({"0+1": "First two", every: "Every page"},):
+        made = {**files.user_category("user_cat_1", "pages", categories, [42, 41, 0, 1, 2, 40]),
+                "sourcePages": pages, "overlapStrategy": "intersections", "intersectionLabels": labels}
+        adata = _small()
+        plan = read_session(_write(tmp_path, {"set": {"field-overlays": files.overlays(user_fields=[made])}})).apply(adata)
+        assert [row.status for row in plan.rows] == ["write"]
+        plan.apply()
+        assert adata.obs["pages"].tolist() == ["Every page", "First two", "P0", "P1", "P2", "P40"]
+
+
+def test_a_written_columns_colors_are_the_ones_it_is_shown_in(tmp_path: Path) -> None:
+    # A field's palette goes with its column as Scanpy keeps colors,
+    # uns['<key>_colors'], one a category in the column's order -- every
+    # category, a used or not (F139). A field without a palette opens in
+    # Cellucid's own category colors, and is written with them (F239); a
+    # column of no categories (a highlight) takes no colors: those under its
+    # name described another column.
+    made = {**files.user_category("user_cat_1", "annotation", ["a", "b", "unused"], [0, 1, 255, 0, 1, 0]),
+            "palette": ["#dc2626", "#16a34a", "#2563eb"]}
+    plain = files.user_category("user_cat_2", "plain", ["x"], [0] * 6)
+    groups = files.highlights(files.page("page_1", "QC", files.group("highlight_1", "Gate", [0, 1])))
+    path = _write(tmp_path, {"set": {"field-overlays": files.overlays(user_fields=[made, plain]), "highlights": groups}})
+    adata = _small()
+    adata.uns["plain_colors"] = ["#000000", "#111111", "#222222"]
+    adata.uns["cellucid_highlight__QC__Gate_colors"] = np.array(["#000000"], dtype=object)
+    adata.uns["cell_type_colors"] = ["#aaaaaa", "#bbbbbb", "#cccccc"]
+    plan = read_session(path).apply(adata)
+    assert "annotation_colors" not in adata.uns and "plain_colors" in adata.uns  # a dry run writes nothing
+    plan.apply()
+    assert adata.obs["annotation"].cat.categories.tolist() == ["a", "b", "unused"]
+    assert adata.uns["annotation_colors"] == ["#dc2626", "#16a34a", "#2563eb"]
+    assert adata.uns["plain_colors"] == ["#ff9900"]
+    assert "cellucid_highlight__QC__Gate_colors" not in adata.uns
+    assert adata.uns["cell_type_colors"] == ["#aaaaaa", "#bbbbbb", "#cccccc"]  # a column left as it is keeps its colors
+    # Applied again: unchanged, colors as they are.
+    adata.uns["annotation_colors"] = ["#dc2626", "#16a34a", "#000000"]
+    assert not read_session(path).apply(adata, dry_run=False).applied
+    assert adata.uns["annotation_colors"] == ["#dc2626", "#16a34a", "#000000"]
+    # Replaced (overwrite): the new palette replaces the colors.
+    other = {**made, "codes": {"cells": None, "values": files.typed("Uint8Array", [1] * 6)}, "palette": ["#111111", "#222222", "#333333"]}
+    again = _write(tmp_path, {"set": {"field-overlays": files.overlays(user_fields=[other, plain]), "highlights": groups}})
+    report = read_session(again).apply(adata, dry_run=False, overwrite=True)
+    assert [row.status for row in report.plan.rows if row.name == "annotation"] == ["replace"]
+    assert adata.uns["annotation_colors"] == ["#111111", "#222222", "#333333"]
+
+
+def test_colors_follow_a_renamed_column_and_merged_categories(tmp_path: Path) -> None:
+    overlays = files.overlays(
+        renamed_fields=[{"source": "obs", "key": "leiden", "name": "cluster"}, {"source": "obs", "key": "count", "name": "number"}],
+        renamed_categories=[
+            # B merges into T, in B's place: the category keeps B's color.
+            {"source": "obs", "field": "cell_type", "category": "B", "name": "T"},
+            {"source": "obs", "field": "label", "category": "x1", "name": "y"},
+        ],
+    )
+    adata = _small()
+    adata.uns["cell_type_colors"] = np.array(["#aa0000", "#00aa00", "#0000aa"], dtype=object)
+    adata.uns["leiden_colors"] = ["#111111", "#222222", "#333333"]
+    adata.uns["cluster_colors"] = ["#999999"]  # stale: no column of that name
+    adata.uns["count_colors"] = np.zeros((2, 4))  # not Scanpy's form: not carried
+    adata.uns["label_colors"] = ["#444444", "#555555"]
+    read_session(_write(tmp_path, {"set": {"field-overlays": overlays}})).apply(adata, dry_run=False)
+    assert adata.obs["cell_type"].cat.categories.tolist() == ["T", "NK"]
+    assert adata.uns["cell_type_colors"] == ["#aa0000", "#0000aa"]
+    assert adata.uns["cluster_colors"] == ["#111111", "#222222", "#333333"]
+    assert "leiden_colors" not in adata.uns
+    assert "count_colors" not in adata.uns and "number_colors" not in adata.uns
+    # A text column relabeled: Scanpy colors it by its sorted labels, which the rename reorders.
+    assert "label_colors" not in adata.uns
+
+
+def test_merged_categories_drop_colors_that_did_not_cover_them(tmp_path: Path) -> None:
+    overlays = files.overlays(renamed_categories=[
+        {"source": "obs", "field": "cell_type", "category": "NK", "name": "T"},
+        {"source": "obs", "field": "leiden", "category": "0", "name": "zero"},
+    ])
+    adata = _small()
+    adata.uns["cell_type_colors"] = ["#aa0000", "#00aa00"]  # fewer than its 3 categories: Scanpy draws its own
+    adata.uns["leiden_colors"] = ["#111111"]  # a rename alone: left as it is
+    read_session(_write(tmp_path, {"set": {"field-overlays": overlays}})).apply(adata, dry_run=False)
+    assert adata.obs["cell_type"].cat.categories.tolist() == ["B", "T"]
+    assert "cell_type_colors" not in adata.uns
+    assert adata.uns["leiden_colors"] == ["#111111"]
+
+
+def _recolor(field_id: str, *pairs: tuple[Any, str]) -> dict[str, Any]:
+    """One field's entry of a view's colors: its categories recolored."""
+    return {"field": {"source": "obs", "user": field_id}, "colors": [{"category": c, "color": h} for c, h in pairs]}
+
+
+def _views(focus: int, count: int) -> dict[str, Any]:
+    view = {"embedding": {"key": "X_umap", "columns": [0, 1]}, "followsDefault": True, "centroids": {"points": False, "labels": False}}
+    return {"layout": "grid", "focus": focus, "liveHidden": False, "camerasLinked": True, "views": [view] * count}
+
+
+def test_a_fields_colors_are_the_ones_the_view_in_focus_shows(tmp_path: Path) -> None:
+    """The colors a person or an agent gave a field's categories reach
+    uns['<key>_colors'] (L26-8): in the view in focus at the step, each
+    category recolored there, the rest in the colors it opens with -- its
+    palette, else Cellucid's own colors by position. Another view's colors
+    stay how the data was shown."""
+    stage = files.user_category("user_cat_1", "stage", ["early", "mid", "late"], [0, 1, 2, 0, 1, 2])
+    fate = {**files.user_category("user_cat_2", "fate", ["a", "b"], [0, 1, 0, 1, 0, 1]), "palette": ["#dc2626", "#16a34a"]}
+    live = [_recolor("user_cat_1", ("early", "#111111"))]
+    kept = [
+        {"field": {"source": "obs", "key": "cell_type"}, "colors": [{"category": "B", "color": "#000000"}]},
+        _recolor("user_cat_1", ("late", "#008080"), ("early", "#808080"), ("absent", "#ffffff")),
+        _recolor("user_cat_2", ("b", "#ffd700")),
+    ]
+    made = {"set": {"field-overlays": files.overlays(user_fields=[stage, fate])}}
+    root = files.state(colors={"views": [[], []]}, views=_views(0, 2))
+
+    def applied(focus: int) -> tuple[ad.AnnData, ApplyReport]:
+        path = _write(tmp_path, made, {"set": {"colors": {"views": [live, kept]}, "views": _views(focus, 2)}}, root=root)
+        adata = _small()
+        return adata, read_session(path).apply(adata, dry_run=False)
+
+    adata, report = applied(1)
+    assert adata.uns["stage_colors"] == ["#808080", "#0077c8", "#008080"]
+    assert adata.uns["fate_colors"] == ["#dc2626", "#ffd700"]
+    # The dataset column recolored in the view in focus (RCC-1).
+    assert adata.uns["cell_type_colors"] == ["#000000", "#0077c8", "#ad50e0"]
+    column_row, colors_row = [row for row in report.plan.rows if row.domain == "colors"]
+    assert (column_row.kind, column_row.name, column_row.status) == ("column-colors", "cell_type", "write")
+    assert (colors_row.status, colors_row.note) == ("not-applied", COLORS_NOTE)
+    assert next(row.note for row in report.plan.rows if row.domain == "views") == PRESENTATION_NOTE
+    adata, _ = applied(0)
+    assert adata.uns["stage_colors"] == ["#111111", "#0077c8", "#ad50e0"]
+    assert adata.uns["fate_colors"] == ["#dc2626", "#16a34a"]
+    assert "cell_type_colors" not in adata.uns  # recolored in another view only
+    # The colors at the step before (none recolored): the colors the fields open with.
+    path = _write(tmp_path, made, {"set": {"colors": {"views": [live, kept]}, "views": _views(1, 2)}}, root=root)
+    adata = _small()
+    read_session(path).apply(adata, step="s1", dry_run=False)
+    assert adata.uns["stage_colors"] == ["#ff9900", "#0077c8", "#ad50e0"]
+    # At the head: the columns are unchanged (their colors as they are); the
+    # dataset column recolored there takes its colors, once.
+    report = read_session(path).apply(adata, dry_run=False)
+    assert [(row.kind, row.status) for row in report.plan.rows if row.domain == "colors"] == [
+        ("column-colors", "write"), ("presentation", "not-applied")]
+    assert adata.uns["stage_colors"] == ["#ff9900", "#0077c8", "#ad50e0"]
+    report = read_session(path).apply(adata, dry_run=False)
+    assert not report.applied
+    assert [row.status for row in report.plan.rows if row.domain == "colors"] == ["unchanged", "not-applied"]
+    assert next(row.note for row in report.plan.rows if row.domain == "colors" and row.kind == "presentation") == COLORS_NOTE
+
+
+def _dataset_recolor(key: str, *pairs: tuple[Any, str]) -> dict[str, Any]:
+    """A dataset column's entry of a view's colors: its categories recolored."""
+    return {"field": {"source": "obs", "key": key}, "colors": [{"category": c, "color": h} for c, h in pairs]}
+
+
+def test_a_recolored_dataset_column_is_written_with_the_colors_it_is_shown_in(tmp_path: Path) -> None:
+    """A column that came with the dataset, recolored in the view in focus,
+    takes the colors it is shown in (RCC-1): the categories recolored, the
+    rest in the colors it opens with -- Scanpy's colors for it, as drawn
+    (#rgb widened, alpha dropped), else Cellucid's own by position. Applied
+    again: unchanged. A column it cannot be written to says why (a column
+    the object lacks is refused before, as every field the state uses)."""
+    recolors = [
+        _dataset_recolor("cell_type", ("T", "#123456")),
+        _dataset_recolor("leiden", ("1", "#00ff00")),
+        _dataset_recolor("label", ("x0", "#ffffff")),
+        _dataset_recolor("count", ("absent", "#ffffff")),
+    ]
+    path = _write(tmp_path, {"set": {"colors": {"views": [recolors]}, "views": _views(0, 1)}},
+                  root=files.state(colors={"views": [[]]}, views=_views(0, 1)))
+    adata = _small()
+    adata.uns["cell_type_colors"] = np.array(["#AA0000", "#0a0", "#0000aaff"], dtype=object)
+    adata.uns["leiden_colors"] = ["#111111"]  # fewer than its 3 categories: the viewer opens it in Cellucid's colors
+    plan = read_session(path).apply(adata)
+    rows = [(row.kind, row.name, row.status, row.note) for row in plan.rows if row.domain == "colors"]
+    assert rows == [
+        ("column-colors", "cell_type", "write", None),
+        ("column-colors", "leiden", "write", None),
+        ("column-colors", "label", "not-applied", 'The obs column "label" is not categorical; Scanpy keeps colors for a categorical column only.'),
+        ("column-colors", "count", "not-applied", 'The obs column "count" is not categorical; Scanpy keeps colors for a categorical column only.'),
+        ("presentation", "Colors", "not-applied", COLORS_NOTE),
+    ]
+    assert list(adata.uns["cell_type_colors"]) == ["#AA0000", "#0a0", "#0000aaff"]  # a dry run writes nothing
+    report = plan.apply()
+    assert report.applied and report.provenance is not None
+    assert adata.uns["cell_type_colors"] == ["#aa0000", "#123456", "#0000aa"]
+    assert adata.uns["leiden_colors"] == ["#ff9900", "#00ff00", "#ad50e0"]
+    assert "label_colors" not in adata.uns
+    assert [entry.name for entry in report.provenance.skipped if entry.kind == "column-colors"] == ["label", "count"]
+    again = read_session(path).apply(adata, dry_run=False)
+    assert not again.applied
+    assert [row.status for row in again.plan.rows if row.kind == "column-colors"] == [
+        "unchanged", "unchanged", "not-applied", "not-applied"]
+
+
+def test_a_recolored_dataset_column_renamed_in_the_session_takes_its_colors_by_its_new_labels(tmp_path: Path) -> None:
+    """The colors value names a dataset column by the key the dataset gives it
+    and its categories by the labels shown at the step: the column renamed
+    and a category relabeled by the same apply are written under the new
+    names, the colors in the column's order; a label the column lacks is
+    said, the others written."""
+    overlays = files.overlays(
+        renamed_fields=[{"source": "obs", "key": "cell_type", "name": "kind"}],
+        renamed_categories=[{"source": "obs", "field": "cell_type", "category": "B", "name": "Bcell"}],
+    )
+    recolors = [_dataset_recolor("cell_type", ("Bcell", "#101010"), ("ghost", "#202020"))]
+    path = _write(tmp_path, {"set": {"field-overlays": overlays, "colors": {"views": [recolors]}, "views": _views(0, 1)}},
+                  root=files.state(colors={"views": [[]]}, views=_views(0, 1)))
+    adata = _small()
+    adata.uns["cell_type_colors"] = ["#aa0000", "#00aa00", "#0000aa"]
+    report = read_session(path).apply(adata, dry_run=False)
+    assert adata.obs["kind"].cat.categories.tolist() == ["Bcell", "T", "NK"]
+    assert adata.uns["kind_colors"] == ["#101010", "#00aa00", "#0000aa"]
+    assert "cell_type_colors" not in adata.uns
+    (row,) = [row for row in report.plan.rows if row.kind == "column-colors"]
+    assert (row.name, row.status, row.note) == (
+        "kind", "write", 'Not written: the color of "ghost", which the obs column "kind" does not have.')
+    # Only labels the column lacks: nothing to write.
+    only = [_dataset_recolor("leiden", ("9", "#202020"), ("8", "#303030"))]
+    path = _write(tmp_path, {"set": {"colors": {"views": [only]}, "views": _views(0, 1)}},
+                  root=files.state(colors={"views": [[]]}, views=_views(0, 1)))
+    plan = read_session(path).apply(_small())
+    (row,) = [row for row in plan.rows if row.kind == "column-colors"]
+    assert (row.status, row.note) == (
+        "not-applied", 'Not written: the colors of "9", "8", which the obs column "leiden" does not have.')
+
+
+def test_colors_the_session_holds_are_checked(tmp_path: Path) -> None:
+    stage = files.user_category("user_cat_1", "stage", ["early"], [0] * 6)
+    made = {"set": {"field-overlays": files.overlays(user_fields=[stage])}}
+    for value, views, message in (
+        ({"views": [[_recolor("user_cat_1", ("early", "#FFFFFF"))]]}, None, r"color must be one #rrggbb color"),
+        ({"views": [[{"field": {"source": "obs", "user": ""}}]]}, None, r"field.user must be a non-empty text"),
+        ({"views": [[]]}, _views(1, 2), r"colors value holds 1 view, and the view in focus is view 1"),
+        ({"views": [[]]}, {**_views(0, 1), "focus": -1}, r"focus must be a non-negative whole number"),
+    ):
+        changes: dict[str, Any] = {"colors": value} if views is None else {"colors": value, "views": views}
+        path = _write(tmp_path, made, {"set": changes}, root=files.state(colors={"views": [[]]}, views=_views(0, 1)))
+        with pytest.raises(ValueError, match=message):
+            read_session(path).apply(_small())
+
+
+def test_a_session_saved_under_the_id_an_object_was_shown_under_applies_when_named(tmp_path: Path) -> None:
+    """A viewer given dataset_id= serves the object under that id, and its
+    session is saved under it (L26-7): naming it applies the session to the
+    object, which declares its own id; another id is refused."""
+    record = files.fingerprint(cell_count=6, var_count=2, dataset_id="pancreas-notebook",
+                               digest=_fingerprint()["cellOrder"]["digest"])
+    gate = files.highlights(files.page("page_1", "QC", files.group("highlight_1", "Gate", [0, 1])))
+    path = files.session_file(
+        tmp_path / "shown.cellucid-session", fingerprint_record=record,
+        trackers=[{"id": "t1", "name": "Tracker 1", "root": files.state(), "steps": [{"set": {"highlights": gate}}]}],
+    )
+    adata = _small()
+    adata.uns["cellucid"] = {"id": "pancreas"}
+    with pytest.raises(ValueError, match=(r"saved on the dataset 'pancreas-notebook', and this object is 'pancreas' .*"
+                                          r"name that id: dataset_id='pancreas-notebook'")):
+        apply_cellucid_session_to_anndata(adata, path)
+    with pytest.raises(ValueError, match=r"saved on the dataset 'pancreas-notebook', and this object was shown as 'pancreas'"):
+        apply_cellucid_session_to_anndata(adata, path, dataset_id="pancreas")
+    with pytest.raises(ValueError, match="dataset_id"):
+        apply_cellucid_session_to_anndata(adata, path, dataset_id="no/slash")
+    report = read_session(path).apply(adata, dataset_id="pancreas-notebook", dry_run=False)
+    assert report.applied and adata.obs["cellucid_highlight__QC__Gate"].tolist() == [True, True, False, False, False, False]
+    # A plan made so is applied so (the plan is made again first).
+    again = _small()
+    again.uns["cellucid"] = {"id": "pancreas"}
+    assert apply_cellucid_session_to_anndata(again, path, dataset_id="pancreas-notebook").apply().applied
+    # A pull of the session file takes the same id.
+    pulled = _small()
+    pulled.uns["cellucid"] = {"id": "pancreas"}
+    with pytest.raises(ValueError, match="this object is 'pancreas'"):
+        cellucid.pull(pulled, path)
+    assert list(cellucid.pull(pulled, path, dataset_id="pancreas-notebook").columns) == ["cellucid_highlight__highlight_1"]
+
+
+def test_a_pull_of_a_session_file_writes_a_fields_palette_under_its_column(tmp_path: Path) -> None:
+    made = {**files.user_category("user_cat_1", "annotation", ["a", "b"], [0, 1, 255, 0, 1, 0]), "palette": ["#dc2626", "#16a34a"]}
+    path = _write(tmp_path, {"set": {"field-overlays": files.overlays(user_fields=[made])}})
+    adata = _small()
+    adata.uns["field__annotation_colors"] = ["#000000"]
+    summary = cellucid.pull(adata, path, field_prefix="field__")
+    assert list(summary.columns) == ["field__annotation"]
+    assert adata.uns["field__annotation_colors"] == ["#dc2626", "#16a34a"]
+    # Written beside a column of that name (on_conflict="suffix"): under the name written.
+    adata = _small()
+    adata.obs["annotation"] = 1.0
+    adata.uns["annotation_colors"] = ["#000000"]
+    summary = cellucid.pull(adata, path, on_conflict="suffix")
+    (written,) = summary.columns
+    assert written != "annotation"
+    assert adata.uns[f"{written}_colors"] == ["#dc2626", "#16a34a"]
+    assert adata.uns["annotation_colors"] == ["#000000"]
 
 
 def test_highlight_groups_of_every_page_are_named_by_page_and_label(tmp_path: Path) -> None:
@@ -846,6 +1186,58 @@ def test_presentation_domains_are_reported_not_applied(tmp_path: Path) -> None:
     ]
     report = plan.apply()
     assert not report.applied
+
+
+def test_the_steps_expression_values_are_recorded_never_applied(tmp_path: Path) -> None:
+    """The step's expression values go into its apply's record (what the person
+    looked at the genes in); X keeps its values, and the domain is a presentation row."""
+    gate = files.highlights(files.page("page_1", "QC", files.group("highlight_1", "Gate", [0, 1])))
+    root = files.state(expression={"normalize": False, "log1p": False})
+    shown = {"normalize": True, "log1p": True}
+    path = _write(tmp_path, {"set": {"expression": shown}}, {"set": {"highlights": gate}}, root=root)
+    adata = _small()
+    stored = adata.X.copy()
+    report = read_session(path).apply(adata, dry_run=False)
+    assert report.applied
+    assert [(row.kind, row.domain, row.name, row.status, row.note) for row in report.plan.rows if row.kind == "presentation"] == [
+        ("presentation", "expression", "Expression values", "not-applied", PRESENTATION_NOTE),
+    ]
+    assert report.provenance is not None and report.provenance.expression == cellucid._history_model.ExpressionValues(normalize=True, log1p=True)
+    assert [record["expression"] for record in history_applied(adata)] == [shown]
+    assert np.array_equal(adata.X, stored)
+    # Read back from a file, as a notebook reads it later.
+    written = tmp_path / "applied.h5ad"
+    adata.write_h5ad(written)
+    assert cellucid.history_applied(ad.read_h5ad(written))[-1]["expression"] == shown
+    # The step before (normalized and log1p asked, nothing written) records nothing.
+    assert not read_session(path).apply(_small(), step="s1", dry_run=False).applied
+    # A step whose expression values are the opening's records them too: values as stored.
+    path = _write(tmp_path, {"set": {"highlights": gate}}, root=root)
+    adata = _small()
+    read_session(path).apply(adata, dry_run=False)
+    assert history_applied(adata)[-1]["expression"] == {"normalize": False, "log1p": False}
+
+
+def test_a_session_without_expression_values_records_none(tmp_path: Path) -> None:
+    gate = files.highlights(files.page("page_1", "QC", files.group("highlight_1", "Gate", [0, 1])))
+    adata = _small()
+    report = read_session(_write(tmp_path, {"set": {"highlights": gate}})).apply(adata, dry_run=False)
+    assert report.provenance is not None and report.provenance.expression is None
+    assert history_applied(adata)[-1]["expression"] is None
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ({"normalize": True}, r"expression value at step s1 has other fields than this version reads \(missing log1p\)"),
+        ({"normalize": True, "log1p": 1}, r"expression value at step s1's log1p must be true or false"),
+    ],
+)
+def test_expression_values_of_another_shape_are_refused(tmp_path: Path, value: dict[str, Any], message: str) -> None:
+    gate = files.highlights(files.page("page_1", "QC", files.group("highlight_1", "Gate", [0, 1])))
+    path = _write(tmp_path, {"set": {"expression": value, "highlights": gate}}, root=files.state(expression={"normalize": False, "log1p": False}))
+    with pytest.raises(ValueError, match=message):
+        read_session(path).apply(_small())
 
 
 def test_a_steps_only_file_reads_and_is_not_applied(tmp_path: Path) -> None:

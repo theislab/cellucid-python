@@ -5,7 +5,7 @@
 **What you’ll get:** the overlay working, or a precise statement of why it cannot.
 
 This page is a troubleshooting-first companion to the vector field overlay docs.
-For behaviour that looks wrong but is correct, go to {doc}`06_edge_cases` instead.
+For behavior that looks wrong but is correct, go to {doc}`06_edge_cases` instead.
 
 Each entry follows the same structure:
 **Symptom → Likely causes (ordered) → How to confirm → Fix → Prevention**.
@@ -64,7 +64,11 @@ If you’re stuck, do this first:
 ### How to confirm
 
 - The UI will show a hint that names the embeddings that have a field, like:
-  - `Vector fields are bound to X_umap, X_umap_3d. Show one of them in this view to enable.`
+  - `Vector fields are bound to UMAP · 2D, UMAP · 3D. Show one of them in this view to enable.`
+- Hover the dimmed `Show overlay`: its tooltip says why it is off — no vector
+  field bound to the embedding this view shows, no field selected, or the field
+  still loading. An agent's or a script's `setting.set` that is refused gives
+  the same reason.
 
 ### Fix
 
@@ -88,7 +92,7 @@ If you’re stuck, do this first:
 ### How to confirm
 
 - Watch the info line under the overlay settings:
-  - it may briefly show `Loading vector field…`, then `Failed to load vector field.`
+  - it may briefly show `Loading vector field…`, then `The vector field could not be shown.`
 - You may also see a toast/notification containing an error message.
 
 ### Fix
@@ -141,7 +145,8 @@ If you’re stuck, do this first:
 1) `Opacity` is 0% or very low, or `Particle size` is too small.  
 2) All cells are filtered out / invisible, so there is nothing to spawn particles from.  
 3) Vectors are all-zero. Every particle is then discarded before it is drawn, so
-   nothing appears at any setting — see {doc}`06_edge_cases`.  
+   nothing appears at any setting; a notice says so when the field loads
+   (`No particle moves in velocity on UMAP · 2D: every vector is zero.`) — see {doc}`06_edge_cases`.  
 4) Vectors are extremely small but non-zero, so motion is imperceptible.  
 5) You are GPU-saturated and frames are not updating smoothly.  
 
@@ -244,6 +249,31 @@ If you’re stuck, do this first:
 
 ---
 
+## Symptom: “The particles do not move”
+
+### Likely causes (ordered)
+
+1) The operating system's **reduce motion** setting is on. The overlay then
+   draws a still picture of the flow on purpose — streaks traced once, showing
+   direction and speed — and does not animate
+   ({doc}`05_performance_and_quality`).
+2) The vectors are extremely small, so the motion is imperceptible (see
+   “Overlay is enabled, but nothing is visible” above).
+
+### How to confirm
+
+- The picture stays exactly the same until you move the camera or change a
+  setting, and then is redrawn at once without moving: reduce motion is on.
+
+### Fix
+
+- To see the moving flow, turn the system's reduce motion setting off (macOS:
+  System Settings → Accessibility → Display → Reduce motion; Windows: Settings
+  → Accessibility → Visual effects → Animation effects). Cellucid switches at
+  once; no reload is needed.
+
+---
+
 ## Symptom: “The flow vanishes when I zoom out”
 
 ### Likely causes (ordered)
@@ -275,7 +305,7 @@ If you’re stuck, do this first:
 
 ---
 
-## Symptom: `Preparing velocity overlay...` takes a long time
+## Symptom: `Preparing velocity overlay…` takes a long time
 
 ### Likely causes (ordered)
 
@@ -444,7 +474,7 @@ not on a paraphrase — each one has exactly one cause.
 | `Two vector arrays are the vector field "<id>" of <embedding label>; bind only one.` | Vector field manager | Two bindings give one field two arrays over the same embedding; keep one. |
 
 Whichever one fires, the visible consequence is the same: `Show overlay` turns
-itself back off and the info line reads `Failed to load vector field.`
+itself back off and the info line reads `The vector field could not be shown.`
 
 ---
 

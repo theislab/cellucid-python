@@ -20,7 +20,7 @@ If you can load a demo dataset but not yours, it’s usually **data loading / da
 2) Check you’re not in a “looks broken but isn’t” state:
    - **Visible cells**: do you have `0 visible` due to filters? → {doc}`../e_filtering/07_troubleshooting_filtering`
    - **Active view**: are you editing the intended panel (live vs snapshot)? → {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
-   - **Still starting**: if controls look greyed out, read the line under the
+   - **Still starting**: if controls look grayed out, read the line under the
      **Open data** heading — see {ref}`starting-up`.
 3) Reload in a clean state (private window; extensions off)  
 4) If only one dataset fails, try a known-good demo dataset  
@@ -48,6 +48,16 @@ shared, a host that did not answer); **Details** holds the raw error, which
 the notification log and the browser console keep too. **Try again** reloads
 the same address; **Open without this link** closes the panel and removes
 those settings from the address, leaving Cellucid open to choose other data.
+
+**A link Cellucid cannot read** (a parameter given twice or empty, spaces
+around a value, `anndata=` other than `true`, a `source` other than
+`local-demo` or `remote`, a server and data at once, a `remote` that is no web
+address, a viewer address Python or R did not write, a `dataset` its source
+does not hold) is said the same way, naming the parameter and what is wrong
+("This link names "dataset" 2 times; a link names it once."), with **Open
+without this link** first: opening it again meets the same refusal. A
+`remote` server address is read as the address bar reads one, so a trailing
+slash or an upper-case scheme is the same server.
 When asking again cannot change the answer, **Open without this link** comes
 first. See {doc}`../b_data_loading/08_troubleshooting_data_loading`.
 
@@ -58,18 +68,24 @@ carried launch settings, and the guide for that problem.
 
 | The heading says | What it means | Go to |
 |---|---|---|
-| **This browser cannot run Cellucid** | The browser gave the page no WebGL2 context (Details: `WebGL2 is required but not supported in this browser.`): old browser, disabled hardware acceleration, a managed-device policy, or a remote-desktop session | {doc}`../a_orientation/02_system_requirements` |
+| **This browser cannot run Cellucid** | The browser has no WebGL2 (Details: `The viewer got no WebGL2 context from the browser.`) or is older than Cellucid needs: old browser, disabled hardware acceleration, a managed-device policy, or a remote-desktop session | {doc}`../a_orientation/02_system_requirements` |
+| **The browser's graphics stopped working** | The browser has WebGL2 but its graphics process was reset, lost the page's context, or would not make another (too many pages drawing at once) | close other tabs that draw 3D graphics, reload; restart the browser if it happens again |
 | **Cellucid could not load** | One of the app’s own files failed to download, or does not fit the others, so nothing could run | reload; see *The line turns red* below |
 | **Cellucid has been updated** | The page was loading while a new version was published, so its files are of two versions | **Reload** |
 | **The data could not be opened** | The Cellucid server the page itself is served from (`cellucid serve`, Jupyter) could not be read | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
 | **A server did not answer** | A server startup was waiting on (the page's own server, the sample catalog, a published default view) sent nothing for 60 s | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
-| **Cellucid could not start** | Anything else, such as an invalid launch setting (an empty `?remote=`) | Details, then {doc}`../p_developer_docs/02_local_development_setup` or report it |
+| **Cellucid could not start** | Anything else: a fault of Cellucid itself (a link Cellucid cannot read is not this card, see above) | Details, then {doc}`../p_developer_docs/02_local_development_setup` or report it |
 
 A blank page instead of a card, or “module script failed to load” in the
 console, means the app’s own files were not served correctly (wrong MIME type,
 opened via `file://`): see {doc}`../p_developer_docs/02_local_development_setup`.
 
 If JavaScript is disabled the card reads **Cellucid needs JavaScript**.
+
+A browser that keeps nothing for the site (site data or cookies blocked, some
+private windows) runs Cellucid all the same: it says once, after the welcome,
+**Nothing is kept**, and settings, histories and stored datasets last until
+the page closes.
 
 ---
 
@@ -80,7 +96,7 @@ distinction is the single most useful thing on this page.
 
 | The message contains | Cause | What to do |
 |---|---|---|
-| **“was cancelled”** | The request was aborted — you switched datasets, disconnected, or navigated away mid-load. **Nothing is wrong.** | Retry the load. If it cancels on its own, something else is switching the source underneath you. |
+| **“was canceled”** | The request was aborted — you switched datasets, disconnected, or navigated away mid-load. **Nothing is wrong.** | Retry the load. If it cancels on its own, something else is switching the source underneath you. |
 | **“is longer than the longest text this browser can hold”** | A metadata file is bigger than any browser can parse, not a corrupt file | See {ref}`size-limits` below |
 | **“response body transfer failed”** | The connection dropped partway through | Network, VPN, proxy or a server that closed early. Retry, then check the server. |
 | **“must contain valid JSON”** | Genuinely malformed content — this now means what it says | The file is not what it claims to be. {doc}`../b_data_loading/08_troubleshooting_data_loading` |
@@ -92,7 +108,7 @@ that says “invalid format”, re-run it: the message you get now is likely to 
 different and more specific.
 :::
 
-When a connection or catalogue fails, the interface writes a full sentence of
+When a connection or catalog fails, the interface writes a full sentence of
 the form *“&lt;what&gt; &lt;failed how&gt;: &lt;cause&gt; &lt;what to do&gt;”*.
 The cause phrase tells you which class of failure it was:
 
@@ -140,8 +156,8 @@ the browser itself, and each is reported by name rather than as a crash:
 | The message says | What it means | Go to |
 |---|---|---|
 | “That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked.” | A click hits the dot drawn under the pointer, at its drawn size, plus a few pixels of slack. Zooming in, raising **Point size**, or turning off level of detail all make cells easier to hit | {doc}`../f_highlighting_selection/06_troubleshooting_highlighting` |
-| “That cell has no value on that panel's field, so there is nothing to select.” | The cell is real but missing on the field the panel you pressed is coloured by | {doc}`../d_fields_coloring_legends/03_color_by_behavior` |
-| “That panel is not colored by a field, so there is nothing to select.” | The panel you pressed has no colour-by field; an annotation gesture reads the pressed panel's field, not the focused view's | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
+| “That cell has no value on that panel's field, so there is nothing to select.” | The cell is real but missing on the field the panel you pressed is colored by | {doc}`../d_fields_coloring_legends/03_color_by_behavior` |
+| “That panel is not colored by a field, so there is nothing to select.” | The panel you pressed has no color-by field; an annotation gesture reads the pressed panel's field, not the focused view's | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 | “That gesture ended outside the view, so nothing was selected.” | The drag was released off the panel | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 | “That gesture did not change the selection.” | The gesture worked; it just selected what was already selected | — |
 | “Color by a field first (Coloring & filtering), then Alt+click a cell.” (Selection (i)) | No panel on screen is colored by a field; choose a categorical or continuous obs field first | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
@@ -160,10 +176,10 @@ hit; turning off level of detail makes every cell hittable.
 | The message | Meaning | Go to |
 |---|---|---|
 | **“Graphics reset by the browser”** dialog, restoring, with **Save session** (and **Reload** only if restoring failed) | The GPU dropped the context, usually from memory pressure or a driver reset. The viewer rebuilds every GPU object from the page when the browser gives it back, keeping filters, selections, kept views and analyses; the session was saved in the page first | {doc}`../n_benchmarking_performance/07_troubleshooting_performance` |
-| “WebGL context restored, but Cellucid requires a reload…” | Your browser handed the context back; Cellucid still needs a reload | Reload |
+| “The graphics could not be restored. Save the session, then reload the page to continue.” (the same dialog, now with **Reload**) | The graphics did not come back; the session captured at the loss was already downloaded (**Save session** writes it again) | **Reload**, then open that session ({doc}`../a_orientation/02_system_requirements`) |
 | “Volumetric smoke isn't available on this device: …” (titled **Volumetric smoke unavailable**) | This browser's graphics driver lacks something the smoke cloud needs, most often float blending (iPhone/iPad Safari, many Android browsers); the view stays in Points | {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` |
 | “Volumetric smoke could not be built. Points rendering works as usual.” / “Volumetric smoke stopped rendering, so the view is back in Points.” | A smoke build or frame failed; the view is in Points and the technical detail is in the browser console | {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` |
-| “Volumetric smoke requires a single view. Clear snapshots first.” | Smoke mode is single-view only | {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples` |
+| “volumetric smoke draws one view; remove the kept views first (Clear, beside Layout)” (the dimmed smoke choice) | Smoke mode is single-view only | {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples` |
 | “Velocity overlay unavailable” | The overlay could not be built for this dataset or dimension | {doc}`../i_vector_field_velocity/07_troubleshooting_velocity_overlay` |
 
 ---
@@ -177,11 +193,11 @@ hit; turning off level of detail makes every cell hittable.
 | `<gene> is not a gene in this dataset.` (after Enter in **Gene expression**, or choosing a gene in an analysis result) | No gene of the gene list in use has that name. For an analysis result, it was computed from another gene list than the one **Session › Data mapping › Genes** shows | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | `Gene names are still being read: <gene> can be chosen once they are listed.` | The dataset's gene names are read right after its first view; choose the gene again once **Gene expression** can be typed in | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
 | `<field> is not shown: a saved view is being restored.` / `… the view is being saved.` (or `the gene list changed while it was read … and no longer has it`) | A field or gene was chosen while a session or a sample's saved view was being restored or saved, or while the gene list was replaced by one without that gene. Choose it again when that has ended | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
-| **“Gene cannot be shown”**, a multi-line notification naming the gene, counting its `+Infinity` / `-Infinity` / `NaN` values and listing the first affected cells | The values arrived and cannot be placed on a colour scale. The active field never changed. This is a values problem, not a transport one — repair the data at the source | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
-| `Field "X" has no value in any of N cells, so it has no colour scale.` | Every value in that column is `NaN`, so there is nothing to scale — usually a column that was never computed | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
-| “Failed to load field: …” | A field could not be loaded. Read the rest of the line: if it counts non-finite values it is the case above, otherwise the data could not be fetched | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends`, then {doc}`../b_data_loading/08_troubleshooting_data_loading` |
-| “Failed to load gene: …” / “Failed to load field: …” on the progress toast | The load never finished — a dropped connection, a stopped server, a refused payload. It is the terminal state of the `Loading …` toast; the reason arrives as a separate notification beside it | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
-| “No neighbor graph available for this dataset” | kNN selection needs a neighbour graph (`obsp`), which this dataset does not hold | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
+| **“Gene cannot be shown”**, a multi-line notification naming the gene, counting its `+Infinity` / `-Infinity` / `NaN` values and listing the first affected cells | The values arrived and cannot be placed on a color scale. The active field never changed. This is a values problem, not a transport one — repair the data at the source | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
+| `Field "X" has no value in any of N cells, so it has no color scale.` | Every value in that column is `NaN`, so there is nothing to scale — usually a column that was never computed | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
+| “Could not load the field: …” | A field could not be loaded. Read the rest of the line: if it counts non-finite values it is the case above, otherwise the data could not be fetched | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends`, then {doc}`../b_data_loading/08_troubleshooting_data_loading` |
+| “Cellucid could not read gene X.” / “Cellucid could not read field X.” with **Try again** | The read never finished — a dropped connection, a stopped server, a refused payload. The `Loading …` card closes and this one takes its place; the reason is under its **Details** | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
+| “This dataset has no neighbor graph, so KNN drag cannot select by neighbors; use Proximity drag or Lasso.” | kNN selection needs a neighbor graph (`obsp`), which this dataset does not hold | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 
 :::{note}
 If you ever see a message containing a literal `{symbol}`, `{name}` or similar
@@ -197,7 +213,7 @@ dataset publishes no gene expression fields…”*.
 
 | The message | Meaning | Go to |
 |---|---|---|
-| “Failed to load session”, or a sentence about a session manifest | The bundle did not validate. These messages are written for developers; the useful question is whether the bundle matches this dataset | {doc}`../l_sessions_sharing/10_troubleshooting_sessions` |
+| “Loading failed · <file>: the file is damaged, so it was not opened; the history shown is unchanged.” (or “it does not hold together as a history”) | The session file or saved state did not validate; what is wrong is under **Details**. The useful question is whether it was saved on this dataset | {doc}`../l_sessions_sharing/10_troubleshooting_sessions` |
 | “The dataset is loaded, but its published sample view could not be applied” | The dataset opened; only its saved default view did not | {doc}`../l_sessions_sharing/07_versioning_compatibility_and_dataset_identity` |
 | “Export failed: …” | Figure export could not complete | {doc}`../k_figure_export/07_troubleshooting_figure_export` |
 | “Exact point export requires WebGL2…” / “…requires camera matrices…” | A capability the exact-point renderer needs is missing right now | {doc}`../k_figure_export/03_export_formats_and_renderers` |
@@ -211,29 +227,37 @@ dataset publishes no gene expression fields…”*.
 | The message | Meaning | Go to |
 |---|---|---|
 | “Couldn’t reach the GitHub sign-in server from &lt;origin&gt;…” | Your deployment’s origin is not allowed by the authentication proxy. This one **does** name CORS | {doc}`../j_community_annotation/02_author_guide` |
-| “GitHub session expired or was revoked.” | Sign in again | {doc}`../j_community_annotation/01_annotator_guide` |
+| “Your GitHub sign-in expired or was revoked. Sign in again to Pull or Publish; your unpublished changes stay in this browser.” | GitHub refused the sign-in; it is forgotten here | {doc}`../j_community_annotation/01_annotator_guide` |
 | “Lost access to &lt;repo&gt;. GitHub returned 403” | Permissions changed on the repository | {doc}`../j_community_annotation/02_author_guide` |
 | “Annotation repo not accessible (deleted/renamed or access removed)” | The repository moved or you lost access | {doc}`../j_community_annotation/02_author_guide` |
 | “Repo &lt;repo&gt; is missing …” | The repository does not have the expected annotation layout | {doc}`../j_community_annotation/02_author_guide` |
-| “Sign in required.”, “No annotation repo connected.”, “Missing dataset context.” | A precondition is not met yet | {doc}`../j_community_annotation/03_ui_reference` |
+| “Sign in required.”, “No annotation repo connected.”, “No dataset is open.” | A precondition is not met yet | {doc}`../j_community_annotation/03_ui_reference` |
 | “Connected with a dataset mismatch…” | The repository was set up against a different dataset identity | {doc}`../b_data_loading/06_dataset_identity_why_it_matters` |
 
 ---
 
 ### Notebook / Jupyter
 
+These messages name what opened the viewer, as its server says
+(`/_cellucid/info`, `runtime`): “the notebook” (a Python notebook kernel),
+“the Python session” (a script or session), “the cellucid serve command”,
+“the agent app's cellucid mcp server” (`cellucid mcp --open`), “the R session”
+(`cellucid_view()`, `cellucid_serve()`) or “the agent app's cellucid_mcp()
+server” (R's `cellucid_mcp(open = …)`). Below, *the notebook* stands for
+whichever it is.
+
 | The message | Meaning | Go to |
 |---|---|---|
-| **“Notebook command failed”** — “The notebook &lt;type&gt; command did not run: … The viewer is unchanged; correct the notebook cell and run it again.” | A command sent from Python was rejected by the viewer. Nothing changed, so re-running a corrected cell is safe | {doc}`../b_data_loading/05_jupyter_tutorial` |
-| **“Viewer stopped”** — “The notebook or R session that opened this viewer stopped (its server no longer answers). The last complete view stays as it is.” | The kernel, R session or server went away. What you see is the last good state, not live | {doc}`../b_data_loading/05_jupyter_tutorial` |
-| **“Viewer disconnected”** — “The notebook or R session is running, but this viewer cannot open its channel (…). A proxy between this page and the host must pass WebSockets…” | A browser-tab viewer's channel (one WebSocket, `/_cellucid/ws`) is blocked by a proxy (a notebook widget has no WebSocket) | {doc}`../b_data_loading/05_jupyter_tutorial` |
+| **“Jupyter command failed”** (“Python command failed”, “R command failed”, …) — “The notebook's “&lt;type&gt;” command did not run: … The viewer is unchanged; correct the call in the notebook and run it again.” | A command sent from Python or R was rejected by the viewer. Nothing changed, so re-running a corrected cell is safe | {doc}`../b_data_loading/05_jupyter_tutorial` |
+| **“Viewer stopped”** — “The notebook, which opened this viewer, stopped (its server no longer answers). The last complete view stays as it is. Run the notebook cell that opened it again.” | The kernel, script, `cellucid serve`, the agent app's MCP server or the R session went away; the last sentence says how to open the viewer again. What you see is the last good state, not live | {doc}`../b_data_loading/05_jupyter_tutorial` |
+| **“Viewer disconnected”** — “The notebook is running, but this viewer cannot open its channel (…). Something between this page and the host does not pass WebSockets…” | A browser-tab viewer's channel (one WebSocket, `/_cellucid/ws`) is blocked by a proxy (a notebook widget has no WebSocket) | {doc}`../b_data_loading/05_jupyter_tutorial` |
 | **“Viewer opened elsewhere”** | The same viewer was opened in another page; this one stops following the notebook | {doc}`../b_data_loading/05_jupyter_tutorial` |
-| “Selection was saved locally, but Python notification failed…” | The selection is real in the browser; Python was not told | {doc}`../b_data_loading/05_jupyter_tutorial` |
+| “The selection is kept here, but the notebook was not told of it…” | The selection is real in the browser; Python or R was not told | {doc}`../b_data_loading/05_jupyter_tutorial` |
 
 ---
 
 (starting-up)=
-### “The buttons are greyed out” / “I clicked and nothing happened”
+### “The buttons are grayed out” / “I clicked and nothing happened”
 
 The data-source, renderer and benchmark controls now ship **disabled** and are
 enabled only once the code that responds to them is wired up. While the app is
@@ -247,7 +271,7 @@ readers announce this, and each control is described by that line.
 
 So:
 
-- **Greyed out for a moment on a slow start** — expected. Wait. They open as
+- **Grayed out for a moment on a slow start** — expected. Wait. They open as
   soon as the interface is built, before the sample catalog has answered
   (only a data server or a link the address names is read first); they do
   not wait for the first dataset to load. A file, link or sample you choose
@@ -422,7 +446,9 @@ Use this section when Cellucid is slow, the canvas is blank, or you see WebGL-re
 4) Clear snapshots. Then, if you need a comparison of a large dataset, turn on
    Level of detail first: every view draws every point again —
    {doc}`../n_benchmarking_performance/06_edge_cases_performance` explains it.
-5) If you see “WebGL context lost”: reload, then re-try with reduced load.
+5) If you see **Graphics reset by the browser**: wait, the graphics restore
+   themselves; only if the dialog says they could not, reload and open the
+   session it saved. Then re-try with reduced load.
 
 :::{note}
 **Filtering cells away makes drawing faster, not slower.** Hidden cells are

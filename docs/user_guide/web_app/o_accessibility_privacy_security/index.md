@@ -27,7 +27,7 @@ If you are in a regulated environment (clinical, IRB-controlled, corporate IP), 
 |---|---|---|
 | Use sensitive/clinical data without uploading it | **Self-host or run locally** (this alone switches off usage analytics), then open local files (H5AD, Zarr), avoid Community Annotation, and review figure metadata before sharing | {doc}`02_privacy_model` |
 | Answer “what does this send to third parties?” for a review board | Read the analytics section first — it is the only third-party egress you do not start yourself, and it is hostname-gated; then the AI agents section, if agents will be used | {doc}`02_privacy_model` |
-| Let an AI agent work on sensitive data | Switch on **Agents see names and summaries only** for the dataset, and know it is not anonymisation | {doc}`../g_agents/03_permissions_and_what_agents_see` |
+| Let an AI agent work on sensitive data | Switch on **Agents see names and summaries only** for the dataset, and know it is not anonymization | {doc}`../g_agents/03_permissions_and_what_agents_see` |
 | Share sessions safely with a team | Treat `.cellucid-session` files like sensitive derived artifacts; avoid patient IDs in labels | {doc}`../l_sessions_sharing/08_security_privacy_and_trust` |
 | Make figures readable for colorblind audiences | Keep the categories you rely on within the first 24 of a field; check the export preview’s colorblind simulation | {doc}`01_accessibility` + {doc}`../k_figure_export/04_quality_knobs_and_best_practices` |
 | Work keyboard-only | Navigation, filtering and analysis are all keyboard-operable; only pointer-based *selection* is not | {doc}`01_accessibility` |

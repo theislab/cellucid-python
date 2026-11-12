@@ -69,10 +69,10 @@ moment. (A notebook widget hears the viewer only between cells, so
 
 ## Step 3 — Make a selection in the viewer UI
 
-In the embedded viewer:
-- use any selection tool (lasso is usually easiest), or
-- click cells (depending on your workflow), or
-- use the UI’s selection/highlight features.
+In the embedded viewer, open **Highlighting**, choose **Lasso** under
+**Tool**, hold {kbd}`Alt` and drag around some cells, release, and click
+**Confirm**. The selection is sent to Python when you click **Confirm**
+(every tool works the same way: Alt held on the plot, then **Confirm**).
 
 For a deep dive on selection tools, see the web app guide:
 - {doc}`../../web_app/f_highlighting_selection/02_selection_tools_document_each_tool`
@@ -106,6 +106,13 @@ the object or file as it was shown, in its original order.
 - To take the cells themselves, use `viewer.subset(adata)` or
   `adata[selection.obs_names]`; an object reordered or subset after it was
   shown is refused by `pull` and `subset` rather than written in the wrong rows.
+- Naming cells to the viewer (`viewer.highlight_cells(cells=...)` and every
+  action with a `cells` parameter) is the same: rows and NumPy masks are
+  original positions. From a file in priority order, pass obs names
+  (`adata.obs_names[mask]`) or a boolean `pandas.Series`
+  (`adata.obs["cell_type"] == "Beta"`, its True cells by name), which mean
+  the same cells in any order; `np.flatnonzero(mask)` of that object would
+  name other cells.
 ```
 
 ## Step 5 — Highlight the same cells back in the viewer
@@ -120,7 +127,7 @@ if cells:
 You should see the selection become highlighted (exact visual style depends on the web app UI).
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/highlighting-selected-page.png
-:alt: The Highlighting panel with one page renamed "Left lobe" carrying 826 cells, the summary "826 cells highlighted", and one group row labelled "Lasso (826 cells) (826)".
+:alt: The Highlighting panel with one page renamed "Left lobe" carrying 826 cells, the summary "826 cells highlighted" above CSV, .h5ad and Clear buttons, and one group row labeled "Lasso" with its count 826.
 :width: 532px
 
 Highlighted cells are stored on a named page that can be used by analysis and session workflows.

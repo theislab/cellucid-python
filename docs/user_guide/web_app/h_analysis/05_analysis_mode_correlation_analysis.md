@@ -39,7 +39,7 @@ What it is *not*:
 | --- | --- |
 | Essentials | **X axis**, **Y axis**, then **Pages** |
 | More options → Test | **Method** (Pearson / Spearman) |
-| More options → Display | **Colour by** |
+| More options → Display | **Color by** |
 
 Press **Run** to compute. The line above Run says what is missing (`Choose the X
 and Y variables`, `X and Y are the same variable`, `Select at least one page`).
@@ -55,11 +55,11 @@ Detailed uses (type, then the field or gene).
 
 Correlation is computed **separately for each selected page**.
 
-### Colour by
+### Color by
 
-**Page** (default) colours points by page, with the page colours you set; a
-categorical obs field colours them by category, which can reveal substructure.
-The coefficient is always computed per page, never per colour.
+**Page** (default) colors points by page, with the page colors you set; a
+categorical obs field colors them by category, which can reveal substructure.
+The coefficient is always computed per page, never per color.
 
 ### Defaults
 
@@ -69,7 +69,7 @@ The coefficient is always computed per page, never per colour.
 | X axis | None |
 | Y axis | None |
 | Method | Pearson |
-| Colour by | Page |
+| Color by | Page |
 <!-- /options:correlation -->
 
 ---
@@ -94,6 +94,13 @@ Minimum size:
 
 - **Pearson** measures linear correlation on the raw values.
 - **Spearman** computes Pearson correlation on the ranked values (rank correlation).
+
+A gene is read in the values **Session › Data mapping › Expression values**
+shows it in (as stored by default; normalized, `log1p` or both: see
+{doc}`../b_data_loading/13_data_mapping`). Pearson's `r` changes with them
+(`log1p` is not linear), so the axis titles, the hover and the CSV's `x_label` /
+`y_label` name a gene's values when they are not as stored
+(`Ins1 · log1p(norm.)`); an obs field keeps its bare name.
 
 ### Reported statistics
 
@@ -148,12 +155,12 @@ The reported statistics (`r`, `p-value`, `n`) are computed on the **full paired 
 3) Choose **X axis** and **Y axis**
    - Start with continuous obs fields (QC) to confirm the workflow.
 4) Select one or more pages
-5) Optional: **More options** → Method (Pearson or Spearman), Colour by
+5) Optional: **More options** → Method (Pearson or Spearman), Color by
 6) Press **Run**
 7) Interpret
    - inspect scatter shape,
    - confirm `n` is large enough to trust,
-   - consider whether the relationship is driven by a hidden grouping (Colour by helps).
+   - consider whether the relationship is driven by a hidden grouping (Color by helps).
 
 ---
 
@@ -167,7 +174,7 @@ Many single-cell expression matrices are sparse:
 
 Practical tips:
 - try Spearman if you suspect non-linearity,
-- stratify by cell type (Colour by or separate pages).
+- stratify by cell type (Color by or separate pages).
 
 ### Confounding and mixture effects
 
@@ -236,12 +243,12 @@ Fix:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/analysis/correlation-results.png
-:alt: The Correlation form with Page 1 and Rest of Page 1 selected, X axis S_score and Y axis G2M_score (Continuous obs), More options open on Display with Colour by cell_type, and the Run button.
+:alt: The Correlation form with Page 1 and Rest of Page 1 selected, X axis S_score and Y axis G2M_score (Continuous obs), More options open on Display with Color by cell_type, and the Run button.
 :width: 468px
 
-Correlation on the two cell-cycle scores, both pages selected and points coloured
-by `cell_type`. **Colour by** changes only the colouring; the coefficient is always
-computed per page, never per colour.
+Correlation on the two cell-cycle scores, both pages selected and points colored
+by `cell_type`. **Color by** changes only the coloring; the coefficient is always
+computed per page, never per color.
 ```
 
 ```{figure} ../../../_static/screenshots/analysis/correlation-expanded.png
@@ -251,8 +258,8 @@ computed per page, never per colour.
 Expanded Correlation. **Summary statistics** gives one row per page: `r`, `r²`,
 the p-value in exponential notation, and `n` — the number of **paired finite**
 values that actually entered the calculation. **Statistical analysis** restates
-the same `r` as a direction and a strength band, with the band boundaries printed
-underneath.
+the same `r` as a direction and a strength band (the band boundaries are in the
+(i) beside the correlation method).
 ```
 
 :::{important}

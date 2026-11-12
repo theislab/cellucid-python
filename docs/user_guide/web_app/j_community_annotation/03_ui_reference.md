@@ -124,7 +124,7 @@ If your annotation repo does not appear later, this step is the usual cause.
 :width: 1040px
 
 Step 2 of 4. The status line always states the exact count and page, because an
-organisation can expose thousands of repositories.
+organization can expose thousands of repositories.
 ```
 
 ### 3) Choose repository
@@ -179,7 +179,19 @@ While any sync is running — including a background **Auto pull** — **Pull
 latest** and **Publish** are disabled until it finishes. A Pull or Publish that
 still reaches a running sync does not run and reports `Another GitHub sync is
 still running. Wait for it to finish, then try again.`; one you cancel reports
-`Cancelled.`. Only a completed transaction reports its success text.
+`Canceled.`. A Pull or Publish stopped because the dataset, the repository or
+the GitHub user changed, the repository was disconnected, or annotation moved
+to another tab is not reported as failed: its notification is withdrawn and
+what stopped it says why. A Publish stopped after GitHub had already accepted
+part of it says so instead, naming the files GitHub accepted, and asks you to
+Pull before publishing again. One stopped because the connection was lost is
+reported as failed. Only a completed transaction reports its success text.
+
+When GitHub cannot be reached while Cellucid checks your role on the
+repository (each request already asked again while that could help), the
+status line says so and the connection is kept; the role is checked again with
+the next Pull (yours or an automatic one) and as soon as this computer comes
+back online.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-05-sync.png
 :alt: Step 4 of 4 of the GitHub sync wizard, Sync: the dataset, GitHub account and repository in the header, the line "Pull fetches the latest votes; Publish writes them for everyone.", Pull latest and Publish, an Auto pull checkbox with its interval, and the status line "Pulled latest annotations."
@@ -252,9 +264,10 @@ If you are an author, Publish may also update:
 - `annotations/config.json`
 - `annotations/moderation/merges.json`
 
-Publishing modes:
+Publishing routes (named here; the panel does not show them, its result line
+says which one ran: *Published.*, or *Opened a pull request: …*):
 
-- **Direct push** if GitHub reports you can push.
+- **Direct publish** if GitHub reports you can push.
 - **Fork + Pull Request** if you cannot push but the repo allows forking.
   You make the fork on GitHub (Cellucid never creates one) and install the
   Cellucid GitHub App on your account with access to it (*All repositories*,
@@ -357,7 +370,7 @@ Remember: config changes become shared only after the author clicks **Publish** 
 
 **Annotated columns** with a column already annotatable, so the per-column
 consensus settings are shown. **Threshold** is edited in whole percent; it is
-stored as a signed fraction whose full range is −100 % to +100 %, because
+stored as a signed fraction whose full range is −100% to +100%, because
 confidence is itself signed.
 ```
 
@@ -365,7 +378,7 @@ The defaults, for a column with no explicit settings, are **1** minimum
 annotator and a **0.5** threshold.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-08-votable-badge.png
-:alt: The Categorical obs select holding clusters, prefixed by a ballot-box badge marking it open for voting, and the legend beneath it: each category with its consensus label (Beta cell under Beta) and its up and down vote counts.
+:alt: The Categorical obs select holding clusters, prefixed by a ballot-box badge marking it open for voting, and the legend beneath it: each category with its consensus label (Beta cell under Beta, a dash under the others) and its up and down vote counts.
 :width: 496px
 
 A column that is open for annotation is prefixed with 🗳️ wherever it is
@@ -466,7 +479,7 @@ The status line is exact about which of the three states applies and why:
 |---|---|---|
 | Consensus | `Consensus: "<label>" (<confidence>% • <n> voters)` | at least `minAnnotators` voters, one clear leader, and confidence ≥ threshold |
 | Disputed | `Disputed: "<label(s)>" (<confidence>% • <n> voters)` | enough voters, but the leader is tied or confidence is below threshold |
-| Pending | `Pending (<n> voters)` | fewer than `minAnnotators` voters; no confidence is reported |
+| Pending | `Pending (<n> voters)` | no voter yet, or fewer than `minAnnotators` voters; no confidence is reported |
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-12-disputed.png
 :alt: The voting view for the Beta cluster with a banner reading "Disputed: "Beta (immature), Beta cell" (0% • 4 voters)", two suggestion cards each at net 0 with two upvotes and two downvotes, and the New suggestion form below.
@@ -574,8 +587,8 @@ open for voting, it cannot be renamed or edited, whatever name it shows.
 
 An agent (the chat bar, Claude or ChatGPT through the connector, a local app
 through `cellucid mcp`) and a Python or R notebook can read the community
-annotation of the dataset shown and vote, through the same session as the
-voting dialog. Connecting a repository and signing in to GitHub stay yours.
+annotation of the dataset shown, vote and suggest labels, through the same
+session as the voting dialog. Connecting a repository and signing in to GitHub stay yours.
 
 **Reading** (`annotation_suggestions`, no permission needed): for each
 category of a column, its suggestions (label, ontology term, who suggested it
@@ -587,33 +600,49 @@ pages, each whole (`next` starts the following one). What the agent reads
 goes to its provider, other people's GitHub logins and names included
 ({ref}`privacy-agents`).
 
-**Voting** (`annotation_vote`) publishes that one vote and nothing else:
+**Voting and suggesting** (`annotation_publish`) publishes the votes and new
+labels of one call together, as one commit of your file, and nothing else.
+The agent is asked to put everything of a turn in one call, so a turn of
+eight votes is one commit in the repository's history and one question to
+you:
 
 - you are asked first (Publishing is **Ask** by default), whoever asks: the
-  question names the vote ("vote "Alpha cell" up for alpha"), the repository
-  it goes to (or that it opens a pull request when you cannot write to the
-  repository), and how many of your other changes stay unpublished;
-- only your file as GitHub holds it plus this vote is written: your drafts,
-  your other votes not yet published and, for an author, the repository
-  settings and merges are not published (they wait for your own **Publish**);
-- a vote that is already so (published and here) asks nothing and writes
+  question says how many votes and suggestions it publishes ("It publishes 3
+  votes and 2 suggestions (each with your upvote) to team/labels@main as one
+  commit"), the repository it goes to (or that it goes in a pull request when
+  you cannot write to the repository), and how many of your other changes
+  stay unpublished; each vote and suggestion is under **Details**;
+- only your file as GitHub holds it plus these changes is written: your
+  drafts, your other votes not yet published and, for an author, the
+  repository settings and merges are not published (they wait for your own
+  **Publish**);
+- each new label comes with your upvote, as **New suggestion** adds one; a
+  label already suggested for the category is refused with its id (vote on
+  it instead);
+- every change is checked before you are asked: if one is refused (a label
+  already there, a suggestion that does not exist, the same suggestion voted
+  twice differently, a field not open to voting), nothing of the call is
+  published, nothing is asked, and the refusal names each one;
+- votes that are already so (published and here) ask nothing and write
   nothing;
-- an agent's vote never opens a dialog (your profile's fields are optional;
+- an agent's call never opens a dialog (your profile's fields are optional;
   the file is named by your GitHub login), waits for a Pull under way, and
   pulls first when your file changed on GitHub since the last Pull;
 - a suggestion is named by its id or its label; suggestions with the same
   label are one suggestion (the earliest proposal), so a label names one;
-- the agent is told where the vote went: the repository, a pull request (with
-  its link), or nowhere (it was already so).
+- the agent is told where the changes went: the repository, a pull request
+  (with its link), or nowhere (the votes were already so), with each vote's
+  counts now and each new suggestion's id.
 
-**Undo turn cannot take back a published vote.** The agent's line counts what
-it published ("1 vote published, not undoable"), the turn keeps the vote in
-its record in the history, and Undo turn says the vote stays published.
-Change it back by voting again.
+**Undo turn cannot take back a publication.** The agent's line counts what it
+published ("1 annotation commit published, not undoable"), the turn keeps it
+in its record in the history, and Undo turn says it stays published. Change a
+vote back by voting again.
 
-**Stop while a vote is written**: if GitHub may already have it, Cellucid
-pulls at once and the agent is told what the Pull shows: published, or kept
-in this browser and not published. Your next Publish works either way.
+**Stop while a publication is written**: if GitHub may already have it,
+Cellucid pulls at once and the agent is told what the Pull shows: published,
+or kept in this browser and not published. Your next Publish works either
+way.
 
 ---
 
@@ -650,13 +679,17 @@ This section is organized by “what you’re trying to do”. Always start by c
 - "Cellucid cannot write to your fork …": the app is not installed on your account with access to the fork. Install it (**Install the app**; *All repositories*, or *Only select repositories* with the fork selected), then Publish again.
 - "GitHub is still copying your fork …": Publish again in a minute.
 
-#### “Remote user file changed since your last Pull” on Publish
+#### Your file changed on GitHub since your last Pull
 
 - Cause: your user file on GitHub is newer than the one your last Pull read
-  (common if you published from another device).
-- Fix: Pull latest, confirm your intended state, then Publish again. There is
-  no option to overwrite: Cellucid never replaces a remote file it has not
-  read.
+  (common if you published from another device or tab).
+- What Publish does: it pulls (your file on GitHub and what is here are
+  merged), then publishes once more, by itself; an agent's publication does
+  the same. Cellucid never replaces a remote file it has not read.
+- Only when you are an author with repository settings or merges not yet
+  published does Publish stop with "Remote user file changed since your last
+  Pull", because a Pull would bring the repository's settings over yours:
+  note them, Pull latest, check them, then Publish again.
 
 #### “Your published file … is not a valid annotation file”
 
@@ -665,8 +698,6 @@ This section is organized by “what you’re trying to do”. Always start by c
   Publish will not overwrite it.
 - Fix: fix or remove the file on GitHub (or ask an author to), then Pull and
   Publish again.
-- An agent's vote does this itself: it pulls, then publishes the vote on the
-  file as it is now.
 
 #### Pull succeeds but I don’t see new votes
 

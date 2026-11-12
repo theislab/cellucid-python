@@ -14,7 +14,7 @@ per file never applies and no Git LFS is needed
 ## Step 1: the object
 
 Use your own SingleCellExperiment. Here one is built from SeuratObject's
-80-cell example, with its counts, log-normalised values, cell metadata, PCA
+80-cell example, with its counts, log-normalized values, cell metadata, PCA
 and t-SNE:
 
 ```r
@@ -71,7 +71,7 @@ cellucid_prepare("pbmc_small.zarr", format = "zarr", data = sce)
 `data = sce` takes everything the object holds: `logcounts` as the expression
 matrix (gene-major, so the browser reads one gene at a time), `colData` as the
 cell metadata, each reduced dimension as an embedding (`X_PCA`, `X_TSNE`),
-`colPairs` as the neighbour graph. Any argument you pass replaces one of them
+`colPairs` as the neighbor graph. Any argument you pass replaces one of them
 ({doc}`../c_data_preparation_api/01_cellucid_prepare_overview`).
 
 ## Step 3: check it before publishing
@@ -83,11 +83,11 @@ max(file.size(file.path("pbmc_small.zarr", files)))
 ```
 
 ```text
-[1] 105
-[1] 8937
+[1] 136
+[1] 11076
 ```
 
-105 files, the largest 9 KB. Look at it in the viewer exactly as others will:
+136 files, the largest 11 KB. Look at it in the viewer exactly as others will:
 
 ```r
 viewer <- cellucid_view("pbmc_small.zarr")

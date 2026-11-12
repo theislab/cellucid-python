@@ -22,8 +22,11 @@ behind both the relay client (`relay-client.js`, connection kind
   `agentLabel`), Stop and Undo turn are the connector's;
 - groups a connection's calls into one turn until someone else makes a step
   or `AGENT_TURN_IDLE_MS` passes;
-- answers the tool list for the connection asking (`mcp-tools.js`
-  `mcpToolsOf` with the presence's `permissionFor`);
+- answers the tool list (`mcp-tools.js` `mcpToolsOf`: the same for every
+  connection, whatever the person's settings) and tells the agent those
+  settings after its connection's first tool result and after any result
+  once they changed, as a note appended to the result's text
+  (`agent-calls.js` `withSettingsTold`, words in `settings-told.js`);
 - tells the caller when the person is asked about a call, with the card's
   own sentence (`presence.questionFor`), and when they answered.
 
@@ -50,7 +53,7 @@ The tools, the instructions (`instructionsFor('local')`), the status tool
 Desktop", `cursor-vscode` "Cursor"; else the app's `clientInfo.title` or
 `name`) are generated into `mcp-tools.json` (`mcpToolsDocument`) by
 `scripts/generate-action-catalog.mjs`, in the same run as the action
-catalogue: `tests/fixtures/mcp-tools.json` here, `src/cellucid/mcp_tools.json`
+catalog: `tests/fixtures/mcp-tools.json` here, `src/cellucid/mcp_tools.json`
 and `inst/mcp_tools.json` in the packages, each made from that repository's
 own `action_catalog.json` (its `catalogDigest`). Its `tools` are
 `mcpToolsOf(catalogue)` with the default permissions: exactly the relay's
@@ -68,7 +71,8 @@ connection}`, `agent_cancel {requestId}`, `agent_answer {requestId,
 allowed}`; page to host: `agent_tools` and `agent_result` (binary: the MCP
 tools, or the MCP tool result, as UTF-8 JSON; every call gets exactly one
 result, an error included), `agent_asking {requestId, message, detail}`,
-`agent_answered {requestId, allowed}`, `agent_tools_changed`.
+`agent_answered {requestId, allowed}`. No event says the tool list
+changed: it never does.
 `connection` is `{id, client}` (`local-` and 12 hex characters per MCP
 session; the app's `clientInfo.name`). The page reads them in
 `viewer-host-source.js` (`onAgent`, `sendAgentResult`, …) and `main.js`
@@ -104,12 +108,16 @@ whose events reach no notebook; `CELLUCID_AGENTS=off` publishes nothing):
   (`202`; `409` when no page holds the channel, with the sentence the agent
   reads), `GET …/events?consumer=<connection id>&wait=<s>` returns that
   consumer's events (`agent_tools`, `agent_result`, `agent_asking`,
-  `agent_answered`, `agent_tools_changed`, `agent_failed`, `viewer_stopped`).
+  `agent_answered`, `agent_failed`, `viewer_stopped`).
   Every request carries `Authorization: Bearer <token>`; one with an
   `Origin` header (a browser), from another host, or naming another `Host`
   is refused. A consumer silent for `CONSUMER_IDLE_SECONDS` (its `cellucid
   mcp` was killed) is swept on a clock: its calls are stopped in the page,
-  their cards withdrawn, and its queued events let go.
+  their cards withdrawn, and its queued events let go. Anyone on the
+  computer can connect without the token, so Python's endpoint closes a
+  connection idle for `CONNECTION_IDLE_SECONDS` (120 s; each holds a thread
+  of the viewer's process) and answers a command nested deeper than Python
+  follows `400`; R's httpuv server holds no thread per connection.
 
 `cellucid mcp` drives the viewer it opened itself (`--open`, in-process:
 the viewer's port directly), else the newest published viewer whose page is
@@ -127,9 +135,8 @@ the endpoint, the app-name cases and every sentence an agent reads.
 **The page going.** When the page holding a viewer's channel closes, is
 reloaded or is replaced by a newer one, every agent call and list it was
 running fails at once with the page-gone sentence (whether it was done is
-not known; read the history first), never a wait; a page taking the channel
-again sends `notifications/tools/list_changed`, since its settings may
-differ.
+not known; read the history first), never a wait. A page taking the
+channel again changes nothing in the tool list.
 
 Not published: a page opened at a server's bare `/?anndata=true` (no
 channel) and an IRkernel notebook's viewer (no server between cells).
@@ -141,7 +148,7 @@ speaks the `initialize` handshake and the 2026-07-28 per-request protocol);
 R has no official SDK and implements the stdio subset itself
 (`R/mcp.R`). Both are thin over one core (`cellucid._mcp_core`, R's
 equivalent): `initialize` gives the local instructions and
-`tools.listChanged`; `tools/list` the tools and `cellucid_status`;
+`tools.listChanged: false`; `tools/list` the tools and `cellucid_status`;
 `tools/call` sends `agent_call` and returns the page's result as it is.
 The local instructions tell the agent to ask the person in plain words with
 numbered choices (the chat bar's `ask_person` tool is not listed).
@@ -153,8 +160,18 @@ elicitation only is not asked): Accept sends `agent_answer true`, Decline
 the app's question is withdrawn (`notifications/cancelled` for the
 elicitation request), and an answer the app sends later changes nothing.
 Progress counts 1, 2, … within a call. `notifications/cancelled` sends `agent_cancel`
-(the page stops the call: a change rolled back, a question withdrawn). The
-page's `agent_tools_changed` becomes `notifications/tools/list_changed`.
+(the page stops the call: a change rolled back, but a playing camera path
+stopped where it is; a question withdrawn).
+
+**The tool list never changes.** It is the same whatever the person's
+settings, and neither server sends `notifications/tools/list_changed`: for
+Claude 5.5 models a changed list rewrites the app's cached prompt (about
+55k tokens) and drops the conversation's earlier reasoning. Measured on
+Opus 5.5, the connector's next turn after a permission change cost $0.41
+against about $0.10 cached, about 4×. The person's settings reach the agent
+after its tool results instead ("[Cellucid: the person's settings for you
+now. …]"), and the local instructions say so.
+
 stdout carries only MCP messages: the `--open` viewer starts once the
 transport holds stdout (Python's SDK sends what else is printed there to
 stderr; R starts it after the handshake, its prints sunk to stderr).

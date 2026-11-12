@@ -104,9 +104,9 @@ curl -s http://127.0.0.1:8765/_cellucid/protocol | python -m json.tool
                "debug_snapshot", "freeze", "load_session", "ping", "requestSessionBundle"],
   "binaryCommands": ["action", "load_session"],
   "events": ["action_result", "agent_answered", "agent_asking", "agent_result", "agent_tools",
-             "agent_tools_changed", "click", "color_by", "command_error", "data_mapping",
-             "debug_snapshot", "history_changed", "hover", "pong", "ready", "result",
-             "result_removed", "results", "selection", "session_bundle", "session_loaded"]
+             "click", "color_by", "command_error", "data_mapping", "debug_snapshot",
+             "history_changed", "hover", "pong", "ready", "result", "result_removed",
+             "results", "selection", "session_bundle", "session_loaded"]
 }
 ```
 
@@ -156,7 +156,13 @@ and the viewer's events back
 - events are JSON text frames (at most 1 MiB) and binary frames for
   `selection` (uint32 cell indices, read in place), `result` (a result's
   cells and values), `action_result` (an action's outcome as UTF-8 JSON) and
-  `session_bundle` (streamed to a temporary file);
+  `session_bundle` (streamed to a temporary file). A binary body is read as
+  its bytes arrive, never into a buffer the size a frame or header names; a
+  selection longer than the dataset's cells, a cell (a selection's, a
+  hover's, a click's) beyond them, or a result for a dataset of another size
+  is refused (`1009`, `1008`), the dataset's cell count being the one this
+  process serves, else the one the viewer's `ready` reported, as cellucid-r
+  checks them;
 - the server pings every 20 s; `viewer.stop()` or the server stopping closes
   the channel with `1001`, a newer channel of the same viewer replaces it with
   `4409`, and a frame that breaks the rules closes it with `1008` (`1002`,
@@ -204,8 +210,8 @@ fourth:
    and the names of the stored elements (a MuData's shared cells, its
    modalities, and the default modality's genes); no array is read. Other
    formats are read only by the browser.
-3. `[3/4] Checking launch choices` — every choice named (`embedding_keys`,
-   `knn_key`, `expression_source`, `gene_id_column`, `latent_key`,
+3. `[3/4] Checking launch choices` — every choice named (`embedding_defaults`,
+   `knn_key`, `expression_source`, `var_gene_id_column`, `latent_key`,
    `vector_field_default`, `obs_keys`, `normalize_embeddings`,
    `centroid_min_points`, `modality`) must have its exact form, and, for an
    AnnData or MuData, exist in the store with a usable shape (`modality` only
@@ -264,11 +270,20 @@ with `format` the registry's format id. `n_cells` and `n_genes` are `null` for
 a format Python does not read (an R object, a Loom, 10x or MatrixMarket
 dataset): the browser learns them when it opens the data. `/_cellucid/info`
 carries the same `version`, `type`, `format`, `n_cells` and `n_genes`, plus
-`host` and `port`, and `runtime`: `"python"` for `cellucid serve` and a viewer
-outside a notebook, `"jupyter"` for a viewer in a notebook kernel (the R
-package's viewer says `"r"`). The viewer names its host by it -- "Python",
-"Jupyter" or "R" in the Dataset box -- with the names the shared protocol
-file declares (`viewer-protocol.json`, `runtimes`).
+`host` and `port`, and `runtime`: what opened the viewer -- `"jupyter"` (a
+notebook kernel: `show_anndata()`, `cellucid.Widget`, an `AnnDataViewer` or
+`serve_anndata()` there), `"python"` (a script or session outside a notebook),
+`"cellucid-serve"` (`cellucid serve`), `"cellucid-mcp"` (`cellucid mcp
+--open`); the R package's viewer says `"r"` (`cellucid_view()`,
+`cellucid_serve()`) or `"r-mcp"` (`cellucid_mcp(open = …)`). The shared
+protocol file declares them with each one's label and language
+(`viewer-protocol.json`, `runtimes`); the web app's one table of them
+(`VIEWER_HOST_RUNTIMES`, `assets/js/data/viewer-protocol.js`) gives what the
+person reads: the Dataset box's label ("Jupyter", "cellucid serve", "R"),
+the words every viewer sentence names the host by ("the notebook", "the
+cellucid serve command", "the agent app's cellucid mcp server"; "the program
+serving this viewer" before the host said), how to open the viewer again, and
+the language its history steps are labeled with (`python` or `r`).
 
 ### The store: `/_cellucid/anndata/<dataset_id>…`
 
@@ -330,9 +345,14 @@ The server establishes the configured exact source generation:
 
 - at every `start()`, before it binds, the Python server reads the inventory
   `cellucid-web-assets.json` from the web source (`https://www.cellucid.com`
-  by default) and downloads every object it declares,
-- byte-verifies them and publishes the complete generation atomically in the
-  web cache directory,
+  by default); when the cache holds that very inventory and every file
+  verifies, it is served as it is; when the source cannot be read, a cache
+  that verifies is served offline (`web_cache._serve_cached_offline`, the
+  shared `WEB_APP_*` messages, word for word as `cellucid-r/R/web-cache.R`),
+- otherwise it stages a new generation (the files the cache holds with the
+  declared bytes copied, every other one downloaded six at once,
+  `web_cache._CONCURRENT_DOWNLOADS`), byte-verifies it and publishes it
+  atomically in the web cache directory,
 - and then serves `/index.html` and `/assets/...` from that verified
   generation, from the same origin as the dataset routes (an object the
   inventory does not declare is a `404`).

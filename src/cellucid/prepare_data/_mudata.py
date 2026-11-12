@@ -8,7 +8,7 @@ write, laid out for the web app's range reads:
 - the root is the MuData group (``encoding-type`` ``MuData``, ``axis`` 0:
   the modalities share cells): the cells' ``obs``, ``obsm`` (shared
   embeddings, vector fields and mudata's per-modality boolean masks),
-  ``obsp`` (the shared neighbour graph), ``uns`` (``title`` and
+  ``obsp`` (the shared neighbor graph), ``uns`` (``title`` and
   ``uns['cellucid']``), the global ``var`` (every modality's feature names),
   ``obsmap`` and ``varmap`` (where each modality's cells and features sit in
   the global ones, 1-based, 0 for absent), and ``mod`` (``mod-order``);
@@ -25,7 +25,7 @@ the MuData itself.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import numpy as np
@@ -82,6 +82,10 @@ class Modality:
     #: The modality's X, checked when called (:func:`._inputs.resolve_expression`)
     #: and laid out as it is written (:meth:`stored_matrix`), None without X.
     matrix: Callable[[], Any] | None
+    #: Whether the matrix written is ``raw.X`` (the viewer's default rule,
+    #: :func:`._data.default_expression_of`), whose genes are ``raw.var``'s, not
+    #: the modality's ``var`` that mudata's root ``var`` and ``varmap`` place.
+    genes_from_raw: bool = False
     #: Each row's original row in the modality, for a MuData in a verified
     #: stored order (its own ``obs['cellucid_original_position']``); None:
     #: each row its own.
@@ -93,6 +97,9 @@ class Modality:
     #: In priority order, the modality's rows of cells below each global
     #: prefix level (``_priority.CellPriority.modality``); None as given.
     prefix_levels: np.ndarray | None = None
+    #: Scanpy's colors of its own obs columns, its ``uns['<column>_colors']``
+    #: (``_inputs.written_obs_colors``).
+    colors: Mapping[str, np.ndarray] = field(default_factory=dict)
 
     def stored_matrix(self) -> Any:
         """The modality's X as it is written: gene-major in its written row
@@ -178,10 +185,10 @@ def check_mudata(mdata: Any, selected: list[str] | None = None) -> list[str]:
             what=f"The cell names of modality {name!r}",
             fix=f"mdata.mod[{name!r}].obs_names_make_unique(); mdata.update()",
         )
-        if modality.X is None:
+        if modality.X is None and modality.raw is None and not len(modality.layers):
             raise ValueError(
-                f"Modality {name!r} has no X. Give it the matrix the viewer reads, for example "
-                f"mdata.mod[{name!r}].X = mdata.mod[{name!r}].layers['counts']."
+                f"Modality {name!r} has no expression matrix (no X, raw or layer). Give it the matrix the "
+                f"viewer reads, for example mdata.mod[{name!r}].X = counts."
             )
     return names
 
@@ -207,8 +214,17 @@ def resolve_modality(mdata: Any, name: str, *, stored: bool = False) -> Modality
     ``obs['cellucid_original_position']`` is each row's original row in it
     (``Modality.given``), composed with the written order.
     """
+    from ._data import default_expression_of
+
     modality = mdata.mod[name]
     update = "rebuild them with mdata.update()"
+    # The matrix the viewer opens this modality with, as for an AnnData:
+    # raw when it holds more genes than X or X is scaled, else X; without X,
+    # raw or a layer.
+    where = f"mdata.mod[{name!r}]"
+    expression, chosen, genes, note = default_expression_of(modality, where=where)
+    if note is not None:
+        console_print(note)
     try:
         frame, note = storable_columns(modality.obs, f"mdata.mod[{name!r}].obs")
         if note is not None:
@@ -218,10 +234,11 @@ def resolve_modality(mdata: Any, name: str, *, stored: bool = False) -> Modality
         if stored and ORIGINAL_POSITION_COLUMN in obs:
             given = _require_positions(modality.obs[ORIGINAL_POSITION_COLUMN].to_numpy(), modality.n_obs)
         obs = without_positions(obs, f"mdata.mod[{name!r}].obs", verified=given is not None)
-        frame, note = storable_columns(modality.var, f"mdata.mod[{name!r}].var")
+        genes_label = f"{where}.raw.var" if expression == "raw" else f"{where}.var"
+        frame, note = storable_columns(genes, genes_label)
         if note is not None:
             console_print(note)
-        _, var_index, var = resolve_genes(modality.n_vars, frame, None, None)
+        _, var_index, var = resolve_genes(len(genes), frame, None, None)
         obsp = {}
         graph = default_graph(modality.obsp.keys(), modality=name)
         if graph is not None:
@@ -235,7 +252,9 @@ def resolve_modality(mdata: Any, name: str, *, stored: bool = False) -> Modality
         what=f"mdata.obsmap[{name!r}]",
         fix=update,
     )
-    varmap = _placement(
+    # raw's genes are not the ones mudata's varmap places: the root var axis
+    # is made again from the genes written (_prepare._written_var_axis).
+    varmap = np.zeros(0, dtype=np.uint32) if expression == "raw" else _placement(
         mdata.varmap[name],
         total=mdata.n_vars,
         present=modality.n_vars,
@@ -245,7 +264,7 @@ def resolve_modality(mdata: Any, name: str, *, stored: bool = False) -> Modality
 
     def matrix() -> Any:
         try:
-            return resolve_expression(modality.X, modality.n_obs)
+            return resolve_expression(chosen, modality.n_obs)
         except (TypeError, ValueError) as error:
             raise _modality_error(name, error) from error
 
@@ -260,6 +279,7 @@ def resolve_modality(mdata: Any, name: str, *, stored: bool = False) -> Modality
         obsmap=obsmap,
         varmap=varmap,
         matrix=matrix,
+        genes_from_raw=expression == "raw",
         given=given,
     )
 
@@ -318,7 +338,7 @@ class MuDataLayout:
                     var=modality.var,
                     obsm=modality.obsm,
                     obsp=modality.obsp,
-                    uns={},
+                    uns=dict(modality.colors),
                 )
             )
             del x

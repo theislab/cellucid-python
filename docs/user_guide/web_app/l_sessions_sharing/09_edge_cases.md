@@ -50,8 +50,14 @@ therefore stay active after the view has changed; that is not partial
 success. **Session fully restored.** appears only once everything is read and
 checked, and a new step you take meanwhile waits until then.
 
-If a late part is invalid, the camera, fields, filters, highlights, windows
-and playback go back to what was shown before, and the trackers you had stay.
+If the file's structure is invalid (a value a step names is missing, a
+conversation of a tracker it does not hold), the camera, fields, filters,
+highlights, windows and playback go back to what was shown before, and the
+trackers you had stay. A part that only cannot be put back (a value this
+version refuses, one saved by an earlier version of Cellucid) does not undo
+the rest: it is left as it was shown and named in **Session restored but for
+N parts**, and the history records it as a step of its own
+({doc}`../m_state_history/03_saved_states_and_autosave`).
 If you press **Cancel** or start another load, the same happens, and the older
 progress is dismissed without success or a red failure.
 
@@ -150,8 +156,11 @@ file's steps on the changed dataset (**Load… › Replay a session file here…
 This release reads session format 4 only. A file saved by an earlier Cellucid
 (format 3 or older, which held one saved state rather than the history) or by
 a newer one is refused before anything is read, naming its format. A format-4
-file holding a part of the state this version does not have is refused naming
-that part. Open such a file in the version of Cellucid that saved it.
+file from another version is restored part by part: a part of the state this
+version does not have is left out of every step, and a history (tracker) whose
+records this version cannot read is left out, each named in the notice that
+ends the load (**Session restored but for …**); everything else is restored.
+Open the file in the version of Cellucid that saved it to see those parts.
 
 ## Catalog starting views and manual sessions
 

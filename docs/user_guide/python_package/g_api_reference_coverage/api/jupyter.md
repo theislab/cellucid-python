@@ -206,7 +206,7 @@ Architecture: {doc}`../../e_jupyter_hooks/05_architecture_viewer_channel`.
 ### Duplicate gene identifiers
 - The viewer makes repeated gene names unique (`MATR3`, `MATR3-1`), so every
   gene stays reachable; name genes by another `var` column with
-  `gene_id_column` when the index holds identifiers you do not search by.
+  `var_gene_id_column` when the index holds identifiers you do not search by.
 
 ---
 
@@ -275,7 +275,9 @@ How to confirm:
 - In a new cell, check `viewer.state.ready`.
 
 Fix:
-- Ensure the viewer is loaded, then select cells (lasso/shift-click/etc.).
+- Ensure the viewer is loaded, then select cells: any tool of **Highlighting**
+  with {kbd}`Alt` held on the plot, then **Confirm** (the selection is sent on
+  **Confirm**).
 
 ---
 

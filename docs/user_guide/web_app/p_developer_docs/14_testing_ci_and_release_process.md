@@ -67,7 +67,7 @@ What the contract suite once got wrong only on some CI cells (fixed
 
 - **A process started in a group of its own** (`detached`, so a hung test
   file can be stopped with everything it started) no longer hears the
-  terminal's Ctrl-C or a cancelled job's SIGTERM: whoever started it forwards
+  terminal's Ctrl-C or a canceled job's SIGTERM: whoever started it forwards
   them (`scripts/run-web-tests.mjs` stops every file it started, 2026-11-07).
 - **Starting a process is measured, never assumed**: on a runner five times
   slower than its peers, starting Node and the network guard took longer than
@@ -243,7 +243,7 @@ runs cannot overwrite each other's evidence.
 ### Sibling repositories and environment variables
 
 Several contract tests and specs read the other repositories of the workspace:
-a shared fixture, a mirrored catalogue, the documentation tree, a starting
+a shared fixture, a mirrored catalog, the documentation tree, a starting
 view. Each finds its sibling beside this checkout
 (`../cellucid-python`, `../cellucid-r`, `../cellucid-datasets`) unless an
 environment variable names another place (a worktree, a CI checkout
@@ -251,8 +251,8 @@ elsewhere):
 
 | Variable | Default | Read by | When the sibling is absent |
 |---|---|---|---|
-| `CELLUCID_PYTHON_ROOT` | `../cellucid-python` | `scripts/generate-history-golden.mjs` and `tests/history-golden-fixture.test.mjs` (the shared golden history, `tests/fixtures/history_golden/`), `tests/notebook-widget-requests-contract.test.mjs` (the Python widget copy), `scripts/generate-action-catalog.mjs` and `tests/action-catalog-document-contract.test.mjs` (`src/cellucid/action_catalog.json`), the Python viewer specs (`viewer-channel`, `viewer-round-trip`, `viewer-host-selection-delivery`, `notebook-widget-jupyterlab`: the source they run) | the fixture tests skip; the catalogue copy is named and skipped (`t.diagnostic`) |
-| `CELLUCID_R_ROOT` | `../cellucid-r` | `scripts/generate-history-golden.mjs` and `tests/history-golden-fixture.test.mjs` (the shared golden history, `tests/testthat/fixtures/history_golden/`), `tests/notebook-widget-requests-contract.test.mjs` (the R widget copy), `scripts/generate-action-catalog.mjs` and `tests/action-catalog-document-contract.test.mjs` (`inst/action_catalog.json`), `tests/browser/notebook-widget-jupyterlab.spec.mjs` (the R package source), `scripts/efficiency-floor/served.R` | the golden-history copy test skips; the catalogue copy is named and skipped |
+| `CELLUCID_PYTHON_ROOT` | `../cellucid-python` | `scripts/generate-history-golden.mjs` and `tests/history-golden-fixture.test.mjs` (the shared golden history, `tests/fixtures/history_golden/`), `tests/notebook-widget-requests-contract.test.mjs` (the Python widget copy), `scripts/generate-action-catalog.mjs` and `tests/action-catalog-document-contract.test.mjs` (`src/cellucid/action_catalog.json`), the Python viewer specs (`viewer-channel`, `viewer-round-trip`, `viewer-host-selection-delivery`, `notebook-widget-jupyterlab`: the source they run) | the fixture tests skip; the catalog copy is named and skipped (`t.diagnostic`) |
+| `CELLUCID_R_ROOT` | `../cellucid-r` | `scripts/generate-history-golden.mjs` and `tests/history-golden-fixture.test.mjs` (the shared golden history, `tests/testthat/fixtures/history_golden/`), `tests/notebook-widget-requests-contract.test.mjs` (the R widget copy), `scripts/generate-action-catalog.mjs` and `tests/action-catalog-document-contract.test.mjs` (`inst/action_catalog.json`), `tests/browser/notebook-widget-jupyterlab.spec.mjs` (the R package source), `scripts/efficiency-floor/served.R` | the golden-history copy test skips; the catalog copy is named and skipped |
 | `CELLUCID_DATASETS_ROOT` | `../cellucid-datasets` | `tests/session-preset-control-inventory-contract.test.mjs`: the starting views the sample catalog advertises (`anndata/datasets.json`), read the way the viewer reads them, held to the control inventory | skipped when the sibling is not checked out; a directory named by the variable that is not a `cellucid-datasets` checkout fails |
 | `CELLUCID_PYTHON_DOCS` | `../cellucid-python/docs` | `tests/info-tips-contract.test.mjs` (every info tip's link resolves to a heading of these docs), `tests/citation-contract.test.mjs`, `tests/analysis-options-schema-contract.test.mjs`, `tests/action-reference-contract.test.mjs` and `scripts/generate-action-reference.mjs` (the action reference page) | the documentation checks skip |
 | `CELLUCID_PYTHON` | none | the Python viewer specs: an interpreter with cellucid's dependencies (JupyterLab and anywidget too for `notebook-widget-jupyterlab`); the package itself comes from `CELLUCID_PYTHON_ROOT`, never an installed copy | the spec skips |
@@ -261,7 +261,7 @@ elsewhere):
 
 In CI the Node job sets none of these: it checks out, beside this one, only the
 files of each sibling its contracts read (`.github/workflows/test.yml`, sparse:
-the two widget copies; both packages' copies of the action catalogue, the MCP
+the two widget copies; both packages' copies of the action catalog, the MCP
 tools and the history model; both golden history folders; this site's Markdown
 pages; and the sample catalog `anndata/datasets.json` with its starting views).
 `tests/ci-sibling-checkouts-contract.test.mjs` holds those lists to what the
@@ -288,7 +288,7 @@ retry would hide exactly these failures.
   could do it (the opening done, the read settled, a page timer of the
   product's delay armed after the product's own, `outlastPageTimers` in
   `ui-keyboard-lifecycle.spec.mjs`), then asserts. A held request is held on
-  a deferred the test releases (`holdDatasetOpening` and `releaseAndDrain` in
+  a deferred the test releases (`holdOpening` or `holdRequests`, and `releaseAndDrain`, in
   `tests/browser/helpers/dataset-loading.mjs`), not for a set time.
 - **No fixed sleeps.** `tests/browser-spec-fixed-waits-contract.test.mjs`
   (`npm test`) finds every `page.waitForTimeout(…)` and every promise a timer
@@ -328,7 +328,7 @@ retry would hide exactly these failures.
   (below). Its pixel comparison of two such objects is bounded, not skipped: no
   more than one lit pixel in a thousand may differ (`pixelParityVerdict`,
   `lod-rank-order-resize`, `segmented-point-stores`), which still fails on what
-  moves whole points (a wrong order, colour or camera, cells missing) and
+  moves whole points (a wrong order, color or camera, cells missing) and
   cannot show a difference of fewer pixels that only that renderer would
   draw. The figure export's point pass drawn in a worker and on the page is
   compared by its two GL contexts only, and `segmented-point-stores` draws
@@ -430,7 +430,8 @@ retry would hide exactly these failures.
   the stylesheet, and one it imports, for 2.5 s in every engine;
   `tests/startup-code-graph-contract.test.mjs` holds the gate's place in the
   page. `dismissWelcome` waits for the state the product keeps
-  (`#welcome-modal:not(.hidden)`).
+  (`#welcome-modal[open]`: the welcome is a `<dialog>`, never displayed
+  until opened, styled or not).
 - **Offline only through `goOffline`.** A page still loading something of its
   own when the connection goes reports that failure too: the analysis tools it
   imports as it starts (hundreds of files, still arriving on a hosted runner:
@@ -447,7 +448,7 @@ retry would hide exactly these failures.
   dataset opens and moves everything under it (the foot of the panel by 718 px
   in six steps): a release then lands on something else, the browser sends
   the `click` to their common ancestor, and the control pressed hears
-  nothing, with no error (`ui-visual-consistency.spec.mjs`, the licence link,
+  nothing, with no error (`ui-visual-consistency.spec.mjs`, the license link,
   Linux WebKit, run 42180485733). `tests/browser/helpers/split-clicks.mjs`
   watches every context of every test for a trusted mouse press and release
   at one point whose pressed element is no longer under it, and fails the
@@ -666,7 +667,7 @@ contracts workflow (`cellucid/.github/workflows/test.yml`), run 41213981681
   | What earlier visits and the page's own downloads measured of the host (`data/host-link-memory.js`) | The prices above until the opening measures more | Not weighed while `link` is held (`plannedHostLink`) | held |
   | The same link as requests are shaped by it (merge gaps, request size, the concurrency search, the protocol guess) | How many requests carry a read, and how long each is | Measured | the bytes read are the same: no spec asserts a count of requests, and a Node test of requests gives its byte reader a clock |
   | Response times (`ResponseClock`) | When a stalled request is given up and asked again | Measured | it must follow the real link: its patience grows with what the runner measures |
-  | A host's pace (`formats/io/hosts.js`) | The spacing of requests to a host that refused some | Measured | learnt only from refusals (429, 403), which a fixture gives only where that is its subject |
+  | A host's pace (`formats/io/hosts.js`) | The spacing of requests to a host that refused some | Measured | learned only from refusals (429, 403), which a fixture gives only where that is its subject |
   | How fast chunks decode (`formats/io/decode-pool.js`) | The gene sample, a progressive first view | Held: `decodeBytesPerMs` | held |
   | Which decoder is fastest (`formats/io/decoder-choice.js`) | The decoder of a codec family | Measured | every decoder gives the same bytes |
   | How long making every cell's order took | File order or a `blocks` order for every cell | Held: `orderMadeMs` | held |
@@ -679,7 +680,7 @@ contracts workflow (`cellucid/.github/workflows/test.yml`), run 41213981681
   | The GPU's time for a frame (`rendering/full-detail-frame-cost.js`) | Level of detail and culling by itself | Held: `gpu` (a simulated timer) | held |
   | What frames held the main thread, how late the page's frames ran behind the GPU, and the display interval (`rendering/ambient-frame-pacing.js`) | Which ambient frames (pulse, smoke, velocity particles, backdrop motion) are held back | Measured | specs wait for what was drawn (an overlay draw, the page at rest), never for a frame count |
   | The GPU's time for a level of a backdrop's sky (`rendering/backdrops/backdrop-look-renderer.js`) | How far the sky is refined (its faces' resolution) | Measured | not verified for every spec: the look shows from its first level on any GPU, and a slow one stops refining sooner (a coarser sky), so a spec may assert a look only against the same page |
-  | What a neighbour row cost from the file, and a pass over the held edges (`app/main.js` `knnRowReader`) | Which of the two gives a cell's neighbours | Measured | both give the same rows |
+  | What a neighbor row cost from the file, and a pass over the held edges (`app/main.js` `knnRowReader`) | Which of the two gives a cell's neighbors | Measured | both give the same rows |
   | The cores | Pool sizes | Held: `hardwareConcurrency` (page `navigator`, the machine's `cores` in workers) | held |
   | The memory the browser reports | Budgets, the cells an auto-fit opens | Held where reported (`deviceMemory`, Chromium); Firefox and WebKit report none and take 8 GiB | determined |
   | An allocation the engine refused; a tab that crashed while opening | The memory allowance halved | Measured | only where the runner really cannot allocate, which the page must then follow |
@@ -700,7 +701,7 @@ contracts workflow (`cellucid/.github/workflows/test.yml`), run 41213981681
   (`document.timeline.currentTime`), not per pointer move: a slow host draws
   several frames per move. `full-detail-frame-cost.spec.mjs` asserts each
   verdict exactly, number for number: before the timer, fences that
-  signalled at a simulated time still let the runner decide (a frame
+  signaled at a simulated time still let the runner decide (a frame
   measured 150 ms faster was called no faster on Linux Chromium; 40,000
   cells under a flat 60 ms measured 124 ms against 96 ms with level of
   detail and culling, and were kept, run 41255961977).
@@ -724,7 +725,7 @@ contracts workflow (`cellucid/.github/workflows/test.yml`), run 41213981681
   (40 px). No control may move because a line the page changes by itself
   changes length: the count holds one line of its own (cut, its title says
   it whole), the selection bar's status lines hold one line, and the force
-  row stays, greyed out while level of detail is off;
+  row stays, grayed out while level of detail is off;
   `analysis-cancel.spec.mjs` asserts that Run and the count's header stay
   put while the page turns level of detail on and off (it failed before,
   Run moving 40 px). A sidebar scan that records every control's place each
@@ -892,7 +893,7 @@ contracts workflow (`cellucid/.github/workflows/test.yml`), run 41213981681
   `cellucid-r` and `cellucid-datasets` at their default branch when it starts.
   A cross-repository change whose sibling push lands later fails until the next
   run; `notebook-widget-requests-contract.test.mjs` names each copy's commit
-  and runs its behaviour contracts on both copies, so the failing copy is the
+  and runs its behavior contracts on both copies, so the failing copy is the
   one behind. Push the siblings first.
 - **No WebKit on Windows.** The nightly and dispatch matrix runs every engine
   on every operating system except WebKit on Windows (removed 2026-10-31).
@@ -1035,7 +1036,7 @@ WebKit. Its retained checks prove:
   Float32 inputs;
 - zero product `readPixels` calls;
 - a maximum 262,144-cell staging upload (one position buffer and one RGBA8
-  colour buffer) and bounded draw submissions;
+  color buffer) and bounded draw submissions;
 - exact GL-state restoration, including samplers and separate blend equations;
 - complete resource cleanup after an injected mid-publication failure;
 - atomic renderer publication, prior-volume rollback, and no owned texture in

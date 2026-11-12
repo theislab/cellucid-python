@@ -1,6 +1,6 @@
 # Core Interactions (Viewer Basics)
 
-These pages explain how to *drive the viewer* confidently: navigation, camera, render modes, multiview, and switching embeddings.
+These pages explain how to *drive the viewer* confidently: navigation, camera, render modes, multiview, switching embeddings, and camera paths.
 
 **Audience:** everyone (novices get click-by-click; power users get exact controls + edge cases)  
 **Time:** 15–30 minutes for full coverage
@@ -13,12 +13,13 @@ These pages explain how to *drive the viewer* confidently: navigation, camera, r
 4) {doc}`03_render_modes_points_vs_volumetric_smoke`
 5) {doc}`02_camera_controls_advanced` (when you want to tune)
 6) {doc}`06_troubleshooting_core_interactions` (when something feels “stuck”)
-7) {doc}`07_screenshots` (every control on this page, photographed)
+7) {doc}`08_camera_path` (keyframes played as a film)
+8) {doc}`07_screenshots` (every control on this page, photographed)
 
 ## Where these controls live
 
-Everything in this section is in three sidebar accordions: **Visualization**,
-**Navigation** and **Compare views**. **Navigation** is the one you will use
+Everything in this section is in four sidebar accordions: **Visualization**,
+**Navigation**, **Compare views** and **Camera path**. **Navigation** is the one you will use
 most; it edits the selected view, and it changes shape with the mode you pick:
 
 ```{figure} ../../../_static/screenshots/web_app/navigation-controls-orbit.png
@@ -65,6 +66,13 @@ Keep view, grid compare, the view rows, linked cameras, and per‑view state.
 :link-type: doc
 
 Which embedding each view shows, keys 1/2/3, what changes, and what doesn’t.
+:::
+
+:::{grid-item-card} {octicon}`video;1.5em;sd-mr-1` Camera Path
+:link: 08_camera_path
+:link-type: doc
+
+Save positions as keyframes and play them as one smooth film: holds, timing, easing, loop, and paths an agent directs.
 :::
 
 :::{grid-item-card} {octicon}`bug;1.5em;sd-mr-1` Troubleshooting

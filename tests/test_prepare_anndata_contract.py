@@ -185,7 +185,11 @@ def test_anndata_reads_back_every_value_exactly(
     np.testing.assert_array_equal(graph.toarray(), given["connectivities"].toarray().astype(np.float32))
 
     assert adata.uns["title"] == "Toy blood"
-    assert adata.uns["cellucid"] == {"schema": 1, "id": "toy-v1", "name": "Toy blood"}
+    # The toy X holds counts: each cell's total over the stored genes (§ totalCounts).
+    assert adata.uns["cellucid"] == {
+        "schema": 1, "id": "toy-v1", "name": "Toy blood",
+        "totalCounts": {"field": "total_counts", "over": "stored genes"},
+    }
 
 
 def test_a_dense_expression_matrix_stays_dense_and_gene_major(tmp_path: Path) -> None:
@@ -717,6 +721,40 @@ def test_a_zipped_store_depends_on_its_entries_alone(tmp_path: Path, zarr_format
     assert first.read_bytes() == second.read_bytes()
 
 
+@pytest.mark.parametrize("zarr_format", [2, 3])
+def test_a_zarr_folder_stores_every_chunk_of_every_array(tmp_path: Path, zarr_format: int) -> None:
+    """A chunk holding only the fill value is stored too (as cellucid-r and the
+    served store write it): zarr-python leaves it out by default, and a web
+    host answers a chunk left out with 404, which the browser reports as an
+    error -- the priority seed of 0 on every opening, an all-zero column
+    whenever it is read. Leaving it out saves no request: the reader asks
+    for it either way."""
+    obs = _inputs()["obs"].assign(all_zero=np.zeros(N_CELLS))
+    path = _write(tmp_path, "data.zarr", "zarr", zarr_format, obs=obs, obs_keys=["cell_type", "all_zero"])
+    root = zarr.open_group(path, mode="r")
+    missing = []
+
+    def visit(group: Any, prefix: str) -> None:
+        for name, array in group.arrays():
+            key = f"{prefix}{name}"
+            grid = [-(-extent // size) for extent, size in zip(array.shape, array.chunks, strict=True)]
+            if 0 in grid:
+                continue
+            for coords in np.ndindex(*grid) if grid else [()]:
+                if zarr_format == 2:
+                    chunk = path / key / (".".join(map(str, coords)) if coords else "0")
+                else:
+                    chunk = path.joinpath(key, "c", *map(str, coords))
+                if not chunk.is_file():
+                    missing.append(chunk.relative_to(path).as_posix())
+        for name, child in group.groups():
+            visit(child, f"{prefix}{name}/")
+
+    visit(root, "")
+    assert missing == []
+    assert (path / "uns/cellucid/priority/seed").is_dir()
+
+
 def test_a_zarr_v3_chunk_carries_no_time(tmp_path: Path) -> None:
     """gzip's header has a time field; numcodecs stamps the time of writing
     in it, which would make every run's chunks differ. Every gzip chunk,
@@ -810,6 +848,7 @@ def test_uns_cellucid_holds_exactly_what_was_given(tmp_path: Path) -> None:
         "description": "",
         "citation": {"text": "Doe et al. 2026", "url": "https://doi.org/10.0000/x"},
         "source": {"name": "CELLxGENE"},
+        "totalCounts": {"field": "total_counts", "over": "stored genes"},
     }
     assert defaults["embedding2d"] == "X_umap"
     assert defaults["embedding3d"]["key"] == "X_pca"
@@ -878,7 +917,8 @@ def test_repeated_names_are_made_unique_and_reported(
 def test_without_obs_cells_are_named_by_position(tmp_path: Path) -> None:
     adata = _read(_write(tmp_path, "data.h5ad", "h5ad", None, obs=None))
     assert list(adata.obs_names[:3]) == ["0", "1", "2"]
-    assert list(adata.obs.columns) == []
+    # The toy X holds counts, so its cells' totals are the one column.
+    assert list(adata.obs.columns) == ["total_counts"]
 
 
 @pytest.mark.parametrize(("name", "output_format", "zarr_format"), OUTPUTS)
@@ -905,12 +945,15 @@ def test_only_embeddings_is_a_complete_dataset(
 
 REFUSALS = [
     pytest.param({"dataset_id": "has space"}, ValueError, "dataset_id", id="bad-id"),
-    pytest.param({"dataset_name": " padded"}, ValueError, "dataset_name", id="bad-name"),
+    pytest.param({"dataset_name": " \u00a0 "}, ValueError, "dataset_name must be a non-empty string", id="blank-name"),
+    pytest.param({"dataset_name": "Zero\u200bwidth"}, ValueError, "dataset_name is displayed verbatim", id="invisible-in-name"),
     pytest.param({"citation_url": "https://x.org"}, ValueError, "citation_text is required whenever citation_url", id="url-without-text"),
     pytest.param({"source_name": "S", "source_url": "ftp://x.org"}, ValueError, "absolute http", id="non-http-url"),
     pytest.param({"embeddings": {}}, ValueError, "at least one embedding", id="no-embeddings"),
     pytest.param({"embeddings": {"X/umap": np.zeros((N_CELLS, 2))}}, ValueError, "cannot appear in a file name", id="slash-key"),
     pytest.param({"embeddings": {"X_umap": np.zeros((N_CELLS, 2)), "x_UMAP": np.zeros((N_CELLS, 2))}}, ValueError, "differ only in letter case", id="case-collision"),
+    pytest.param({"embeddings": {"X_caf\u00e9": np.zeros((N_CELLS, 2)), "X_cafe\u0301": np.zeros((N_CELLS, 2))}}, ValueError, "differ only in letter case or Unicode form", id="unicode-form-collision"),
+    pytest.param({"obs": pd.DataFrame({"\u7ec6\u80de" * 43: range(N_CELLS)})}, ValueError, "is 258 bytes long in UTF-8, longer than the 255 a file name may be", id="name-longer-than-a-file-name"),
     pytest.param({"embeddings": {"X_umap": np.full((N_CELLS, 2), np.nan)}}, ValueError, "every cell's values are missing (NaN or infinite)", id="no-cell-placed"),
     pytest.param({"embeddings": {"X_umap": np.where(np.arange(N_CELLS)[:, None] == 3, [np.nan, 0.0], [1e39, 1.0])}}, ValueError, "within the float32 range", id="placed-cell-beyond-float32"),
     pytest.param({"embeddings": {"X_umap": np.zeros((N_CELLS + 1, 2))}, "vector_fields": None}, ValueError, "obs has 40 rows, but the embeddings have 41", id="row-mismatch"),
@@ -968,7 +1011,7 @@ def test_a_cell_an_embedding_does_not_place_is_written_as_given_and_gets_no_outl
 
 
 def test_a_self_loop_is_no_edge_seurat_snn_is_written_without_its_diagonal(tmp_path: Path) -> None:
-    """Seurat's ``FindNeighbors`` counts each cell among its own neighbours: its
+    """Seurat's ``FindNeighbors`` counts each cell among its own neighbors: its
     ``<assay>_snn`` graph has 1 on the diagonal. A self-loop is no edge anyone can
     draw, so the diagonal is left out (as the web app and cellucid-r leave it
     out), never the graph refused."""
@@ -1178,3 +1221,103 @@ def test_what_a_killed_writer_left_is_removed_by_the_next_one(tmp_path: Path) ->
     (tmp_path / f".other.zarr.{dead}.replaced").mkdir()
     prepare(other, format="zarr", **_inputs())
     assert (tmp_path / f".other.zarr.{dead}.replaced").exists()
+
+
+def _scanpy_processed(n_cells: int = 30, n_genes: int = 12, kept: int = 8, *, scaled: bool = True) -> ad.AnnData:
+    """An AnnData as Scanpy leaves it: ``adata.raw = adata`` after log1p over
+    every gene, then ``X`` cut to the highly variable genes and scaled."""
+    rng = np.random.default_rng(7)
+    counts = rng.poisson(2.0, size=(n_cells, n_genes)).astype(np.float32)
+    logged = np.log1p(counts)
+    adata = ad.AnnData(
+        X=logged,
+        obs=pd.DataFrame(index=[f"c{i}" for i in range(n_cells)]),
+        var=pd.DataFrame({"symbol": [f"S{i}" for i in range(n_genes)]}, index=[f"g{i}" for i in range(n_genes)]),
+    )
+    adata.layers["counts"] = counts
+    adata.raw = adata
+    adata = adata[:, :kept].copy()
+    adata.var["highly_variable"] = True
+    if scaled:
+        x = adata.X
+        adata.X = ((x - x.mean(axis=0)) / (x.std(axis=0) + 1e-6)).astype(np.float32)
+    adata.obsm["X_umap"] = rng.normal(size=(n_cells, 2)).astype(np.float32)
+    return adata
+
+
+def _written_genes(path: Path) -> tuple[list[str], np.ndarray]:
+    written = restore_original_order(ad.read_zarr(path))
+    x = written.X.toarray() if sparse.issparse(written.X) else np.asarray(written.X)
+    return list(written.var_names), x
+
+
+def test_data_writes_the_matrix_the_viewer_opens_a_scanpy_object_with(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """A Scanpy object's genes are read from ``raw`` when it holds more genes
+    than ``X`` or ``X`` is scaled (``default_expression``, the web app's
+    ``defaultExpression``): ``prepare(data=)`` writes that matrix, so the file
+    opens on the values and genes the object itself opens on (R9Y-2)."""
+    adata = _scanpy_processed()
+    path = prepare(tmp_path / "s.zarr", format="zarr", data=adata, dataset_id="s", dataset_name="S")
+    said = capsys.readouterr().out
+    assert "raw.X written as X, with raw.var as its genes: raw holds more genes than X (12 against 8)" in said
+    names, x = _written_genes(path)
+    assert names == list(adata.raw.var_names)
+    np.testing.assert_allclose(x, adata.raw.X, rtol=1e-6)
+    assert "symbol" in ad.read_zarr(path).var and "highly_variable" not in ad.read_zarr(path).var
+    # The advice the note gives writes X instead.
+    path = prepare(tmp_path / "x.zarr", format="zarr", data=adata, dataset_id="s", dataset_name="S",
+                   gene_expression=adata.X, var=adata.var)
+    names, x = _written_genes(path)
+    assert names == list(adata.var_names) and float(x.min()) < 0
+    # An explicit matrix of X's genes (a layer) goes with X's var, never raw's.
+    adata.layers["log1p"] = np.log1p(np.abs(adata.X))
+    path = prepare(tmp_path / "l.zarr", format="zarr", data=adata, dataset_id="s", dataset_name="S",
+                   gene_expression=adata.layers["log1p"])
+    assert _written_genes(path)[0] == list(adata.var_names)
+
+
+def test_data_reads_raw_over_a_scaled_x_of_the_same_genes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    adata = _scanpy_processed(kept=12)
+    path = prepare(tmp_path / "s.zarr", format="zarr", data=adata, dataset_id="s", dataset_name="S")
+    assert "X holds scaled values (negative ones, from sc.pp.scale)" in capsys.readouterr().out
+    np.testing.assert_allclose(_written_genes(path)[1], adata.raw.X, rtol=1e-6)
+    # Neither more genes nor scaled: X, and the note's advice for raw works.
+    adata = _scanpy_processed(kept=12, scaled=False)
+    path = prepare(tmp_path / "x.zarr", format="zarr", data=adata, dataset_id="s", dataset_name="S")
+    said = capsys.readouterr().out
+    assert "raw not read (prepare() writes one matrix; to write raw: gene_expression=adata.raw.X, var=adata.raw.var)." in said
+    np.testing.assert_allclose(_written_genes(path)[1], adata.X, rtol=1e-6)
+    path = prepare(tmp_path / "r.zarr", format="zarr", data=adata, dataset_id="s", dataset_name="S",
+                   gene_expression=adata.raw.X, var=adata.raw.var)
+    np.testing.assert_allclose(_written_genes(path)[1], adata.raw.X, rtol=1e-6)
+
+
+def test_data_without_x_writes_raw_else_the_layer_the_viewer_opens(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    adata = _scanpy_processed(kept=12, scaled=False)
+    adata.X = None
+    path = prepare(tmp_path / "r.zarr", format="zarr", data=adata, dataset_id="s", dataset_name="S")
+    assert "raw.X written as X, with raw.var as its genes: there is no X" in capsys.readouterr().out
+    np.testing.assert_allclose(_written_genes(path)[1], adata.raw.X, rtol=1e-6)
+    del adata.raw
+    adata.layers["lognorm"] = np.log1p(adata.layers["counts"])
+    path = prepare(tmp_path / "l.zarr", format="zarr", data=adata, dataset_id="s", dataset_name="S")
+    said = capsys.readouterr().out
+    assert "layers['lognorm'] written as X: there is no X or raw" in said
+    assert "layers not read: ['counts']" in said
+    np.testing.assert_allclose(_written_genes(path)[1], adata.layers["lognorm"], rtol=1e-6)
+
+
+def test_descriptive_text_is_written_trimmed_and_identifiers_stay_strict(tmp_path: Path) -> None:
+    """R9U-9: a space typed at either end of a name, description, citation
+    text or source name is removed (the web app reads such text trimmed,
+    cellucid-r writes it so); an id with one is still refused."""
+    path = prepare(
+        tmp_path / "t.zarr", format="zarr", **{**_inputs(), "dataset_name": " PBMC 3k\u00a0",
+        "dataset_description": "One paragraph. \n", "citation_text": "\ufeffSmith J. A study. 2024. ",
+        "citation_url": "https://doi.org/10.1/x", "source_name": "GEO\t", "source_url": "https://example.org/"},
+    )
+    record = _read(path).uns["cellucid"]
+    assert (record["name"], record["description"]) == ("PBMC 3k", "One paragraph.")
+    assert record["citation"]["text"] == "Smith J. A study. 2024." and record["source"]["name"] == "GEO"
+    with pytest.raises(ValueError, match="dataset_id"):
+        prepare(tmp_path / "u.zarr", format="zarr", **{**_inputs(), "dataset_id": "pbmc "})
