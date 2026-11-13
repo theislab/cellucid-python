@@ -42,7 +42,7 @@ import json
 import math
 import re
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 import pandas as pd
@@ -969,7 +969,7 @@ class Tracker(model.Tracker):
         return out
 
     def stale(self) -> list[dict[str, Any]]:
-        """The results stale at the head (``history-v2`` §3.4): each step on
+        """The results stale at the head: each step on
         the head's path whose output is still what the head shows while an
         input it read changed since, with the first later step that changed
         it (``cause``) and the inputs (``domains``), in step order."""
@@ -1104,12 +1104,3 @@ def build_tracker(
     for item in (*tracker.step_records, *tracker.branches, *tracker.groups):
         object.__setattr__(item, _OWNER, tracker)
     return tracker
-
-
-def _field_names(record: str) -> list[str]:
-    return [attr for _, attr, _, _ in model.FIELDS[record]]
-
-
-def record_fields(cls: type) -> list[str]:
-    """The attribute names of a record class's fields (the model's, in its order)."""
-    return [item.name for item in fields(cls)]

@@ -34,7 +34,8 @@ import numpy as np
 import pandas as pd
 import pytest
 import zarr
-from _web_root import node_executable, sibling_dir, sibling_file, web_file
+from _repository_source import CHILD_PROCESS_FENCE
+from _web_root import assert_shared_file, node_executable, sibling_dir, web_file
 from scipy import sparse
 
 from cellucid import prepare, restore_original_order
@@ -187,7 +188,7 @@ def _colors(uns: Any) -> dict[str, list[str]]:
 
 @pytest.mark.parametrize("output", ["data.h5ad", "data.zarr"])
 def test_a_written_column_keeps_its_scanpy_colors(tmp_path: Path, output: str, capsys: Any) -> None:
-    """F148: ``uns['<column>_colors']`` of every obs column written goes with
+    """``uns['<column>_colors']`` of every obs column written goes with
     it (the viewer opens the column in them); colors that cannot color the
     written column are left out, saying why, and so are a column's not written."""
     adata = _adata()
@@ -225,7 +226,7 @@ def test_obs_colors_replaces_the_colors_data_holds_and_is_checked(tmp_path: Path
         ({"nope": ["#000000"]}, ValueError, r"obs_colors names 'nope', which is no obs column written"),
         ({"cell_type": "#000000"}, TypeError, r"must be a list of text colors"),
         ({"cell_type": [1, 2]}, TypeError, r"must be a list of text colors"),
-        # The viewer opens no palette holding a color that is not hex (R9Y-3).
+        # The viewer opens no palette holding a color that is not hex.
         ({"cell_type": ["red", "#00ff00"]}, ValueError, r"obs_colors\['cell_type'\]: 'red' is not a hex color"),
         (["cell_type"], TypeError, r"obs_colors must be a mapping"),
     ]:
@@ -513,7 +514,7 @@ def test_each_modality_is_a_cellucid_ready_anndata_under_a_mudata_root(
         assert path.read_bytes()[:6] == b"MuData"
         assert path.read_bytes()[512:520] == b"\x89HDF\r\n\x1a\n"
         root.close()
-    # F148: Scanpy's colors go with the columns they color, as mudata reads them.
+    # Scanpy's colors go with the columns they color, as mudata reads them.
     written = _stored_mudata(path)
     assert _colors(written.uns) == {"sample_colors": ["#aa0000", "#00aa00"]}
     assert _colors(written.mod["rna"].uns) == {"leiden_colors": ["#0000aa", "#00aaaa", "#aa00aa"]}
@@ -762,7 +763,7 @@ def test_the_web_app_reads_the_prepared_mudata_as_mudata_does(
         capture_output=True,
         text=True,
         check=False,
-        timeout=300,
+        timeout=CHILD_PROCESS_FENCE,
     )
     assert completed.returncode == 0, completed.stderr
     read = json.loads(completed.stdout)
@@ -1067,8 +1068,9 @@ def test_modalities_is_refused_where_it_cannot_apply(tmp_path: Path) -> None:
 
 def test_both_repositories_hold_the_same_mudata_cross_writer_harness() -> None:
     """cellucid-r runs the same harness, byte for byte, against this writer."""
-    copy = sibling_file("cellucid-r", "tests/testthat/python/cross_writer_mudata.py")
-    assert copy.read_bytes() == (Path(__file__).parent / "cross_writer_mudata.py").read_bytes()
+    assert_shared_file(
+        "tests/cross_writer_mudata.py", "tests/testthat/python/cross_writer_mudata.py", repository="cellucid-r"
+    )
 
 
 def test_an_obs_of_the_wrong_length_names_the_mudatas_cells(tmp_path: Path) -> None:
@@ -1098,7 +1100,7 @@ def _mudata_with_scanpy_rna(n_cells: int = 30) -> Any:
 
 
 def test_a_mudata_modality_is_written_from_the_matrix_the_viewer_opens_it_with(tmp_path: Path, capsys: Any) -> None:
-    """R9Y-9 (d): a modality follows the AnnData rule (raw when it holds more
+    """A modality follows the AnnData rule (raw when it holds more
     genes than X or X is scaled), and the root var and varmap follow raw's
     genes."""
     import mudata as md

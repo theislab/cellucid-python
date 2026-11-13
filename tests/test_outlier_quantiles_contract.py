@@ -5,7 +5,8 @@ The latent-space outlier quantiles :func:`cellucid.prepare` stores.
   of the shared conformance fixture, which the web repository's numpy
   generator (``scripts/generate-latent-outlier-conformance.py``) writes
   independently of every implementation; the web app and cellucid-r are
-  checked against the same file (pinned here by its SHA-256).
+  checked against the same file (the copy here is compared byte for byte with
+  the web repository's ``tests/fixtures/latent-outlier-conformance.json``).
 - ``prepare(latent_key=...)`` stores ``uns['cellucid']['outlierQuantiles']``
   with every categorical obs column's quantiles in that latent space -- a
   categorical, a text column, a boolean and a nullable boolean column -- and
@@ -18,7 +19,6 @@ The latent-space outlier quantiles :func:`cellucid.prepare` stores.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -27,18 +27,21 @@ import numpy as np
 import pandas as pd
 import pytest
 import zarr
+from _web_root import assert_shared_file
 
 from cellucid import prepare, restore_original_order
 from cellucid.prepare_data._outliers import latent_outlier_quantiles
 
 FIXTURE = Path(__file__).parent / "fixtures" / "latent_outlier_conformance.json"
-FIXTURE_SHA256 = "a812db4dd25c9b5b44549c001a0e3927043042ca12ad7d8567c73f583ecf498d"
 
 N_CELLS = 60
 
 
+def test_the_fixture_is_the_web_apps_byte_for_byte() -> None:
+    assert_shared_file("tests/fixtures/latent_outlier_conformance.json", "tests/fixtures/latent-outlier-conformance.json")
+
+
 def test_the_rule_gives_the_conformance_bytes() -> None:
-    assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == FIXTURE_SHA256
     for case in json.loads(FIXTURE.read_text(encoding="utf-8"))["cases"]:
         # None (JSON null): a NaN row's value, a cell the latent space does not place.
         stored = [np.nan if value is None else value for value in case["latent"]]

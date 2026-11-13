@@ -42,7 +42,7 @@ change X" index, and each folder has a short `README.md`.
                                                3 containers      formats/{hdf5,zarr,zip,rds,text}
                                                                  │  → store model (formats/store.js)
                                                4 AnnData         data/anndata/open.js → views/ | transcode/
-                                                                 │  → AnnDataReader (reader.js)
+                                                                 │  → AnnDataReader (reader.js, reader/)
                                                5 share planner   subsample-plan.js → views/cell-subset.js
                                                                  │  gene sample, column indexes, graphs
         ◀──── payloads (typed arrays, transferred) ──────────────┘
@@ -62,7 +62,7 @@ cancellation (`utils/abort.js`), progress and logs (`formats/io/activity.js`,
 
 | Owns | Module | Entry points |
 | --- | --- | --- |
-| What a file or folder is | `data/input-formats.js` | the format registry (mirrored byte for byte as `input_formats.json` in Python and R, digest-pinned in all three suites) |
+| What a file or folder is | `data/input-formats.js` | the format registry (mirrored byte for byte as `input_formats.json` in Python and R; each suite compares its copy with the web repository's `tests/fixtures/input-formats.json`, {ref}`shared-files`) |
 | One class per way a dataset arrives | `data/local-user-source.js`, `link-source.js`, `local-demo-source.js`, `remote-source.js`, `viewer-host-source.js`; all read through `anndata-file-source.js` | `DataSourceManager` (`data/data-source-manager.js`) |
 | Link providers | `data/sources/providers/<host>.js`, `data/sources/registry.js` | `getProviderRegistry`, `formatLocator` |
 | A remote file described without downloading it | `data/sources/remote-file.js` | `describeRemoteFile`, `downloadRemoteFile` (hosts that serve no ranges) |
@@ -126,12 +126,13 @@ included, each rejecting with `reason` (the reader passes why it moved on,
 | --- | --- | --- |
 | From a source to a store root | `data/anndata/open.js` | `openDatasetStore` |
 | Formats presented as AnnData in place | `data/anndata/views/` (`loom`, `tenx-h5`, `tenx-outs`, `mudata`, `modalities`) | `views/index.js` by input-format id |
-| Streams converted once into a kept Zarr store | `data/anndata/transcode/` (`r-object`, `matrix-market`, `tables`; storage in `space.js`) | `transcode/index.js`, `session.js` |
-| The reader | `data/anndata/reader.js` | `AnnDataReader` (open, fields, genes, embeddings, graphs, category codings) |
+| Streams converted once into a kept Zarr store | `data/anndata/transcode/` (`r-object`, `matrix-market`, `tables`; storage in `space.js`, what a kept directory holds in `kept-format.js` and `kept-journal.js`) | `transcode/index.js`, `session.js` |
+| The reader | `data/anndata/reader.js` (state and lifecycle: constructor, `open`, the carry, clearing, trimming, closing) and `data/anndata/reader/` (14 method groups mixed onto its prototype: names, `obsm`, obs fields, graphs, the mapping probe, matrix rows, gene columns, cell-subset reads, the gene sample, kept indexes, row pointers, matrices, gene segments, stored outliers; `reader/README.md`) | `AnnDataReader` (open, fields, genes, embeddings, graphs, category codings) |
+| What the reader's groups share | `data/anndata/{uns,probe,cell-maps,positions,cell-subset-blocks,present-categories,prefix-reads}.js` | functions of their arguments: `uns`, element probes, cell maps, checked positions, cell-subset blocks, category codings, opening prefixes; `utils/apply-mixin.js` mixes a group on |
 | Gene columns and cell rows by layout, and their prices | `data/anndata/matrix-access.js` | `geneLayoutOf`, `requestPriceOf`, each layout's `readCost`, `columnIndexResidentBytes` |
 
 Invariants: a format-specific path is a view or a transcoder, never a branch
-in `reader.js`. A file the readers cannot read is said to the person once, in
+in the reader (`reader.js` or `reader/`). A file the readers cannot read is said to the person once, in
 `open.js` (`explainFormatError`): each container's damage and unsupported
 features, an R stream's, a web page in place of data, and an element that
 breaks the AnnData layout (`AnnDataFormatError`, `elements.js`: every check of
@@ -233,7 +234,9 @@ what was tried and reverted, and the open items:
 {doc}`25_decisions_exports`,
 {doc}`26_decisions_served_store_and_widgets` (served sources in steps 1 and 2),
 {doc}`27_decisions_memory_model` (counted memory, every step),
-{doc}`28_decisions_rendering_layers` (step 8).
+{doc}`28_decisions_rendering_layers` (step 8). The records of the subsystems
+beside the read path (actions and the history, agents, the interface, figure
+export, analysis, testing) are listed on {doc}`index`.
 
 ---
 

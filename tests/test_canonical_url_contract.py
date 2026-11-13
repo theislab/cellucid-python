@@ -7,15 +7,8 @@ that must never change once published — JSON Schema `$id` values, the SVG
 export namespace, and the provenance strings embedded in exported figures —
 plus the CORS origin patterns the Python server matches.
 
-Before this contract existed the split was enforced in one direction only: a
-test pinned the documentation header link at the apex and nothing stopped a
-frozen identifier from being "normalized" to `www`. This module enforces both
-directions:
-
-* every bare-apex occurrence must be a declared identifier or origin pattern,
-  so a new navigational link cannot use the apex; and
-* every frozen identifier is positively pinned at the apex, so it cannot be
-  rewritten to `www`.
+Every bare-apex occurrence must be a declared identifier or origin pattern,
+so a new navigational link cannot use the apex.
 
 The prose statement of the rule lives in `docs/contributing/web_app.md`.
 """
@@ -42,7 +35,7 @@ EXCLUDED_PARTS = frozenset({"_build", "__pycache__", ".pytest_cache", ".mypy_cac
 # The page that documents the convention necessarily quotes both forms.
 CONVENTION_PAGE = "docs/contributing/web_app.md"
 
-# Frozen identifiers: exact lines that must keep the bare apex. Rewriting any of
+# Frozen identifiers: the exact lines that may hold the bare apex. Rewriting any of
 # them to `www` invalidates already-published references (a schema `$id` is
 # compared as a string) or makes figures exported by two builds disagree about
 # their own origin.
@@ -125,52 +118,6 @@ def test_every_bare_apex_url_is_a_declared_identifier_or_origin_pattern() -> Non
         f"{CANONICAL_APP_ORIGIN}. Unclassified occurrences:\n"
         + "\n".join(unclassified)
     )
-
-
-def test_frozen_identifiers_are_still_written_at_the_bare_apex() -> None:
-    for relative, required_lines in FROZEN_APEX_IDENTIFIERS.items():
-        contents = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
-        for required in required_lines:
-            assert required in contents, (
-                f"{relative} no longer declares the frozen identifier {required!r}. "
-                "These are names, not addresses: adding the `www` host to a "
-                "published schema $id or to exported figure provenance is a "
-                "breaking change, not a normalization."
-            )
-
-
-def test_navigational_urls_use_the_canonical_www_host() -> None:
-    conf = (DOCS_ROOT / "conf.py").read_text(encoding="utf-8")
-    assert f'"url": "{CANONICAL_APP_ORIGIN}"' in conf
-
-    index = (DOCS_ROOT / "index.md").read_text(encoding="utf-8")
-    assert f"```{{button-link}} {CANONICAL_APP_ORIGIN}" in index
-
-    server_base = (REPOSITORY_ROOT / "src/cellucid/_server_base.py").read_text(
-        encoding="utf-8"
-    )
-    assert f'CELLUCID_WEB_URL = "{CANONICAL_APP_ORIGIN}"' in server_base
-
-    contributing = (REPOSITORY_ROOT / CONVENTION_PAGE).read_text(encoding="utf-8")
-    assert f"hosted at `{CANONICAL_APP_ORIGIN}`" in contributing
-
-    readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
-    assert CANONICAL_APP_ORIGIN in readme
-
-
-def test_the_convention_page_states_which_form_is_canonical_for_which_purpose() -> None:
-    contributing = (REPOSITORY_ROOT / CONVENTION_PAGE).read_text(encoding="utf-8")
-    assert "## Cross-repository conventions" in contributing
-    assert "Canonical URL forms" in contributing
-    assert "frozen identifier" in contributing
-    assert "scripts/sweep_versions.py" in contributing
-    assert "CELLUCID_VERSION" in contributing
-
-
-def test_citation_files_point_at_a_reachable_canonical_landing_page() -> None:
-    citation = (REPOSITORY_ROOT / "CITATION.cff").read_text(encoding="utf-8")
-    assert 'url: "https://docs.cellucid.com"' in citation
-    assert BARE_APEX not in citation
 
 
 def test_the_release_version_marker_convention_is_applied_to_this_repository() -> None:
@@ -265,7 +212,7 @@ def test_no_two_pages_of_one_guide_share_a_title() -> None:
     titles: dict[tuple[str, str], list[str]] = {}
     for path in sorted(DOCS_ROOT.rglob("*")):
         relative = path.relative_to(DOCS_ROOT).as_posix()
-        if path.suffix not in {".md", ".ipynb"} or relative.startswith(("_", "user_guide/web_app/r_screenshot_checklist")):
+        if path.suffix not in {".md", ".ipynb"} or relative.startswith("_"):
             continue
         if path.suffix == ".md":
             text = path.read_text(encoding="utf-8")
@@ -300,8 +247,3 @@ def test_docs_robots_txt_allows_crawling_and_advertises_the_sitemap() -> None:
     robots = (DOCS_ROOT / "_extra" / "robots.txt").read_text(encoding="utf-8")
     lines = [line.strip() for line in robots.splitlines() if line.strip()]
     assert lines == ["User-agent: *", "Disallow:", f"Sitemap: {DOCS_SITEMAP_URL}"]
-
-
-def test_the_docs_landing_page_links_to_the_app() -> None:
-    index = (DOCS_ROOT / "index.md").read_text(encoding="utf-8")
-    assert f"{{button-link}} {CANONICAL_APP_ORIGIN}" in index

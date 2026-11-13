@@ -139,11 +139,12 @@ class CellucidThreadingHTTPServer(ThreadingMixIn, CellucidHTTPServer):
 
         A browser keeps its connections to a host alive between requests, and
         a viewer's channel stays open for as long as its page does. Closing
-        only the listening socket left each of those answered by its handler
-        thread: a server started next on the same port saw the page read the
-        stopped server's dataset documents over the kept connections, and
-        each idle thread lived until its timeout. Shutting each connection
-        down wakes its thread from a blocked read, and it ends.
+        only the listening socket would leave each of those answered by its
+        handler thread: a server started next on the same port would see the
+        page read the stopped server's dataset documents over the kept
+        connections, and each idle thread would live until its timeout.
+        Shutting each connection down wakes its thread from a blocked read,
+        and it ends.
 
         A viewer channel is closed the WebSocket way instead (1001, then the
         orderly close of :meth:`cellucid._websocket.WebSocket.close`), so its
@@ -810,8 +811,8 @@ class CORSMixin:
         Windows reports WinError 10053, POSIX a reset or a broken pipe while the
         client is still sending. A refusal -- a foreign ``Host``, a method this
         server does not answer -- is sent before any body is read, so without
-        this the client saw a dropped connection instead of the status it was
-        sent. Only a body framed by one canonical ``Content-Length`` is
+        this the client would see a dropped connection instead of the status
+        it is sent. Only a body framed by one canonical ``Content-Length`` is
         drained, and for a bounded time.
         """
         self.close_connection = True

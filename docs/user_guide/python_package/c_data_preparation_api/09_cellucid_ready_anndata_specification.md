@@ -609,7 +609,8 @@ specification's `blosc` codec instead: Blosc byte-shuffles each block of a
 chunk (the whole chunk, or blocks of 1 MiB in a larger one) and stores each
 byte plane as a zlib stream at level 6. On the He atlas (71,650 cells) the
 format 3 store is 29.00 MB so, against 29.11 MB with `numcodecs.shuffle` and
-gzip and 37.62 MB with gzip unshuffled.
+gzip and 37.62 MB with gzip unshuffled (the gene indices of `X` alone are
+64% larger unshuffled).
 
 Browsers inflate deflate, zlib and gzip natively (`DecompressionStream`), the
 zlib streams of a Blosc frame included (the web app reads the frame and
@@ -704,7 +705,9 @@ What each change bought, and what was measured and not chosen:
   (pages of 64 KiB to 4 MiB) gathered the metadata too but spread each array's
   chunks over pages shared with the others: a whole-matrix read over HTTP/1.1
   took 224 requests instead of 33 (3.3× its bound instead of 1.6×), and the
-  file grew 1–21%.
+  file grew 1–21%. Suo has 44 KB of metadata; the rest of the block holds
+  chunk indexes, and its unused part stays in the file, which grew by 58 KB
+  (by 26 October 2026).
 - **`.h5ad` attributes and opening's values in its first 512 KiB** (every
   element declared before any value is written; the `obs` labels with what
   opening reads), read with the probe of the file's size: the rebuilt Suo's
@@ -731,7 +734,8 @@ What each change bought, and what was measured and not chosen:
   16 times larger, cost the first gene 0.64 MB and a round trip. The cost is
   requests: a whole-matrix read of a `.zarr` folder fetches four times as many
   files as with 2^16 (before, on Suo: 2^15 doubled them over HTTP/1.1, 41 s
-  instead of 21 s for the two cell types); a single file (`.h5ad`,
+  instead of 21 s for the two cell types, and 2^17 and 2^18 fetched 1.7 and
+  3 times the bytes of a batch of genes); a single file (`.h5ad`,
   `.zarr.zip`) reads neighboring chunks as one range.
 - **Chunks of the per-cell arrays**: 2^16 values (an embedding's rows: 2^16
   over its width), so a subsample — the first rows in priority order — reads
@@ -743,7 +747,8 @@ What each change bought, and what was measured and not chosen:
   tried — Zstandard (level 3) 3% larger, Blosc-Zstandard 2%, Blosc-LZ4 30% —
   and the others are decoded in JavaScript rather than natively; no read was
   faster. Deflate level 9 made the expression values 6% (everything else
-  under 1%) smaller and wrote them twenty times slower.
+  under 1%) smaller and wrote them twenty times slower; level 4 made the
+  expression values 6% larger.
 - **Zarr v3**: read exactly as fast as v2 (8.0 against 7.8 s over HTTP/2);
   v2 stays the default because anndata 0.8–0.10 and zarr-python 2 read only
   v2. A sharded v3 store (64 chunks per shard) cut a folder's whole-matrix
@@ -758,6 +763,21 @@ What each change bought, and what was measured and not chosen:
 - Kept as they were, measured: consolidated metadata (a folder opens in one
   request for its structure), `float32` embeddings, and the category code
   widths pandas gives (`|i1` for fewer than 127 categories).
+
+What the writer's own passes cost, each measured when the pass was written:
+
+- **Deflate on every core** (by 26 October 2026): deflating the values on the
+  calling thread was 93% of `prepare()`'s time on 200,000 cells. An `.h5ad`'s
+  chunks are compressed by a pool of threads and stored with HDF5's direct
+  chunk write (`_write_chunks_in_parallel`).
+- **Text columns to categoricals** (by 26 October 2026): one pass per value in
+  Python cost half a second per million cells and text column. pandas now
+  finds the candidates, and only the few it flags are checked in Python
+  (`_string_column`).
+- **The gene-major order of a block** (by 1 November 2026): one stable sort of
+  the int64 key `line * extent + position` (`line_order`) gives the order of a
+  two-key `lexsort` in a thirtieth of its time, 1.2 s against 44 s for 40M
+  values.
 
 ---
 

@@ -16,8 +16,6 @@ from collections.abc import Mapping as _Mapping
 from dataclasses import dataclass
 from typing import Any, Final
 
-#: The SHA-256 of the ``history_model.schema.json`` this module was written from.
-HISTORY_MODEL_SHA256: Final = "0896116c1e791e370b7247d61e734bc22f96047f5d1ed49a39738cf4f8a5333c"
 #: The model's version (``HISTORY_MODEL_VERSION``).
 HISTORY_MODEL_VERSION: Final = 2
 

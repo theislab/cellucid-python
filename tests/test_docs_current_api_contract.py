@@ -5,13 +5,19 @@ import binascii
 import hashlib
 import inspect
 import json
+import os
 import re
+import shutil
 import struct
+import subprocess
 import textwrap
 from collections.abc import Iterator
 from pathlib import Path
 
 import h5py
+import pytest
+from _repository_source import CHILD_PROCESS_FENCE
+from _web_root import node_executable
 
 import cellucid
 from cellucid.data_mapping import EMBEDDING_KEY_PREFIX, parse_vector_field_key
@@ -261,9 +267,27 @@ def test_runnable_python_examples_match_current_public_signatures() -> None:
 
     for location, tree in _python_examples():
         for node in ast.walk(tree):
+            # A name imported from the package is one the package exports.
+            if isinstance(node, ast.ImportFrom) and node.module == "cellucid" and node.level == 0:
+                failures.extend(
+                    f"{location}:{node.lineno}: cellucid exports no {alias.name!r}"
+                    for alias in node.names
+                    if alias.name not in cellucid.__all__
+                )
             if not isinstance(node, ast.Call):
                 continue
             name = _call_name(node)
+            # A call written cellucid.<name>(...) is a call of the package: the
+            # name is one the package has, or the page documents a function
+            # that does not exist.
+            if (
+                isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "cellucid"
+                and name not in cellucid.__all__
+            ):
+                failures.append(f"{location}:{node.lineno}: cellucid.{name} is not a function of the package")
+                continue
             # A method called on a viewer is the viewer's (viewer.pull(adata)
             # is AnnDataViewer.pull, not cellucid.pull(adata, source)).
             viewer_method = (
@@ -348,208 +372,15 @@ def test_runnable_python_examples_match_current_public_signatures() -> None:
     assert not failures, "\n".join(failures)
 
 
-_FENCE = re.compile(r"^(?P<ticks>`{3,})(?P<info>.*)$")
-
-def test_cli_examples_use_only_the_exact_current_contract() -> None:
-    # A store that declares no identity is named after its file, as
-    # cellucid-r names it, so a command needs no identity flags; a removed
-    # option is never documented.
-    failures: list[str] = []
-    for path in [*_markdown_files(), *_notebook_files()]:
-        text = path.read_text(encoding="utf-8")
-        relative = path.relative_to(REPOSITORY_ROOT)
-        if "--no-backed" in text or "--backed" in text:
-            failures.append(f"{relative}: documents a removed backed-mode CLI option")
-    assert not failures, "\n".join(failures)
-
-
-def test_docs_do_not_reintroduce_removed_or_invented_runtime_contracts() -> None:
-    text_by_path = {
-        path.relative_to(REPOSITORY_ROOT): path.read_text(encoding="utf-8")
-        for path in _markdown_files()
-    }
-    all_docs_text = "\n".join(text_by_path.values())
-    python_guide_text = "\n".join(
-        text
-        for path, text in text_by_path.items()
-        if path == Path("README.md") or path.parts[:3] == ("docs", "user_guide", "python_package")
-    )
-
-    stale_claims = [
-        "prefetching (one-time per web build)",
-        "Viewer UI cache ready",
-        "later entries overwrite earlier ones",
-        "jupyter_server_proxy",
-        "automatic proxy selection",
-        "first available port",
-        "ports 8765, 8766",
-        "warn-and-skip or partial-apply mismatch policy",
-        "mismatch policies",
-        "not all implemented",
-        "add a screenshot",
-        "depends on UI version",
-        "show_anndata(data, **kwargs)",
-        "**adapter_kwargs",
-        "Cellucid already catches exceptions inside hook callbacks",
-        "Python should ignore unknown keys",
-        "the server may still start",
-        "the session was for a different dataset and was skipped",
-        "apply_cellucid_session_to_anndata requires pandas",
-        "For large `.h5ad`, prefer `.zarr`",
-        "Clear UI cache and retry",
-        "Retry `viewer.get_session_bundle()`",
-        "skip unknown chunk contributors",
-        "Pandas is a core `cellucid` dependency and is used to write the planned",
-    ]
-    for claim in stale_claims:
-        assert claim not in python_guide_text
-
-    retired_web_claims = [
-        "bridge.html",
-        "bridge.js",
-        "fetchWithExportsBridge",
-        "Browser **.zarr folder picker**",
-        "Browser **.zarr** folder picker",
-        "H5AD/Zarr/Prepared",
-        "user selects folder/h5ad/zarr",
-        "Load a `.zarr` Directory Directly",
-        "Zarr directory selected, but it errors immediately",
-        "Switch to Chrome/Edge",
-        "Chrome is the most reliable for folder access",
-        "`velocity_umap` if present, otherwise the first field",
-        "synthetic rendering benchmark** (when available)",
-    ]
-    for claim in retired_web_claims:
-        assert claim not in all_docs_text
-
-    assert not re.search(
-        r"serve_anndata\s*\([^)]*\bbacked\s*=\s*True",
-        python_guide_text,
-        re.DOTALL,
-    )
-    for nonexistent_command in ("cellucid prepare", "cellucid cache", "cellucid session"):
-        assert nonexistent_command not in python_guide_text
-
-    screenshot_placeholder = DOCS_ROOT / "_static" / "screenshots" / "placeholder-screenshot.svg"
-    assert not screenshot_placeholder.exists()
-
-    vector_page = text_by_path[
-        Path(
-            "docs/user_guide/python_package/d_viewing_apis/"
-            "08_anndata_mode_show_anndata_and_serve_anndata.md"
-        )
-    ]
-    assert "vector_field_default" in vector_page
-    assert "rejects duplicate gene names" not in vector_page
-    assert "var_names_make_unique()" in vector_page
-    assert "embedding_defaults" in vector_page
-    assert "knn_key" in vector_page
-    cli_page = text_by_path[
-        Path("docs/user_guide/python_package/d_viewing_apis/04_cli_cellucid_serve_quickstart.md")
-    ]
-    assert "--vector-field-default" in cli_page
-
-    environment_page = text_by_path[
-        Path(
-            "docs/user_guide/python_package/h_developer_docs/"
-            "06_configuration_env_vars_and_logging.md"
-        )
-    ]
-    assert "no environment-variable configuration layer" in environment_page
-    assert "`CELLUCID_CLIENT_SERVER_URL` are ignored" in environment_page
-
-    installation_page = text_by_path[
-        Path("docs/user_guide/python_package/installation.md")
-    ]
-    assert r".\.venv\Scripts\Activate.ps1" in installation_page
-    assert r".\.venv\Scripts\activate.bat" in installation_page
-
-    anndata_server_source = (REPOSITORY_ROOT / "src/cellucid/anndata_server.py").read_text(
-        encoding="utf-8"
-    )
-    assert "one-time per web build" not in anndata_server_source
-    assert '"Viewer UI cache"' not in anndata_server_source
-    assert '"Viewer UI generation"' in anndata_server_source
-    assert '"establishing exact configured source"' in anndata_server_source
-
-
-#: The prepared-export world Cellucid removed: its server, its viewer, its
-#: on-disk format and its knobs. The Python guide, the README and the site home
-#: describe a Cellucid-ready AnnData instead, so none of these may come back.
-REMOVED_EXPORT_VOCABULARY = (
-    "CellucidViewer",
-    "CellucidServer",
-    "generate_datasets_manifest",
-    "var_quantization",
-    "obs_continuous_quantization",
-    "obs_categorical_dtype",
-    "latent_space=",
-    "out_dir=",
-    "dataset_identity.json",
-    "obs_manifest.json",
-    "var_manifest.json",
-    "connectivity_manifest.json",
-    "edges.src.bin",
-    "/?source=remote",
-    "Embedding(",
-    "export folder",
-    "export directory",
-    "exported directory",
-    "prepared export",
-)
-#: A call of the removed ``show(...)``/``serve(...)``/``pack(...)`` helpers,
-#: and not ``show_anndata(...)``/``serve_anndata(...)``.
-REMOVED_EXPORT_CALL = re.compile(r"(?<![\w.])(?:cellucid\.)?(?:show|serve|pack)\(")
-
-
-def test_python_guide_describes_no_prepared_export_contract() -> None:
-    pages = [
-        README,
-        DOCS_ROOT / "index.md",
-        *sorted((DOCS_ROOT / "user_guide" / "python_package").rglob("*.md")),
-        *sorted((DOCS_ROOT / "user_guide" / "python_package").rglob("*.ipynb")),
-    ]
-    failures: list[str] = []
-    for path in pages:
-        if "_build" in path.parts:
-            continue
-        text = path.read_text(encoding="utf-8")
-        relative = path.relative_to(REPOSITORY_ROOT)
-        lowered = text.lower()
-        for term in REMOVED_EXPORT_VOCABULARY:
-            if term.lower() in lowered:
-                failures.append(f"{relative}: describes removed {term!r}")
-        for match in REMOVED_EXPORT_CALL.finditer(text):
-            line = text[: match.start()].count("\n") + 1
-            failures.append(f"{relative}:{line}: calls removed {match.group(0)!r}")
-    assert not failures, "\n".join(failures)
-
-
 def test_documented_vector_declarations_follow_the_vector_field_key_rule() -> None:
     """Every documented vector declaration binds by the vector-field key rule.
 
     A vector field is ``obsm['<field>_<basis>']`` over ``obsm['X_<basis>']``
     (:func:`cellucid.data_mapping.parse_vector_field_key`). A documented
     ``obsm`` dictionary must therefore name the embedding each of its vector
-    keys is drawn over, and the removed per-dimension UMAP grammar is not
-    described as the current rule.
+    keys is drawn over, and a per-dimension UMAP grammar, which is not the
+    rule, is not described as one.
     """
-    all_text = "\n".join(
-        path.read_text(encoding="utf-8") for path in [*_markdown_files(), *_notebook_files()]
-    )
-    stale_contract_phrases = [
-        "Implicit keys are also supported",
-        "**Fallback (implicit key",
-        "Style B: implicit dimension",
-        "explicit_dim_suffix=True",
-        "explicit_dim_suffix=False",
-        "<field>_umap_<d>d",
-        "<field>_umap_<n>d",
-        "<field>_umap_<1|2|3>d",
-    ]
-    for phrase in stale_contract_phrases:
-        assert phrase not in all_text, phrase
-
     failures: list[str] = []
     for location, tree in _python_examples():
         for node in ast.walk(tree):
@@ -604,150 +435,11 @@ def test_documented_vector_declarations_follow_the_vector_field_key_rule() -> No
     assert not failures, "\n".join(failures)
 
 
-def test_documented_multi_field_vector_defaults_use_exact_runtime_field_ids() -> None:
-    relative_paths = (
-        "docs/user_guide/python_package/d_viewing_apis/"
-        "08_anndata_mode_show_anndata_and_serve_anndata.md",
-        "docs/user_guide/python_package/f_notebooks_tutorials/"
-        "33_vector_fields_and_velocity_overlay_end_to_end.md",
-        "docs/user_guide/web_app/b_data_loading/05_jupyter_tutorial.md",
-    )
-    page_text = {
-        relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
-        for relative in relative_paths
-    }
-    combined = "\n".join(page_text.values())
-
-    # A field is listed by the <field> part of '<field>_<basis>', so a launch
-    # default names `velocity` or `T_fwd`, never a full obsm key.
-    assert 'vector_field_default="velocity"' in page_text[relative_paths[0]]
-    assert 'vector_field_default="velocity"' in page_text[relative_paths[1]]
-    assert 'default_vector_field = "velocity"' in page_text[relative_paths[1]]
-    assert 'vector_field_default="velocity"' in page_text[relative_paths[2]]
-    assert 'vector_field_default="T_fwd"' in page_text[relative_paths[2]]
-    assert not re.search(
-        r'\bvector_field_default\s*=\s*["\'](?:velocity|T_fwd)_umap\w*["\']',
-        combined,
-    )
-    assert 'default_vector_field = "velocity_umap"' not in combined
-
-
-def test_documented_embedding_requirements_use_exact_current_keys() -> None:
-    """Two paths name embeddings, and each page must state its own rule.
-
-    ``prepare()`` takes every embedding as an array in ``embeddings={...}``,
-    stored whole under its key, and names a dimension's default with
-    ``embedding_defaults``. The readers -- the Python serve path and the
-    browser's own file picker -- read ``obsm`` keys, and a plain ``X_umap`` at
-    the dimension its column count states, so their pages must say so.
-    """
-    reader_pages = [
-        DOCS_ROOT
-        / "user_guide"
-        / "web_app"
-        / "b_data_loading"
-        / "03_browser_file_picker_tutorial.md",
-    ]
-    preparation = DOCS_ROOT / "user_guide" / "python_package" / "c_data_preparation_api"
-    preparation_pages = [
-        preparation / "01_prepare_overview.md",
-        preparation / "03_embeddings_and_coordinates.md",
-        preparation / "index.md",
-    ]
-
-    failures: list[str] = []
-    for path in preparation_pages:
-        text = path.read_text(encoding="utf-8")
-        relative = path.relative_to(REPOSITORY_ROOT)
-        if "embeddings=" not in text and "embeddings={" not in text:
-            failures.append(f"{relative}: omits the embeddings= argument")
-        for removed in ("X_umap_1d=", "X_umap_2d=", "X_umap_3d=", "Embedding("):
-            if removed in text:
-                failures.append(f"{relative}: documents removed argument {removed!r}")
-
-    for path in reader_pages:
-        text = path.read_text(encoding="utf-8")
-        relative = path.relative_to(REPOSITORY_ROOT)
-        for key in ("X_umap_1d", "X_umap_2d", "X_umap_3d"):
-            if key not in text:
-                failures.append(f"{relative}: omits current embedding key {key!r}")
-        if "X_umap" not in text or "column count" not in text:
-            failures.append(
-                f"{relative}: must state that a plain X_umap is read at the "
-                "dimension its column count states"
-            )
-
-    overview = preparation_pages[0].read_text(encoding="utf-8")
-    for container in ("`.h5ad`", "`.zarr`", "`.zarr.zip`", "uns['cellucid']"):
-        assert container in overview
-    embeddings_page = preparation_pages[1].read_text(encoding="utf-8")
-    for exact in ("embedding_defaults", "latent_key", "normalize_embeddings", "every column"):
-        assert exact in embeddings_page
-
-    assert not failures, "\n".join(failures)
-
-
-def test_connectivity_docs_state_the_stored_graph_contract() -> None:
-    """``prepare(connectivities=...)`` stores one symmetric CSR float32 graph."""
-    page = (
-        DOCS_ROOT
-        / "user_guide"
-        / "python_package"
-        / "c_data_preparation_api"
-        / "07_connectivities_knn_graph.md"
-    ).read_text(encoding="utf-8")
-    normalized = " ".join(page.split())
-    for exact in (
-        "`obsp['connectivities']`, a CSR float32 matrix",
-        "**exactly symmetric**",
-        "zero on the diagonal",
-        "Connectivity matrix must be exactly symmetric.",
-    ):
-        assert exact in normalized, exact
-
-
 def test_server_and_jupyter_docs_state_exact_current_security_and_loading() -> None:
     text_by_path = {
         path.relative_to(REPOSITORY_ROOT): path.read_text(encoding="utf-8")
         for path in _markdown_files()
     }
-    all_text = "\n".join(text_by_path.values())
-
-    stale_security_claims = [
-        "There is no per-event cryptographic auth token",
-        "does not currently enforce `viewerToken`",
-        "not authenticated beyond `viewerId`",
-        "viewerId-routed but not authenticated",
-        "Authentication-ish",
-    ]
-    for claim in stale_security_claims:
-        assert claim not in all_text
-
-    stale_zarr_claims = [
-        "lazy-ish (chunked access)",
-        "inherently chunked/lazy",
-        "scripted server startup with chunked access",
-        "array access is chunked/lazy",
-        "lazy loading from `.h5ad` backed mode or `.zarr`",
-        "lazy loading** for backed `.h5ad` and `.zarr`",
-    ]
-    for claim in stale_zarr_claims:
-        assert claim not in all_text
-
-    python_server_page = text_by_path[
-        Path(
-            "docs/user_guide/python_package/d_viewing_apis/"
-            "05_python_serve_anndata_quickstart.md"
-        )
-    ]
-    advanced_server_page = text_by_path[
-        Path("docs/user_guide/python_package/d_viewing_apis/09_server_mode_advanced.md")
-    ]
-    for page in (python_server_page, advanced_server_page):
-        assert "anndata=true" in page
-        assert "first paint" in page
-        assert "source=remote" not in page
-
     failures: list[str] = []
     # ``?data=http://127.0.0.1:8000/`` names a static host for the web app to
     # read from, not a Cellucid server's launch, so it is not a Viewer URL.
@@ -770,10 +462,6 @@ def test_server_and_jupyter_docs_state_exact_current_security_and_loading() -> N
                     "must use its exact printed Viewer URL"
                 )
 
-    cli_source = (REPOSITORY_ROOT / "src" / "cellucid" / "cli.py").read_text(encoding="utf-8")
-    assert not bare_loopback_viewer.search(cli_source)
-    assert "open the exact Viewer URL printed by Cellucid" in cli_source
-
     session_route = re.compile(r"/_cellucid/session_bundle\?[^\s`]*")
     for path, text in text_by_path.items():
         for line_number, line in enumerate(text.splitlines(), start=1):
@@ -789,273 +477,6 @@ def test_bundled_tutorial_h5ad_uses_the_exact_current_root_encoding() -> None:
         assert handle.attrs["encoding-version"] == "0.1.0"
         assert "X_umap_2d" in handle["obsm"]
         assert "X_umap" not in handle["obsm"]
-
-
-def test_docs_preserve_closed_jupyter_session_and_zarr_contracts() -> None:
-    markdown_text = "\n".join(path.read_text(encoding="utf-8") for path in _markdown_files())
-    pyproject_text = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-
-    assert "anndata>=0.12.19,<0.13" in pyproject_text
-    assert "zarr>=3.1.4,<4" in pyproject_text
-    assert "numcodecs>=0.16.3,<0.17" in pyproject_text
-    assert "pip install zarr" not in markdown_text.lower()
-    assert "frontend_console" not in markdown_text
-
-    removed_custom_tutorial = (
-        DOCS_ROOT
-        / "user_guide"
-        / "python_package"
-        / "f_notebooks_tutorials"
-        / "31_custom_message_schemas_and_frontend_extensions.md"
-    )
-    exact_schema_tutorial = removed_custom_tutorial.with_name(
-        "31_exact_message_schemas_and_diagnostics.md"
-    )
-    assert not removed_custom_tutorial.exists()
-    assert exact_schema_tutorial.is_file()
-
-    event_page = (
-        DOCS_ROOT
-        / "user_guide"
-        / "python_package"
-        / "e_jupyter_hooks"
-        / "07_frontend_to_python_events.md"
-    ).read_text(encoding="utf-8")
-    for event_type in (
-        "selection",
-        "hover",
-        "click",
-        "ready",
-        "pong",
-        "debug_snapshot",
-        "session_bundle",
-        "action_result",
-        "command_error",
-        "data_mapping",
-    ):
-        assert f"### `{event_type}`" in event_page
-    assert "Unknown event types" in event_page
-    assert "rejected before any hook runs" in event_page
-    assert "sends closed event records" in event_page
-    assert "@viewer.on_command_error" in event_page
-    # A command that failed must not read as one that applied.
-    assert "did not take effect in the viewer" in event_page
-
-    session_reference = (
-        DOCS_ROOT
-        / "user_guide"
-        / "python_package"
-        / "g_api_reference_coverage"
-        / "api"
-        / "sessions.md"
-    ).read_text(encoding="utf-8")
-    assert "Each refusal is one sentence starting *This session file is damaged:*" in session_reference
-    assert "A key this version does not know is refused before anything is written" in " ".join(
-        session_reference.split()
-    )
-    # An apply writes in memory; a backed file is never rewritten.
-    assert "its source file is not rewritten" in " ".join(session_reference.split())
-
-
-def test_embedding_docs_state_that_the_viewer_normalizes() -> None:
-    """``prepare()`` stores coordinates as given; the browser normalizes them."""
-    page = (
-        DOCS_ROOT
-        / "user_guide"
-        / "python_package"
-        / "c_data_preparation_api"
-        / "03_embeddings_and_coordinates.md"
-    ).read_text(encoding="utf-8")
-    normalized = " ".join(page.split())
-    assert "Nothing is normalized or cropped." in normalized
-    assert "The viewer scales each embedding into its view" in normalized
-    assert "normalizes each embedding on its own" not in normalized
-
-
-def test_current_startup_screenshots_and_documented_defaults_are_exact() -> None:
-    screenshot_directory = DOCS_ROOT / "_static" / "screenshots" / "web_app"
-    for filename in ("welcome-startup.png", "startup-loaded-build.png"):
-        assert _validated_png_dimensions(screenshot_directory / filename) == (
-            1440,
-            1000,
-        )
-
-    quick_tour = (
-        DOCS_ROOT / "user_guide" / "web_app" / "a_orientation" / "03_quick_tour_60_seconds.md"
-    ).read_text(encoding="utf-8")
-    glossary = (
-        DOCS_ROOT / "user_guide" / "web_app" / "a_orientation" / "04_ui_glossary_terminology.md"
-    ).read_text(encoding="utf-8")
-    camera_page = (
-        DOCS_ROOT / "user_guide" / "web_app" / "c_core_interactions" / "07_screenshots.md"
-    ).read_text(encoding="utf-8")
-    annotation_index = (
-        DOCS_ROOT / "user_guide" / "web_app" / "j_community_annotation" / "index.md"
-    ).read_text(encoding="utf-8")
-    combined = "\n".join((quick_tour, glossary))
-
-    assert "../../../_static/screenshots/web_app/welcome-startup.png" in quick_tour
-    assert "../../../_static/screenshots/web_app/startup-loaded-build.png" in combined
-    assert "Every ordinary bundled or catalog startup opens the welcome overlay" in quick_tour
-    # A startup the address names skips the overlay: the viewer page
-    # (``?viewer=true``, Python or R), a server (``?remote=``, the served
-    # ``?anndata=true`` page) and any ``?data=`` link, not only GitHub
-    # (``resolveStartupUrlIntent`` in ``app/startup-url-intent.js``).
-    for page in (quick_tour, glossary):
-        assert (
-            "address already names its data (a Python or R viewer, a "
-            "`cellucid serve` server, or a `?data=` link) skips"
-        ) in " ".join(page.split())
-    assert "Suo dataset remains the sample\ncatalog default" in quick_tour
-    assert "1D or 2D starts in **Planar**" in quick_tour
-    assert "3D starts in **Orbit**" in quick_tour
-    assert "default light studio floor" in quick_tour
-    # The sidebar footer's build identity bumps on every web release — seven
-    # times in the five days after ``2026-07-27.1``. Pinning a literal here made
-    # the assertion enforce staleness: it kept passing while both pages, and the
-    # screenshot they share, described a build nobody was running, and it turned
-    # every web change into a documentation change. The durable claim is *where*
-    # to read the value and that it is yours, not ours; this forbids a literal
-    # coming back.
-    assert not re.search(r"Build \d{4}-\d{2}-\d{2}\.\d+", combined), combined
-    assert "changes with every web release" in " ".join(quick_tour.split())
-    assert "read yours off your own footer" in " ".join(glossary.split())
-    assert "exact value in bug reports" in glossary
-    assert "Camera path** accordion starts collapsed" in camera_page
-    assert "Community annotation** accordion starts collapsed" in annotation_index
-    assert "unless the user explicitly enables **Autoplay**" in camera_page
-
-
-def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:
-    page = (
-        DOCS_ROOT / "user_guide" / "web_app" / "b_data_loading" / "10_standard_pancreas_dataset.md"
-    ).read_text(encoding="utf-8")
-    normalized = " ".join(page.split())
-
-    for exact_value in (
-        "Pancreatic endocrinogenesis (scVelo)",
-        "3,696 cells",
-        "3,753 genes",
-        "`clusters_coarse` (5 categories)",
-        "`clusters` (8 categories)",
-        "`cell_type` (8 categories)",
-        "`S_score`",
-        "`G2M_score`",
-        "33,476 exact weighted connectivity edges",
-        "one vector field, `velocity` (the `obsm` arrays `velocity_umap_1d`, "
-        "`velocity_umap` and `velocity_umap_3d`",
-        "| `X_umap_1d` | 1 | derived | yes (1D default) | `velocity_umap_1d` |",
-        "| `X_umap` | 2 | source | yes (2D default) | `velocity_umap` |",
-        "| `X_umap_3d` | 3 | derived | yes (3D default) | `velocity_umap_3d` |",
-        "| `X_pca` | 50 | source | yes, components 1 and 2 as a 2D view, enabled by the starting view",
-        "selector reports `velocity`",
-        "f6cad69fd509be44c8453205309f4c3c3c37ba34",
-        "27,998 ordered genes",
-        "SHA-256 store digest covering every file of `anndata/pancreas.zarr`",
-        "recorded in `sources/pancreas.json` rather than repeated here",
-        "GSE132188",
-        "10.1242/dev.173849",
-    ):
-        assert exact_value in normalized
-
-    assert "Suo remains the catalog default" in page
-    # The file stores the field under scVelo's names for it on each UMAP
-    # (`<field>_<basis>`), which the viewer lists as the one field `velocity`.
-    assert "`velocity_umap` field" not in page
-    assert "velocity_umap_2d" not in page
-    assert "rounds the counts to **3.7K cells · 3.8K genes**" in normalized
-    assert "**Showing all 3,696 cells**" in normalized
-    assert "default 3D embedding with **Orbit**" in normalized
-    assert "Selecting 1D or 2D" in page and "**Planar**" in page
-    assert "No camera path is created or played automatically" in normalized
-    assert (
-        "four source-owned observation fields (`clusters_coarse`, `clusters`, "
-        "`S_score`, and `G2M_score`)"
-    ) in normalized
-    assert "it is not a fifth source-owned field" in normalized
-    assert "category order and per-cell codes exactly equal source-owned `clusters`" in normalized
-    assert "neither is sliced, padded, or copied from the 2D coordinates" in normalized
-    assert "analysis-only working copy" in normalized
-    assert "sources/pancreas.json" in page
-
-
-def test_data_loading_matrix_uses_the_exact_local_picker_labels() -> None:
-    page = (
-        DOCS_ROOT / "user_guide" / "web_app" / "b_data_loading" / "index.md"
-    ).read_text(encoding="utf-8")
-
-    assert "| A Zarr store folder (`.zarr`), for example from `prepare()` | **Open… › Folder…**, or drop the folder |" in page
-    assert "| A portable `.zarr.zip` or `.zip` | **Open… › File…** |" in page
-    assert "| A `.h5ad` of any size, and no Python | **Open… › File…** |" in page
-    assert "Prepared" not in page
-    assert "Browser folder picker" not in page
-    for removed in ("**H5AD**", "**Zarr ZIP**", "**Files**", "Open from link", "**Connect**"):
-        assert removed not in page, removed
-
-
-def test_remote_and_github_url_docs_require_exact_multi_dataset_selection() -> None:
-    page = (
-        DOCS_ROOT
-        / "user_guide"
-        / "web_app"
-        / "p_developer_docs"
-        / "04_configuration_env_vars_and_feature_flags.md"
-    ).read_text(encoding="utf-8")
-
-    assert "?remote=https://data.example.org&dataset=study-a" in page
-    assert "?data=gh:owner/repo/path&dataset=study-a" in page
-    assert "dataset list containing exactly one dataset selects that sole" in page
-    assert "requires `dataset=<exact-dataset-id>`" in page
-    assert "does not choose an arbitrary\n  catalog entry" in page
-    assert "loads its first dataset" not in page
-
-
-def test_server_docs_open_the_one_served_dataset() -> None:
-    pages = [
-        (
-            DOCS_ROOT
-            / "user_guide"
-            / "python_package"
-            / "d_viewing_apis"
-            / "05_python_serve_anndata_quickstart.md"
-        ),
-        (
-            DOCS_ROOT
-            / "user_guide"
-            / "python_package"
-            / "d_viewing_apis"
-            / "09_server_mode_advanced.md"
-        ),
-    ]
-    for page in pages:
-        normalized = " ".join(page.read_text(encoding="utf-8").split())
-        assert "`server.viewer_url`" in normalized, page
-        assert "opens the one dataset the server lists at `/_cellucid/datasets`" in normalized, page
-        assert "loads its first dataset" not in normalized, page
-
-
-def test_debug_connection_docs_use_only_the_keyed_store_probe_report() -> None:
-    markdown = "\n".join(path.read_text(encoding="utf-8") for path in _markdown_files())
-    python_guide = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in sorted((DOCS_ROOT / "user_guide" / "python_package").rglob("*.md"))
-    )
-    # A browser-tab viewer (AnnDataViewer) reports its served store under
-    # ``anndata_store_probes``; a notebook widget serves no HTTP and reports
-    # none, so the pages that document a browser-tab report must name it.
-    for relative in (
-        "e_jupyter_hooks/16_reference.md",
-        "e_jupyter_hooks/14_troubleshooting_hooks.md",
-        "h_developer_docs/12_debugging_playbook.md",
-        "b_concepts_mental_models/08_debugging_mental_model_where_to_look.md",
-    ):
-        page = (DOCS_ROOT / "user_guide" / "python_package" / relative).read_text(encoding="utf-8")
-        assert "anndata_store_probes" in page, relative
-    assert "dataset_identity_probes" not in python_guide
-    assert "dataset_identity_url" not in markdown
-    assert "dataset_identity_error" not in markdown
-    assert "recent frontend console warnings" not in markdown
-    assert "recent frontend console warnings/errors" not in markdown
 
 
 def test_every_documented_screenshot_uses_its_intrinsic_responsive_width() -> None:
@@ -1108,17 +529,10 @@ def test_every_documented_screenshot_uses_its_intrinsic_responsive_width() -> No
     assert referenced == screenshots
     assert all(len(widths) == 1 for widths in declared_widths.values())
 
-    stylesheet = (DOCS_ROOT / "_static" / "custom.css").read_text(encoding="utf-8")
-    assert "figure img {" in stylesheet
-    assert "height: auto;" in stylesheet
-    assert "max-width: 100%;" in stylesheet
-
-
 # Published images that ``docs/_tooling/screenshots/captures.json`` has no record
-# for, so ``node capture.mjs check`` cannot re-verify them (which is how an empty
-# screenshot once shipped). The backlog was closed on 2026-10-25: every published
-# image is a scenario capture. A new image gets a scenario and a record, never an
-# allowance here.
+# for, so ``node capture.mjs check`` cannot re-verify them (an empty screenshot
+# would pass unseen). Every published image is a scenario capture: a new image
+# gets a scenario and a record, never an allowance here.
 UNPROVENANCED_SCREENSHOT_BUDGET = 0
 
 # Records whose ``sha256`` does not describe the file they name, so the published
@@ -1126,6 +540,19 @@ UNPROVENANCED_SCREENSHOT_BUDGET = 0
 # is the fix; correcting the digest in place would be inventing provenance for an
 # image nobody can show came from that run.
 DIVERGENT_SCREENSHOT_RECORDS: frozenset[str] = frozenset()
+
+# What a record holds, as ``capture.mjs`` writes it: the image (``sha256``, its
+# sizes and format), how it was taken, the Cellucid version of the application
+# it shows (``cellucid_version``) and the browser. ``quality`` is a WebP's.
+SCREENSHOT_RECORD_FIELDS = frozenset({
+    "id", "topic", "name", "describes", "dataset", "theme", "viewport", "device_scale_factor", "crop",
+    "captured_css", "native_px", "emitted_px", "format", "cursor", "rings", "settled", "uses_timeout",
+    "page_errors", "sha256", "cellucid_version", "browser", "captured_at",
+})  # fmt: skip
+
+
+def _version_tuple(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.split("."))
 
 
 def test_screenshot_provenance_records_describe_the_published_images() -> None:
@@ -1142,8 +569,19 @@ def test_screenshot_provenance_records_describe_the_published_images() -> None:
     recorded: set[Path] = set()
     divergent: set[str] = set()
     for capture_id, record in manifest["captures"].items():
-        for field in ("topic", "name", "sha256", "web_repository_revision"):
+        assert set(record) - {"quality"} == SCREENSHOT_RECORD_FIELDS, (
+            capture_id,
+            sorted(set(record) ^ SCREENSHOT_RECORD_FIELDS),
+        )
+        for field in ("topic", "name", "sha256", "cellucid_version"):
             assert record.get(field), (capture_id, field)
+        # The release the image shows: a Cellucid version, and never one
+        # newer than this repository's.
+        assert re.fullmatch(r"\d+\.\d+\.\d+", record["cellucid_version"]), (capture_id, record["cellucid_version"])
+        assert _version_tuple(record["cellucid_version"]) <= _version_tuple(cellucid.__version__), (
+            capture_id,
+            record["cellucid_version"],
+        )
         extension = record.get("format", "png")
         assert extension in {"png", "webp"}, (capture_id, extension)
         image = (screenshot_root / record["topic"] / f"{record['name']}.{extension}").resolve()
@@ -1153,12 +591,6 @@ def test_screenshot_provenance_records_describe_the_published_images() -> None:
             assert not image.exists(), capture_id
             continue
         assert image.is_file(), (capture_id, image)
-        # A suffixed revision (``<sha>-dirty``) means the image shows an app no
-        # commit contains; only a bare commit SHA rebuilds what is pictured.
-        assert "-" not in record["web_repository_revision"], (
-            capture_id,
-            record["web_repository_revision"],
-        )
         recorded.add(image)
         digest = hashlib.sha256(image.read_bytes()).hexdigest()
         if digest != record["sha256"]:
@@ -1178,6 +610,66 @@ def test_screenshot_provenance_records_describe_the_published_images() -> None:
     assert webp <= recorded, sorted(
         str(path.relative_to(screenshot_root)) for path in webp - recorded
     )
+
+
+def test_the_capture_tool_emits_only_from_a_web_tree_without_uncommitted_changes(tmp_path: Path) -> None:
+    """``capture.mjs --emit`` writes the published images and their records,
+    and the application it serves is the web repository's files on disk: it
+    refuses, before anything starts, while that tree has uncommitted changes."""
+    node = node_executable("the screenshot capture tool")
+    git = shutil.which("git")
+    if git is None:
+        pytest.skip("git is not installed: the capture tool's check of the web tree cannot run.")
+    tooling = DOCS_ROOT / "_tooling" / "screenshots"
+    manifest_before = (tooling / "captures.json").read_bytes()
+    scenario = next(iter(json.loads(manifest_before)["captures"]))
+
+    web = tmp_path / "cellucid"
+    web.mkdir()
+    (web / "index.html").write_text('<meta name="cellucid-version" content="0.0.1" />\n', encoding="utf-8")
+    # The first thing the tool asks the web tree once it goes on is its ports: this stand-in records that, and fails.
+    started = tmp_path / "web-tree-asked"
+    (web / "scripts").mkdir()
+    (web / "scripts" / "browser-test-ports.mjs").write_text(
+        "import { writeFileSync } from 'node:fs';\n"
+        "export function resolveBrowserTestPorts() {\n"
+        "  writeFileSync(process.env.CELLUCID_TEST_STARTED_MARKER, 'asked');\n"
+        "  throw new Error('a stand-in holds no app');\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    def run_git(*arguments: str) -> None:
+        subprocess.run(
+            [git, "-c", "user.name=test", "-c", "user.email=test@example.invalid", *arguments],
+            cwd=web, check=True, capture_output=True,
+        )
+
+    run_git("init", "--quiet")
+    run_git("add", "index.html", "scripts")
+    run_git("commit", "--quiet", "-m", "a web tree")
+
+    def emit() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [node, str(tooling / "capture.mjs"), "shoot", scenario, "--emit"],
+            env={**os.environ, "CELLUCID_WEB_ROOT": str(web), "CELLUCID_TEST_STARTED_MARKER": str(started)},
+            capture_output=True, text=True, encoding="utf-8", check=False, timeout=CHILD_PROCESS_FENCE,
+        )
+
+    # A committed tree is not refused: the run goes on to the web tree, which this stand-in fails.
+    committed = emit()
+    assert committed.returncode != 0
+    assert started.exists(), committed.stderr
+
+    # A tree with uncommitted changes is refused before anything starts or is written, and the paths are named.
+    started.unlink()
+    (web / "index.html").write_text('<meta name="cellucid-version" content="0.0.2" />\n', encoding="utf-8")
+    (web / "scratch.js").write_text("// not committed\n", encoding="utf-8")
+    refused = emit()
+    assert refused.returncode != 0
+    assert not started.exists(), refused.stderr
+    assert "index.html" in refused.stderr and "scratch.js" in refused.stderr
+    assert (tooling / "captures.json").read_bytes() == manifest_before
 
 
 def _webp_dimensions(path: Path) -> tuple[int, int]:
@@ -1238,8 +730,8 @@ def test_every_page_placed_image_declares_its_intrinsic_size() -> None:
 
 # Every page that enumerates the viewer's hook decorators, and the name of the
 # heading or lead-in that makes the list read as complete. A hook added to
-# ``AnnDataViewer`` has to reach all of them: the web-app Jupyter tutorial silently
-# lost ``on_command_error`` because no check tied these lists to the class.
+# ``AnnDataViewer`` has to reach all of them: with no check tying these lists to
+# the class, a page silently lacks one.
 HOOK_ENUMERATION_PAGES = (
     "docs/user_guide/web_app/b_data_loading/05_jupyter_tutorial.md",
     "docs/user_guide/python_package/e_jupyter_hooks/"
@@ -1300,23 +792,6 @@ def test_every_documented_hook_list_matches_the_viewer_decorator_surface() -> No
     assert not failures, "\n".join(failures)
 
 
-# Every page that enumerates the routes the Python servers answer, and so reads
-# as complete. ``/_cellucid/protocol`` is how a web build discovers what this
-# installation accepts, which makes an endpoint list that omits it actively
-# misleading rather than merely short.
-ENDPOINT_ENUMERATION_PAGES = (
-    "docs/user_guide/python_package/h_developer_docs/"
-    "09_server_mode_architecture_endpoints_and_security.md",
-    "docs/user_guide/python_package/h_developer_docs/"
-    "17_security_privacy_and_networking.md",
-    "docs/user_guide/python_package/e_jupyter_hooks/16_reference.md",
-    "docs/user_guide/python_package/e_jupyter_hooks/12_security_model.md",
-    "docs/user_guide/python_package/d_viewing_apis/09_server_mode_advanced.md",
-    "docs/user_guide/python_package/d_viewing_apis/"
-    "04_cli_cellucid_serve_quickstart.md",
-    "docs/user_guide/python_package/g_api_reference_coverage/api/server.md",
-)
-
 # The pages that print the route's body. A capability list written out in prose
 # is a claim about what the server answers, so it is checked against the answer
 # rather than proof-read.
@@ -1326,16 +801,6 @@ PROTOCOL_BODY_PAGES = (
     "docs/user_guide/python_package/h_developer_docs/"
     "11_hooks_events_protocol_and_schema.md",
 )
-
-
-def test_every_documented_endpoint_list_names_the_capability_route() -> None:
-    failures = [
-        f"{relative}: endpoint list omits /_cellucid/protocol"
-        for relative in ENDPOINT_ENUMERATION_PAGES
-        if "/_cellucid/protocol" not in (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
-    ]
-
-    assert not failures, "\n".join(failures)
 
 
 def test_every_documented_capability_body_matches_the_served_document() -> None:

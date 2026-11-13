@@ -24,6 +24,7 @@ documentation site:
 | Where does the web app's code live, and what are the performance rules? | `cellucid/CONTRIBUTING.md` |
 | How do I write or change a web-app page on this site? | this page, below |
 | Which URL form and version marker do I use across repositories? | this page, below |
+| Where does history go that would otherwise sit in a comment (a CI run, a date, an incident, a measurement)? | this page, below, and each repository's `CONTRIBUTING.md` |
 
 The split is deliberate, not an oversight, and it is not a mirror that fell out
 of date. The documentation build tree contains only `cellucid-python`
@@ -78,8 +79,9 @@ The web-app testing, CI, and release checklist is
 
 ## Cross-repository conventions
 
-These two conventions span every Cellucid repository. Both are enforced, so a
-change that ignores them fails a check rather than drifting quietly.
+These conventions span every Cellucid repository. The first two are enforced,
+so a change that ignores them fails a check rather than drifting quietly; the
+third is held by review.
 
 ### Canonical URL forms: `www` for links, bare apex for identifiers
 
@@ -140,3 +142,40 @@ stamps recording which exporter release produced a committed export. It exits
 non-zero only on real drift. `npm/package.json` is JSON and cannot carry a
 comment, so its marker is a `"cellucid-version-marker": "CELLUCID_VERSION"`
 field of its `config` object, on the line after the version.
+
+### Comments say what the code does; history goes to the decision records
+
+A comment in any Cellucid repository says what the code does and why it must
+be so, in the present tense. It holds no CI run number, no finding, audit or
+plan id, no date of our own work, no account of who decided, no story of what
+the code used to do, and no number measured on a machine. Each of those goes,
+in the same change, to the **decision record** of the subsystem on this
+site, and the comment keeps the reason in one clause and names the page.
+
+The rule is written out, with a before-and-after pair for a reason told
+through an incident and one for a measurement, in each repository's
+`CONTRIBUTING.md` (`cellucid`, `cellucid-python`, `cellucid-r`), in that
+repository's own terms. What this site owns is the records themselves:
+
+- the web app's, one a subsystem, listed with their reference pages on
+  {doc}`/user_guide/web_app/p_developer_docs/index`;
+- the Python writer's measured choices, in
+  {doc}`/user_guide/python_package/c_data_preparation_api/09_cellucid_ready_anndata_specification`;
+- the served store and the notebook widgets of both packages, in
+  {doc}`/user_guide/web_app/p_developer_docs/26_decisions_served_store_and_widgets`;
+- the R package's own, in
+  {doc}`/user_guide/r_package/h_developer_docs/01_codebase_architecture` and
+  {doc}`/user_guide/r_package/h_developer_docs/02_testing_and_ci`.
+
+Every record has the same sections: what it does now, decisions and why
+(date, decision, why, what it rules out), measurements that justify it (the
+machine and engine named), tried and reverted, known limits and open items,
+where the code and tests live. A record tells a story in plain words, with
+its date and its numbers. It names no finding, audit or plan id and no file
+of a repository a reader cannot open; a run of a public CI workflow is named
+by its number.
+
+A reference page follows the comment's rule, not the record's: it says what
+the code does now and the rule it keeps, and links to the record for the
+story. Where a reference page and a record would say the same thing, it is
+said once, in the record.

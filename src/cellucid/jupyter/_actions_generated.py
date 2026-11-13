@@ -1,7 +1,7 @@
 """The viewer's methods, one per action of the catalog: generated, do not edit.
 
 Written by ``scripts/generate_actions.py`` from ``cellucid/action_catalog.json``
-(the web app's action catalog, digest 725d32e5357cebbc). Each method sends one
+(the web app's action catalog). Each method sends one
 ``action`` command through :meth:`AnnDataViewer.act`, which checks and converts
 its parameters by the catalog, and returns its :class:`ActionRequest`.
 """

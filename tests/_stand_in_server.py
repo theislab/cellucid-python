@@ -5,8 +5,8 @@ It holds every attribute and method the viewers read from their server
 (``self._server.<name>`` in ``cellucid/jupyter/_viewer.py`` and
 ``_widget.py``), in one place: a test subclasses it for what it records.
 ``test_the_stand_in_server_has_what_the_viewers_read`` fails when a viewer
-starts reading something it lacks. (Round 9: the server gained
-``declared_dataset_id``, and three of four hand-written stand-ins lacked it.)
+starts reading something it lacks. (A stand-in written by hand in each test
+file falls behind the server the day it gains an attribute.)
 """
 
 from __future__ import annotations

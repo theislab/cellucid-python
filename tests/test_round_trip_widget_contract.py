@@ -2,7 +2,7 @@
 
 A widget hears the viewer only between cells (the kernel reads comm messages
 when it is idle), so nothing in the round trip may ask the viewer and wait.
-The page here sends what ``app/viewer-host-results.js`` sends -- a snapshot
+The page here sends what ``app/viewer-host/results.js`` sends -- a snapshot
 (every result, then the ``results`` inventory) and each change after -- over
 the widget's comm, between "cells"; the next "cell" pulls, subsets, lists the
 gene sets and pushes, all at once, on the thread a cell runs on.
@@ -190,8 +190,8 @@ def test_a_request_collected_in_a_later_cell_says_it_has_not_arrived_yet(
 ) -> None:
     """Asked in one cell and collected in the next, as the two-cell pattern
     says, an answer that has not come is one the viewer has not sent yet --
-    never "ask in one cell and collect it in the next", which is what was done
-    (docs walk, R9X-9: a tutorial run top to bottom said exactly that)."""
+    never "ask in one cell and collect it in the next", which is what was
+    done."""
     from cellucid.jupyter import _viewer, _widget
 
     cell = {"count": 1}
@@ -208,7 +208,7 @@ def test_a_request_collected_in_a_later_cell_says_it_has_not_arrived_yet(
     _settle(lambda: widget.debug_connection()["channel_connected"])
     with pytest.raises(RuntimeError, match="the viewer is still working on it.*Run this cell again"):
         widget.apply_session_to_anndata(adata, request)
-    # Collected in the cell that asked: the two-cell advice, as before.
+    # Collected in the cell that asked: the two-cell advice.
     cell["count"] = 3
     again = widget.request_session()
     with pytest.raises(RuntimeError, match="next cell"):
@@ -223,8 +223,8 @@ def test_a_viewer_given_another_dataset_id_takes_its_own_session_back(
 ) -> None:
     """A viewer given dataset_id= serves the data under that id, and saves
     its session under it; applied back through the viewer, the session goes
-    to the object it served, which declares its own id (L26-7). An object
-    declaring another id is refused, as before."""
+    to the object it served, which declares its own id. An object
+    declaring another id is refused."""
     import _session_files as files
 
     from cellucid.anndata_session._apply import cell_order_digest

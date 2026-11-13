@@ -88,7 +88,7 @@ def test_a_reported_mapping_names_why_it_is_what_it_is(origin: str) -> None:
     [
         ({"origin": "unknown"}, "origin must be one of"),
         ({"origin": None}, "origin must be one of"),
-        # Schema 2's answer to setDataMapping named its request; none does now.
+        # A data_mapping event names no request.
         ({"requestId": None}, "unknown requestId"),
         ({"mapping": {"kind": "h5ad"}}, "kind"),
         ({"mapping": {**ANNDATA_MAPPING, "extra": True}}, "unknown extra"),

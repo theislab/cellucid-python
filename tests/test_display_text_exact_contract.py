@@ -4,7 +4,7 @@ A dataset name, a description, a citation and a source line are drawn as
 stored in the viewer. A character with no glyph inside them changes the stored
 value without changing the picture, so ``prepare()`` rejects such text instead
 of removing it. White space at either end of these descriptive texts is the
-one exception: it is removed, as the web app reads it (R9U-9); a URL keeps the
+one exception: it is removed, as the web app reads it; a URL keeps the
 strict rule.
 """
 

@@ -306,18 +306,15 @@ def prepare(
           files, ``cellucid serve`` and Jupyter. Its ranges are merged into
           few requests; most such hosts answer over HTTP/1.1, six requests at
           a time, where a folder is several times slower. What opening reads
-          comes first in the file (431 KB of a 561,947-cell atlas of 5,103
-          genes), which the web app reads with its first request of 512 KiB.
+          comes first in the file, where the web app's first request of
+          512 KiB reaches it.
         - ``"zarr.zip"``: the Zarr store in one ``.zarr.zip`` file (entries
           stored, metadata last), wherever an ``.h5ad`` goes.
 
-        Measured on a 561,947-cell atlas, every read the web app makes, in
-        total: over GitHub's HTTP/2 (80 ms, 50 MB/s) 8.3 s from the ``.h5ad``,
-        8.0 s from the folder, 8.2 s from the ``.zarr.zip``; over HTTP/1.1
-        (80 ms, 50 MB/s) 9.0 s, 46.8 s and 9.0 s; from a local file in a
-        browser 2.5, 2.6 and 2.7 s. The ``.zarr.zip`` is 13% smaller than the
-        ``.h5ad`` (198 against 228 MB). The "Which format?" section of the
-        documentation's preparation guide has the full table.
+        The three are as fast over HTTP/2 and from a local file, and a
+        ``.zarr.zip`` is smaller than the ``.h5ad``. The "Which format?"
+        section of the documentation's preparation guide has the measured
+        table.
     data
         An ``anndata.AnnData`` or a ``mudata.MuData`` (``pip install
         "cellucid[mudata]"`` to read and build one) that fills every component

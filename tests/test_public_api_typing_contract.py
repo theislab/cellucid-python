@@ -88,7 +88,7 @@ def _run_mypy_on_consumer(source: str, tmp_path: Path, cache_dir: Path) -> str:
 
 
 def test_every_public_export_has_a_real_type_for_a_consumer(tmp_path: Path, mypy_cache: Path) -> None:
-    """No export may resolve to ``Any``; the lazy ``__getattr__`` used to erase them all."""
+    """No export may resolve to ``Any``, which is all a lazy ``__getattr__`` alone gives a checker."""
     lines = ["import cellucid", ""]
     revealed_at: dict[int, str] = {}
     for name in LAZY_EXPORTS:
@@ -115,7 +115,7 @@ def test_every_public_export_has_a_real_type_for_a_consumer(tmp_path: Path, mypy
 def test_a_wrong_keyword_argument_is_a_consumer_visible_type_error(
     tmp_path: Path, mypy_cache: Path
 ) -> None:
-    """``prepare(nonexistent_argument=123)`` used to type-check clean."""
+    """``prepare(nonexistent_argument=123)`` must not type-check clean."""
     output = _run_mypy_on_consumer(
         "import cellucid\n\ncellucid.prepare(nonexistent_argument=123)\n",
         tmp_path,

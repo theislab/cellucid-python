@@ -384,7 +384,8 @@ def _string_column(values: np.ndarray, label: str) -> Any:
     """
     # Vectorized: pandas finds the candidates, and the few it flags are held
     # to this module's own rule (None, pandas NA, a float NaN); one pass per
-    # value in Python cost half a second per million cells and text column.
+    # value in Python would be far slower
+    # (measured: 09_cellucid_ready_anndata_specification.md).
     missing = np.asarray(pd.isna(values), dtype=bool)
     flagged = np.flatnonzero(missing)
     if flagged.size:

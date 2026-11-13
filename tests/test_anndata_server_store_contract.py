@@ -35,6 +35,7 @@ import h5py
 import numpy as np
 import pandas as pd
 import pytest
+from _web_root import assert_shared_file
 from scipy import sparse
 
 from cellucid._anndata_files import (
@@ -46,6 +47,9 @@ from cellucid._file_versions import open_shared, path_version
 from cellucid.anndata_server import AnnDataServer
 from cellucid.prepare_data._priority import ORIGINAL_POSITION_COLUMN, CellPriority, prefix_levels
 
+#: Files in the layouts older anndata releases, h5sparse and SeuratDisk wrote,
+#: and their twins in the current layout: byte for byte the web app's
+#: ``tests/browser/fixtures/legacy-*`` (their home), which its readers open.
 FIXTURES = Path(__file__).parent / "fixtures" / "older_anndata"
 
 
@@ -135,6 +139,7 @@ def _json(host: str, port: int, path: str) -> dict:
 # =============================================================================
 
 
+@pytest.mark.core
 def test_the_catalog_names_the_dataset_its_store_and_nothing_private(tmp_path: Path) -> None:
     private = tmp_path / "private-name-of-a-local-file.h5ad"
     _adata().write_h5ad(private)
@@ -378,6 +383,7 @@ def test_a_store_without_identity_is_named_as_cellucid_r_names_it(
 # =============================================================================
 
 
+@pytest.mark.core
 def test_a_file_is_read_with_exact_ranges(tmp_path: Path) -> None:
     source = tmp_path / "x.h5ad"
     _in_priority_order(_adata()).write_h5ad(source)
@@ -429,8 +435,7 @@ def test_a_served_file_is_held_only_while_its_bytes_are_sent(tmp_path: Path) -> 
     removes it. On Windows no file held open can have another moved over it,
     so the server holds a served file only while it sends its bytes: right
     after any answer without a body (``HEAD``, the dataset list) the file is
-    replaced, every time (a handle still held then failed the save with
-    "Access is denied", Python package run on windows-latest, 2026-11-07).
+    replaced, every time (a handle still held then would fail the save).
     While bytes are sent it is opened sharing deletion (``open_shared``): it
     can be removed meanwhile, and the open file keeps reading the version
     it opened."""
@@ -624,6 +629,7 @@ def _zarr_folder(tmp_path: Path, *, consolidated: bool) -> Path:
     return folder
 
 
+@pytest.mark.core
 def test_a_zarr_folder_is_read_key_by_key_with_404_for_an_absent_key(tmp_path: Path) -> None:
     folder = _zarr_folder(tmp_path, consolidated=True)
     outside = tmp_path / "secret.txt"
@@ -807,6 +813,11 @@ def test_hdf5plugin_filters_the_browser_decodes_need_no_copy(tmp_path: Path) -> 
 # =============================================================================
 # What a store holds, from metadata alone
 # =============================================================================
+
+
+@pytest.mark.parametrize("name", sorted(path.name for path in FIXTURES.glob("legacy-*")))
+def test_the_older_layout_files_are_the_web_apps_byte_for_byte(name: str) -> None:
+    assert_shared_file(f"tests/fixtures/older_anndata/{name}", f"tests/browser/fixtures/{name}")
 
 
 @pytest.mark.parametrize(

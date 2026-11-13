@@ -572,6 +572,7 @@ def test_served_bytes_of_a_prefix_grow_with_k(tmp_path: Path) -> None:
 # =============================================================================
 
 
+@pytest.mark.core
 def test_the_served_arrays_are_the_ones_prepare_writes(tmp_path: Path) -> None:
     """The store a server presents holds the arrays ``prepare()`` writes for
     the same object: the same rows, gene-major entries and prefix counts, as
@@ -806,7 +807,10 @@ def test_an_object_s_matrices_are_read_only_while_the_worker_lays_them_out(form:
         real_copy(snapshot)
 
     def held_place(layout: GeneMajorLayout) -> Any:
-        gate.wait(30)
+        # The worker's layout is held. A key asked for meanwhile places a
+        # part of the matrix on the asking thread, which nothing holds.
+        if threading.current_thread() is not threading.main_thread():
+            gate.wait(30)
         return real_place(layout)
 
     def held_dense(laid: Any) -> None:
@@ -1142,12 +1146,24 @@ def test_obs_of_every_encoding_is_cut_straight_in_served_order() -> None:
     assert documents["obs/wide/codes"]["dtype"] == "<i2" and documents["obs/small/codes"]["dtype"] == "|i1"
 
 
+def answered_when_counted(server: AnnDataServer, path: str) -> tuple[int, dict[str, str], bytes]:
+    """The answer to ``path`` once the store has counted the file's matrix: a
+    key of X asked for before then is ``503`` with ``Retry-After`` (the
+    store's worker counts it in the background after the server starts), and
+    is asked again after that wait, as the viewer does."""
+    while True:
+        status, headers, body = server.answer_request("GET", path, None)
+        if status != 503:
+            return status, headers, body
+        threading.Event().wait(min(0.05, float(headers.get("Retry-After") or 0.05)))
+
+
 def test_a_file_replaced_or_rewritten_while_it_is_served_is_refused_with_why_not_failed(tmp_path: Path) -> None:
-    """Round 9 sources lane (R9S-9): a file written again while a server
-    served it (from a notebook beside ``cellucid serve``) had every chunk
-    answered 500 with an HDF5 error ("wrong B-tree signature"), which the
-    viewer said as the server failing. Every key of the store made of the
-    old version is now refused with 409 and why, through the widget's
+    """A file written again while a server serves it (from a notebook beside
+    ``cellucid serve``) would have every chunk answered 500 with an HDF5
+    error ("wrong B-tree signature"), which the viewer says as the server
+    failing. Every key of the store made of the old version is refused with
+    409 and why, through the widget's
     ``answer_request`` and over HTTP: a file replaced (a new one moved over
     it, as a safe write does) and one written in place alike."""
     path = tmp_path / "served.h5ad"
@@ -1175,7 +1191,7 @@ def test_a_file_replaced_or_rewritten_while_it_is_served_is_refused_with_why_not
                     with pytest.raises(PermissionError):
                         other.replace(path)
                     for key in (".zmetadata", "obs/_index/0", "X/indptr/0"):
-                        status, _, _ = server.answer_request("GET", f"_cellucid/anndata/served.zarr/{key}", None)
+                        status, _, _ = answered_when_counted(server, f"_cellucid/anndata/served.zarr/{key}")
                         assert status == 200, (change, key)
                     continue
                 other.replace(path)
@@ -1210,7 +1226,7 @@ def test_a_file_replaced_or_rewritten_while_it_is_served_is_refused_with_why_not
                     assert "PermissionError" in written.stderr, written.stderr
                     assert path_version(path) == before
                     for key in (".zmetadata", "obs/_index/0", "X/indptr/0"):
-                        status, _, _ = server.answer_request("GET", f"_cellucid/anndata/served.zarr/{key}", None)
+                        status, _, _ = answered_when_counted(server, f"_cellucid/anndata/served.zarr/{key}")
                         assert status == 200, (change, key)
                     continue
                 assert path_version(path) != before, (before, path_version(path))

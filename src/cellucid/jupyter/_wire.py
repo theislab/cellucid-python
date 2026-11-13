@@ -80,10 +80,10 @@ _AGENT_TOOL_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 # ``arrays`` lists them (``path``: the keys and list indices leading to it in
 # ``params``, ending in a key ``params`` does not hold; ``type``; ``length``).
 # Two million cells are 8 MB written in one pass, where the same cells as
-# JSON text were 14 MB to build and parse. ``load_session`` pushes a session
-# file into the viewer: its header names the request and the file (``name``,
-# without a folder), padded the same way, and its body is the file; the viewer
-# answers with ``session_loaded`` or a ``command_error``.
+# JSON text are a longer string to build and parse. ``load_session`` pushes a
+# session file into the viewer: its header names the request and the file
+# (``name``, without a folder), padded the same way, and its body is the
+# file; the viewer answers with ``session_loaded`` or a ``command_error``.
 _BINARY_COMMAND_HEADER_FIELDS: dict[str, frozenset[str]] = {
     "action": frozenset({"type", "requestId", "action", "params", "turn", "turnLabel", "arrays"}),
     "load_session": frozenset({"type", "requestId", "name"}),
@@ -426,43 +426,6 @@ def _require_debug_dataset_list(payload: object) -> list[dict[str, Any]]:
             }
         )
     return datasets
-
-
-def _require_cell_indices(value: object, *, label: str = "cell_indices") -> np.ndarray:
-    """Validate cells a command names; return them as ascending ``uint32``.
-
-    ``value`` is a list of native ints or a one-dimensional NumPy integer
-    array, holding at least one cell, each a non-negative index below 2**32,
-    none twice. Cells given in any order are sorted once (the wire carries
-    them strictly ascending); an array already ascending is not copied when it
-    is ``uint32`` already. A list is checked element by element (a bool or a
-    float is refused); an array by its dtype, in vectorized passes.
-    """
-    if type(value) is list:
-        for index, cell_index in enumerate(value):
-            if type(cell_index) is not int or cell_index < 0:
-                raise TypeError(f"{label}[{index}] must be a non-negative native integer")
-        try:
-            cells = np.array(value, dtype=np.int64) if value else np.empty(0, dtype=np.int64)
-        except OverflowError as error:
-            raise ValueError(f"{label} must be cell indices below 2**32") from error
-    elif isinstance(value, np.ndarray):
-        if value.ndim != 1 or value.dtype.kind not in "iu":
-            raise TypeError(f"{label} must be a one-dimensional NumPy integer array, not {value.dtype} of {value.ndim} {plural(value.ndim, 'dimension')}")
-        cells = value
-    else:
-        raise TypeError(f"{label} must be a native list of ints or a one-dimensional NumPy integer array")
-    if cells.size == 0:
-        raise ValueError(f"{label} must be non-empty: name at least one cell")
-    if cells.dtype.kind == "i" and int(cells.min()) < 0:
-        raise TypeError(f"{label} must be non-negative cell indices")
-    if int(cells.max()) > _MAX_CELL_INDEX:
-        raise ValueError(f"{label} must be cell indices below 2**32")
-    if cells.size > 1 and not bool(np.all(cells[1:] > cells[:-1])):
-        cells = np.sort(cells)
-        if bool(np.any(cells[1:] == cells[:-1])):
-            raise ValueError(f"{label} must not contain duplicate cell indices")
-    return cells.astype(_SELECTION_CELL_DTYPE, copy=False)
 
 
 #: The largest cell index the wire carries: a ``uint32``.

@@ -219,9 +219,10 @@ and overlays. A restore applies each exactly as a choice made by hand.
   the setting as it is shown, and one notice says which (`2 saved settings
   could not be used and stay as shown`, each with its reason under
   **Details**); every other setting is restored. A setting added since the
-  file was saved keeps its value. Figure Export settings saved by an earlier
-  version are read in today's terms (an SVG strategy left unchosen is
-  **Full vector**).
+  file was saved keeps its value. The Figure Export settings are one record
+  with a version: a record of any version but today's is refused whole (one
+  notice line, the reason under **Details**), the panel keeps its settings, and
+  everything else in the session is restored.
 
 :::{note}
 "Captured by id" means the control's DOM identifier is the key, not the label

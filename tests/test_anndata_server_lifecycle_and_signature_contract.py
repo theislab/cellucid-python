@@ -279,49 +279,6 @@ def test_web_cache_failure_preserves_its_error_and_releases_the_file(
     _assert_released(server, temporary)
 
 
-def test_anndata_server_reports_exact_viewer_generation_establishment(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    detail_calls: list[tuple[str, str]] = []
-    success_calls: list[str] = []
-    cache_calls: list[dict[str, object]] = []
-
-    monkeypatch.setattr(
-        "cellucid.anndata_server.print_detail",
-        lambda label, value: detail_calls.append((label, value)),
-    )
-    monkeypatch.setattr(
-        "cellucid.anndata_server.print_success",
-        lambda message: success_calls.append(message),
-    )
-    monkeypatch.setattr(
-        "cellucid.web_cache.ensure_web_ui_cached",
-        lambda **kwargs: cache_calls.append(kwargs) or _established(kwargs),
-    )
-    server = AnnDataServer(
-        _adata(),
-        host="127.0.0.1",
-        port=0,
-        quiet=False,
-        serve_web_ui=True,
-        web_source_url="https://viewer.example",
-        web_cache_dir=tmp_path / "web-cache",
-        dataset_name="Generation report",
-        dataset_id="generation-report",
-    )
-
-    server.start_background()
-    try:
-        assert ("Viewer UI generation", "establishing exact configured source") in detail_calls
-        assert "Viewer UI generation established" in success_calls
-        assert len(cache_calls) == 1
-        assert cache_calls[0]["force"] is True
-        assert cache_calls[0]["source_url"] == "https://viewer.example"
-    finally:
-        server.stop()
-
-
 def test_thread_start_failure_rolls_back_the_socket_and_the_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -405,9 +362,10 @@ def test_background_serve_failure_is_retained_for_wait_and_releases_resources(
 def test_stopping_closes_every_kept_alive_connection() -> None:
     """A browser's kept connection must not outlive the server that answered it.
 
-    Closing only the listening socket left each kept connection answered by
-    its handler thread: a server started next on the same port had the page
-    read the stopped server's dataset documents over those connections.
+    Closing only the listening socket would leave each kept connection
+    answered by its handler thread: a server started next on the same port
+    would have the page read the stopped server's dataset documents over
+    those connections.
     """
     import http.client
     import json
@@ -461,7 +419,7 @@ def test_a_notebook_viewer_takes_the_next_free_port_when_its_own_is_taken() -> N
 def test_a_host_that_is_no_address_of_this_machine_is_refused_saying_so(host: str) -> None:
     """An unresolvable name, or an address of another machine (TEST-NET-1),
     is said as such -- not as the resolver's ``gaierror`` or "Can't assign
-    requested address" -- in cellucid-r's words (R9Y-5)."""
+    requested address" -- in cellucid-r's words."""
     server = AnnDataServer(_adata(), host=host, port=0, quiet=True, serve_web_ui=False,
                            dataset_name="Host fixture", dataset_id="host-fixture")
     with pytest.raises(OSError, match=rf"^Host '{host}' is not an address this machine can serve from\. Use host='127\.0\.0\.1'"):

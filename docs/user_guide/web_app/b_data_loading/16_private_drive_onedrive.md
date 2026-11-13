@@ -72,12 +72,11 @@ now … Open the file again to read it with your Google account, or try again
 in a few minutes": opened again, the file asks you to sign in, or, when you
 are signed in already, opens Google's picker on it. A read that fails
 because the connection dropped is asked again as usual and says so.
-Google does not publish its limit. In our tests (2026-10-25) the hold began
-three times, each after a few hundred megabytes had been downloaded from one
-address within minutes (about 200–400 MB in 3–10 minutes, whether in 30
-requests or 400), and lasted about 50 minutes. An address released from a
-hold was held again much sooner: the same day, after some 30 MB a quarter of
-an hour after its hold ended. Reading in place keeps a
+Google does not publish its limit. In our tests the hold began after a few
+hundred megabytes had been downloaded from one address within minutes (about
+200–400 MB in 3–10 minutes, whether in 30 requests or 400), and lasted about
+50 minutes. An address released from a hold was held again much sooner: after
+some 30 MB a quarter of an hour after its hold ended. Reading in place keeps a
 first view to a few megabytes, but a large R object is read whole, and the
 first gene of a large `.h5ad` stored by cell reads the matrix's index once
 (125 MB for a 257 MB file). A file you
@@ -243,7 +242,7 @@ administrator's approval, `AADSTS90094`): a colleague's file, sharing across
 organizations (a guest opening another organization's file), and the
 SharePoint download host.
 
-Checked with real personal accounts on 2026-10-25: a second personal account
+Checked with real personal accounts: a second personal account
 opened a file shared only with it ("People you choose", view: 2.8 MB read in
 30 requests) and someone else's "Anyone" link (a 5.7 MB Seurat `.rds`, read
 whole in 2 requests), signed in with `Files.Read` alone: Microsoft never asked
@@ -366,7 +365,7 @@ address, and accepts plain `http://` only for this computer.
 
 Where a row says no, open the file on www.cellucid.com.
 
-Checked against Google and Microsoft on 2026-10-25 from `http://127.0.0.1:8765`:
+Checked against Google and Microsoft from `http://127.0.0.1:8765`:
 public Drive files open with no sign-in, and Microsoft's sign-in page accepts
 all three addresses Cellucid returns to (`www.cellucid.com`, `127.0.0.1` and
 `localhost`, on any port). With real accounts: a Google sign-in and Google's

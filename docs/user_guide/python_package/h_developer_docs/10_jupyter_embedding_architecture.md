@@ -75,8 +75,10 @@ note saying so; a port given explicitly is used or refused.
    trait `_fetch_messages` to 2: at most two batches are with it at once (one
    being answered, the next ready), and the requests asked meanwhile gather
    in the widget into the next batch, sent as soon as one is answered
-   (IRkernel spends about 1.7 ms of its own on each message: 450 requests in
-   450 messages took 1.28 s, in 15 messages 0.27 s). A request waiting in
+   (IRkernel spends time of its own on each message, so one message a
+   request is too slow:
+   {doc}`/user_guide/web_app/p_developer_docs/26_decisions_served_store_and_widgets`).
+   A request waiting in
    the widget that the page withdraws
    (`{t: 'cancel', id}`, sent when the read that asked it is canceled, from
    the reader worker through the page) is dropped before the kernel reads

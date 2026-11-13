@@ -1,8 +1,8 @@
 """The shared transition-drift conformance fixture, run against the Python helper.
 
 ``tests/fixtures/transition_drift_conformance.json`` is kept byte for byte in
-cellucid-python and cellucid-r (``tests/testthat/fixtures/``), and both
-repositories pin the same SHA-256. It is written by
+cellucid-python (its home) and cellucid-r (``tests/testthat/fixtures/``):
+each package's test compares the two files. It is written by
 ``scripts/generate_transition_drift_conformance.py`` with exact rational
 arithmetic, independently of numpy, scipy and R, so
 :func:`cellucid.compute_transition_drift` and cellucid-r's
@@ -20,7 +20,6 @@ Every case is run with the transition matrix dense and sparse.
 
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -28,6 +27,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from _web_root import assert_shared_file
 from scipy import sparse
 
 from cellucid import compute_transition_drift
@@ -36,17 +36,20 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = REPOSITORY_ROOT / "tests" / "fixtures" / "transition_drift_conformance.json"
 GENERATOR = REPOSITORY_ROOT / "scripts" / "generate_transition_drift_conformance.py"
 
-#: The same digest is pinned in cellucid-r
-#: (tests/testthat/test-transition-drift.R). Update both together.
-FIXTURE_SHA256 = "1488017dafe4085eb0e1a1041e7ddf5c7ae3e9717971f017897a15b71c5ce5f8"
-
 
 def _cases() -> list[dict[str, Any]]:
     return json.loads(FIXTURE.read_text(encoding="utf-8"))["cases"]
 
 
-def test_the_fixture_is_the_pinned_generator_output() -> None:
-    assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == FIXTURE_SHA256
+def test_cellucid_r_holds_the_same_fixture() -> None:
+    assert_shared_file(
+        "tests/fixtures/transition_drift_conformance.json",
+        "tests/testthat/fixtures/transition_drift_conformance.json",
+        repository="cellucid-r",
+    )
+
+
+def test_the_fixture_is_what_the_generator_writes() -> None:
     spec = importlib.util.spec_from_file_location("generate_transition_drift_conformance", GENERATOR)
     assert spec is not None and spec.loader is not None
     generator = importlib.util.module_from_spec(spec)

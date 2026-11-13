@@ -128,9 +128,9 @@ same change as the code it describes.
       asked meanwhile join the next message. The answers' JSON is written in
       one pass.
     - Both packages ship the same front end, byte for byte
-      (`cellucid-python/src/cellucid/jupyter/static/widget.js`,
-      `cellucid-r/inst/widget/widget.js`), and both test suites pin its
-      digest.
+      (`cellucid-python/src/cellucid/jupyter/static/widget.js`, its home, and
+      `cellucid-r/inst/widget/widget.js`), and each test suite compares its
+      file with the other package's ({ref}`shared-files`).
 
 ## Decisions and why
 
@@ -151,6 +151,18 @@ same change as the code it describes.
 | 2026-10-30 | R backed matrices (BPCells, DelayedArray) stay on disk: one counting pass, then placing passes of at most ¼ of physical memory, 64-bit positions | The old path joined every block into one double `dgCMatrix` (12–24 B a value, int32 pointers) | The 2^31 − 1 value cap; a dgCMatrix of the whole matrix |
 | 2026-10-30 | Speed and less download outrank memory, as long as memory is counted and bounded | Project decision | Trading speed for memory that is already explained |
 | 2026-10-30 | App timings are taken on a real GPU only | SwiftShader holds the main thread on synchronous GL calls | Timing on a software rasterizer |
+| by 2026-10-21 | A refused request's declared body is drained, for a bounded time, before its socket closes (`_server_base.py`) | A socket closed with received bytes unread is reset, and the client saw a dropped connection (on Windows, WinError 10053) instead of the status it was sent | Closing a refused request's socket at once |
+| by 2026-10-26 | Stopping a server shuts down every connection still open, not only the listening socket (`server_close`) | Each kept-alive connection stayed answered by its handler thread: a server started next on the same port had the page read the stopped server's dataset documents over the kept connections, and each idle thread lived until its timeout | Closing the listening socket alone |
+| by 2026-10-26 | A failing notebook hook never costs the notebook the event: the event is recorded first, every hook runs, and the failure is raised afterwards for the channel to log | One failing hook dropped the event from `viewer.state` and `wait_for_event`, so a session request timed out behind it | Stopping at the first hook that fails |
+| by 2026-11-01 | A notebook cell run again stops the viewer its earlier run showed, when no other cell shows it, and releases its object's matrices and chunk cache; where no cell id is known (a terminal, a console, a front end that sends none), R stops the earlier viewer of the same dataset id and says so | Each re-run kept one more viewer and its object alive; Python already stopped the widget a re-run cell replaced | A viewer kept for every run of a cell |
+| by 2026-11-01 | A session answer that has not arrived says the viewer has not sent it yet | A tutorial run top to bottom, which had asked in one cell and collected in the next, was told to "ask in one cell and collect it in the next" | Advice the person has already followed |
+| 2026-11-07 | A served file is held open only while its body is sent; an answer without a body (`HEAD`, 304, 416, an empty file) is sent after the file is closed (`anndata_server.py`, `_send_file`) | On Windows a file held open cannot have another moved over it: a handle still held after the answer failed a person's `write_h5ad` (a temporary name, then a rename) with "Access is denied" on the package's Windows CI | Holding the file for the length of the request |
+| by 2026-11-12 | A file replaced or rewritten while it is served is refused with 409 and the reason, for every key of the store made of the old version, over HTTP and through the widget | A file written again from a notebook beside `cellucid serve` had every chunk answered 500 with an HDF5 error ("wrong B-tree signature"), which the viewer reported as the server failing ("try again later"); the server now answers 409 with what to do, and the store says so as it is and reads nothing more of either version | Serving a store made of a file that is no longer there |
+| by 2026-11-12 | A binary frame of the viewer channel allocates only what arrives, and a binary first frame is refused from its header; cells and bodies past the dataset the viewer shows are refused before they are read | The buffer was allocated and zeroed at the length a frame named (four bytes can name a 4 GiB header; a frame header a 256 MiB body) before a byte of it came, and a first frame was read to its end before the socket had said who it was | Allocating at a length the other side states |
+| by 2026-11-12 | A hook is registered only for an event of the shared protocol, its name matched exactly (Python's `register_hook`, R's `cellucid_on()`); a misspelt one is refused by name | Python took a misspelt event, which then never fired; R's `match.arg()` matched a prefix (`"sel"`) or refused in R's generic words | Prefix matching; an event name nothing sends |
+| by 2026-11-12 | What opened a viewer names itself to the page (`runtime` of `_cellucid/info`): `jupyter`, `python`, `cellucid-serve` and `cellucid-mcp` from Python, `r` (`cellucid_view()`, `cellucid_serve()`) and `r-mcp` (`cellucid_mcp(open = )`) from R; an agent's record carries the same | The viewer says its host's name in every sentence: when `cellucid mcp --open` or an agent app's R MCP server ended, the page froze with "The notebook or R session that opened this viewer stopped" | One runtime name for everything a package starts. A host's own stop (a freeze, then a normal close) froze the page in silence and is now said as a stop; a reason that ends its own sentence is not ended twice (a field refusal read "... \"sample\".. The viewer is unchanged") |
+| by 2026-11-12 | `cellucid_serve()` of a file states `knn_key` and `expression_source` to the viewer, in the viewer's spelling, as `serve_anndata()` does | R refused both, so a file served from R could not name the neighbor graph or the matrix the viewer should read | A refusal of what a served file may state in R only |
+| by 2026-11-12 | `cellucid serve` flushes every line it prints (`console_print`) | With standard output not a terminal (a file, `nohup`, an IDE's run panel) Python block-buffers: the Viewer URL stayed in the buffer while the server ran, and the person could not open the viewer | Printing through a buffered stream |
 
 ## Measurements that justify it
 
@@ -207,10 +219,31 @@ SwiftShader and do not describe the app. On Metal, before the widget fixes,
 | The same object, 93 genes (1.2·10⁸ values), served | store ready after 250 s (laid out on R's thread), peak 3.7 GB |
 | Parallel deflate, 200k × 200 prepare | 24.2 → 7.7 s; deflate 39 → 295 MB/s on 1 → 10 threads |
 
-**Loopback request cost**, which sets the 2^18-value chunk: Python's
-`http.server` answers at most about 4,700 requests a second, and R's handlers
-about 1,600. A browser's `fetch` from a worker moves 46–79 MB/s in 64 KiB
-requests and 300–510 MB/s in 1 MiB requests (Chromium, Firefox, WebKit).
+**Loopback request cost**, which sets the 2^18-value chunk (Apple M1 Pro,
+six connections, by 2026-11-01): Python's `http.server` answers at most about
+4,700 requests a second (0.21 ms of the interpreter a request), and R's
+handlers, on R's one thread, about 1,600 (0.6 ms each). A browser's `fetch`
+from a worker moves 46–79 MB/s in 64 KiB requests and 300–510 MB/s in 1 MiB
+requests (Chromium, Firefox, WebKit), and no more in 4 MiB requests
+(169–590 MB/s). So in chunks of 2^14 values a pass over a matrix (an
+analysis, many genes) was bound by its requests, and 2^18 values (1 MiB of
+float32) is the least at which every engine's loopback rate has reached its
+plateau.
+
+**Other costs that set a constant or a path:**
+
+| What | When | Measured |
+|---|---|---|
+| Deflate on R's one main thread, the thread that answers every request | by 2026-10-26 | About 20 MB/s, while a browser reads loopback at hundreds of MB/s (above). A served store therefore declares no compressor, and no shuffle filter: the shuffle only helps the compressor and would cost a permutation of every chunk on that thread |
+| An action whose parameters hold arrays, sent as one binary frame (`jupyter/_wire.py`) | by 2026-10-26 | Two million cells are 8 MB written in one pass; the same cells as JSON text were 14 MB to build and parse |
+| The R widget's fetch messages (`.widget_fetch_messages`) | 2026-10-30 | 450 requests of the page: 1.28 s when each came in its own Jupyter message (450 messages), 0.27 s in 15 messages |
+| A matrix probe on the opening's path (`tests/first-view-reads-no-matrix.test.mjs` holds that the first view reads no matrix value) | date not kept | It made the first picture wait for a whole layout: `cellucid serve` of a 1M-cell CSR `.h5ad` took 4.4 s to the first picture against 1.5 s without it |
+| A dense matrix stored in chunks of whole rows, read through its rows (`_served_store.py`, `_DenseGeneMajor`) | by 2026-11-01 | 300,000 × 200 in gzip chunks of 1,000 × 200: 1.2 s a gene, each time, every served strip decoding every chunk. Laid out once, a strip is one slice |
+| `obs` of an object, cut to the served chunks | by 2026-11-01 | Re-cutting what anndata had chunked cost seconds before the server's first answer on a 10M-cell `obs`; it is cut straight from its columns in served order |
+| The priority order of the ranks (`subsample.py`, `_rank_argsort`) | by 2026-11-01 | 10M cells: 0.4 s by two stable counting passes over the 16-bit halves of the ranks, against 6 s for numpy's stable sort of the 32-bit keys |
+| A cached asset of the web app, verified on every request (`web_cache.py`) | by 2026-11-12 | Re-reading the inventory and hashing every asset on every request, under one lock, cost 30 ms an asset, seconds before a viewer's first frame. An asset is now verified once per version of its file |
+| The cached web app, downloaded from `www.cellucid.com` (`web_cache.py`, `_CONCURRENT_DOWNLOADS`; `R/web-cache.R`, `.concurrent_downloads`) | 2026-11-11 | One file at a time took over six minutes for the 1,209 files of a build. Both packages now keep six downloads in flight, the six connections per host a browser opens to a site, so the source sees no more than a browser loading the app asks of it |
+| Serving a 562k-cell × 8,192-gene `.h5ad` (CSR, gzip) from `cellucid serve` | on one Mac over localhost, no date kept | Startup 0.16 s, obs fields about 90 ms, 2D/3D UMAP about 40 ms each, the gene index about 2 s in the background from the moment the dataset opens (the browser measures a localhost link as fast as a disk), then a gene in a few ms and 100 genes in about 20 ms (1.3 s for a gene asked before the index is built), 1,000 cell rows 0.55 s, neighbor graph 0.65 s when drawn. The same object in memory: 0.8 s to write the temporary CSC `.h5ad` (925 MB), then first gene 8 ms and 100 genes 68 ms |
 
 ## Tried and reverted
 
@@ -220,7 +253,7 @@ requests and 300–510 MB/s in 1 MiB requests (Chromium, Firefox, WebKit).
 - **Waiting by one comparison (R, 2026-10-30).** An interim rule compared
   one pass with the layout's rest, so a burst paid one pass per gene
   (100 genes 4.9 s). It was replaced by the two-condition rule.
-- **Making the rest in output order (R, round 1 of the shared design).** A
+- **Making the rest in output order (R, an early form of the shared layout).** A
   pass over each segment's rest in output order touched random columns, with
   two cache misses per cell: 0.2–0.3 s per chunk at 10M on ten threads. The
   scan in stored order is about 10× cheaper and replaced it.
@@ -232,6 +265,15 @@ requests and 300–510 MB/s in 1 MiB requests (Chromium, Firefox, WebKit).
   thread; binary buffers take 0.3 ms. One message per request was replaced
   by the two-message window. Earlier versions of both widgets also put a
   two-batch gate in the front end, which was removed.
+- **jsonlite's writer for the R widget's answers.** It walked each
+  answer's list; one pass in `.widget_answers_json()` replaced it.
+- **A block of genes per gene read (R, until 2026-11-01).** A served store
+  made, for each gene read, a block of the genes around it and kept the
+  blocks within `cache_bytes`. Genes read across a matrix larger than the
+  cache made a block again for nearly every gene: at 1M cells × 100 values a
+  cell, 80 ms a gene, against 1 ms once the matrix is laid out. It was
+  replaced by laying the matrix out once, in the background
+  (`.laid_out_arrays()`), as Python's served store does.
 - **Joining backed blocks into a dgCMatrix (R).** `.in_memory_matrix()` was
   replaced by `.readable_matrix` and `cellucid-r/R/backed-matrix.R`.
   Python's dask sparse `X` is now decoded by row blocks into scratch instead
@@ -272,16 +314,6 @@ requests and 300–510 MB/s in 1 MiB requests (Chromium, Firefox, WebKit).
 - The thread start and join code in `cellucid-r/src/chunks.c` (`run_tasks`)
   is a fourth copy beside two in `src/backed.c` and one in `src/deflate.c`;
   one helper in `src/gene_major.h` for all of them is open work.
-
-## Known issues (pre-commit)
-
-Defects, regressions and unverified behavior known when this version was
-committed (2026-10-30), each with where it is recorded above. An item is
-removed in the change that fixes or verifies it.
-
-- **10M rows:** taken before the request's scan in stored order; the final design's 10M run (R at `-O0` and `-O2`, Python) is not taken.
-- **Python widget:** 100 genes and the DE read were slower in the latest single run (1.90 s, 0.86 s) than in the earlier one (0.65 s, 0.33 s), not yet explained.
-- **R served backed matrix:** laid out on R's thread before the viewer opens (250 s for the 1.3M-neuron object).
 
 ## Where the code and tests live
 

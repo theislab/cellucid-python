@@ -129,8 +129,8 @@ Decide what holds the value of each control:
 - **Another domain's state.** A control whose value is held elsewhere (a
   field picker, a filter, a highlight) dispatches its action, and the domain's
   owner captures the value from the state; add its id to the inventory's
-  `DOMAIN_OWNED_IDS` (and to the list in `app/state-serializer/README.md`,
-  which `tests/session-docs-current-contract.test.mjs` holds to it) or mark its
+  `DOMAIN_OWNED_IDS` (and to the list in `app/state-serializer/README.md`;
+  `tests/session-ui-controls-exact-contract.test.mjs` holds that capture omits every id of the set) or mark its
   subtree skipped, so it is not also a setting.
 - **Page chrome.** A toolbelt of buttons of which exactly one is pressed and
   which decides how later gestures are read (the selection tool) is marked

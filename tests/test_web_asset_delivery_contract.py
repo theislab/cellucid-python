@@ -671,7 +671,7 @@ def test_force_refresh_network_failure_keeps_the_prior_generation(
 
     if failure_asset == web_cache.WEB_ASSET_INVENTORY_FILENAME:
         # The source cannot be read at all: the verified cache is that build
-        # exactly and is served offline, as the R package serves it (R9X-15).
+        # exactly and is served offline, as the R package serves it.
         summary = web_cache.ensure_web_ui_cached(
             cache_dir=cache_dir, source_url="https://viewer.example", force=True, show_progress=False
         )
@@ -1043,7 +1043,8 @@ def test_cache_cleanup_failure_is_propagated(monkeypatch, tmp_path: Path) -> Non
 
 
 def test_an_asset_is_verified_once_per_version_not_on_every_request(monkeypatch, tmp_path: Path) -> None:
-    """Hashing every asset on every request cost 30 ms each: seconds before a first frame."""
+    """Hashing every asset on every request would put seconds before a first
+    frame (measured: 26_decisions_served_store_and_widgets.md)."""
     from cellucid import web_cache
 
     assets = _asset_payloads("build-1")
@@ -1141,9 +1142,10 @@ def test_a_new_build_downloads_only_the_files_it_changed(monkeypatch, tmp_path: 
 
 
 def test_a_build_is_downloaded_several_files_at_once(monkeypatch, tmp_path: Path) -> None:
-    """Each file was once fetched only after the previous one arrived: 1,209
-    files from www.cellucid.com took over six minutes. Here every download
-    waits until another is in flight with it, which one at a time never is."""
+    """Fetched one after the other, a build of over a thousand files takes
+    minutes (measured: 26_decisions_served_store_and_widgets.md). Here every
+    download waits until another is in flight with it, which one at a time
+    never is."""
     import threading
 
     from cellucid import web_cache
@@ -1173,7 +1175,7 @@ def test_a_build_is_downloaded_several_files_at_once(monkeypatch, tmp_path: Path
 
 
 def test_offline_a_verified_cache_is_served_and_anything_else_says_what_is_missing(monkeypatch, tmp_path: Path) -> None:
-    """Offline start parity with the R package (R9X-15): the source cannot be
+    """Offline start parity with the R package: the source cannot be
     read; a cache whose every file matches its inventory is served, an
     unverified one or none is refused with the shared words."""
     from cellucid import web_cache

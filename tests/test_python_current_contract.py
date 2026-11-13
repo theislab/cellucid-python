@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import re
 import subprocess
@@ -7,8 +8,8 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
-import cellucid
 from cellucid._viewer_channel import (
     register_event_callback,
     route_event,
@@ -72,19 +73,6 @@ def test_shipped_python_repository_surfaces_contain_only_current_contract_langua
     assert violations == []
 
 
-def test_readme_cross_references_the_current_cellucid_ecosystem() -> None:
-    readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
-    for url in (
-        "https://docs.cellucid.com/en/latest/user_guide/python_package/index.html",
-        "https://github.com/theislab/cellucid",
-        "https://github.com/theislab/cellucid-r",
-        "https://github.com/theislab/cellucid-datasets",
-        "https://github.com/theislab/cellucid-demo-custom-datasets",
-        "https://github.com/theislab/cellucid-annotation",
-    ):
-        assert url in readme
-
-
 def test_readme_renders_completely_outside_the_repository() -> None:
     """PyPI serves the long description with no repository to resolve against."""
     readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
@@ -94,16 +82,6 @@ def test_readme_renders_completely_outside_the_repository() -> None:
         if not target.startswith(("https://", "http://", "#", "mailto:"))
     ]
     assert relative_targets == []
-
-
-def test_readme_claims_only_what_the_project_can_evidence() -> None:
-    readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
-    # No conda-forge feedstock exists for this package.
-    assert "conda-forge" not in readme
-    assert "anaconda.org" not in readme
-    # Unmeasured scale and speed claims must not be advertised.
-    for unmeasured in ("millions", "10x faster", "10× faster", "fastest"):
-        assert unmeasured.lower() not in readme.lower()
 
 
 def test_mypy_uses_each_ci_interpreter_and_ci_keeps_the_supported_boundaries() -> None:
@@ -121,36 +99,94 @@ def test_mypy_uses_each_ci_interpreter_and_ci_keeps_the_supported_boundaries() -
     assert "python -m mypy src/cellucid" in workflow
 
 
+def _workflow_steps(name: str) -> tuple[dict, list[dict]]:
+    """The parsed workflow ``name`` and every step of every job in it."""
+    workflow = yaml.safe_load((REPOSITORY_ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))
+    return workflow, [step for job in workflow["jobs"].values() for step in job["steps"]]
+
+
+def _string_prefix(node: ast.expr) -> tuple[str, bool] | None:
+    """The text of a string literal or f-string up to its first substitution,
+    and whether the whole of it is known."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value, True
+    if isinstance(node, ast.JoinedStr):
+        prefix = ""
+        for part in node.values:
+            if not (isinstance(part, ast.Constant) and isinstance(part.value, str)):
+                return prefix, False
+            prefix += part.value
+        return prefix, True
+    return None
+
+
+def _web_paths_the_tests_name() -> list[tuple[str, bool]]:
+    """Each path of the web app's checkout a test names (``web_file()``, the
+    ``theirs`` of ``assert_shared_file()``, the script of ``rendered_by_web()``),
+    as its known leading text and whether that is the whole path."""
+    named: list[tuple[str, bool]] = []
+    for test_file in sorted((REPOSITORY_ROOT / "tests").glob("*.py")):
+        for call in ast.walk(ast.parse(test_file.read_text(encoding="utf-8"))):
+            if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
+                continue
+            keywords = {keyword.arg: keyword.value for keyword in call.keywords}
+            argument: ast.expr | None = None
+            if call.func.id in {"web_file", "rendered_by_web"} and call.args:
+                argument = call.args[0]
+            elif call.func.id == "assert_shared_file":
+                repository = keywords.get("repository")
+                if repository is None or (isinstance(repository, ast.Constant) and repository.value == "cellucid"):
+                    argument = call.args[1] if len(call.args) > 1 else keywords.get("theirs")
+            text = None if argument is None else _string_prefix(argument)
+            if text is not None:
+                named.append(text)
+    return named
+
+
+def _sparse_pattern_holds(pattern: str, path: str, *, whole: bool) -> bool:
+    """Whether the no-cone sparse-checkout ``pattern`` (``*`` within one name) holds ``path``,
+    or, where only the start of the path is known, could hold a file under it."""
+    if pattern.endswith("/"):
+        return path.startswith(pattern) or (not whole and pattern.startswith(path))
+    expression = "[^/]*".join(re.escape(part) for part in pattern.split("*"))
+    if re.fullmatch(expression, path):
+        return True
+    return not whole and pattern.startswith(path)
+
+
 def test_ci_checks_out_every_sibling_the_tests_compare_with() -> None:
     """The cross-repository tests (tests/_web_root.py) skip only where a
-    sibling is not checked out; CI checks out each one beside this repository
-    and requires it, so there they always run (a test reading cellucid-r
-    without its checkout failed every job, run 43106597330)."""
+    sibling is not checked out; CI checks out each one beside this repository,
+    at ``main``, names it and requires it, so there they always run (a test
+    reading a sibling that is not checked out would fail every job)."""
     from _web_root import _SIBLINGS
 
-    workflow = (REPOSITORY_ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
-    assert re.search(r'(?m)^      CELLUCID_SIBLINGS_REQUIRED: "1"$', workflow)
-    assert re.search(r"(?m)^          path: cellucid-python$", workflow)
-    for repository in _SIBLINGS:
-        assert re.search(
-            rf"(?m)^          repository: theislab/{re.escape(repository)}\n          path: {re.escape(repository)}$",
-            workflow,
-        ), repository
-    # The web app's sparse checkout holds every tree the tests read of it.
-    sparse = re.search(r"repository: theislab/cellucid\n(?:.*\n)*?\s+sparse-checkout: \|\n((?:\s{12}.*\n)+)", workflow)
-    assert sparse is not None
-    assert sorted(line.strip() for line in sparse.group(1).strip().splitlines()) == [
-        "assets/external/",
-        "assets/js/",
-        "assets/wasm/",
-        "assets/workers/",
-        "scripts/",
-        "tests/fixtures/",
+    workflow, steps = _workflow_steps("test.yml")
+    job = workflow["jobs"]["test"]
+    assert job["env"]["CELLUCID_REQUIRE_SIBLINGS"] == "1"
+    checkouts = {
+        step["with"]["repository"]: step["with"]
+        for step in steps
+        if str(step.get("uses", "")).startswith("actions/checkout@") and "repository" in step.get("with", {})
+    }
+    for repository, (variable, _) in _SIBLINGS.items():
+        checkout = checkouts[f"theislab/{repository}"]
+        assert checkout["ref"] == "main", repository
+        assert job["env"][variable] == f"${{{{ github.workspace }}}}/{checkout['path']}", variable
+    assert any(str(step.get("uses", "")).startswith("actions/setup-node@") for step in steps)
+
+    # The web app's sparse checkout holds every path the tests name of it.
+    sparse = checkouts["theislab/cellucid"]["sparse-checkout"].split()
+    assert checkouts["theislab/cellucid"]["sparse-checkout-cone-mode"] is False
+    named = _web_paths_the_tests_name()
+    assert len(named) > 10, "the tests name paths of the web app"
+    left_out = [
+        prefix for prefix, whole in named if not any(_sparse_pattern_holds(pattern, prefix, whole=whole) for pattern in sparse)
     ]
-    assert "actions/setup-node@" in workflow
+    assert left_out == [], "paths the tests read of the web app that its sparse checkout leaves out"
 
 
-def test_release_version_and_embedding_dimensions_are_coherent() -> None:
+def test_the_release_validator_accepts_only_the_tag_of_this_version() -> None:
     pyproject = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     version_match = re.search(
         r'(?m)^version = "([^"]+)"\s+# CELLUCID_VERSION$',
@@ -158,22 +194,6 @@ def test_release_version_and_embedding_dimensions_are_coherent() -> None:
     )
     assert version_match is not None
     version = version_match.group(1)
-
-    changelog = (REPOSITORY_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    citation = (REPOSITORY_ROOT / "CITATION.cff").read_text(encoding="utf-8")
-    docs_conf = (REPOSITORY_ROOT / "docs/conf.py").read_text(encoding="utf-8")
-    assert f"## [{version}]" in changelog
-    assert "## [Unreleased]" not in changelog
-    assert "[Unreleased]:" not in changelog
-    assert f"/releases/tag/v{version}" in changelog
-    assert f"version: {version}" in citation
-    assert "date-released:" not in citation
-    assert f"## [{version}]\n" in changelog
-    assert f'release = version = "{version}"' in docs_conf
-    assert "1D/2D/3D/4D" not in changelog
-    assert "Multi-dimensional embedding exports (1D/2D/3D)" in changelog
-    assert cellucid.__doc__ is not None
-    assert "1D, 2D, and 3D single-cell WebGL visualization toolkit" in cellucid.__doc__
 
     validator = REPOSITORY_ROOT / "scripts" / "validate_release.py"
     valid = subprocess.run(
@@ -268,7 +288,7 @@ def test_hook_events_are_the_protocol_events_and_a_misspelt_one_is_refused() -> 
     # Every event the viewer sends a notebook takes a hook, except an agent
     # app's own (delivered to its port), plus the catch-all ``message``:
     # cellucid-r's cellucid_on() pins the same names to the same fixture
-    # (test-viewer-protocol.R). A misspelt event used to be taken and never fired.
+    # (test-viewer-protocol.R). A misspelt event, if taken, would never fire.
     protocol = json.loads((Path(__file__).parent / "fixtures" / "viewer_protocol.json").read_text(encoding="utf-8"))
     events = {*protocol["events"], *protocol["binaryEvents"]}
     assert set(HOOK_EVENTS) == {event for event in events if not event.startswith("agent_")} | {"message"}

@@ -78,6 +78,8 @@ dev = [
     "cellucid[mudata]",
     "cellucid[mcp]",
     "pytest>=7.0",
+    # The workflow contracts read the workflows as data.
+    "pyyaml>=6.0",
     "pytest-cov>=4.0",
     # Linters are pinned to an exact version, and the docs extra already pins
     # Sphinx the same way. A floor lets CI install whatever shipped that morning,
@@ -152,7 +154,11 @@ known-first-party = ["cellucid"]
 testpaths = ["tests"]
 # Tests import this checkout's cellucid, never another installed copy.
 pythonpath = ["src"]
-addopts = "-v --tb=short"
+# A misspelt marker is an error, not an empty selection.
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "core: the fast run that covers each part of the package once (python -m pytest -m core)",
+]
 
 [tool.mypy]
 warn_return_any = true

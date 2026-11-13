@@ -81,7 +81,7 @@ served store makes (`cache_bytes`, `cellucid-python/src/cellucid/_served_store.p
 | Date | Decision | Why | Rules out |
 |---|---|---|---|
 | 2026-10-20 | **No fabricated limits.** A size or count bound exists only for a real platform limit (one `ArrayBuffer`'s length, a WebAssembly memory's 2^32 bytes, GPU texture size, a protocol field) or to bound untrusted input against what it declares. Every named limit is classified with its reason in `cellucid/tests/size-limit-allowlist-contract.test.mjs`. | An invented "512 MiB browser limit" refused real files and had spread to about ten places. | Refusing, truncating or hiding data because of its size; memory budgets that decide what opens. |
-| 2026-10-26 | 77 bytes a cell in the working set, measured, not modeled. | Measured steady at 100M synthetic 3D cells with levels of detail (renderer and GPU processes, Chromium, M1 Pro): 64.6 bytes for the points, plus a field's codes, one continuous field and its quantile. An earlier 54 left out the spatial tree, draw order and GPU overhead, and fitted 148M cells to a 16 GB machine where 125M already swapped. | A per-cell figure nobody measured. |
+| 2026-10-26 | 77 bytes a cell in the working set, measured, not modeled. | Measured steady at 100M synthetic 3D cells with levels of detail (renderer and GPU processes together, Chromium, M1 Pro): 64.6 bytes of physical memory a cell for the points in 3D (53.3 in 2D), rounded up, plus 4 for the colored field's codes, 4 for one continuous field and 4 for its outlier quantile. On a 16 GB machine (an 8 GB allowance) 100M 3D cells built their levels of detail and 125M went into swap building them, so about 104M cells is what opens. An earlier 54 left out the spatial tree, draw order and GPU overhead, and fitted 148M cells to a 16 GB machine where 125M already swapped. | A per-cell figure nobody measured. |
 | 2026-10-28 | **Count bytes, not the heap.** One ledger of holders in every thread replaces heap-percentage pressure. | `performance.memory.usedJSHeapSize` read 10,000,000 before and after allocating 512 MiB of typed arrays (quantized, rarely refreshed outside cross-origin isolation), counts no `ArrayBuffer`, and exists only on Chromium pages: pressure never arrived. | Thresholds on heap percentage; clock-driven cleanups. |
 | 2026-10-28 | **Allowance = half the device; the working set first, the caches divide what it leaves.** | Before, the auto-fit and the caches were each sized against the full allowance: at the auto-fit limit they reached 100% of the device (Chromium, 16 GiB Mac: 111.6M cells, 8 + 8 GiB). | Two budgets spending the same bytes. |
 | 2026-10-28 | **The page estimates the device and hands it to workers.** | A worker has no heap limit to read: a Chromium that caps `deviceMemory` at 8 gave the worker 8 GiB and the page 14. | Per-thread estimates that disagree. |
@@ -91,8 +91,11 @@ served store makes (`cache_bytes`, `cellucid-python/src/cellucid/_served_store.p
 | 2026-10-30 | **Speed and less download before memory, while memory is counted, bounded and explained.** Unexplained memory is a defect. | The product's priority order. Memory above every cell's is acceptable when counted and explained. | Trading time or re-downloads for memory (for example, releasing a subsample's ranks after growth). |
 | 2026-10-30 | **An index pass under way counts as held** (`building()` on index access and segments, in the reader's `_heldBytes`), so genes kept for a cell-subset run are never held beside a building gene index past the share. | At 50M, a kept cell subset beside a 50M gene-index pass took the reader worker to 8.7 GB and failed (`Array buffer allocation failed`). | Keeping a run's genes against an unbuilt index's reservation. |
 | 2026-10-30 | **Analysis workers' marker contexts are counted at what they hold** (`markerContextBytes`: the codes and the 2-4 B group index each worker builds from them, `heldBytes`). | They were counted at the codes alone (1 B a cell a worker). | Uncounted per-worker indexes. |
-| 2026-10-30 | **What a share holds is counted where it is held.** An open subsample's rows and ranks (`'cell rows N'`), the page's cell identity, the view's row pointers (`heldBuffers`, reported under `columnIndex`). | A 50M reader worker held far more than it reported. | Per-cell arrays outside the ledger. |
+| 2026-10-30 | **What a share holds is counted where it is held.** An open subsample's rows and ranks (`'cell rows N'`), the page's cell identity, the view's row pointers (`heldBuffers`, reported under `columnIndex`). What the cell-rows lookups hold is this thread's part of the working set and is let go when the reader closes. | At 50M cells the reader worker held 2.34 GB after collection against 0.6 GB counted, before the count. | Per-cell arrays outside the ledger. |
+| no date kept | **A level-of-detail build is admitted against the tab's heap before it starts**, by its peak (retained plus transient, `requireLodBuildHeapHeadroom` in `rendering/high-perf-renderer.js`), not its settled size; a build in the tree worker is admitted against what this thread receives (typed arrays and about one tree node per thousand points, `LOD_WORKER_RESULT_HEAP_BYTES_PER_POINT`), not the worker's scratch | A build whose peak exceeds `jsHeapSizeLimit` produces no error on Chromium: 40M points with levels of detail did not return after 26 minutes, the engine collecting a multi-GiB heap while the tab stayed alive. A 100M-point 3D load that the tree worker builds was refused by the whole-build projection though this thread receives little of it | Admitting against the settled size; projecting a worker's scratch onto this thread |
+| by 2026-11-12 | **Field residency is bounded in bytes**, a share of the allowance (`state/managers/field/residency.js`), and an inactive gene keeps its sparse form alone. | It is what stops "scroll through genes for 10 minutes → tab uses 10 GB"; the earlier entry-count bound did not, because each field object kept its arrays alive. A gene's sparse form is its entries instead of four bytes a cell (40 MB at 10M cells), so browsing genes holds one gene's column at a time. | A bound by entry count. |
 | 2026-10-31 | **The page's inactive field data is counted from the cached fields only** (`state/managers/field/residency.js`: each inventory indexed by cache key once per fields array and length, then a memory report looks up the cached keys, each view's active field and the user-defined aliases). | The count is asked on every memory report (each worker report, each working-set change); it walked every field of every view, 30,000 genes, each time: 0.5-1.4 s of the page's main thread per markers run at 10M cells (traced). The same answer as the walk, bit for bit (`residency-cached-keys-contract`). | Walking the inventories per report. |
+| by 2026-11-12 | **The dimension manager a publication replaced is held beside the publication, not in it,** and retired once that publication's interface has settled (`app/dataset/publication.js`). | A publication lives as long as its dataset is shown, and its stage holds every position, so a replaced dataset's positions would stay in memory as long. | Keeping the replaced manager in the publication. |
 | 2026-11-06 | **A released field is no filter, and what cannot be read again is never released.** The visibility pass asks for a field's arrays only when it was read or its filter narrows (`hasCategoryFilter`, `hasRangeFilter`). Stay resident: a hidden category, the missing row hidden, a category's cell count (`_categoryCellLimits`), a filter on a deleted field, and a user-defined field's own arrays (its codes, a pushed column's values; a copy of a file's continuous column reads its values again). | A tab switch trims to nothing, so a field colored once kept `_categoryVisible` without codes and every later pass threw: on 0.9.7 live, "Verifying the branch failed: Observation category field 4 requires exact dataset-length codes", and the same for coloring, undo and jump. A continuous field threw the same way, and a category limited by cell count and a user's own column were lost: a pushed column's values and a duplicated field's codes exist nowhere else (`tests/browser/history-verify-released-fields.spec.mjs`). The check stays for a narrowing filter on a field not read. | Clearing `_categoryVisible` on release (a kept view's copy and every later reader would still have to know); skipping unread fields whatever their filter (wrong visibility). |
 
 ## Measurements that justify it
@@ -109,11 +112,15 @@ Apple M1 Pro, 16 GB, Chromium on Metal unless stated.
   +2.5 to 3 GB within 2 s); the cause was the reader worker's heap, 4.0 GB of
   about a million one-cell reads in flight, not the analysis workers. With
   every read priced at least one request of the link: Wilcoxon 2.8 s,
-  renderer peak 4.5 → 2.4 GB, reader heap 4.0 GB → 4 MB.
+  renderer peak 4.5 → 2.4 GB, reader heap 4.0 GB → 4 MB; at a million cells
+  the unpriced read held 1 GB of heap for 5.5 s (the pricing:
+  {doc}`23_decisions_partial_reading`).
 - **Neighbor graphs at scale** (2026-10-30): forward adjacency (8 bytes an
   edge + 4 bytes a cell held) replaced edge records. 50M cells, 349.7M edges
   build and show in 40.0 s (refused before: "Array buffer allocation failed"
-  after a 10.4 GB build), `graph` working set 2.9 GB; 10M edges reader worker
+  after a 10.4 GB build), `graph` working set 2.9 GB; a k = 15 graph of 50M
+  cells (350M edges) holds 3.0 GB and peaks at 3.2 GB while it is built
+  (float32 weights); 10M edges reader worker
   peak 6.6 → 3.0 GB, page 2.5 → 1.2 GB. See {doc}`24_decisions_graph_edges_at_scale`.
 - **Held against counted** (2026-10-30). Node, reader worker handler, live
   `ArrayBuffer`s after collection against `memoryReport()`:
@@ -130,9 +137,45 @@ Apple M1 Pro, 16 GB, Chromium on Metal unless stated.
   and a kept index copy's pointers (42 MB), now counted.
 - **Page side at 10M** (2026-10-30): a gene crosses from the worker in its
   sparse form when smaller, and inactive genes are kept as that form
-  alone; a gene shown on the page 66 to 70 → 6 to 10 ms of main thread
-  (Node).
+  alone; a gene shown on the page 66 to 70 → 6 to 10 ms of main thread,
+  a partial answer 146 → 6 ms (Node).
 
+- **The device and the platform's buffers** (2026-10-28 for the buffer sizes, Playwright
+  builds on macOS arm64). On a 16 GiB Mac, Chromium 151 reports
+  `deviceMemory` 16 and its V8 heap limit is 3.76 GB (about a quarter of
+  physical memory), so the estimate past an 8 GiB report that may be a cap
+  is 14 GiB, not 8. The largest `ArrayBuffer` is 2,145,386,496 bytes in
+  Chromium (2,080,374,783 in earlier builds), 2^32 in WebKit and 2^34 in
+  Firefox. A `WebAssembly.Memory` holds up to 2^32 bytes on all three and
+  behaves as an ordinary buffer for reads, writes, `set`, `subarray` and
+  `slice` (checked on each engine at 2^31, 2.6, 3 and 4 GiB).
+- **The level-of-detail build's heap** (Chromium on ANGLE Metal; `LOD_BUILD_*`
+  in `rendering/high-perf-renderer.js`). Fitted from a 5M, 10M, 20M and 30M
+  point curve: the settled heap is 79.8 bytes a point plus 24 MiB with the
+  index built and 51.9 bytes plus 20 MiB without it, so the build retains
+  27.9 bytes a point plus 4 MiB. The transient term adds the scratch alive
+  at the same time: three `Uint32Array(pointCount)` in the ordering pass
+  (12 bytes at calibration; the priority order now holds at most 8, and 16
+  for a `blocks` subsample), the leaves and child chain of `buildNode`
+  (about 8.6), and 16 that was a point-count-sized packing scratch at
+  calibration and stays as margin until the 40M-point hang is measured
+  again (the stores are now gathered on the GPU). The renderer process's own
+  cap measured 4,395,630,592 bytes. WebKit rendered the same 40M load and
+  Firefox refused it with a stated WebGL `OUT_OF_MEMORY`. A build in the tree
+  worker leaves this thread only the decoded tree's nodes: 1.06 bytes a point
+  at 2M and 1.53 at 10M after a collection (V8 in Node 26, 3-D, 1,000 points
+  a leaf), rounded up to 2. Typed arrays are outside `jsHeapSizeLimit`:
+  Chromium accepted 15 GiB of `ArrayBuffer`s with a 4.1 GiB limit (the 50M to
+  100M point scale probe of the three engines). A 100M synthetic 3D load in
+  the tree worker had 2,121 MiB of heap in use against a 4,192 MiB cap.
+- **Requests and bytes only an export reads.** Held requests are bounded by
+  the fetched-bytes budget, oldest first: a 21,285-cell export of a 10M-cell
+  file held 210 of its 216 fetched MB to its end, and HLCA core's 808 MB
+  export peaked at 970 MB instead of 726 MB. A cell export's own bytes are
+  read once and not handed to the page's memory of fetched bytes: an export
+  of 21,285 cells of HLCA read 812 MB
+  ({doc}`25_decisions_exports`).
+- **Strings and field walks.** A short ASCII string made a character at a time is a chain of as many pieces until it is first read whole: the names of 1M cells of a 10M-cell Zarr store, 22 characters each, held 391 MB of heap built so and 91 MB made whole (`formats/zarr/codecs/vlen.js`). Count loops that walked every field for every cell and re-derived each filter's state were most of a categorical field switch at 5,000,000 cells; filters that can never hide a cell are left out of them (`state/managers/field/summary.js`).
 - **A day of use holds nothing more** (2026-11-11, Chromium, demo catalog
   2-D and 3-D datasets opened in turn): one round is a dataset opened,
   coloring by a gene, a field and a category, a filter, two kept views
@@ -158,7 +201,8 @@ Apple M1 Pro, 16 GB, Chromium on Metal unless stated.
 ## Known limits and open items
 
 Real platform limits the model designs around (details in
-{doc}`07_rendering_pipeline_webgl_and_performance_notes`): one `ArrayBuffer`
+{doc}`28_decisions_rendering_layers`, its decision rows under "Stores, orders,
+trees and the frame" and its section "The point stores in detail"): one `ArrayBuffer`
 (Chromium 2,145,386,496 bytes, WebKit 2^32, Firefox 2^34), so larger
 per-cell arrays are made in a WebAssembly memory (`utils/large-arrays.js`);
 a WebAssembly memory's 2^32 bytes; Firefox and Safari report no device
@@ -168,7 +212,8 @@ Open:
 
 - **50M reader worker, held against counted.** After the pointer fix, a
   168 MB read held in a promise and about 250 MB of arrays with no owner in
-  the snapshot were still unattributed at 50M (not reproduced at 10M).
+  the snapshot (about 418 MB in all) were still unattributed at 50M (not
+  reproduced at 10M).
 - **Not counted** (stated in {ref}`memory-budgets`): GPU objects beyond the
   working set's measured share (kept views' color stores, highlights, edge
   geometry), sharded Zarr shard indexes, and the read activity log's
@@ -180,16 +225,6 @@ Open:
   counted, unattributed (analysis buffers held account for about 55 MB at
   2.28M cells; attributing the rest needs a per-thread measurement).
 
-## Known issues (pre-commit)
-
-Defects, regressions and unverified behavior known when this version was
-committed (2026-10-30), each with where it is recorded above. An item is
-removed in the change that fixes or verifies it.
-
-- **Firefox during differential expression:** about 870 MB more than counted, unattributed.
-- **50M reader worker:** about 418 MB held but not attributed to a counted holder (a 168 MB read held in a promise and about 250 MB of arrays with no owner in the snapshot).
-- **DE at 10M:** about 1 GB of short-lived buffers in the reader, not in the ledger.
-
 ## Where the code and tests live
 
 | Concern | Module(s) | Tests |
@@ -200,7 +235,7 @@ removed in the change that fixes or verifies it.
 | Worker lifetimes | `workers/idle-retirement.js` | `cellucid/tests/worker-idle-retirement-contract.test.mjs` |
 | Decoded chunks' shared budget | `formats/io/decoded-budget.js`, `data/anndata/decoded-chunks.js` | `cellucid/tests/decoded-chunks.test.mjs` |
 | Allocations that report refusals | `data/sparse-column-index.js` (`allocateTypedArray`), `utils/large-arrays.js` | `cellucid/tests/per-cell-allocation-contract.test.mjs` |
-| Open rows and ranks counted | `data/anndata/reader.js`, `data/anndata/views/cell-subset.js`, `data/subsample.js` | `cellucid/tests/cell-rows-lookups-contract.test.mjs` |
+| Open rows and ranks counted | `data/anndata/reader.js` (`_cellRowsPart`), `data/anndata/views/cell-subset.js`, `data/subsample.js` | `cellucid/tests/cell-rows-lookups-contract.test.mjs` |
 | Analysis memory | `app/analysis/shared/gene-stream-runner.js`, `app/analysis/compute/worker-pool.js`, `app/analysis/data/data-layer.js` | `cellucid/tests/analysis-gene-reads-bounded-contract.test.mjs` |
 | Auto-fit against the allowance | `data/anndata/subsample-plan.js` | `cellucid/tests/scale-auto-fit-budget.test.mjs` |
 | Page holders and per-cell array ownership | `app/state/core/data-state.js` (inactive fields, unshown layouts, cell identity), `app/state/managers/field/residency.js`, `app/state/managers/per-cell-array-ownership.js` | `cellucid/tests/view-memory-ownership-contract.test.mjs`, `cellucid/tests/residency-cached-keys-contract.test.mjs`, `cellucid/tests/browser/kept-views-memory.spec.mjs` |
@@ -217,8 +252,8 @@ removed in the change that fixes or verifies it.
   browser memory.
 - {doc}`20_read_path_architecture`: memory as a cross-cutting concern of the
   read path.
-- {doc}`07_rendering_pipeline_webgl_and_performance_notes`: GPU memory and
-  `ArrayBuffer` limits.
+- {doc}`28_decisions_rendering_layers`: GPU memory and `ArrayBuffer` limits
+  (the point stores in detail).
 - {doc}`21_decisions_decoders_and_codecs`: decode workers and their memory.
 - {doc}`23_decisions_partial_reading`: what a share costs, memory included.
 - {doc}`24_decisions_graph_edges_at_scale`: the graph's working set.

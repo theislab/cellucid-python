@@ -1,7 +1,7 @@
 """The round trip: what a person made in the viewer, pulled into an AnnData in
 one call, and columns and gene sets pushed into the viewer.
 
-The viewer's side is played by a fake that sends what ``app/viewer-host-results.js``
+The viewer's side is played by a fake that sends what ``app/viewer-host/results.js``
 sends -- a snapshot (every result, then the ``results`` inventory), then each
 change -- through the notebook's own event path (``_handle_frontend_message``),
 frames and all. Nothing in the round trip asks the viewer and waits: every
@@ -10,7 +10,6 @@ call reads what it already sent.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from pathlib import Path
@@ -21,6 +20,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from _serverless_viewer import serverless_viewer
+from _web_root import assert_shared_file
 
 import cellucid
 import cellucid.jupyter as jupyter
@@ -216,7 +216,7 @@ def test_one_pull_writes_every_highlight_label_and_score_with_one_naming_scheme(
     assert set(adata.uns["cellucid"]["pulled"]) == set(summary.columns)
     assert adata.uns["cellucid"]["pulled"]["annotation"] == {
         "kind": "categorical", "id": "user_cat_1", "pulled_from": "viewer", "key": "annotation", "origin": "user"}
-    # The colors the viewer shows the field in (its result carries them, RCC-1);
+    # The colors the viewer shows the field in (its result carries them);
     # a column of no categories takes none.
     assert adata.uns["annotation_colors"] == ["#123456", "#0077c8"]
     assert not any(key.endswith("_colors") for key in adata.uns if key != "annotation_colors")
@@ -537,20 +537,23 @@ def test_gmt_round_trip(tmp_path: Path) -> None:
         "T cells": ["CD3E", "CD3D"], "B cells": ["MS4A1"], "B cells (2)": ["CD79A"], "a  b": ["X"]}
 
 
-def _shared_fixture(name: str, digest: str) -> Path:
-    path = Path(__file__).parent / "fixtures" / name
-    assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, f"{name} changed: update it in all three repositories"
-    return path
+#: The files the web app, this package and cellucid-r each read in their round-trip tests.
+SHARED_FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.mark.parametrize(("ours", "theirs"), [("gene_sets.gmt", "gene-sets.gmt"), ("obs_columns.csv", "obs-columns.csv")])
+def test_the_shared_round_trip_fixtures_are_the_web_apps_byte_for_byte(ours: str, theirs: str) -> None:
+    assert_shared_file(f"tests/fixtures/{ours}", f"tests/fixtures/{theirs}")
 
 
 def test_the_shared_gmt_fixture_reads_as_the_web_app_and_r_read_it() -> None:
-    path = _shared_fixture("gene_sets.gmt", "071d3e007164ff4d9c311820ba3a1be3061b7fd4b80e59142df17690c37b8bfd")
+    path = SHARED_FIXTURES / "gene_sets.gmt"
     assert cellucid.read_gmt(path) == {
         "T cells": ["CD3E", "CD3D"], "Set 2": ["X"], "T cells (2)": ["CD2"], "B": ["MS4A1"]}
 
 
 def test_the_shared_obs_column_csv_fixture_keeps_every_declared_kind() -> None:
-    path = _shared_fixture("obs_columns.csv", "0353146eabba6a9fa76c565a5710dcce275471fcbfd7674f3a86d8c6e2799db2")
+    path = SHARED_FIXTURES / "obs_columns.csv"
     adata = ad.AnnData(obs=pd.DataFrame(index=["c0", "c,1", "c2", "c3", "c4", "c5"]))
     summary = cellucid.pull(adata, path)
     obs = adata.obs
@@ -570,8 +573,8 @@ def test_the_shared_obs_column_csv_fixture_keeps_every_declared_kind() -> None:
 
 
 def test_a_fields_csv_keeps_the_fields_category_order_and_its_empty_categories(tmp_path: Path) -> None:
-    # F125: categories came back in the rows' order of first appearance,
-    # and a category no cell holds was lost.
+    # Categories come back in the field's order, never the rows' order of
+    # first appearance, and a category no cell holds is kept.
     path = tmp_path / "stage.csv"
     path.write_text(
         'obs_name,stage\nkind,categorical\ncategories,"[""Pre-endocrine"",""Progenitor"",""Endocrine"",""Unassigned""]"\n'
@@ -660,7 +663,7 @@ def test_a_bool_column_is_pushed_with_the_labels_r_pushes() -> None:
 
 
 def test_identifiers_past_2_53_are_pushed_as_their_exact_text() -> None:
-    # As the viewer reads such a column (F116): text, never the nearest float32.
+    # As the viewer reads such a column: text, never the nearest float32.
     ids = np.array([2**60 + 1, 2**60 + 3, 2**60 + 1], dtype=np.int64)
     params = field_push_params(ids, "donor_id", n_obs=3, obs_names=None)
     assert params["kind"] == "categorical"

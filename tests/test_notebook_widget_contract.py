@@ -26,6 +26,7 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from _web_root import assert_shared_file
 
 from cellucid.jupyter import Widget
 from cellucid.jupyter._widget import _ANSWER_MESSAGE_BYTES, show_widget
@@ -218,9 +219,10 @@ def test_answers_that_arrive_together_share_messages_of_bounded_size(widget, fro
 
 
 def test_a_slow_request_holds_back_no_other_and_frees_the_kernel_at_once(widget, front):
-    """A chunk made while its matrix is laid out took 2.7 s at 10M cells, and
-    every request after it waited (the kernel answered in turn): each is
-    answered on a thread of its own now, as the HTTP server answers them."""
+    """A chunk made while its matrix is laid out takes seconds on a large
+    dataset (measured: 26_decisions_served_store_and_widgets.md), and a
+    kernel answering in turn would make every request after it wait: each is
+    answered on a thread of its own, as the HTTP server answers them."""
     release = threading.Event()
     server = widget._server
     answer_request = server.answer_request
@@ -279,7 +281,7 @@ def test_the_channel_runs_over_the_comm_commands_first_then_events_in_order(widg
 
     # A selection, sent in pieces as the front end splits a binary frame:
     # the protocol's example header, with cells of the four this widget
-    # serves (a cell beyond them closes the channel, R9Z-3).
+    # serves (a cell beyond them closes the channel).
     example = next(e for e in PROTOCOL["examples"]["binaryEvents"] if e["header"]["type"] == "selection")
     header = json.dumps(example["header"], separators=(",", ":")).encode("utf-8")
     cells = [0, 2, 3]
@@ -543,19 +545,12 @@ def test_where_no_cell_id_is_sent_showing_a_dataset_again_stops_its_earlier_widg
             made.close()
 
 
-# The widget's front end, byte for byte cellucid-r's inst/widget/: pinned here
-# and in cellucid-r's tests/testthat/test-viewer-widget.R.
-WIDGET_JS_SHA256 = "75258ef90ac240b3902dded04695a7b51efbd7755606076d598b6a64c49a466b"
-WIDGET_CSS_SHA256 = "3b9acad3ebc04ece34acf580446a72ed7f73f3497b747539a11bc33fe281d82b"
-
-
-def test_the_front_end_is_cellucid_rs_byte_for_byte():
-    import hashlib
-
-    from cellucid.jupyter._widget import _STATIC
-
-    assert hashlib.sha256((_STATIC / "widget.js").read_bytes()).hexdigest() == WIDGET_JS_SHA256
-    assert hashlib.sha256((_STATIC / "widget.css").read_bytes()).hexdigest() == WIDGET_CSS_SHA256
+# The widget's front end: its home is here, and cellucid-r's inst/widget/ is
+# the same two files byte for byte (its tests/testthat/test-viewer-widget.R
+# compares them from its side).
+@pytest.mark.parametrize("name", ["widget.js", "widget.css"])
+def test_the_front_end_is_cellucid_rs_byte_for_byte(name):
+    assert_shared_file(f"src/cellucid/jupyter/static/{name}", f"inst/widget/{name}", repository="cellucid-r")
 
 
 def test_the_front_end_module_ships_with_the_package():

@@ -374,7 +374,7 @@ const PANCREAS_READY = {
  * 1.5 s after the last bytes; a frame taken before that shows a count that
  * depends on timing. Every step that reads (the first views, a field
  * colored) is followed by this: the overview colored by clusters after the
- * sample was ready, and its image showed a count still growing (F76). A
+ * sample was ready shows a count still growing. A
  * scenario that holds the page's long timers (`holdLongTimersInPage`) also
  * holds that 1.5 s window, so its line stays as it was; such a scenario does
  * not show the Dataset box.
@@ -613,7 +613,7 @@ export const SCENARIOS = Object.freeze([
   // Details min / p95 / max of whatever is loaded — here, the docs page's own
   // render loop on the capture host. That readout is a measurement of the
   // machine, not of Cellucid (see the note under this scenario), and it also
-  // grows the panel about a second after it opens, which used to push Copy
+  // grows the panel about a second after it opens, which pushes Copy
   // Situation Report and Analyze Performance out of the published frame. So
   // the scenario hides the readout with a style rule rather than racing it:
   // the image shows every control and no number. The metric names live in a
@@ -656,37 +656,15 @@ export const SCENARIOS = Object.freeze([
   // `n_benchmarking_performance/05_benchmark_tools.md`, which is verifiable
   // against `index.html` and does not rot with the host's load average.
 
-  // --- developer: attempted, withdrawn ---------------------------------------
-  // `p_developer_docs/08_ui_modules_map.md` is the one page in that section
-  // where a picture of the running app would beat a diagram: its tables map
-  // module file -> what it owns, and a reader's real question is the inverse
-  // ("I clicked this, which file is it?").
-  //
-  // A scenario for it was written and run, and it does not work with this tool
-  // as it stands. Two independent blockers, both recorded here so the next
-  // person does not rediscover them:
-  //
-  //   1. HEIGHT. The sidebar with its accordions expanded is several thousand
-  //      CSS pixels tall. VIEWPORT is fixed at 1000 and `resolveClip` clamps
-  //      into it, so the crop silently loses everything below the fold — the
-  //      run emitted 288x988 css and captured two of eleven sections.
-  //   2. CLOSED STATE DOES NOT HOLD. Driving every section shut with
-  //      `closeSection` and capturing produced an image with Session and
-  //      Visualization still open, so something re-opens them after the steps
-  //      run. That something is the sample's published default session, which
-  //      was applied after the point count — the old ready signal — and so
-  //      after the steps; `PANCREAS_READY` now waits for it, which removes
-  //      this blocker. Blocker 1 stands.
-  //
-  // A third, smaller point: ring labels render as a fixed 22 px circular badge,
-  // so file paths cannot go on the image; they would need a numbered key on the
-  // page. That part is fine — the key is more readable and it translates.
-  //
-  // A scenario may now name a taller `viewport`, which lifts blocker 1; the
-  // figure has not been made because the page reads better as a table: it
-  // carries corrected prose tables instead, which is the defect that
-  // actually mattered there: it documented 19 of 29 modules and named the wrong
-  // initializer for three of them.
+  // --- developer: no scenario for the UI modules map -------------------------
+  // `p_developer_docs/08_ui_modules_map.md` maps module file -> what it owns
+  // as prose tables, and that page stays tables: the sidebar with its
+  // accordions expanded is several thousand CSS pixels tall, a scenario's
+  // viewport is 1000 tall unless it names a taller `viewport` (`resolveClip`
+  // clamps into it, so a crop would lose everything below the fold), and ring
+  // labels render as a fixed 22 px circular badge, so file paths cannot go on
+  // the image without a numbered key on the page. A table is also verifiable
+  // against the source and translates.
 
   // ==========================================================================
   // a_orientation · c_core_interactions · d_fields_coloring_legends ·
@@ -735,8 +713,7 @@ export const SCENARIOS = Object.freeze([
   ...buildFormatAndViewerScenarios(),
 
   // Orientation, 2D navigation, connectivity, the camera path, the vector
-  // field overlay, figure export and the benchmark: figures earlier sweeps
-  // captured by hand, now each a scenario.
+  // field overlay, figure export and the benchmark: the figures of those pages.
   ...buildViewAndExportScenarios(),
 
   // f_highlighting_selection. Separate builder for the same reason as the
@@ -859,10 +836,8 @@ function buildFilteringScenarios() {
   /**
    * Move the legend's Minimum slider `percent` of the way along its track.
    * Its steps are the web app's `SLIDER_STEPS` (`legend/range-bounds.js`),
-   * 1,000 since 2026-11-01, not 100: a raw value of 62 then moved it 6.2%
-   * of the way, so `legend-category-unavailable` emptied no category and
-   * `window-continuous-range-applied` hid 6 cells. The track's own `max` is
-   * read, so the figure does not depend on that count.
+   * 1,000, not 100: a raw value is not a percentage, so the track's own `max`
+   * is read and the figure does not depend on that count.
    */
   const setMinimumAt = percent => ({
     run: async page => {
@@ -2850,7 +2825,7 @@ function buildAnnotationAndSessionScenarios() {
           // The switch raises its own download and field notifications, and
           // any work still in flight keeps a progress row in the center, so
           // an empty center is the signal that the new dataset has settled.
-          // A fixed pause here used to let them drain under the crop.
+          // A fixed pause would let them drain under the crop.
           await NOTIFICATIONS_DRAINED.run(page);
           const chooser = page.waitForEvent('filechooser');
           await clickLoadSession(page);
@@ -4393,7 +4368,7 @@ function buildDataLinkScenarios() {
  * loopback port and return the address to type into the bar
  * (`127.0.0.1:<port>`) once its health endpoint answers. The executable is
  * `$CELLUCID_CLI`, else `cellucid` on the PATH; the catalog is
- * `$CELLUCID_DATASETS_REPO/anndata`, as in `capture.mjs`. The server is
+ * `$CELLUCID_DATASETS_ROOT/anndata`, as in `capture.mjs`. The server is
  * stopped when this process exits.
  *
  * @param {string} storeName - a store in the catalog folder
@@ -4404,7 +4379,7 @@ async function serveSampleStore(storeName) {
   const { fileURLToPath } = await import('node:url');
   const { dirname, join, resolve } = await import('node:path');
   const here = dirname(fileURLToPath(import.meta.url));
-  const datasets = process.env.CELLUCID_DATASETS_REPO
+  const datasets = process.env.CELLUCID_DATASETS_ROOT
     ?? resolve(here, '..', '..', '..', '..', 'cellucid-datasets');
   const { cellucid } = requirement('cellucid-serve');
   const port = await freePort(`cellucid serve ${storeName}`);
@@ -6288,7 +6263,7 @@ async function startPythonServe(urls) {
   const { dirname, join, resolve } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
   const here = dirname(fileURLToPath(import.meta.url));
-  const datasets = process.env.CELLUCID_DATASETS_REPO
+  const datasets = process.env.CELLUCID_DATASETS_ROOT
     ?? resolve(here, '..', '..', '..', '..', 'cellucid-datasets');
   const { cellucid } = requirement('cellucid-serve');
   const port = await freePort('cellucid serve (Viewer URL)');
@@ -6418,7 +6393,7 @@ async function gatedSampleCatalog() {
     const { dirname, join, resolve } = await import('node:path');
     const { fileURLToPath } = await import('node:url');
     const here = dirname(fileURLToPath(import.meta.url));
-    const datasets = process.env.CELLUCID_DATASETS_REPO
+    const datasets = process.env.CELLUCID_DATASETS_ROOT
       ?? resolve(here, '..', '..', '..', '..', 'cellucid-datasets');
     gatedCatalogOrigin = await serveFolder(join(datasets, 'anndata'), { gate: SAMPLE_CATALOG_GATE });
   }
@@ -6429,7 +6404,7 @@ async function gatedSampleCatalog() {
 // Orientation, navigation and connectivity, the camera path, the vector field
 // overlay, figure export and the benchmark: the figures of a_orientation,
 // c_core_interactions, i_vector_field_velocity, k_figure_export and
-// n_benchmarking_performance that earlier sweeps captured by hand.
+// n_benchmarking_performance as scenarios.
 // ---------------------------------------------------------------------------
 
 /**
@@ -7015,7 +6990,7 @@ async function startPythonViewer(urls) {
   const { dirname, join, resolve } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
   const here = dirname(fileURLToPath(import.meta.url));
-  const datasets = process.env.CELLUCID_DATASETS_REPO
+  const datasets = process.env.CELLUCID_DATASETS_ROOT
     ?? resolve(here, '..', '..', '..', '..', 'cellucid-datasets');
   const { python } = requirement('python-viewer');
   const store = join(datasets, 'anndata', 'pancreas.zarr');
@@ -7089,7 +7064,7 @@ async function webBuildOrigin() {
     const { readFile } = await import('node:fs/promises');
     const { join } = await import('node:path');
     const { pathToFileURL } = await import('node:url');
-    const web = process.env.CELLUCID_WEB_REPO ?? resolve(here, '..', '..', '..', '..', 'cellucid');
+    const web = process.env.CELLUCID_WEB_ROOT ?? resolve(here, '..', '..', '..', '..', 'cellucid');
     // The inventory is computed over the files this host serves, with the
     // web repository's own generator and the asset list its committed
     // inventory names: on a clean tree it is that committed file byte for

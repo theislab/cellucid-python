@@ -1,9 +1,10 @@
-"""Session format 4 (History v2) in Python: the golden history read exactly, and applied.
+"""Session format 4 in Python: the golden history read exactly, and applied.
 
 The shared golden fixture (``tests/fixtures/history_golden``, written by the
 web repository's ``scripts/generate-history-golden.mjs`` with the history
-model's own constructors and pinned by digest in the web app, cellucid-python
-and cellucid-r) holds every kind of record the model has: trackers (a replay,
+model's own constructors; its home is the web repository's
+``tests/fixtures/``, and cellucid-python and cellucid-r each hold a copy the
+tests compare with it byte for byte) holds every kind of record the model has: trackers (a replay,
 one removed), branches (a nested fork, a locked and an archived one), turns
 (a notebook's, an agent's with its summary), notes, a bookmark, a paused
 tracker, squashed steps (a paused period; a squash in mid-branch carrying a
@@ -32,7 +33,7 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
-from _web_root import web_file
+from _web_root import assert_shared_file, web_file
 
 import cellucid
 from cellucid import (
@@ -53,14 +54,12 @@ from cellucid.anndata_session._apply import (
 from cellucid.anndata_session._colors import COLORS_NOTE
 from cellucid.history import NOTE_COLUMNS, STEP_COLUMNS, Diff
 from cellucid.session import (
-    NOT_A_SESSION_FILE_MESSAGE,
     SESSION_SIGNATURE,
     _hash_value,
     _js_number,
     _js_string,
     _js_stringify,
     newer_session_message,
-    other_session_format_message,
     package_version,
 )
 
@@ -69,16 +68,8 @@ GOLDEN = FIXTURES / "history_golden.cellucid-session"
 EXPECTED_JSON = FIXTURES / "history_golden.expected.json"
 #: The golden's current state only, as the web app's Share › Current state only writes it.
 GOLDEN_STATE = FIXTURES / "history_golden_state.cellucid-session"
-#: The golden files' digests; the web app (``tests/history-golden-fixture.test.mjs``) and cellucid-r pin the same.
-DIGESTS = {
-    GOLDEN: "9711bbc4dfd19fd91809a2ab3967cab54b6982c2a3907c73432200e72414ca4a",
-    EXPECTED_JSON: "8684353157ec936017b777c395e1d60342dcd4f393ef2a0648fe4a7891a67c34",
-    GOLDEN_STATE: "f9f0a6025679dacb91cbd00b0abd1cd6380ab1e829fa9ea529cbc59c1801e3dd",
-}
-REGENERATE = (
-    "Run node scripts/generate-history-golden.mjs in the cellucid repository (it writes the three copies), "
-    "and pin the printed digests in the three suites."
-)
+#: The golden session's SHA-256, which names the file in a session, a plan and an apply record.
+GOLDEN_SHA256 = hashlib.sha256(GOLDEN.read_bytes()).hexdigest()
 EXPECTED = json.loads(EXPECTED_JSON.read_text(encoding="utf-8"))
 T1, T2, T3 = (tracker["id"] for tracker in EXPECTED["trackers"])
 
@@ -120,17 +111,20 @@ def _rows(plan: ApplyPlan) -> list[dict[str, Any]]:
 # =============================================================================
 
 
-def test_the_golden_files_are_pinned_and_the_web_apps() -> None:
-    for path, digest in DIGESTS.items():
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, f"{path.name} changed. {REGENERATE}"
-    assert EXPECTED["sha256"] == DIGESTS[GOLDEN]
-    for ours, theirs in (
-        (GOLDEN, "history-golden.cellucid-session"),
-        (EXPECTED_JSON, "history-golden.expected.json"),
-        (GOLDEN_STATE, "history-golden-state.cellucid-session"),
-    ):
-        web = web_file(f"tests/fixtures/{theirs}")
-        assert web.read_bytes() == ours.read_bytes(), f"{theirs} differs from the web app's. {REGENERATE}"
+@pytest.mark.parametrize(
+    ("ours", "theirs"),
+    [
+        ("history_golden.cellucid-session", "history-golden.cellucid-session"),
+        ("history_golden.expected.json", "history-golden.expected.json"),
+        ("history_golden_state.cellucid-session", "history-golden-state.cellucid-session"),
+    ],
+)
+def test_the_golden_files_are_the_web_apps_byte_for_byte(ours: str, theirs: str) -> None:
+    assert_shared_file(f"tests/fixtures/history_golden/{ours}", f"tests/fixtures/{theirs}")
+
+
+def test_the_expected_reading_names_the_golden_session() -> None:
+    assert EXPECTED["sha256"] == GOLDEN_SHA256
 
 
 def test_the_web_apps_current_state_only_reads_as_one_state(golden: CellucidSession) -> None:
@@ -175,13 +169,14 @@ def test_the_header_reads_as_written(golden: CellucidSession) -> None:
     golden.chrome["pressed"].clear()
     assert golden.chrome == session["chrome"]
     assert golden.active_tracker == session["active_tracker"] == T1
-    assert golden.sha256 == DIGESTS[GOLDEN]
+    assert golden.sha256 == GOLDEN_SHA256
     assert len(golden._contents.values) == session["values"]
     assert golden.dataset_fingerprint["cellOrder"]["digest"] == EXPECTED["dataset"]["cell_order_digest"]
     assert golden.source == {"kind": "sample", "dataset": EXPECTED["dataset"]["id"]}
     assert golden.cells is None and golden.genes is None
 
 
+@pytest.mark.core
 @pytest.mark.parametrize("index", [0, 1, 2], ids=["annotation", "replay", "removed"])
 def test_every_tracker_reads_as_expected(golden: CellucidSession, index: int) -> None:
     expected = EXPECTED["trackers"][index]
@@ -307,6 +302,7 @@ def test_records_are_found_by_name_or_id_and_refused_naming_the_others(golden: C
     assert str(refused.value) == 'There is no step "s11" in the tracker "Annotation"; Tracker.steps lists its steps.'
 
 
+@pytest.mark.core
 def test_steps_carry_every_field_of_the_model(golden: CellucidSession) -> None:
     tracker = golden.tracker()
     agent = tracker.step("s5")
@@ -372,6 +368,7 @@ def test_steps_carry_every_field_of_the_model(golden: CellucidSession) -> None:
 # =============================================================================
 
 
+@pytest.mark.core
 def test_the_apply_sequence_gives_the_shared_plans(golden: CellucidSession) -> None:
     adata = golden_adata()
     assert cell_order_digest(adata.obsm["X_umap"]) == EXPECTED["dataset"]["cell_order_digest"]
@@ -380,7 +377,7 @@ def test_the_apply_sequence_gives_the_shared_plans(golden: CellucidSession) -> N
         plan = golden.apply(adata, tracker=entry["tracker"], branch=entry["branch"], step=entry["step"])
         assert isinstance(plan, ApplyPlan)
         assert (plan.tracker, plan.branch, plan.step) == (entry["expect"]["tracker"], entry["expect"]["branch"], entry["expect"]["step"])
-        assert plan.session_sha256 == DIGESTS[GOLDEN]
+        assert plan.session_sha256 == GOLDEN_SHA256
         assert {"obs": list(plan.requires.obs), "var": list(plan.requires.var)} == entry["requires"]
         assert _rows(plan) == entry["rows"], entry["name"]
         assert list(plan.table.columns) == ["kind", "domain", "name", "column", "from", "cells", "status", "note"]
@@ -437,7 +434,7 @@ def test_keep_session_keeps_the_file_to_rebuild_the_history(golden: CellucidSess
     assert report.provenance is not None and report.provenance.session is not None
     rebuilt = tmp_path / "rebuilt.cellucid-session"
     rebuilt.write_bytes(base64.b64decode(report.provenance.session))
-    assert hashlib.sha256(rebuilt.read_bytes()).hexdigest() == DIGESTS[GOLDEN]
+    assert rebuilt.read_bytes() == GOLDEN.read_bytes()
     assert read_session(rebuilt).tracker().steps["id"].tolist() == golden.tracker().steps["id"].tolist()
     # The record is JSON text, which .h5ad and Zarr hold as it is.
     path = tmp_path / "applied.h5ad"
@@ -456,7 +453,7 @@ def test_keep_session_reads_the_file_when_the_plan_is_made(tmp_path: Path) -> No
     copy_path.unlink()
     report = plan.apply()
     assert report.provenance is not None and report.provenance.session is not None
-    assert hashlib.sha256(base64.b64decode(report.provenance.session)).hexdigest() == DIGESTS[GOLDEN]
+    assert base64.b64decode(report.provenance.session) == GOLDEN.read_bytes()
     changed = tmp_path / "changed.cellucid-session"
     changed.write_bytes(GOLDEN.read_bytes())
     later = read_session(changed)
@@ -626,7 +623,7 @@ def test_labels_rename_columns_and_categories_in_place(tmp_path: Path) -> None:
 def test_labels_of_boolean_and_identifier_columns_are_the_viewers(tmp_path: Path) -> None:
     """A boolean column's categories are false and true, and an integer column
     holding identifiers past 2^53 has its exact decimal texts as categories,
-    as the viewer reads them (F116): a rename made in the viewer applies."""
+    as the viewer reads them: a rename made in the viewer applies."""
     first = 2**60
     overlays = files.overlays(renamed_categories=[
         {"source": "obs", "field": "flag", "category": True, "name": "kept"},
@@ -685,7 +682,7 @@ def test_user_fields_apply_by_kind(tmp_path: Path) -> None:
 
 def test_a_user_category_fields_palette_is_read_and_checked(tmp_path: Path) -> None:
     # The colors a field made from highlight pages opens with (its pages'), one
-    # #rrggbb a category, or null (F124).
+    # #rrggbb a category, or null.
     made = {**files.user_category("user_cat_1", "annotation", ["a", "b"], [0, 1, 255, 0, 1, 0]),
             "palette": ["#dc2626", "#16a34a"]}
     plan = read_session(_write(tmp_path, {"set": {"field-overlays": files.overlays(user_fields=[made])}})).apply(_small())
@@ -697,7 +694,7 @@ def test_a_user_category_fields_palette_is_read_and_checked(tmp_path: Path) -> N
 
 
 def test_a_field_of_the_intersections_of_41_pages_applies(tmp_path: Path) -> None:
-    # Each intersection combines any number of pages (F269); the session keys
+    # Each intersection combines any number of pages; the session keys
     # its label by its pages' positions ("0+1+...+40"), a record of labels;
     # the column is its codes.
     pages = [{"pageId": f"page_{p}", "label": f"P{p}"} for p in range(41)]
@@ -716,8 +713,8 @@ def test_a_field_of_the_intersections_of_41_pages_applies(tmp_path: Path) -> Non
 def test_a_written_columns_colors_are_the_ones_it_is_shown_in(tmp_path: Path) -> None:
     # A field's palette goes with its column as Scanpy keeps colors,
     # uns['<key>_colors'], one a category in the column's order -- every
-    # category, a used or not (F139). A field without a palette opens in
-    # Cellucid's own category colors, and is written with them (F239); a
+    # category, a used or not. A field without a palette opens in
+    # Cellucid's own category colors, and is written with them; a
     # column of no categories (a highlight) takes no colors: those under its
     # name described another column.
     made = {**files.user_category("user_cat_1", "annotation", ["a", "b", "unused"], [0, 1, 255, 0, 1, 0]),
@@ -800,7 +797,7 @@ def _views(focus: int, count: int) -> dict[str, Any]:
 
 def test_a_fields_colors_are_the_ones_the_view_in_focus_shows(tmp_path: Path) -> None:
     """The colors a person or an agent gave a field's categories reach
-    uns['<key>_colors'] (L26-8): in the view in focus at the step, each
+    uns['<key>_colors']: in the view in focus at the step, each
     category recolored there, the rest in the colors it opens with -- its
     palette, else Cellucid's own colors by position. Another view's colors
     stay how the data was shown."""
@@ -823,7 +820,7 @@ def test_a_fields_colors_are_the_ones_the_view_in_focus_shows(tmp_path: Path) ->
     adata, report = applied(1)
     assert adata.uns["stage_colors"] == ["#808080", "#0077c8", "#008080"]
     assert adata.uns["fate_colors"] == ["#dc2626", "#ffd700"]
-    # The dataset column recolored in the view in focus (RCC-1).
+    # The dataset column recolored in the view in focus.
     assert adata.uns["cell_type_colors"] == ["#000000", "#0077c8", "#ad50e0"]
     column_row, colors_row = [row for row in report.plan.rows if row.domain == "colors"]
     assert (column_row.kind, column_row.name, column_row.status) == ("column-colors", "cell_type", "write")
@@ -857,7 +854,7 @@ def _dataset_recolor(key: str, *pairs: tuple[Any, str]) -> dict[str, Any]:
 
 def test_a_recolored_dataset_column_is_written_with_the_colors_it_is_shown_in(tmp_path: Path) -> None:
     """A column that came with the dataset, recolored in the view in focus,
-    takes the colors it is shown in (RCC-1): the categories recolored, the
+    takes the colors it is shown in: the categories recolored, the
     rest in the colors it opens with -- Scanpy's colors for it, as drawn
     (#rgb widened, alpha dropped), else Cellucid's own by position. Applied
     again: unchanged. A column it cannot be written to says why (a column
@@ -944,7 +941,7 @@ def test_colors_the_session_holds_are_checked(tmp_path: Path) -> None:
 
 def test_a_session_saved_under_the_id_an_object_was_shown_under_applies_when_named(tmp_path: Path) -> None:
     """A viewer given dataset_id= serves the object under that id, and its
-    session is saved under it (L26-7): naming it applies the session to the
+    session is saved under it: naming it applies the session to the
     object, which declares its own id; another id is refused."""
     record = files.fingerprint(cell_count=6, var_count=2, dataset_id="pancreas-notebook",
                                digest=_fingerprint()["cellOrder"]["digest"])
@@ -1252,7 +1249,7 @@ def test_a_steps_only_file_reads_and_is_not_applied(tmp_path: Path) -> None:
 
 
 def test_a_state_only_file_reads_and_applies_as_any_file(tmp_path: Path) -> None:
-    """Current state only (History v2 §3.15.3): one tracker, the dataset as
+    """Current state only: one tracker, the dataset as
     opened and one squashed step "Shared state" (no count, no author), with
     no note, turn, group or journal. It reads and applies as any file."""
     groups = files.highlights(files.page("page_1", "QC", files.group("highlight_1", "Gate", [0, 1])))
@@ -1438,6 +1435,7 @@ DAMAGES = [
 ]
 
 
+@pytest.mark.core
 @pytest.mark.parametrize(("damage", "message"), DAMAGES)
 def test_a_damaged_file_is_refused_whole(tmp_path: Path, damage: Any, message: str) -> None:
     path = _rewrite(GOLDEN, damage, tmp_path / "damaged.cellucid-session")
@@ -1521,13 +1519,6 @@ def test_another_format_is_refused_with_the_web_apps_sentence(tmp_path: Path, pr
     assert str(refused.value) == message
 
 
-def test_the_sentences_are_the_web_apps() -> None:
-    assert NOT_A_SESSION_FILE_MESSAGE == WEB_NOT_A_SESSION
-    assert other_session_format_message(3) == WEB_EARLIER_FORMAT_3
-    assert other_session_format_message(5) == WEB_NEWER_FORMAT_5
-    assert SESSION_SIGNATURE == b"CELLUCID_SESSION/4\n"
-
-
 def test_a_missing_file_is_not_found(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         read_session(tmp_path / "absent.cellucid-session")
@@ -1607,7 +1598,8 @@ def _web_source(relative: str) -> str:
 def test_the_readers_constants_are_the_web_apps() -> None:
     """The chunk kinds and their keys are the session README's (the format-4
     contract), the typed arrays the value codec's; every record's keys are the
-    history model's, pinned by its digest (``test_history_model.py``)."""
+    history model's, which ``test_history_model.py`` compares with the web
+    app's."""
     from cellucid import session as reader
 
     readme = _web_source("app/session/README.md")

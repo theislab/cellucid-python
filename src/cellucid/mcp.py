@@ -127,7 +127,7 @@ class _ViewerCall:
     sent it is back. Whichever of the two ends second -- the send, or the
     app giving up -- sends ``agent_cancel``, so a cancel is never lost to how
     the two interleave (``tests/test_mcp.py`` holds a send until the server
-    took the cancel, which lost it before).
+    has taken the cancel).
     """
 
     def __init__(self, session: LocalAgentSession, request_id: str) -> None:

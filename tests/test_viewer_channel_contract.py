@@ -25,6 +25,7 @@ from _viewer_channel_client import (
     HandshakeRefused,
     binary_event,
 )
+from _web_root import assert_shared_file
 
 import cellucid._viewer_channel as channel
 import cellucid._websocket as websocket_module
@@ -39,12 +40,6 @@ from cellucid.session import SESSION_SIGNATURE
 VIEWER_ID = "security-contract-viewer"
 VIEWER_TOKEN = "security-contract-viewer-token"
 REQUEST_ID = "security-contract-request"
-
-#: The digest of ``tests/fixtures/viewer_protocol.json``: the web app's
-#: ``tests/fixtures/viewer-protocol.json`` byte for byte. The web app and
-#: cellucid-r pin the same one.
-VIEWER_PROTOCOL_SHA256 = "c117822a5d87df03439fdbed9af460617764b59d9e560ba7c0e519ec5f708dae"
-
 
 def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], dict[str, object]]]:
     return [
@@ -372,7 +367,7 @@ def test_routing_functions_expose_only_the_authenticated_current_contract() -> N
         # was running then fail at once).
         "on_page_gone",
         # The cells of the dataset the viewer shows: the bound of every cell
-        # and binary body its events name (R9Z-3).
+        # and binary body its events name.
         "cell_count",
     ]
     assert list(inspect.signature(channel.unregister_event_callback).parameters) == [
@@ -468,8 +463,8 @@ def test_pending_request_registration_rejects_wrong_token_and_duplicate() -> Non
 
 
 def test_a_failing_viewer_hook_never_costs_the_notebook_the_event() -> None:
-    # One buggy hook used to drop the event from viewer.state and
-    # wait_for_event, so a session request timed out behind it. The event
+    # A failing hook must not drop the event from viewer.state and
+    # wait_for_event (a session request would time out behind it): the event
     # is recorded first; every hook runs; the failure is raised afterwards for
     # the channel to log.
     viewer = serverless_viewer()
@@ -521,6 +516,7 @@ def test_a_failing_viewer_hook_never_costs_the_notebook_the_event() -> None:
     assert viewer._event_seq == 2
 
 
+@pytest.mark.core
 def test_every_known_inbound_event_preserves_its_exact_payload() -> None:
     viewer = serverless_viewer()
     delivered: list[dict[str, object]] = []
@@ -713,7 +709,7 @@ def test_unhandled_command_error_is_printed_where_the_notebook_looks(
         ({"command": ""}, "command_error command"),
         ({"command": None}, "command_error command"),
         ({"command": "action "}, "command_error command"),
-        # Schema 2's state commands are actions now.
+        # A state change is an action, never a command of its own.
         ({"command": "setColorBy"}, "one current Jupyter command"),
         ({"requestId": ""}, "command_error requestId"),
         ({"requestId": 7}, "command_error requestId"),
@@ -1108,7 +1104,7 @@ def test_a_socket_that_never_says_hello_is_closed_and_holds_no_thread(monkeypatc
 
 def test_a_binary_first_frame_is_refused_from_its_header_unread(monkeypatch: pytest.MonkeyPatch) -> None:
     # A frame declaring a gibibyte, of which a few bytes come: refused at
-    # once, before the socket said who it is (it was read to its end before).
+    # once, before the socket said who it is, never read to its end.
     monkeypatch.setattr(websocket_module, "CLOSE_DRAIN_SECONDS", 0.2)
     with _viewer_on_a_server() as (_viewer, _server, http_server, port):
         socket_ = FakeViewer(port)
@@ -1130,8 +1126,8 @@ def test_a_hello_nested_past_the_interpreter_closes_the_channel_as_a_protocol_vi
 
 def test_a_binary_header_length_allocates_only_what_arrives() -> None:
     # Four bytes naming a 4 GiB header, then a few bytes and the frame's end:
-    # the buffer was allocated (and zeroed) at the size named before a byte
-    # of it arrived.
+    # the buffer is never allocated (and zeroed) at the size named before a
+    # byte of it arrives.
     import tracemalloc
 
     with _channel_viewer() as (viewer, port):
@@ -1147,9 +1143,9 @@ def test_a_binary_header_length_allocates_only_what_arrives() -> None:
 
 
 def test_a_body_frame_length_allocates_only_what_arrives() -> None:
-    # R9Z-3 (F122): a frame header naming 256 MiB, of which an event header
-    # and a few body bytes arrive before the page stops: the body was
-    # allocated (and zeroed) at the frame's length before a byte of it came.
+    # A frame header naming 256 MiB, of which an event header and a few body
+    # bytes arrive before the page stops: the body is never allocated (and
+    # zeroed) at the frame's length before a byte of it comes.
     import socket as socket_module
     import tracemalloc
 
@@ -1177,7 +1173,7 @@ def _ready_viewer_socket(viewer: jupyter.AnnDataViewer, port: int, n_obs: int) -
 
 
 def test_cells_and_bodies_past_the_dataset_are_refused_before_they_are_read() -> None:
-    # R9Z-3: what a page names is bounded by the dataset the viewer shows
+    # What a page names is bounded by the dataset the viewer shows
     # (cellucid-r's .check_event_cells): a selection of more cells than it
     # has, a cell beyond it, a result for a dataset of another size, a hover
     # beyond it. Before, each was delivered (a selection's obs names then
@@ -1228,6 +1224,7 @@ def test_an_event_nested_past_the_interpreter_is_refused_as_malformed() -> None:
         wire._require_inbound_jupyter_event({"type": "agent_result", "requestId": "a", "body": body})
 
 
+@pytest.mark.core
 def test_commands_sent_before_the_viewer_connects_arrive_in_order_once() -> None:
     with _channel_viewer() as (viewer, port):
         assert viewer.send_message({"type": "freeze"}) is False
@@ -1275,6 +1272,7 @@ def test_a_newer_socket_of_the_same_viewer_replaces_the_open_one() -> None:
         assert second.receive_json() == {"type": "freeze"}
 
 
+@pytest.mark.core
 def test_events_reach_the_hooks_in_order_and_the_state() -> None:
     with _channel_viewer() as (viewer, port):
         hovers: list[dict[str, Any]] = []
@@ -1733,6 +1731,7 @@ def _example_params(example: dict[str, Any]) -> dict[str, Any]:
     return params
 
 
+@pytest.mark.core
 def test_the_python_declarations_are_the_shared_viewer_protocol() -> None:
     fixture = json.loads((Path(__file__).parent / "fixtures" / "viewer_protocol.json").read_text(encoding="utf-8"))
     assert fixture["schema"] == 5
@@ -1861,11 +1860,8 @@ def test_an_action_the_viewer_cannot_read_is_refused_before_it_is_sent(params: d
             wire._require_frontend_message({"type": retired})
 
 
-def test_the_shared_viewer_protocol_is_pinned() -> None:
-    import hashlib
-
-    data = (Path(__file__).parent / "fixtures" / "viewer_protocol.json").read_bytes()
-    assert hashlib.sha256(data).hexdigest() == VIEWER_PROTOCOL_SHA256
+def test_the_shared_viewer_protocol_is_the_web_apps_byte_for_byte() -> None:
+    assert_shared_file("tests/fixtures/viewer_protocol.json", "tests/fixtures/viewer-protocol.json")
 
 
 # =============================================================================

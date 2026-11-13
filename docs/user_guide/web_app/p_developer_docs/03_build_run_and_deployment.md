@@ -127,8 +127,8 @@ Any static host works (GitHub Pages, Netlify, S3+CloudFront, Cloudflare Pages, n
      stale (`tests/web-asset-inventory-contract.test.mjs`), and
      `tests/browser/deploy-skew.spec.mjs` simulates deploys in all three
      engines.
-   - **Workers.** No browser gives a worker an import map (measured
-     2026-10-25 in Chromium, Firefox and WebKit), so a worker started from its
+   - **Workers.** No browser gives a worker an import map
+     ({ref}`testing-decisions-build`, and the measurements of {doc}`38_decisions_testing_and_hosted_runners`), so a worker started from its
      source would ask for each of its imports by plain path, and could meet a
      cached file of the previous build. So the generator also builds every
      worker (the AnnData reader, decode, gunzip, spatial-tree, point-raster,
@@ -159,16 +159,30 @@ Any static host works (GitHub Pages, Netlify, S3+CloudFront, Cloudflare Pages, n
      `npm test` refuses a bundle that is not exactly what the sources build:
      `tests/page-bundle-contract.test.mjs`). The import map lists only the
      files whose name does not already name their bytes.
+   - **The code fingerprints of kept data.** With every run, before the
+     bundles (which hold that module), the generator writes
+     `assets/js/data/anndata/transcode/kept-code-fingerprints.js`: for each
+     kind of data kept in the browser, a digest of the code that decides what
+     a kept directory of that kind holds (`scripts/kept-code-fingerprints.mjs`
+     names each kind's modules; {doc}`09_data_loading_pipeline_and_caching`).
+     Its `--check` and `npm test` refuse a tree where the module is not what
+     the code gives (`tests/kept-code-fingerprints-contract.test.mjs`).
    - **The code cache.** GitHub Pages' `max-age=600` makes a visit ten
      minutes after the last revalidate every file. A deployed page registers
      `service-worker.js` (a root file, since a service worker controls only
      pages below its folder) once it has loaded, with its build id
-     (`?build=`), and names the files it loaded. The worker keeps every
+     (`?build=`), and names the files it loaded once the startup
+     files' preloads have settled (`renderPageBoot`; a file still arriving is
+     in neither the resource timing nor the HTTP cache, so the worker would
+     fetch it twice). The worker keeps every
      same-origin file under `assets/` whose address names its bytes (a `?v=`
      file only when its bytes hash to its version, since the CDN may answer a
      new version's address with old bytes in the minutes after a deploy; a
      bundle file by its name) and answers later requests for them from the
-     cache. Nothing else goes through it (where the browser supports it,
+     cache, all the named files at once: a browser ends a worker some time
+     after its event (Firefox about a minute, two 30 s settings; Chromium five
+     minutes), and files fetched one after another were left half kept.
+     Nothing else goes through it (where the browser supports it,
      `addRoutes` sends everything else straight to the network; Firefox 153
      has no `addRoutes`, so there those requests reach the worker, which
      leaves them to the network). Caches are per
@@ -184,13 +198,9 @@ Any static host works (GitHub Pages, Netlify, S3+CloudFront, Cloudflare Pages, n
      `tests/code-cache-contract.test.mjs` cover it. Playwright's Firefox runs
      only the spec's first visit: under its automation protocol (Juggler) a
      navigation the worker leaves to the network commits without a
-     controller, so its next visit never starts under the worker. Measured
-     2026-10-31 with a 20-line worker as well as the app: the same Firefox 153
-     build, run with no automation (a page that drove its own second visit)
-     or through Playwright's WebDriver BiDi channel (`channel: 'moz-firefox'`,
-     same executable), starts the next visit under the worker and took none
-     of the 22 startup files and the stylesheet from the network (Chromium
-     and WebKit none either; Firefox under Juggler all 23). A Juggler page is controlled only when
+     controller, so its next visit never starts under the worker (the same Firefox build
+     without Juggler does start it: {doc}`38_decisions_testing_and_hosted_runners`,
+     Measurements). A Juggler page is controlled only when
      the worker answers the navigation itself, which the code cache does not
      do for a test harness's sake: every page load would wait on the worker.
      Firefox reports `workerStart` 0 for a file its worker answered, so the
@@ -199,7 +209,7 @@ Any static host works (GitHub Pages, Netlify, S3+CloudFront, Cloudflare Pages, n
    - What a content address cannot reach, and what the app does about it:
      - **A page that outlived its build.** GitHub Pages' CDN ignores the query
        string (a never seen `?v=` on an existing file is answered
-       `x-cache: HIT`, measured 2026-10-23), and the origin keeps only the
+       `x-cache: HIT`), and the origin keeps only the
        current files. A tab open across a deploy, or an `index.html` still in
        the browser's cache for up to ten minutes, asks for its own build's
        URLs and receives the next build's bytes. At startup, a module that
@@ -209,11 +219,16 @@ Any static host works (GitHub Pages, Netlify, S3+CloudFront, Cloudflare Pages, n
        the page's; **Reload** loads one build. A part loaded on demand later
        (`app/app-code.js` `loadAppCode`: the benchmark panel, the figure
        export renderers, Plotly) that fails says the same in a notification
-       with **Reload**.
-   - Whether GitHub Pages purges its CDN on a deploy is not measured. If it
-     does not, a page loaded within ten minutes of a deploy can receive a
-     file's previous bytes at its new URL; a mismatch that fails to link is
-     shown as above.
+       with **Reload**. A load that fails after the page's `beforeunload` (a
+       reload, a link, the address bar) is held, not said: WebKit fails each
+       load as a navigation starts, so a page being left would report a
+       failure. If the page hides, it ends silently; if the page stays (a key
+       or pointer press on it, its return from the back/forward cache, or a
+       navigation the browser reports failed), the failure is said.
+   - A page loaded just after a deploy may receive a file's previous bytes at
+     its new URL (whether GitHub Pages purges its CDN is not measured, see
+     {doc}`38_decisions_testing_and_hosted_runners`); a mismatch that fails to
+     link is shown as above.
    - Dataset stores are not affected in the browser: every request into a
      Zarr store bypasses the HTTP cache (see
      {doc}`09_data_loading_pipeline_and_caching`, "HTTP cache").

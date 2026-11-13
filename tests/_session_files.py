@@ -1,4 +1,4 @@
-"""Session files of format 4 (the History v2 shape), made in the tests.
+"""Session files of format 4 (the history model's shape), made in the tests.
 
 The shared golden fixture (``tests/fixtures/history_golden``) holds every kind
 of record the history model has; these helpers write files of the same format
@@ -318,7 +318,7 @@ def session_file(
     piece_chars: int = CHUNK_TEXT_CHARS,
     codec: str = "auto",
 ) -> Path:
-    """Write a session file of the History v2 shape (every record the model's).
+    """Write a session file of format 4 (every record the model's).
 
     Each tracker is ``{"id", "name", "root": {domain: value}, "steps": [...],
     "head"?, "branchNames"?: {branch id: name}, "activeBranch"?, "chats"?,

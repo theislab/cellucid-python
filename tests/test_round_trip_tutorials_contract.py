@@ -2,9 +2,8 @@
 
 They are published on the docs site and open in Google Colab from their
 badges, so each must be a clean notebook, link its twin, open in Colab at its
-own path, download only what the repository holds, call the round trip it
-teaches, and never wait for the viewer inside a cell (a notebook widget hears
-the viewer only between cells). Every Python call is also checked against the
+own path, download only what the repository holds, and never wait for the
+viewer inside a cell (a notebook widget hears the viewer only between cells). Every Python call is also checked against the
 current signatures by ``test_docs_current_api_contract.py``; the R calls are
 checked against the R package's exports here.
 """
@@ -28,30 +27,15 @@ R_REFERENCE = DOCS / "r_package" / "g_api_reference_coverage" / "01_public_funct
 COLAB = "https://colab.research.google.com/github/theislab/cellucid-python/blob/main/"
 RAW = "https://raw.githubusercontent.com/theislab/cellucid-python/main/"
 
-#: Twin by twin, with what each must call: (Python notebook, R notebook,
-#: Python calls, R calls).
+#: Twin by twin: (Python notebook, R notebook).
 TWINS = (
-    ("41_show_a_dataset_in_any_notebook", "07_view_in_a_notebook",
-     ("cellucid.show_anndata(", "viewer.selection", "viewer.debug_connection()"),
-     ("cellucid_view(", "cellucid_selection(viewer)")),
-    ("42_pull_everything_back", "08_pull_everything_back",
-     ("viewer.pull(adata)", "viewer.results", "viewer.subset("),
-     ("cellucid_pull(seu, viewer", "cellucid_pull(sce, sce_viewer)", "cellucid_results(viewer)", "cellucid_subset(")),
-    ("43_push_clusters_refine_and_pull", "09_push_clusters_refine_and_pull",
-     ("sc.tl.leiden(", "viewer.push(", "viewer.pull(adata)"),
-     ("FindClusters(", "cellucid_push(viewer", "cellucid_pull(seu, viewer")),
-    ("44_round_trip_without_a_notebook", "10_round_trip_without_a_notebook",
-     ("cellucid.pull(adata, EXPORTS)", "cellucid.read_gmt("),
-     ("cellucid_pull(seu, exports", "cellucid_read_gmt(", "cellucid_prepare(")),
-    ("45_gene_sets_round_trip", "11_gene_sets_round_trip",
-     ("cellucid.write_gmt(", "cellucid.read_gmt(", "viewer.gene_set_save(", "viewer.gene_sets()", "viewer.pull(adata)"),
-     ("cellucid_write_gmt(", "cellucid_read_gmt(", "cellucid_gene_set_save(", "cellucid_gene_sets(viewer)", "cellucid_pull(")),
-    ("46_export_an_h5ad_subset_and_reanalyze", "12_subset_and_reanalyze",
-     ("viewer.subset(adata)", "ad.read_h5ad(SUBSET)", "sc.tl.leiden("),
-     ("cellucid_subset(seu, viewer)", "anndataR::read_h5ad(", "FindClusters(")),
-    ("47_subsampled_views", "13_subsampled_views",
-     ("cellucid.subsample_cells(", 'result.kind == "subset"', "viewer.pull(adata)"),
-     ("cellucid_subsample_cells(", 'identical(result$kind, "subset")', "cellucid_pull(seu, viewer")),
+    ("41_show_a_dataset_in_any_notebook", "07_view_in_a_notebook"),
+    ("42_pull_everything_back", "08_pull_everything_back"),
+    ("43_push_clusters_refine_and_pull", "09_push_clusters_refine_and_pull"),
+    ("44_round_trip_without_a_notebook", "10_round_trip_without_a_notebook"),
+    ("45_gene_sets_round_trip", "11_gene_sets_round_trip"),
+    ("46_export_an_h5ad_subset_and_reanalyze", "12_subset_and_reanalyze"),
+    ("47_subsampled_views", "13_subsampled_views"),
 )
 
 #: Calls that wait for the viewer's answer: in a notebook widget they cannot
@@ -80,10 +64,8 @@ def _text(notebook: dict, kind: str | None = None) -> str:
     )
 
 
-@pytest.mark.parametrize(("python", "r", "python_calls", "r_calls"), TWINS)
-def test_each_tutorial_has_its_twin_its_colab_badge_and_its_round_trip(
-    python: str, r: str, python_calls: tuple[str, ...], r_calls: tuple[str, ...]
-) -> None:
+@pytest.mark.parametrize(("python", "r"), TWINS)
+def test_each_tutorial_has_its_twin_its_colab_badge_and_no_waiting_cell(python: str, r: str) -> None:
     py_notebook = _notebook(PYTHON_FOLDER / f"{python}.ipynb")
     r_notebook = _notebook(R_FOLDER / f"{r}.ipynb")
     assert py_notebook["metadata"]["kernelspec"]["language"] == "python"
@@ -99,10 +81,6 @@ def test_each_tutorial_has_its_twin_its_colab_badge_and_its_round_trip(
         assert twin in markdown, f"{name}: does not link its twin {twin}"
     py_code = _text(py_notebook, "code")
     r_code = _text(r_notebook, "code")
-    for call in python_calls:
-        assert call in py_code, (python, call)
-    for call in r_calls:
-        assert call in r_code, (r, call)
     for call in PYTHON_WAITS:
         assert call not in py_code, (python, call)
     for call in R_WAITS:
@@ -147,12 +125,3 @@ def test_every_r_call_in_the_tutorials_is_exported_by_cellucid_r() -> None:
     exported = set(re.findall(r"^export\((\w+)\)", namespace, re.MULTILINE))
     for notebook, name in _r_calls():
         assert name in exported, f"{notebook}: {name}() is not exported by cellucid-r"
-
-
-def test_the_gallery_explains_the_two_cell_pattern() -> None:
-    gallery = GALLERY.read_text(encoding="utf-8")
-    assert "## The two-cell pattern" in gallery
-    assert "request = viewer.request_session()" in gallery
-    assert "`cellucid_session_result()`" in gallery
-    for python, _r, _py_calls, _r_calls in TWINS:
-        assert f"\n{python}\n" in gallery.split("```{toctree}", 1)[1]

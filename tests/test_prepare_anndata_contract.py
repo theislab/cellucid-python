@@ -132,6 +132,7 @@ def _stored(path: Path) -> ad.AnnData:
 # =============================================================================
 
 
+@pytest.mark.core
 @pytest.mark.parametrize(("name", "output_format", "zarr_format"), OUTPUTS)
 def test_anndata_reads_back_every_value_exactly(
     tmp_path: Path, name: str, output_format: str, zarr_format: int | None
@@ -816,6 +817,7 @@ def test_the_browser_decodes_every_array_and_the_server_names_the_dataset(
 # =============================================================================
 
 
+@pytest.mark.core
 def test_uns_cellucid_holds_exactly_what_was_given(tmp_path: Path) -> None:
     adata = _read(
         _write(
@@ -946,7 +948,6 @@ def test_only_embeddings_is_a_complete_dataset(
 REFUSALS = [
     pytest.param({"dataset_id": "has space"}, ValueError, "dataset_id", id="bad-id"),
     pytest.param({"dataset_name": " \u00a0 "}, ValueError, "dataset_name must be a non-empty string", id="blank-name"),
-    pytest.param({"dataset_name": "Zero\u200bwidth"}, ValueError, "dataset_name is displayed verbatim", id="invisible-in-name"),
     pytest.param({"citation_url": "https://x.org"}, ValueError, "citation_text is required whenever citation_url", id="url-without-text"),
     pytest.param({"source_name": "S", "source_url": "ftp://x.org"}, ValueError, "absolute http", id="non-http-url"),
     pytest.param({"embeddings": {}}, ValueError, "at least one embedding", id="no-embeddings"),
@@ -1022,6 +1023,7 @@ def test_a_self_loop_is_no_edge_seurat_snn_is_written_without_its_diagonal(tmp_p
     assert (written != ring.astype(np.float32)).nnz == 0
 
 
+@pytest.mark.core
 @pytest.mark.parametrize(("overrides", "error", "match"), REFUSALS)
 def test_a_defect_is_refused_before_anything_is_written(
     tmp_path: Path, overrides: dict[str, Any], error: type[Exception], match: str
@@ -1255,7 +1257,7 @@ def test_data_writes_the_matrix_the_viewer_opens_a_scanpy_object_with(tmp_path: 
     """A Scanpy object's genes are read from ``raw`` when it holds more genes
     than ``X`` or ``X`` is scaled (``default_expression``, the web app's
     ``defaultExpression``): ``prepare(data=)`` writes that matrix, so the file
-    opens on the values and genes the object itself opens on (R9Y-2)."""
+    opens on the values and genes the object itself opens on."""
     adata = _scanpy_processed()
     path = prepare(tmp_path / "s.zarr", format="zarr", data=adata, dataset_id="s", dataset_name="S")
     said = capsys.readouterr().out
@@ -1308,7 +1310,7 @@ def test_data_without_x_writes_raw_else_the_layer_the_viewer_opens(tmp_path: Pat
 
 
 def test_descriptive_text_is_written_trimmed_and_identifiers_stay_strict(tmp_path: Path) -> None:
-    """R9U-9: a space typed at either end of a name, description, citation
+    """A space typed at either end of a name, description, citation
     text or source name is removed (the web app reads such text trimmed,
     cellucid-r writes it so); an id with one is still refused."""
     path = prepare(

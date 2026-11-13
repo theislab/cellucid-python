@@ -72,7 +72,7 @@ _EMBEDDINGS_GROUP_KEYS = frozenset({"enabled", "defaults"})
 _VECTOR_BINDING_KEYS = frozenset({"key", "embedding"})
 
 #: ``X_umap_1d`` .. ``X_umap_3d`` hold one UMAP per dimension count; they are
-#: the default rule first (design §1.4).
+#: the default rule first.
 DIMENSIONAL_UMAP_KEYS: tuple[str, ...] = ("X_umap_1d", "X_umap_2d", "X_umap_3d")
 
 #: The conventional names of one UMAP, in the order the default rule takes
@@ -190,7 +190,7 @@ class DataMappingError(ValueError):
 
 
 # =============================================================================
-# Making names unique (design §1.5)
+# Making names unique
 # =============================================================================
 
 
@@ -397,7 +397,7 @@ def unique_names_note(
 
 
 # =============================================================================
-# Embedding references and columns (design §1.1, §1.3)
+# Embedding references and columns
 # =============================================================================
 
 
@@ -481,7 +481,7 @@ def validate_embedding_columns(
 
 
 # =============================================================================
-# Validation of the DataMapping JSON (design §1.1)
+# Validation of the DataMapping JSON
 # =============================================================================
 
 
@@ -934,7 +934,7 @@ def expression_layer(expression: str) -> str | None:
 
 
 # =============================================================================
-# The default embedding rule (design §1.4)
+# The default embedding rule
 # =============================================================================
 
 
@@ -944,8 +944,8 @@ class ObsmEntry:
 
     ``width`` is the column count of a dense array (1 for a plain vector) and
     None for anything that is not a dense array. ``usable`` is the listing-time
-    verdict of design §1.3 -- dense, numeric, one row per cell, at least one
-    column -- and ``reason`` says why not.
+    verdict -- dense, numeric, one row per cell, at least one column -- and
+    ``reason`` says why not.
     """
 
     key: str
@@ -1189,7 +1189,7 @@ def _shape_of(value: Any) -> list[int] | None:
 
 
 def describe_obsm(obsm: Any, *, n_obs: int) -> list[dict[str, Any]]:
-    """Describe every ``obsm`` entry with the listing-time verdict of §1.3."""
+    """Describe every ``obsm`` entry with its listing-time verdict (``usable``, else ``reason``)."""
     described: list[dict[str, Any]] = []
     for key in obsm:
         value = obsm[key]

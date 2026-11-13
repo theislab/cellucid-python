@@ -66,10 +66,10 @@ _BLOCK_BYTES_PER_VALUE = 40
 
 #: Stored values one step of a pass holds at a time, so its temporaries take
 #: a 64th of the machine's memory (the share a served store keeps of what it
-#: makes, :func:`cellucid._served_store.default_cache_bytes`): 6.7M on a 16 GB
-#: machine. A scheduling choice from the machine's real memory, not a limit on
-#: the matrix; the layout's time does not depend on it above about a million
-#: values (3M cells x 10: 0.66-0.69 s for 2^20 to 2^24), and the bytes never
+#: makes, :func:`cellucid._served_store.default_cache_bytes`). A scheduling
+#: choice from the machine's real memory, not a limit on the matrix; the
+#: layout's time does not depend on it above about a million values
+#: (measured: 26_decisions_served_store_and_widgets.md), and the bytes never
 #: do. Every pass over a matrix steps by it: the layout here, the served
 #: store's dense snapshots and layouts and its prefix counts.
 PASS_ENTRIES = max(1, machine_memory_bytes() // 64 // _BLOCK_BYTES_PER_VALUE)
@@ -89,7 +89,8 @@ def line_order(lines: np.ndarray, positions: np.ndarray, extent: int) -> np.ndar
     """The stable order of entries by line, then position: one stable sort of the
     single int64 key ``line * extent + position``, the order a two-key
     ``lexsort`` gives (entries of one line and position keep their stored
-    order) at a thirtieth of its time (40M values: 1.2 s against 44 s)."""
+    order) in a fraction of its time
+    (measured: 09_cellucid_ready_anndata_specification.md)."""
     key = np.asarray(lines, dtype=np.int64) * int(extent) + np.asarray(positions, dtype=np.int64)
     return np.argsort(key, kind="stable")
 

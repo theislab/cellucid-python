@@ -39,12 +39,6 @@ def _adata(*, explicit: bool, generic: bool) -> ad.AnnData:
 def test_transition_helper_reads_the_basis_it_is_given() -> None:
     # The drift is computed over the basis named, and named for it.
     written = add_transition_drift_to_obsm(
-        _adata(explicit=False, generic=True),
-        np.eye(3, dtype=np.float32),
-        normalize_rows=False,
-    )
-    assert written == "T_fwd_umap"
-    written = add_transition_drift_to_obsm(
         _adata(explicit=True, generic=False),
         np.eye(3, dtype=np.float32),
         basis="umap_2d",

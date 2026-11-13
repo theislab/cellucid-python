@@ -57,21 +57,68 @@ jobs:
     needs: release-provenance
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The release tag is checked out beside its siblings (cellucid-r and the
+    # web app), as the workspace holds them locally, so the tests that compare
+    # with them run, and one of them or Node missing fails them.
+    defaults:
+      run:
+        working-directory: cellucid-python
+    env:
+      CELLUCID_WEB_ROOT: ${{ github.workspace }}/cellucid
+      CELLUCID_R_ROOT: ${{ github.workspace }}/cellucid-r
+      CELLUCID_REQUIRE_SIBLINGS: "1"
     steps:
       - name: Check out the release tag
         uses: actions/checkout@v7
+        with:
+          path: cellucid-python
 
       - name: Install Python
         uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: cellucid-python/pyproject.toml
+
+      # The web app's generators and readers the tests run need its Node.
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
 
       - name: Install the package and release tools
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,docs]"
+
+      # The siblings' main, as in test.yml: cellucid-r's sources and fixtures,
+      # and the web app's modules, generators and shared fixtures, which the
+      # tests compare this package's copies with byte for byte.
+      - name: Check out cellucid-r for the R twins and cross-writer stores
+        uses: actions/checkout@v7
+        with:
+          repository: theislab/cellucid-r
+          path: cellucid-r
+          ref: main
+
+      - name: Check out the web app's modules, generators and shared fixtures
+        uses: actions/checkout@v7
+        with:
+          repository: theislab/cellucid
+          path: cellucid
+          ref: main
+          filter: blob:none
+          sparse-checkout: |
+            assets/external/
+            assets/js/
+            assets/wasm/
+            assets/workers/
+            scripts/
+            tests/browser/fixtures/*.h5ad
+            tests/browser/fixtures/*.zarr.zip
+            tests/fixtures/
+          sparse-checkout-cone-mode: false
 
       - name: Run source quality gates
         run: |

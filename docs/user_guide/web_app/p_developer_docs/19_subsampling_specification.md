@@ -14,9 +14,11 @@ The shared conformance fixture `subsample-conformance.json` (web app
 `tests/fixtures/`, Python `tests/fixtures/subsample_conformance.json`, R
 `tests/testthat/fixtures/subsample_conformance.json`) is written by
 `cellucid/scripts/generate-subsample-conformance.py`, a plain-Python reading of
-this page independent of all three, and the three copies are pinned by one
-SHA-256 in all three test suites. Changing anything below means regenerating
-the fixture once and updating the digest everywhere.
+this page independent of all three. The web repository's file is its home, and
+each package's suite compares its copy with it byte for byte
+({ref}`shared-files`). Changing anything below means regenerating the fixture
+once and running `node scripts/sync-shared-files.mjs` in the web repository,
+which writes both copies.
 
 Version: 1.
 
@@ -383,14 +385,14 @@ What the web app builds on it (`subsample-plan.js`, `views/cell-subset.js`,
   far as two openings' priority orders agree from the start: all of the
   smaller for `uniform` and `blocks` (nested), only the common start for
   `stratified` and the other methods that draw each size apart. Before use
-  a run is checked (`findKeptRuns`): manifest revision
-  (`KEPT_INDEX_REVISION`), identity digest and sizes; its file rows against
+  a run is checked (`findKeptRuns`): its manifest's code fingerprint
+  (gene indexes'), identity digest and sizes; its file rows against
   the opening's; its row pointers against the file's, read now (a mismatch
   removes the run); the CRC-32s of its column starts and per-gene checksum
   tables. The file's version is the one rule of every kept kind: runs are
   filed under the identity this opening established from the file's source
   (a content name where the source has one, else its size with its
-  Last-Modified date and strong ETag, `space.js` `writeVersion`; a local
+  Last-Modified date and strong ETag, `data/sources/identity.js` `writeVersion`; a local
   file's size and modification time), and opening a version first forgets
   what is kept of the file's other versions (`forgetOtherVersions`), so a
   run of another version is never found.

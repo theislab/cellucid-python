@@ -1,14 +1,16 @@
 """The shared data-mapping conformance fixture, run against the Python rules.
 
-``tests/fixtures/data_mapping_conformance.json`` is kept byte-for-byte in
-cellucid-python, cellucid-r and the web app, and each repository pins the same
-SHA-256. The rules it pins -- making names unique, the best-guess ranking, the
+``tests/fixtures/data_mapping_conformance.json`` is kept byte for byte in
+cellucid-python, cellucid-r and the web app (its home:
+``tests/fixtures/data-mapping-conformance.json`` there), and each package's
+test compares its copy with the web repository's file. The rules it holds --
+making names unique, the best-guess ranking, the
 embedding-column checks, canonical embedding ids, the default expression, the
 vector-field key rule and the default vector bindings, the representations
 enabled when a dataset opens, the "nothing to plot" text, and DataMapping
 validation -- are the ones every reader and writer must apply identically, so a
-change to any of them changes the fixture, the pin, and the other two
-implementations together.
+change to any of them changes the fixture and the other two implementations
+together.
 
 The Python package runs the sections whose rules it implements: making names
 unique and the note that reports it, the embedding-column check, the
@@ -22,20 +24,18 @@ The other sections are rules of the web app.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
+from _web_root import assert_shared_file
 
 from cellucid import data_mapping as dm
 
-FIXTURE = Path(__file__).parent / "fixtures" / "data_mapping_conformance.json"
+pytestmark = pytest.mark.core
 
-#: The same digest is pinned in cellucid-r (tests/testthat/test-data-mapping-
-#: conformance.R) and in the web app. Update all three together.
-FIXTURE_SHA256 = "a3b615e6377f3936ce5701764622ee74ee3c30b95d24303e815eb83476451200"
+FIXTURE = Path(__file__).parent / "fixtures" / "data_mapping_conformance.json"
 
 
 def _fixture() -> dict[str, Any]:
@@ -46,8 +46,11 @@ def _cases(section: str) -> list[dict[str, Any]]:
     return _fixture()[section]
 
 
-def test_the_fixture_is_the_pinned_shared_copy() -> None:
-    assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == FIXTURE_SHA256
+def test_the_fixture_is_the_web_apps_byte_for_byte() -> None:
+    assert_shared_file("tests/fixtures/data_mapping_conformance.json", "tests/fixtures/data-mapping-conformance.json")
+
+
+def test_the_fixture_has_the_sections_this_suite_runs() -> None:
     fixture = _fixture()
     assert fixture["version"] == 9
     assert list(fixture) == [

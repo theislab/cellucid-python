@@ -6,7 +6,9 @@ app: the **action catalog** (every change and read, defined once), the
 (the units state is captured, compared, undone and saved in), and the
 **history** (trackers of step trees over a pool of values kept by content
 hash), with the autosave, the exports, and how one catalog reaches Python,
-R and agents.
+R and agents. It says what each part does and the rule it keeps. Why it is
+built this way (the decisions with their dates, what was measured, what was
+tried and taken out) is {doc}`33_decisions_actions_domains_and_history`.
 
 **Audience:** contributors adding a control, an action or a piece of state;
 maintainers of the Python and R viewer APIs and of the session format
@@ -87,15 +89,15 @@ catalog fails on it.
 | `params` | yes | The parameter schema, an `object` schema in the subset below. Targets are named, never positional. |
 | `touches` | for every effect but `read`, `control`, `history`, `dataset` and `outside` | The state domains the handler can change, distinct ids of `app/actions/domains.js`. A stepless action touches none; every other action touches at least one. |
 | `reads` | yes (empty for none, and for an action that records no step) | Its **result inputs**: what its result is computed from beyond its parameters and the domains it touches (`ACTION_READ_INPUTS`: state domains, and `history` for another branch's tip). A step records each one's value hash (`Step.reads`), so a step whose input changes later is stale ({ref}`declared-inputs`). |
-| `captures` | no (default none) | The inputs of `reads` its result holds the value of itself (`camera-path.keyframe.add` captures `camera`: a keyframe is the camera it was saved at). Still recorded, so replay and re-apply know the step read them; a later change of one never makes the step stale (`provenance.js`; owner, 2026-11-10). In the shared catalog document beside `reads`. |
+| `captures` | no (default none) | The inputs of `reads` its result holds the value of itself (`camera-path.keyframe.add` captures `camera`: a keyframe is the camera it was saved at). Still recorded, so replay and re-apply know the step read them; a later change of one never makes the step stale (`provenance.js`). In the shared catalog document beside `reads`. |
 | `context` | no (default none) | Its **name context**: the state its parameters' names resolve in and its result does not follow (a field's name in `field-overlays`, the view in focus in `views`, a gene's name in `mapping`, a step's id in `history`). Never recorded, so a rename or a focus change stales nothing. |
 | `effect` | yes | One of `ACTION_EFFECTS` (below). |
 | `confirm` | no (default `null`) | Why the person is asked first when an agent acts: `writes-file`, `deletes-saved`, `large-download`, `publishes` or `pauses-recording` (`ACTION_CONFIRMS`, each a permission kind of `app/agent/presence/permissions.js`; `history.recording.pause` is the one that pauses recording). Anything the history can undo needs none. |
-| `opensLinks` | no (default `false`) | The action may fetch an address its parameters name (`dataset.open`: a link, an accession, a server). Its implementation asks, before anything is requested, about an address the person has not seen in this tab (`ctx.confirmLink(address)`, the permission kind `unseen-link`; seen: typed or pasted in the address bar or the chat, open now, in My datasets, `ui/modules/seen-addresses.js`), so an agent misled by text it read cannot make the tab send it to any host (F121). In the catalog document; the MCP tool says what the person's setting makes of it and is `openWorldHint`. An action of effect `dataset` likewise asks, through `ctx.confirmReplacing(detail)` (kind `replaces-unkept`), when the dataset shown holds steps this browser is not keeping (`app/unkept-work-guard.js`, the one guard every replacement passes in `app/main.js`; the person's own opening is asked by a dialog there) |
+| `opensLinks` | no (default `false`) | The action may fetch an address its parameters name (`dataset.open`: a link, an accession, a server). Its implementation asks, before anything is requested, about an address the person has not seen in this tab (`ctx.confirmLink(address)`, the permission kind `unseen-link`; seen: typed or pasted in the address bar or the chat, open now, in My datasets, `ui/modules/seen-addresses.js`), so an agent misled by text it read cannot make the tab send it to any host. In the catalog document; the MCP tool says what the person's setting makes of it and is `openWorldHint`. An action of effect `dataset` likewise asks, through `ctx.confirmReplacing(detail)` (kind `replaces-unkept`), when the dataset shown holds steps this browser is not keeping (`app/unkept-work-guard.js`, the one guard every replacement passes in `app/main.js`; the person's own opening is asked by a dialog there) |
 | `confirmAt` | no (default `start`) | When the person is asked: `start` (before the action runs), or `handler` (its implementation asks through `ctx.confirm(detail)` once it knows the cost, as `dataset.open` does for a whole-file download once the link says its size; never when nothing costs) |
 | `coalesce(params)` | no | A key: consecutive steps with the same key merge into one (a slider drag, a camera gesture). |
 | `supersede` | no (default `false`) | A newer dispatch of the same type cancels an unfinished one (`color.by`, `cells.open`, `view.embedding.set`, `view.embedding.default`). |
-| `keepsWhenStopped` | no (default `false`) | Stopped while it runs (the person's Stop of an agent turn), it keeps what it did and its step instead of being rolled back; its implementation hears the signal and ends where it is (`camera-path.play`: the camera stays where the film stopped, F104). Only for an action that records a step. Not in the shared catalog document: it is the page's own. |
+| `keepsWhenStopped` | no (default `false`) | Stopped while it runs (the person's Stop of an agent turn), it keeps what it did and its step instead of being rolled back; its implementation hears the signal and ends where it is (`camera-path.play`: the camera stays where the film stopped). Only for an action that records a step. Not in the shared catalog document: it is the page's own. |
 | `rerun` | no (default `false`) | Whether the same parameters dispatched again bring a stale step's own result up to date with its inputs: `analysis.run`, and `highlight.category` and `highlight.range`, which give a group already on the page the cells the view shows now, in place ("Updated the cells of …"). Only a stale step of such an action gets **Run again** in the State panel (`ui/modules/state/step-details.js`); an action that adds another of what it made (`view.keep`, `field.duplicate`) or only sets options does not. Needs `reads` (only a step with inputs is stale). Not in the shared catalog document: it is the page's own. |
 | `describe(params, outcome)` | yes | The timeline label and the sentence the methods paragraph uses: one line, past tense. |
 | `code(params)` | yes | One line of pseudocode (`color_by("cell_type")`). |
@@ -178,9 +180,9 @@ in labels and pseudocode (`fieldWords`, `fieldArgument`, `categoriesWords`,
 `get`, `has`, `list` (sorted by type) and `check(type, params)`.
 `catalogDocument(catalog)` is the language-neutral document every other
 surface is generated from: `{schema: 1, actions: [{type, tool, title,
-summary, group, version, effect, confirm, touches, reads, context, params,
-result, example}]}` (`version` null for an action that records no step),
-with no functions, byte-stable for a given catalog.
+summary, group, version, effect, confirm, opensLinks, touches, reads,
+captures, context, params, result, example}]}` (`version` null for an action
+that records no step), with no functions, byte-stable for a given catalog.
 
 ---
 
@@ -202,7 +204,8 @@ and `getStateDomains()`.
 | `provided(type)`, `unprovided()` | Whether a type has an implementation now; every type that has none. |
 | `setRecorder`, `setGate`, `setConfirmer` | Installed by the history (recorder and gate) and by the agent presence (`app/agent/presence/index.js`: the person's permissions). |
 | `subscribe(listener)` | Every dispatch, reads included, as it starts and ends: `{kind: 'start' | 'done' | 'failed', type, params, meta, step?, outcome?, error?}`; and `asking`, then `answered` (`allowed`), when the person is asked about an agent's change. |
-| `idle()` | Resolves once nothing is in flight (a save, the history's exclusive operations, tests). |
+| `idle()` | Resolves once every dispatch has ended, those made meanwhile included, but for those waiting for the person's go-ahead. A dispatch counts from the moment it is made, so one waiting at the history's gate or for its estimate counts; one waiting for the person's answer does not, from the moment the confirmer asks the person (its `asking()`; a change the settings allow at once is never waiting) until the answer: asked at its start, by its implementation (`ctx.confirm`, `ctx.confirmLink`, `ctx.confirmReplacing`, `ctx.heavy`), or about heavy work an internal dispatch it runs finds. It is judged again whenever a dispatch ends or the person is asked or answers. For a control's caller (tests, a host); never awaited inside a dispatch. |
+| `whenApplied()` | Resolves once no change is applying (the changes past the gate). What the history's own moves and the save path wait for from inside their turn, where a change waiting at the gate waits for them. |
 | `retire()` | The application's teardown (`main.js`), before the state domains' owners are withdrawn: every dispatch under way ends with one cancellation (kind `closed`) wherever it is, its recording included, so none records a step or puts state back into a withdrawn owner; every later dispatch is refused with it. Synchronous, and final for the page. |
 
 ### Who dispatches, and with which origin
@@ -225,7 +228,7 @@ pass through its own gate).
 | `host` | A Python or R viewer's `action` command (`app/viewer-host/command-handler.js`), with the host's language, and its `turn` inside a notebook turn |
 | `replay` | The history re-applying the steps after a deleted one (`internal: true, rewrite: <step>`), a restore as new, and `history.replay` (`replayOf: <step>`) |
 | `startup` | Not dispatched: the origin of a tracker's root step and of a change kept as "Changed outside the history" |
-| `session` | Accepted, and dispatched by nothing on main: a loaded session puts values back, it does not dispatch |
+| `session` | `session/recompute-results.js`: once a session file or saved state shared without its results is shown, each analysis whose result was left out is run again through `analysis.run`, an ordinary step. A loaded session otherwise puts values back and does not dispatch. Also the origin of a paused draft that a save, a share or a load settles |
 
 ### What one dispatch does
 
@@ -255,8 +258,7 @@ pass through its own gate).
    (below). That recorder is the one told how the action ended (steps 6 and
    7), whichever is installed by then: another dataset opened meanwhile has
    a history of its own, which never puts back or records the replaced
-   dataset's change; the replaced history, retired, does neither (bug hunt
-   R9W-3).
+   dataset's change; the replaced history, retired, does neither.
 6. **Handler.** The implementation runs with an abort signal. If it throws
    after changing something, `recorder.failed` captures the touched domains
    and puts the before-values back, so a failed action leaves no half-state;
@@ -270,17 +272,17 @@ pass through its own gate).
    (the newer runs right after it; putting back what it replaces at once
    would read again for nothing), and so does one whose definition says it
    keeps what it did when stopped (`keepsWhenStopped`: `camera-path.play`,
-   whose camera stays where the film stopped, as a pause leaves it, F104; its
+   whose camera stays where the film stopped, as a pause leaves it; its
    implementation hears the signal, ends where it is and answers `ended:
    "stopped"`) (`tests/action-dispatch-stop-contract.test.mjs`).
    The dispatcher therefore waits for a stopped change's handler to end:
    a handler that never ends keeps its dispatch in flight, and
-   `dispatcher.idle()` (every history move, a save) waits with it. Every
-   wait of a handler must end, or hear its signal (L20-2), and hearing it
+   `dispatcher.whenApplied()` (every history move, a save) waits with it, and `idle()` too. Every
+   wait of a handler must end, or hear its signal, and hearing it
    means stopping the work it waits for, not only ceasing to wait: work
    that ran on after the rollback would land on the state put back. The
-   shared waits take the signal down to the work (F147,
-   `tests/analysis-action-stop-contract.test.mjs`,
+   shared waits take the signal down to the work
+   (`tests/analysis-action-stop-contract.test.mjs`,
    `tests/cells-reading-stop-contract.test.mjs`,
    `tests/action-stop-reaches-work-contract.test.mjs`): an analysis's
    `whenSettled({signal})` and the window manager's
@@ -367,8 +369,8 @@ own — unless its caller says it is the person's own act (`{person: true}`:
 the analyses' changes, settings controls, a panel's drag or press, the
 sidebar's width): that is its own step, and a rollback of the running action
 (`recorder.failed`) leaves the domains it changed as the person made them
-(the token's `meanwhile`; R9W-5: a window closed with × while its run ran
-came back with the stopped run's rollback). The events a restore or
+(the token's `meanwhile`), so a window closed with × while its run runs
+stays closed when the stopped run is rolled back. The events a restore or
 `setting.set` itself dispatches on a control are never steps
 (`isApplyingControls()` in `state-serializer/ui-controls.js`).
 
@@ -434,8 +436,8 @@ where a step or a comparison lists the parts it changed.
 An analysis window is split between the two last domains, as every panel's
 content and place are: what it shows is `analysis`'s, where it stands, its
 size and whether it is folded are `layout`'s, one place per window in window
-order. So History settings › "Panels, windows and theme" (History v2
-§3.15.5) covers every window's geometry and never an analysis: moving,
+order. So History settings › "Panels, windows and theme" covers every
+window's geometry and never an analysis: moving,
 resizing or folding a window (`analysis.window.place`,
 `analysis.window.collapse`) and an expanded view's size (`analysis.size.set`)
 touch `layout` only; opening, copying or closing one touches both.
@@ -458,10 +460,13 @@ page's registry (`createDomainRegistry`: `provide`, `owner`, `has`,
 `main.js` once the state, viewer and interface exist; its `OWNERS` map names
 one factory per domain).
 
-- `capture()` returns the value now: synchronously for every domain but
-  `analysis`, whose capture waits for the analysis code (the history awaits
-  each capture; a capture inside one synchronous step, as the open cells'
-  in-place growth takes the kept views', uses only synchronous ones). A value
+- `capture()` returns the value now, and never waits for code still loading:
+  before the analysis code has arrived, `analysis` and `layout.analysis` are
+  the analyses with nothing opened, the same value the code gives on arrival,
+  so the history starts and records while it loads (only a restore that shows
+  analyses waits for it). The history awaits each capture; a capture inside
+  one synchronous step, as the open cells' in-place growth takes the kept
+  views', uses only synchronous ones. A value
   is never changed after capture: arrays the app replaces rather than writes
   (highlight groups, user codes and values) are taken by reference and their
   conversions cached by the array and the open cells; the visibility mask,
@@ -526,7 +531,7 @@ one factory per domain).
 
 ## The history
 
-The history is History v2: its records are `app/history/model.js`'s
+The history's records are `app/history/model.js`'s
 (`Tracker`, `Branch`, `Group`, `Step`, `Squash`, `By`, `Turn`, `Note`,
 `JournalEntry`, `Start`, `Scope`), each with exact fields, rules,
 constructors and a validator; `historyModelDocument()` is what
@@ -743,10 +748,10 @@ input, for `history.stale`, `history.step` and the State panel). An input
 held per view is compared at the view the step acted in (the domain owner's
 `readPart(value, views)`, `view-list.js` `viewReadPart`: the entry at the
 `views` value's `focus` when the step ran), so keeping a view or changing
-another view's filters marks nothing stale (F156). With several views, a
+another view's filters marks nothing stale. With several views, a
 step that changed some per-view domain in some views, not all, names them in
 its label (`history.js` `labelWithViews`, `viewNameInValue`), which the
-methods text and the pseudocode report repeat (F157). The state an action's parameters' names resolve in is its
+methods text and the pseudocode report repeat. The state an action's parameters' names resolve in is its
 `context`, never recorded, so a rename or a focus change never marks a step
 stale. Result inputs and name context together decide which dependants a
 deleted step applies again. `tests/action-reads-contract.test.mjs` checks the
@@ -855,7 +860,7 @@ agents and Python or R hosts all act through these actions.
 
 ### A dataset's history from opening to replacement (`dataset-history.js`)
 
-`createDatasetHistories` (`main.js`; `window._cellucidHistories` for tests):
+`createDatasetHistories` (made in `main.js`; `window._cellucidHistories` for tests):
 
 - **open**, when a dataset is published: its history is made with no tracker;
   a starting view the catalog names is put back into it without a step
@@ -868,7 +873,7 @@ agents and Python or R hosts all act through these actions.
   stops recording at once and the autosave writes what changed.
 
 The same dataset read again on other cells is not another dataset: its history
-is kept (`main.js` `keepHistory`). **Cells to open** is the action `cells.open`
+is kept (`app/dataset/publication.js` `keepHistory`). **Cells to open** is the action `cells.open`
 (provided by `ui/modules/subsample-control.js`), a step that touches `cells`
 and every domain a cell can be named in; undoing it puts the `cells` value
 back, which reads the cells shown before again (`state/domains/cells.js`), and
@@ -876,6 +881,7 @@ redo reads the share again, on the same tracker
 (`tests/browser/history-open-cells.spec.mjs`). The reading keeps what was made
 by original cell position (`session/view-carry.js`, `app/cell-subset-carry.js`).
 
+(history-autosave)=
 ### Autosave and saved states (`autosave.js`, `autosave-store.js`)
 
 - **Every change as it is made.** The write of each change of the history
@@ -886,31 +892,23 @@ by original cell position (`session/view-carry.js`, `app/cell-subset-carry.js`).
   encoding), in one transaction, so a crash leaves all of a write or none. A
   history is kept once it holds anything of the person's (a step, a
   conversation, a note, a paused draft).
-- **All of a write or none, whatever becomes of the page.** The browser
-  commits a transaction once it has no request left to run, and a page that
-  goes away while its code waits on one request never makes the next. Writes
-  made one at a time, each awaited, were therefore committed as far as they
-  had got: Firefox kept 98 and 252 of 400 such writes of one transaction when
-  its tab closed (3 closes in 30), and a saved state came back with a
-  conversation's count and not its messages ("This saved state is missing
-  messages of a conversation; it cannot be opened", hosted macOS Firefox, Web
-  contracts run 42202865024). A transaction of `utils/indexed-db-database.js`
-  now reads first and then makes every write at once, none awaited, and a
-  read after a write throws: the writes are all in the transaction before any
-  has run, so the browser runs them all or the page was gone first and it
-  keeps none. It is then told to commit (`IDBTransaction.commit`), so a write
-  handed to the browser is finished whether or not the page is still there
-  (60 closes mid-write in Firefox: 54 kept whole, 6 not at all).
+- **All of a write or none, whatever becomes of the page.** A transaction of
+  `utils/indexed-db-database.js` reads first and then makes every write at
+  once, none awaited, and a read after a write throws: the writes are all in
+  the transaction before any has run, so the browser runs them all or keeps
+  none. It is then told to commit (`IDBTransaction.commit`), so a write handed
+  to the browser is finished whether or not the page is still there.
   `autosave-store.js` plans each write from its reads (`planWrite`,
   `planCollect`) and makes it in one go; `tests/indexed-db-database.test.mjs`
   holds the rule, `tests/browser/saved-state-close.spec.mjs` closes a tab
-  during a write in each engine.
+  during a write in each engine (what the engines did before, and the counts,
+  are in {doc}`33_decisions_actions_domains_and_history`).
 - **What a closed tab can lose.** The change of its last moment: a write is
   handed to the browser some tens of milliseconds after the change (a task,
-  the session header, the digests of new values; measured 20 to 120 ms on a
-  loaded laptop), and a page that goes inside that time has not handed it
-  over. A page that is left retires its autosave, which writes what is left
-  if the browser gives it the time; nothing can make it.
+  the session header, the digests of new values), and a page that goes
+  inside that time has not handed it over. A page that is left retires its
+  autosave, which writes what is left if the browser gives it the time;
+  nothing can make it.
 - **One writer.** One page writes a saved state (a Web Lock, and the store's
   writer check): a second tab continuing it opens a copy.
 - **Continue.** When a dataset opens whose autosave holds steps, a
@@ -937,8 +935,8 @@ history reads subscribe; none of them keeps a history of its own.
 
 ### The history in words (`app/history/exports/`)
 
-Pure modules (no DOM, importable in Node) that take History v2 records as they
-are (`app/history/model.js`): a tracker, one of its branches (by id or name;
+Pure modules (no DOM, importable in Node) that take the history's records as
+they are (`app/history/model.js`): a tracker, one of its branches (by id or name;
 the main branch when left out) and optionally the last step to cover (`to`, the
 step shown after an undo), the dataset's facts and the version. Any branch can
 be exported without showing it. They read each step's `kind`, `by`, `squashed`,
@@ -1038,12 +1036,12 @@ MuData). The file's profile:
 | Surface | How it gets the catalog | Regenerated by | Fails when stale |
 |---|---|---|---|
 | The page | `ACTION_DEFINITIONS` → `createActionCatalog` (`getActionCatalog()`) | — | `defineAction` at import; `tests/action-catalog-contract.test.mjs` |
-| The shared document | `tests/fixtures/action-catalog.json` (cellucid), `src/cellucid/action_catalog.json` (cellucid-python), `inst/action_catalog.json` (cellucid-r): `catalogDocument` as canonical JSON (keys sorted, two-space indent, one trailing newline), byte for byte the same, SHA-256 pinned in the three repositories | `node scripts/generate-action-catalog.mjs` (finds the siblings beside the checkout or at `CELLUCID_PYTHON_ROOT` / `CELLUCID_R_ROOT`; `--check` writes nothing) | `tests/action-catalog-document-contract.test.mjs`, cellucid-python `tests/test_action_catalog.py`, cellucid-r `tests/testthat/test-actions.R` |
+| The shared document | `tests/fixtures/action-catalog.json` (cellucid), `src/cellucid/action_catalog.json` (cellucid-python), `inst/action_catalog.json` (cellucid-r): `catalogDocument` as canonical JSON (keys sorted, two-space indent, one trailing newline), byte for byte the same: the web repository's file is its home, and each package's is a copy of it ({ref}`shared-files`) | `node scripts/sync-shared-files.mjs` (it runs `scripts/generate-action-catalog.mjs` and writes every copy; finds the siblings beside the checkout or at `CELLUCID_PYTHON_ROOT` / `CELLUCID_R_ROOT`; `--check` writes nothing) | `tests/action-catalog-document-contract.test.mjs` and `tests/shared-files-contract.test.mjs`, cellucid-python `tests/test_action_catalog.py`, cellucid-r `tests/testthat/test-actions.R` |
 | Python | One method of `cellucid.jupyter.AnnDataViewer` (and the notebook widget) per action, `src/cellucid/jupyter/_actions_generated.py`, each calling `act(type, …)`, which converts parameters by the catalog (`_actions.py`) | `python scripts/generate_actions.py` (`--check`) | `tests/test_action_catalog.py` |
 | R | One exported `cellucid_<tool>(viewer, …)` per action (`R/actions-generated.R`), its `man/cellucid_<tool>.Rd` page, the NAMESPACE export block and `_pkgdown.yml`'s actions group; each calls `.act()` (`R/actions.R`) | `Rscript tools/generate-actions.R` | `tests/testthat/test-actions.R` |
 | The viewer channel | A host sends one `action` command (`action`: the dotted type, `params`; `turn` and `turnLabel`: the host's turn, both text or both null), answered by `action_result` (its outcome, the step it made, or why a change made none: `unrecorded`) or `command_error`; it pushes a session file with `load_session` (answered by `session_loaded`) and hears every change of the history as `history_changed`; viewer protocol schema 5 (`data/viewer-protocol.js`, mirrored as `viewer_protocol.json`; schema 5 added the local agent messages, {doc}`31_local_agent_connection`) | — | `tests/viewer-protocol-contract.test.mjs` (the protocol's copy of `ACTION_TYPE_PATTERN` is the catalog's) |
 | Agents | Every action is one MCP tool (`app/agent/bridge/mcp-tools.js` `mcpToolsOf`: its tool name, input schema, title, and hints from `effect` and `confirm`; the same list whatever the person's settings, which are told after tool results instead, `settings-told.js`); the relay's copy for when no tab is connected is generated, and so is `mcp-tools.json` (the tools, the local instructions and status tool) for the packages' `cellucid mcp` | `node scripts/generate-relay-bundle.mjs` (`--check`); `node scripts/generate-action-catalog.mjs` writes `mcp-tools.json` into the three repositories | `tests/relay-bundle-contract.test.mjs`; `tests/mcp-tools-document-contract.test.mjs`; `tests/agent-bridge.test.mjs` (the agent instructions name only tools that exist) |
-| The history model | `history_model.schema.json` (`historyModelDocument()`), in the three repositories, digest-pinned | `node scripts/generate-history-model.mjs` | `tests/history-model-schema.test.mjs`, cellucid-python `tests/test_sessions.py`, cellucid-r `tests/testthat/test-sessions.R` |
+| The history model | `history_model.schema.json` (`historyModelDocument()`), in the three repositories: the web repository's `tests/fixtures/history-model.schema.json` is its home, each package's a copy ({ref}`shared-files`) | `node scripts/sync-shared-files.mjs` (it runs `scripts/generate-history-model.mjs`), then `python scripts/generate_history_model.py` and `Rscript tools/generate-history-model.R` | `tests/history-model-schema.test.mjs` and `tests/shared-files-contract.test.mjs`, cellucid-python `tests/test_history_model.py`, cellucid-r `tests/testthat/test-history-model.R` |
 | The docs | {doc}`30_action_reference`: every action with its parameters, effect, label and pseudocode, every read with what it returns | `node scripts/generate-action-reference.mjs` (`--check`; writes into `CELLUCID_PYTHON_DOCS`, else the sibling checkout) | `tests/action-reference-contract.test.mjs` |
 
 ---
@@ -1087,17 +1085,15 @@ MuData). The file's profile:
    mutating state method. A change the owner must make first (a gesture, a
    settings control) is recorded with `recordObserved`, synchronously from its
    event.
-7. **Regenerate every surface**: `node scripts/generate-action-catalog.mjs`
-   (it writes the three copies and prints the digest), `python
-   scripts/generate_actions.py` in cellucid-python, `Rscript
-   tools/generate-actions.R` in cellucid-r, pin the printed digest in
-   `tests/action-catalog-document-contract.test.mjs`,
-   `tests/test_action_catalog.py` and `tests/testthat/test-actions.R` (and
-   the `mcp-tools.json` digest the same run prints), and run
+7. **Regenerate every surface**: `node scripts/sync-shared-files.mjs` (it
+   writes the catalog and `mcp-tools.json` and copies them into both
+   packages; {ref}`shared-files`), `python scripts/generate_actions.py` in
+   cellucid-python, `Rscript tools/generate-actions.R` in cellucid-r, and run
    `node scripts/generate-relay-bundle.mjs`, `node
    scripts/generate-action-versions.mjs` (a new action's or version's
    examples) and `node scripts/generate-action-reference.mjs` (the docs'
-   reference page).
+   reference page). Nothing else is updated by hand: each suite compares its
+   copy with the web repository's file.
 8. **Tests.** `npm test` runs `tests/action-catalog-contract.test.mjs` (the
    example, label and pseudocode, the domains, a result schema for a read)
    and the document and relay checks; add the action to its area's tests
@@ -1153,43 +1149,11 @@ change: update every producer, consumer and fixture together.
 
 ## Drift guards
 
-The guards on main that fail when the layers drift apart:
-
-| Guard | Fails when |
-|---|---|
-| `defineAction`, `assertActionSchema` (at import) | A definition has an unknown field, a schema outside the subset, an open object, an array without `items`, an unknown effect, domain or `confirm` kind, a read or history move that touches a domain, a change that touches none, or no `describe` or `code` |
-| `tests/action-catalog-contract.test.mjs` | An action's own example is invalid, its label or pseudocode is not one trimmed line, it names an unknown domain, an action that records no step (`read`, `control`, `history`, `dataset`, `outside`) touches a domain or has no `result`, a change touches none; or `history.undo`, `history.redo`, `history.jump` stop being actions of effect `history` |
-| `tests/action-catalog-document-contract.test.mjs` | `tests/fixtures/action-catalog.json` is not what the definitions make or not at the pinned digest; a sibling's copy differs (checked when the sibling is beside the checkout); the document is not canonical; a tool name or parameter is not a valid Python method, R function or keyword |
-| cellucid-python `tests/test_action_catalog.py` | The packaged catalog is not at the pinned digest; `_actions_generated.py` differs from what the generator writes; a method does not take the action's parameters, or hides another attribute |
-| cellucid-r `tests/testthat/test-actions.R` | The catalog is not at the pinned digest; a generated function, help page or NAMESPACE block differs from what the generator writes, or a page is left over; a generated name takes a hand-written export's or a reserved word |
-| `tests/relay-bundle-contract.test.mjs` | The relay bundle is not what the web sources make now (an action added, a parameter changed, an instruction edited) |
-| `tests/agent-bridge.test.mjs` | The MCP tools are not the catalog's, or the agent instructions name a tool that does not exist |
-| `tests/viewer-protocol-contract.test.mjs` | The protocol's copy of the action type pattern is not the catalog's |
-| `tests/action-history-core.test.mjs` | The dispatcher and history semantics on fake domains: one step per change with its origin, no step for a no-op or read, coalescing, rollback of a failed handler, refusals, agent confirmation, branches, jumps restoring only what differs, delete a step with a flagged dependant, outside changes as steps, observed changes, re-capture after `cells`, history moves as actions, turns, ordering, trackers saved and loaded; and the value hash of NaN, ±Infinity and -0 |
-| `tests/state-domains-contract.test.mjs` | A domain of `domains.js` has no owner module in `OWNERS` (or two); a value shape, a cell by original position, a field by name, equality and the pool hash, an exact restore, a describe line or the fingerprint regresses; `controlDomainOf` names a control that does not exist or splits a control between two domains |
-| `tests/browser/state-domains-roundtrip.spec.mjs` | A domain changed through the interface does not come back exactly (value, visible state, fingerprint), for the live and a kept view, after a data-mapping change, and on a subsample |
-| `applyUndoRedo` in `tests/browser/actions-fields.spec.mjs`, `actions-camera-path.spec.mjs`, `actions-highlights-views.spec.mjs`, `actions-settings-layout-analysis.spec.mjs` | An action changes a domain it does not list in `touches`, or undo or redo does not give the state fingerprint back |
-| `tests/browser/actions-*.spec.mjs` ("every control … dispatches the action it stands for") | A control of the area stops dispatching its action with exact parameters |
-| `tests/history-autosave.test.mjs`, `tests/browser/history-autosave.spec.mjs` | The autosave writes more or less than what changed, loses a step on a closed page, or stops pausing on a full storage |
-| `tests/session-history-file.test.mjs`, `tests/history-golden-fixture.test.mjs` (with cellucid-python `tests/test_sessions.py` and cellucid-r `tests/testthat/test-sessions.R`) | The session file stops round-tripping a history, or the shared golden history no longer reads, or is no longer made, as pinned ({doc}`10_sessions_persistence_and_serialization`) |
-| `tests/history-exports.test.mjs` | The pseudocode, methods paragraph or report drops a step, an outside change, a squashed step (any cause) or a note, loses a group heading, a bookmark or the abstract, or cannot export a branch that is not shown |
-| `tests/session-docs-current-contract.test.mjs` | `app/session/README.md` stops describing format 4, or `app/state-serializer/README.md` misses an id of `DOMAIN_OWNED_IDS` |
-| `tests/action-method-classification-contract.test.mjs` | A public `DataState` method (its mixins in `app/state/managers/`) or a key of the viewer's public API is not classified in `app/actions/classification.js` as `reads()`, `internal(reason)` or `mutates(domains, actions)`; a classification names a method that is gone, or an owning action the catalog lacks or that does not touch the method's domains |
-| `tests/action-mutation-owners-contract.test.mjs` (the static mutation scan) | A `mutates` method is called outside the modules `MUTATION_OWNERS` names (an action's implementation, a domain owner, an observation recorder, a dataset's publication), naming the file, the line and the action to dispatch instead; an owner entry no longer holds; an underscore member of the state is called outside `app/state/` (`NAME_COLLISIONS` lists same-named methods of other objects) |
-| The control walk (`tests/browser/helpers/control-walk.mjs`; `tests/browser/control-walk-1-of-4.spec.mjs` … `4-of-4`) | Walking every control the page shows (discovered from its interactive roles, never from a list; what a control opens, makes or enables walked too; every setting `settings.list` names that is shown must be met) on a fixture dataset in five scenes, a control changes state with no step, keeps a "Changed outside the history" step, makes more than one step after the step shown or a step without a label, or its step's undo does not put back exactly (the state fingerprint); new steps on another branch none of which follows the step shown (Clear history keeping the state, Branch without this step) are an edit of the history. One test per sidebar section, one for everything outside them and the graph-and-vectors test, over four files, one CI job each (`control-walk` in `.github/workflows/test.yml`: `CELLUCID_CONTROL_WALK=only`, `--shard=k/4`; the 8 shards of the browser job leave the walk out with it `apart`, as Playwright splits shards by test count and four walk files of minutes a test landed in one shard), `--grep "<section id>"` runs one part, and each prints its time by section, its slowest controls and phase; a control is judged by what it does, never by how long it takes, and the walk is bounded by its progress (a wait that has not ended after ten times the slowest one seen to end, at least two minutes, names the control as hung). It runs on Chromium only (about 15 minutes for the whole walk; headless Chromium has no volume renderer, so its smoke settings are never shown) |
-| `tests/browser/history-keyboard-chrome.spec.mjs` | A global key shortcut, a movement key, a key no shortcut uses or a chord changes state with more or fewer than one step, or keeps an outside change; a keyboard camera gesture is not one step; the phone sheet changes the history |
-| `tests/browser/action-catalog-coverage.spec.mjs` | An action of the catalog has no implementation on a page with a dataset open (`unprovided()`), a domain has no owner (`missing()`), or a method of the live state or viewer is not classified |
-| `tests/action-reads-contract.test.mjs`, `tests/browser/action-reads.spec.mjs` | A `reads` or `context` declaration is unknown, duplicated, a touched domain, both, non-empty for a stepless action, or leaves a parameter's name unresolved; an action applied in two states that differ only in domains it neither touches, reads nor resolves names in gives different after-values |
-| `tests/action-versions-contract.test.mjs` | An action's parameter shape changed without a version bump and an upgrader (rewording does not count), an older example (`tests/fixtures/action-versions/`) no longer upgrades to valid parameters, or an example file is not at its pinned bytes |
-| `tests/history-catalog-contract.test.mjs`, `tests/history-actions-contract.test.mjs` | A `history.*` action and its provider disagree (a result outside its schema, an edit not journaled, a refusal without its sentence) |
-| `tests/history-model-contract.test.mjs`, `tests/history-model-schema.test.mjs` | A record's validator accepts what the model's rules refuse, or `history_model.schema.json` is not what `historyModelDocument()` makes, here or in a sibling |
-| `tests/history-v2-core.test.mjs`, `tests/history-tree-properties-*.test.mjs` | The core's semantics regress; 2,100 seeded random operation sequences (three shards) break an invariant after some operation: older restores, interleaved turns, two writers at once, loads beside, each step's before-values its parent's, no loose value in the pool |
-| `tests/action-reference-contract.test.mjs` | {doc}`30_action_reference` differs from what `scripts/generate-action-reference.mjs` writes from the catalog |
-| `tests/agent-data-guard.test.mjs` | An action that answers with data is not classified in `app/agent/bridge/data-guard.js`, or the guard lets a cell value, a picture or a single-cell statistic through under "names and summaries only" ({doc}`32_agents_in_the_tab`) |
-
-No control calls a mutating state method itself: the static mutation scan
-holds it at the source, and the control walk and the area specs drive every
-control and compare the step it makes.
+The guards that fail when the layers drift apart (the catalog and its
+generated surfaces, the domains and their owners, the history's semantics,
+the control walk) are listed with the other test rules, each with what makes
+it fail: {ref}`drift-guards`; no control calls a mutating state method
+itself, which the static mutation scan holds at the source.
 
 Next: {doc}`10_sessions_persistence_and_serialization` (the file a history is
 saved in).

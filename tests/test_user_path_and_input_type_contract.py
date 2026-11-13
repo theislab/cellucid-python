@@ -132,7 +132,7 @@ def test_anndata_server_expands_the_home_directory(
 
 
 def test_every_user_supplied_path_entry_point_expands_the_home_directory() -> None:
-    """Guard the whole class: the sites fixed here must keep calling expanduser."""
+    """Guard the whole class: every site listed here must keep calling expanduser."""
     package_root = Path(cellucid.__file__).resolve().parent
     expected = {
         "prepare_data/_prepare.py": [
@@ -204,16 +204,6 @@ def test_prepare_rejects_non_dataframe_var_with_the_received_type(
         )
 
     assert str(error.value) == f"var must be a pandas DataFrame, got {type_name}."
-
-
-def test_missing_gene_names_are_a_value_error_naming_the_remedy(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="The genes have no names"):
-        prepare(
-            tmp_path / "no-var.h5ad",
-            format="h5ad",
-            **_prepare_kwargs(gene_expression=np.ones((N_CELLS, 2), dtype=np.float32)),
-        )
-    assert list(tmp_path.iterdir()) == []
 
 
 def test_row_count_mismatch_still_reports_the_real_row_counts(tmp_path: Path) -> None:

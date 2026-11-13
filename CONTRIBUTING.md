@@ -139,12 +139,119 @@ pre-commit run --all-files
 
 ---
 
+## Comments say what the code does; history goes to the decision records
+
+A comment or a docstring says what the code does and why it must be so: the
+invariant it keeps, the failure it prevents, the unit of a number, the module
+that owns the other half. It is written in the present tense and stays true
+for as long as the code below it is unchanged. A docstring is held to this
+first: Sphinx publishes it on the API pages.
+
+A comment or a docstring never holds:
+
+1. a CI run number or address;
+2. a finding, audit or plan id (`F123`, `L25-3`, `R9W-5`, "round 9", "bug
+   hunt", a section of a plan), or a path into a repository the reader cannot
+   open;
+3. a date of our own work (a date of an outside version the code depends on,
+   such as a protocol revision or a Python release, stays);
+4. who decided, or their words;
+5. what the code used to do, what was tried, what was found or fixed;
+6. numbers measured on a machine, with the machine, engine or dataset.
+
+Each of these goes, in the same change, to the page that records decisions
+for that part of the package (all under `docs/`, the documentation site):
+
+| Code | Where its history goes |
+|---|---|
+| `prepare()` and the writer (`src/cellucid/prepare_data/`): codecs, shuffles, chunk sizes, sharding | The specification, `docs/user_guide/python_package/c_data_preparation_api/09_cellucid_ready_anndata_specification.md` |
+| The servers, the served store and the notebook widget (`anndata_server.py`, `_served_store.py`, `jupyter/`) | `docs/user_guide/web_app/p_developer_docs/26_decisions_served_store_and_widgets.md` |
+| A test that pins a behavior of the web app | The decision record of that subsystem; `docs/user_guide/web_app/p_developer_docs/index.md` lists them |
+
+In a decision record, a decision goes to "Decisions and why", numbers to
+"Measurements that justify it", an attempt to "Tried and reverted". The
+record tells the story in plain words, with its date and its numbers; it
+holds no finding, audit or plan id either. Where a constant or a design rests
+on one, the comment keeps the reason in one clause and names the page:
+`(measured: 26_decisions_served_store_and_widgets.md)`.
+
+What stays in a comment: the failure the code prevents, told as a condition
+("on Windows a file held open cannot have another moved over it, so the file
+is closed before the answer is sent"); pointers to tests, modules and pages
+that exist; facts about outside versions.
+
+Tests follow the same rule. A test's name says what it pins and holds no id.
+A test module's docstring says what the file pins and what breaks without it;
+the incident that led to it goes to the record.
+
+`tests/test_comment_history_contract.py` checks the comments, docstrings and test names of `src`, `tests` and `scripts`, and the comments of `.github/workflows`, for finding ids, rounds, CI run addresses and plan pointers.
+
+**Before and after: a reason told through an incident**
+(`src/cellucid/anndata_server.py`, `_send_file`).
+
+```python
+# Before
+"""...
+On Windows a file held open cannot have another moved over it (a person's
+``write_h5ad`` to a temporary name and a rename; ``open_shared`` lets it be
+removed, not replaced), and a handle still held after the answer arrived
+failed that save with "Access is denied" (Python package run on
+windows-latest, 2026-11-07).
+"""
+
+# After
+"""...
+On Windows a file held open cannot have another moved over it (a person's
+``write_h5ad`` to a temporary name and a rename; ``open_shared`` lets it be
+removed, not replaced), so a handle held after the answer would fail that
+save.
+"""
+```
+
+Record 26, "Decisions and why", gains the row: 2026-11-07; the file is held
+open only while its body is sent; why: on Windows a handle still held after
+the answer arrived failed a person's save with "Access is denied" (the
+package's CI); rules out: holding the file for the length of the request.
+
+**Before and after: a measurement that justifies a design**
+(`src/cellucid/prepare_data/_store.py`, the module docstring).
+
+```python
+# Before
+"""...
+Measured on the 561,947-cell, 8,192-gene Suo atlas with the web app's own
+reader (``scripts/benchmark-anndata.mjs`` in the web repository; the numbers
+are in the specification page): shuffling cut the Zarr store from 243.4 MB to
+198 MB -- the gene indices by a third, embeddings and graph weights by 7-9% --
+while shuffled expression values of real data grew 14-45% ...
+"""
+
+# After
+"""...
+The codec, the shuffle and the chunk sizes are measured choices, taken with
+the web app's own reader (``scripts/benchmark-anndata.mjs`` in the web
+repository; measured: 09_cellucid_ready_anndata_specification.md).
+"""
+```
+
+The specification already holds those numbers with their dataset and date; a
+number it lacks is added there in the same change.
+
+---
+
 ## Tests
 
 Run the test suite:
 
 ```bash
 pytest
+```
+
+After every change, run the core tests first: each part of the package once,
+in about half a minute on an idle machine. The tests marked `core` say what they protect.
+
+```bash
+python -m pytest -m core
 ```
 
 Useful variants:
@@ -173,7 +280,7 @@ make -C docs html
 Or explicitly:
 
 ```bash
-sphinx-build -b html docs docs/_build/html
+sphinx-build -W --keep-going -b html docs docs/_build/html
 ```
 
 Open:

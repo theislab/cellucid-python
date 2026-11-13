@@ -203,7 +203,7 @@ controls they stand behind and record what a person changes by hand:
 |---|---|---|
 | View controls | `ui/modules/view-controls.js` | multiview (“Keep view”), layout mode, **Link cameras**, one row per view (what it shows, field, navigation mode, linked), the Navigation “Applies to” row |
 | Representation controls | `ui/modules/representation-controls.js` | the `View N shows` picker (`#view-representation-select`) + keys 1/2/3 (default, then cycle) |
-| Render controls | `ui/modules/render-controls.js` | points vs smoke, smoke sliders (scales in `smoke-control-scales.js`; the unavailable-device message in `smoke-availability.js`), connectivity toggles |
+| Render controls | `ui/modules/render-controls.js` | points vs smoke, smoke sliders (scales in `smoke-control-scales.js`; the unavailable-device message in `smoke-availability.js`; the volume's rebuild is `smoke-density.js`) |
 | Velocity overlay controls | `ui/modules/velocity-overlay-controls.js` | vector field overlay settings + field selection |
 | Camera controls | `ui/modules/camera-controls.js` | the Navigation accordion: mode select of the focused view, pointer capture, projectiles |
 | Navigation settings | `ui/modules/navigation-settings.js` | per-mode settings boxes, speed sliders and option checkboxes |
@@ -219,7 +219,9 @@ These are bigger subsystems but still treated as modules:
 | Community annotation (split parts) | `ui/modules/community-annotation/` | the controls module's own submodules (browser integration, connection flow, consensus column, modal shell, auto-pull storage) |
 | Community annotation dialogs | `ui/modules/community-annotation-voting-modal.js`, `ui/modules/community-annotation-modal-owner.js` | the voting dialog and its ownership/lifecycle |
 | Cinematic camera | `ui/modules/cinematic-camera/` | camera-path authoring, transport bar, playback, and the `camera-path.*` actions. Initialized by the coordinator; its keyframes and playback settings are the `camera-path` state domain, and a loaded session plays the path when it was saved with Autoplay on (`startAutoplay`) |
-| Benchmark | `ui/modules/benchmark/` | synthetic data generation contract + worker, the configuration-matrix harness, GL upload counters, frame recorder, camera path. The panel’s wiring lives in `main.js`; the measurement code is here and in `assets/js/dev/benchmark.js` |
+| Benchmark | `ui/modules/benchmark/` | synthetic data generation contract + worker, the configuration-matrix harness, GL upload counters, frame recorder, camera path. The panel’s controls and listeners, its synthetic dataset change (generated in a worker, published as a dataset change like any other) and its reports are `ui/modules/benchmark/benchmark-controls.js` (`initBenchmarkControls`, called from `main.js`, with the harness and `dev/benchmark.js` loaded when the panel is first opened); the measurement code is here and in `assets/js/dev/benchmark.js` |
+| Connectivity controls | `ui/modules/connectivity-controls.js` (`initializeConnectivityControls`, made by the dataset publication) | Show edges, color, opacity, width, Max edges, and the owner of the neighbor graph's edges on the page: when they are read, which each view shows, the k-NN tool's row reader (`knnRowReader`) |
+| Smoke volume rebuild | `ui/modules/smoke-density.js` (`createSmokeDensityRebuild`, from `main.js`) | the smoke volume built again from the cells shown, at the grid size the smoke controls ask for; when it runs is the render controls' |
 | Highlight subsystem | `ui/modules/highlight/` | the four selection tools, their copy, and the highlight-page UI |
 | Legend subsystem | `ui/modules/legend/` | categorical and continuous legend rendering |
 | Visualization reset | `ui/modules/visualization-reset.js` | reset actions (clear filters/highlights/etc.), and the global `R` reset-camera key |

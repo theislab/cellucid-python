@@ -1,36 +1,32 @@
 """The input format registry, shared with the web app and cellucid-r.
 
 ``src/cellucid/input_formats.json`` is byte for byte the web app's
-``tests/fixtures/input-formats.json`` (written from
+``tests/fixtures/input-formats.json`` (its home, written from
 ``assets/js/data/input-formats.js``) and cellucid-r's
-``inst/input_formats.json``; each repository pins the same
-SHA-256. ``classify_anndata_path`` (``cellucid serve``) applies its rules as
+``inst/input_formats.json``: each package's test compares its copy with the
+web repository's file. ``classify_anndata_path`` (``cellucid serve``) applies its rules as
 the browser does: a file is taken by its name, then is what its first bytes
 say; a server names it with the registry's format id.
 """
 
 from __future__ import annotations
 
-import hashlib
 import zipfile
-from importlib import resources
 from pathlib import Path
 
 import pytest
+from _web_root import assert_shared_file
 
 from cellucid._anndata_files import classify_anndata_path, input_formats
-
-#: The same digest is pinned in the web app
-#: (tests/input-formats-registry.test.mjs) and in cellucid-r
-#: (tests/testthat/test-input-formats.R). Update all three together.
-INPUT_FORMATS_SHA256 = "31a4853465dd05ec412f4645f9a9efdfb6a14393f0932b4c26883648ad01f6f9"
 
 HDF5_SIGNATURE = bytes.fromhex("894844460d0a1a0a")
 
 
+def test_the_registry_is_the_web_apps_byte_for_byte() -> None:
+    assert_shared_file("src/cellucid/input_formats.json", "tests/fixtures/input-formats.json")
+
+
 def test_the_packaged_registry_is_the_shared_document() -> None:
-    data = resources.files("cellucid").joinpath("input_formats.json").read_bytes()
-    assert hashlib.sha256(data).hexdigest() == INPUT_FORMATS_SHA256
     document = input_formats()
     assert document["schema"] == 1
     ids = [entry["id"] for entry in document["formats"]]
@@ -130,7 +126,7 @@ def test_a_file_cellucid_does_not_open_is_refused_naming_what_it_opens_as_the_we
     ``openableNamesText({layouts: ['file', 'zip']})``, cellucid-r's
     ``.openable_files_text()`` -- each format's ending that stands alone
     (``.rds``, never the compressed copy's ``.rds.gz``), the refused h5Seurat
-    left out (R9Y-4)."""
+    left out."""
     from cellucid._anndata_files import openable_files_text
 
     expected = (

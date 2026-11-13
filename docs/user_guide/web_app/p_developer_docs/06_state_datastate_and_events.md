@@ -550,7 +550,7 @@ Risks:
 - highlights/snapshot views persist unexpectedly
 
 Mitigation patterns:
-- centralize reload in `main.js`
+- centralize reload in one transaction (`app/dataset/reload.js`; the runtime it replaces is `app/dataset/publication.js`'s)
 - ensure state reset paths clear view contexts, highlights, and caches as appropriate
 - a dataset replaced retires its history first (`app/history/dataset-history.js`
   `retire`): recording stops at once and nothing more is put back; the same

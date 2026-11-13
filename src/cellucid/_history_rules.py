@@ -545,12 +545,6 @@ def _check_unique_names(
         seen[key] = item
 
 
-def validate_tracker(tracker: Mapping[str, Any], path: str = "tracker") -> Mapping[str, Any]:
-    """Check one tracker whole: every record's shape and rules, and the tree's (``validateTracker``)."""
-    check_record("Tracker", tracker, path)
-    return check_tracker_rules(tracker, path)
-
-
 def check_tracker_rules(tracker: Mapping[str, Any], path: str) -> Mapping[str, Any]:
     """A tracker's rules beyond its records' shapes (``checkTrackerRules``)."""
     where = f'{path} "{tracker["id"]}"'

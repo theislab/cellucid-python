@@ -63,13 +63,10 @@ ORIGINAL_POSITION_COLUMN = "cellucid_original_position"
 PREFIX_COUNTS_KEY = "cellucid_prefix_counts"
 
 #: The prefix sizes counted step down from ``n_obs`` by this factor (as an
-#: exact fraction: each level is ``floor(previous * 3 / 4)``). Measured on
-#: the Suo atlas (561,947 cells, 5,103 genes) and a 1,000,000-cell synthetic
-#: file with gene-major ``X`` in 2^16-value chunks: a gene's prefix at 1, 5,
-#: 10 and 30% of the cells, read up to the next level, fetched at most 1.01x
-#: the bytes of its exact prefix, against 1.04-1.09x with halving levels and
-#: 1.00x with 8/7; the table costs 0.09-0.27% of ``X`` (43-45 columns,
-#: 1.6-4.1 KB per column stored), against 0.04-0.11% and 0.19-0.58%.
+#: exact fraction: each level is ``floor(previous * 3 / 4)``). A gene's
+#: prefix is read up to the next level, so closer levels fetch fewer bytes
+#: beyond the exact prefix but make a larger table: 3/4 keeps both small
+#: (measured: 09_cellucid_ready_anndata_specification.md).
 LEVEL_RATIO = (3, 4)
 
 

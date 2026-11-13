@@ -146,3 +146,9 @@ Confirm:
 which cellucid
 python -c "import cellucid; print(cellucid.__file__)"
 ```
+
+## Decisions and why
+
+| Date | Decision | Why | Rules out |
+|---|---|---|---|
+| by 2026-07-31 | The public exports are imported again under `if TYPE_CHECKING:` in `cellucid/__init__.py` (`tests/test_public_api_typing_contract.py`) | The lazy module `__getattr__` erased every export to `Any` for a consumer's type checker, so `prepare(nonexistent_argument=123)` type-checked clean | Lazy exports a type checker cannot see |

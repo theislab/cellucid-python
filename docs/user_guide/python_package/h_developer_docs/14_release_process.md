@@ -42,11 +42,9 @@ to `v*` tags and authorized maintainers. The workflow requests
 `id-token: write` only in its final publication job.
 
 ```{warning}
-Release preflight on 2026-07-26 queried the repository through the read-only
-GitHub API and found **zero configured GitHub environments**. This does not make
-the workflow mechanically unrunnable: GitHub documents that a workflow which
-references a nonexistent environment creates it. That implicit environment
-would not carry the reviewed release protections required by this project.
+A workflow that references a nonexistent environment creates it, and the
+implicit environment would not carry the reviewed release protections this
+project requires.
 
 Publication is therefore blocked by release-security policy until an authorized
 repository administrator explicitly creates and protects `pypi` *before* any
@@ -160,8 +158,9 @@ Before publication authorization:
 - confirm the working tree contains no generated build output;
 - confirm CI is green on the release commit;
 - confirm wheel and source-distribution metadata declare the same dependencies;
-- confirm `validate_release.py --sdist` proves that the downstream recipe
-  records the exact normalized candidate hash.
+- confirm `validate_release.py --sdist` passes: one normalized source
+  distribution named for the version, shipping none of the excluded
+  directories.
 
 ## Publish after explicit authorization
 
@@ -185,8 +184,9 @@ The `Publish to PyPI` workflow then:
    `GITHUB_SHA` to be an ancestor of the fetched `origin/main`;
 2. runs Ruff, mypy, the complete pytest suite, and a strict documentation build;
 3. builds one wheel and one source distribution;
-4. normalizes the source distribution and requires its SHA-256 digest to equal
-   the downstream recipe;
+4. normalizes the source distribution and checks it (`validate_release.py
+   --sdist`: one archive named for the version, none of the excluded
+   directories);
 5. runs strict metadata checks;
 6. installs both artifacts on Linux, macOS, and Windows with Python 3.14;
 7. publishes those exact gated files through the `pypi` environment and OIDC.
@@ -223,7 +223,6 @@ build and the stable documentation link.
 - A tag/version mismatch stops before build or publication.
 - A tag whose commit is not contained in `origin/main` stops before the source
   or artifact gates start.
-- A source-distribution digest mismatch stops before artifact upload.
 - A failed source, documentation, metadata, or installed-artifact gate prevents
   the publication job from starting.
 - A gate that failed for a passing reason (a runner or network failure) is
@@ -234,3 +233,10 @@ build and the stable documentation link.
   release again once every gate is green.
 - If PyPI accepted any file, do not replace it. Diagnose the cause, increment
   the package version, rebuild, and run the complete process again.
+
+## Decisions and why
+
+| Date | Decision | Why | Rules out |
+|---|---|---|---|
+| 2026-07-26 | Publication waits for an explicitly created and protected `pypi` environment, though the workflow would run without one | A release preflight through the read-only GitHub API found zero configured GitHub environments; GitHub creates a referenced environment on its own, without the reviewed protections | Publishing into an implicitly created environment |
+| 2026-11-07 | The conda recipe's `source.sha256` is not compared with the candidate archive at release; only its form is checked (`scripts/validate_release.py`, `validate_recipe`). It is recorded from the file PyPI holds when the recipe goes to conda-forge | Every source edit changes the archive, so a digest written before the release was stale by then, and nothing before the release noticed: the first publish of 0.9.6 failed on it, and the candidate of 0.9.7 was stale again | A digest of the source archive kept by hand in the repository |

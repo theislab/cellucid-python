@@ -110,11 +110,13 @@ The actions are defined once, in the web app (`assets/js/app/actions/`), and
 the packages are generated from them: the web repository's
 `scripts/generate-action-catalog.mjs` writes `catalogDocument` of every
 definition as canonical JSON (sorted keys) to its
-`tests/fixtures/action-catalog.json`, to this package's
+`tests/fixtures/action-catalog.json` (its home), and
+`node scripts/sync-shared-files.mjs` there copies it to this package's
 `src/cellucid/action_catalog.json` and to cellucid-r's
-`inst/action_catalog.json`, byte for byte, and prints the SHA-256 the three
-test suites pin (`tests/action-catalog-document-contract.test.mjs`,
-`tests/test_action_catalog.py`, `tests/testthat/test-actions.R`).
+`inst/action_catalog.json`, byte for byte; each package's suite compares its
+copy with the web repository's file (`tests/test_action_catalog.py`,
+`tests/testthat/test-actions.R`; see
+{ref}`the shared files <shared-files>`).
 `scripts/generate_actions.py` then writes `jupyter/_actions_generated.py`
 (one method per action, typed, with the action's title, summary and
 parameter descriptions as its docstring); `tests/test_action_catalog.py`
@@ -180,9 +182,9 @@ Implementation:
 - the shared rules: `cellucid/tests/fixtures/viewer-protocol.json` (schema 5,
   with one valid frame of every kind, binary actions and a binary
   `load_session` as exact bytes), kept byte for byte in cellucid-python
-  (`tests/fixtures/viewer_protocol.json`) and cellucid-r, each copy
-  SHA-pinned; this package's encoder makes exactly the bytes of every
-  example binary command
+  (`tests/fixtures/viewer_protocol.json`) and cellucid-r, each copy compared
+  with the web repository's file by its own suite; this package's encoder
+  makes exactly the bytes of every example binary command
 - the session files a host receives and pushes: session format 4, tested in
   the three repositories against one golden history the web app's own model
   makes (the web repository's `scripts/generate-history-golden.mjs`: three
@@ -195,10 +197,11 @@ Implementation:
   `tests/fixtures/history_golden/history_golden.cellucid-session` and
   `history_golden.expected.json` here and in cellucid-r's
   `tests/testthat/fixtures/history_golden/`; the expected file holds the
-  reading and the apply plans every reader must find, and the web suite
-  (`tests/history-golden-fixture.test.mjs`), this package
-  (`tests/test_sessions.py`) and cellucid-r (`tests/testthat/test-sessions.R`)
-  pin the same SHA-256 digests
+  reading and the apply plans every reader must find; the web suite
+  (`tests/history-golden-fixture.test.mjs`) holds the files to what the
+  generator makes, and this package (`tests/test_sessions.py`) and cellucid-r
+  (`tests/testthat/test-sessions.R`) compare their copies with the web
+  repository's, byte for byte
 
 ### Event validation in Python
 
@@ -428,10 +431,12 @@ If you add a new event type:
    `GET /_cellucid/protocol` naming the type in its `events` list. The gate is
    positive evidence rather than an assumption: a build that emits an event the
    notebook does not accept produces a worse failure than not emitting at all.
-4) Add the type to the shared `viewer-protocol.json` (the web app's
-   `tests/fixtures/viewer-protocol.json`, copied byte for byte to
-   cellucid-python's `tests/fixtures/viewer_protocol.json` and to cellucid-r,
-   each copy SHA-pinned), and the R package's validator with it.
+4) Add the type to the viewer protocol (the web app's
+   `assets/js/data/viewer-protocol.js`) and run
+   `node scripts/sync-shared-files.mjs` in the web repository: it writes
+   `tests/fixtures/viewer-protocol.json` there and copies it byte for byte to
+   cellucid-python's `tests/fixtures/viewer_protocol.json` and to cellucid-r.
+   Add the R package's validator with it.
 5) Add positive preservation tests and negative missing/undeclared-field tests.
 6) Update docs:
    - add the schema to this page,
@@ -548,3 +553,10 @@ Cause:
 Fix:
 - keep the same AnnData row order as the served dataset,
 - or use stable identifiers and explicit mapping for cross-dataset transfer.
+
+## Decisions and why
+
+| Date | Decision | Why | Rules out |
+|---|---|---|---|
+| by 2026-10-26 | The capability document's key set is fixed (`channel`, `commands`, `binaryCommands`, `events`). `binaryCommands` was the one key added, when commands that name cells became binary frames | A viewer validates payloads against exact key sets, so a later capability arrives inside these lists; with the added key an older viewer refuses the host rather than misread its commands | A new top-level key for each capability |
+| by 2026-11-12 | The state commands of the earlier schema (`setColorBy` and the others) became actions and are no longer the protocol's: a `command_error` naming one is refused as any unknown command is, in Python and in R, and a `data_mapping` event names no request | A change of the viewer's state goes through the action catalog (above) | Two command sets for one change |

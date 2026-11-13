@@ -196,7 +196,7 @@ def test_a_mudata_names_a_root_or_a_modality_column(tmp_path: Path) -> None:
 
 def test_a_column_over_the_sources_gene_panel_is_recorded_as_a_source_panel(tmp_path: Path) -> None:
     # The built-in atlases' totals cover their 8,192-gene integration panels: more genes than are
-    # stored, not the whole transcriptome (F154).
+    # stored, not the whole transcriptome.
     panel = _row_sums(_counts()) + 5
     back = _write(tmp_path, _adata(tc=panel), "p.zarr", total_counts="tc", total_counts_over="source panel")
     assert back.uns["cellucid"]["totalCounts"] == {"field": "tc", "over": "source panel"}

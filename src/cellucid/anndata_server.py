@@ -480,9 +480,8 @@ class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
         an answer without one (``HEAD``, 304, 416, an empty file) is sent
         after the file is closed. On Windows a file held open cannot have
         another moved over it (a person's ``write_h5ad`` to a temporary name
-        and a rename; ``open_shared`` lets it be removed, not replaced), and a
-        handle still held after the answer arrived failed that save with
-        "Access is denied" (Python package run on windows-latest, 2026-11-07).
+        and a rename; ``open_shared`` lets it be removed, not replaced), so a
+        handle held after the answer would fail that save.
         """
         try:
             file = open_shared(path)

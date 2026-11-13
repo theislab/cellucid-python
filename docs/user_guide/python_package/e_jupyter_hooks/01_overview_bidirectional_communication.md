@@ -133,8 +133,11 @@ If you want to trace the implementation:
   transport), `data/viewer-channel.js` (the channel) and
   `data/viewer-host-source.js` (ViewerHostDataSource; commands and events)
 - Web app: `cellucid/assets/js/app/viewer-host/command-handler.js` (a host's
-  actions, dispatched as origin `host`) and `app/main.js` (wires session
-  capture + ready event)
+  actions, dispatched as origin `host`), `app/viewer-host/host-channel.js` (wires
+  the session bundle the host asks for, the commands, results and history events
+  over the channel), `app/viewer-host/host-view.js` (the view's end and the
+  pointer hooks) and `app/main.js` (makes them in the start-up sequence and tells
+  the host the viewer is ready)
 
 ## Important notebook constraint: between cells
 

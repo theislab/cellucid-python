@@ -259,7 +259,7 @@ history, Recently deleted included, conversations left out), `SHARE_DEFAULTS`
 conversation or Recently deleted), `STATE_DEFAULTS` (Current state only: no
 notes, conversations, authors or times) or one made from them:
 
-1. the actions in flight finish (`dispatcher.idle()`);
+1. the changes applying finish (`dispatcher.whenApplied()`: the changes past the history's gate, not one waiting behind it, which would wait for the save);
 2. what changed while recording was paused becomes one squashed step
    (`history.settlePaused`), and `history.reconcile()` keeps a change made
    outside an action as its own step, so the file holds what is shown;
@@ -382,14 +382,14 @@ The load itself is one owned operation (`_runOwnedRestore`):
    playing when it was saved with Autoplay on and has two keyframes
    (`cinematic-camera` `startAutoplay`).
 
-The head is put back part by part (F155, `history.js` `putBack`'s `failed`,
+The head is put back part by part (`history.js` `putBack`'s `failed`,
 `readSaved`): a domain whose owner refuses its value keeps what is shown, is
 listed in `unrestored` (`{part: 'domain', domain, error}`), and the next
 domain is put back; each tracker is checked on its own (`validateTracker`),
 one this version cannot read (`HistoryModelError`) is left out
 (`{part: 'tracker', tracker, active, error}`), and when it is the one shown
 its head is kept as a new tracker of its name with its conversations
-(`showLoaded`). A domain this version does not have (F164) is left out of
+(`showLoaded`). A domain this version does not have is left out of
 every step, journal entry and paused draft before anything is checked
 (`knownDomainsOnly`), named first in `unrestored`; nothing here shows it, so it
 makes no step. A starting view puts back the domains it knows and names the
@@ -407,7 +407,7 @@ goes on as a new saved state. An agent's `history_saved_open` returns the
 sentences as `not_restored`. A kept conversation the chat cannot show is
 said too (`conversation.js` `unreadConversationNotice`).
 
-Heavy work a load finds once its file is read (F167: the cells' totals a
+Heavy work a load finds once its file is read (the cells' totals a
 normalized restore, a mapping onto another counts matrix or a replayed step
 sums) is named on the load's own progress line, with its **Cancel**: the load
 hands every restore and replayed step a `heavy` (`_restore`'s `loadHeavy`)
@@ -509,10 +509,9 @@ generic **Load**: it is applied only by `restorePublishedDefaultState()`.
 Applying it leaves `STARTING_VIEW_SHOWN_CONTROL_IDS` (the viewer background)
 as shown: `history.showValues(values, keepShownControls)` reads what is shown
 before putting the root back. The background is the person's look, as the
-theme is; one never chosen follows the theme (`backgroundForTheme`). Before
-this rule, the starting view's restore dispatched the background's `change`,
-which kept Studio (light) as the person's pick on every first visit, so the
-background never followed the theme again (bug hunt F46, 2026-11-10).
+theme is; one never chosen follows the theme (`backgroundForTheme`), which a
+restore that dispatched the background's `change` would end on the first visit
+({doc}`33_decisions_actions_domains_and_history`, Persistence).
 
 ## The library file (`.cellucid-library`)
 
@@ -639,6 +638,7 @@ another embedding would make them distrust a sound dataset.
 | Cause | Detected by | What the person is told |
 |---|---|---|
 | A session of another format version (format 3 and earlier, or a newer one) | the signature, `bundle/reader.js` | `otherSessionFormatMessage(version)` ([Container](#container)) |
+| A dataset's published sample view of another format version (the app and the datasets are deployed minutes apart) | the signature, `session/bundle/format.js` (`isOtherSessionFormat`), `app/dataset/published-state.js` | the dataset opens on its default view, with one short line that the starting view isn't available right now; nothing about formats, and no other format is read |
 | A library file of My datasets (`.cellucid-library`) | the signature, `bundle/reader.js` | `LIBRARY_FILE_NOT_A_SESSION_MESSAGE`: what it is, and where it is imported |
 | A file without a session signature | the signature, `bundle/reader.js` | `NOT_A_SESSION_FILE_MESSAGE` |
 | A damaged file (a manifest, chunk, array, value or tree that breaks the format) | `history-file.js` | "This session file is damaged: …", naming what |
@@ -648,7 +648,7 @@ another embedding would make them distrust a sound dataset.
 | `cellOrder.embedding` names no layout of this dataset | `verifySessionFingerprint()` | the embedding and its dimension are named |
 | `cellOrder.digest` differs, everything else matches | `verifySessionFingerprint()` | the same name and counts but other cell coordinates: the cells are listed in another order, or were exported again from a re-computed embedding, so every saved selection could mark the wrong cells |
 | A field or gene in `requires` is missing | `describeMissingRequiredFields()` | every missing key at once |
-| A state domain this version does not have | `history.load` | not refused: left out of every step and named in the notice that ends the load (F164) |
+| A state domain this version does not have | `history.load` | not refused: left out of every step and named in the notice that ends the load |
 
 None of these messages carries identifiers or internal vocabulary. No
 dataset-agnostic part of a refused file (its layout, say) is salvaged: the
@@ -671,8 +671,7 @@ skeleton or the hash) changes the only current format. Do not introduce a
 reader for an older shape. Update every current producer, consumer, fixture
 and reference together:
 
-- `app/session/README.md` and this page (`tests/session-docs-current-contract.test.mjs`
-  pins the README's wording);
+- `app/session/README.md` and this page;
 - the shared golden history: `scripts/generate-history-golden.mjs` makes it
   with this app's model and writer (every kind of record: three trackers,
   branches, turns, groups, notes, a bookmark, squashed steps (a paused period
@@ -682,9 +681,12 @@ and reference together:
   the apply plans row for row), byte for byte the same as cellucid-python
   `tests/fixtures/history_golden/` and cellucid-r
   `tests/testthat/fixtures/history_golden/` (also
-  `inst/extdata/history_golden.cellucid-session`); its digests are pinned in
-  `tests/history-golden-fixture.test.mjs`, cellucid-python
-  `tests/test_sessions.py` and cellucid-r `tests/testthat/test-sessions.R`;
+  `inst/extdata/history_golden.cellucid-session`): the web repository's files
+  are their home, `node scripts/sync-shared-files.mjs` writes the copies, and
+  `tests/history-golden-fixture.test.mjs`, `tests/shared-files-contract.test.mjs`,
+  cellucid-python `tests/test_sessions.py` and cellucid-r
+  `tests/testthat/test-sessions.R` compare them byte for byte
+  ({ref}`shared-files`);
 - the packages that read a session and apply one of its steps
   (cellucid-python `src/cellucid/session.py`, `history.py` and
   `anndata_session/`, cellucid-r `R/session-file.R`, `R/history.R` and
@@ -721,7 +723,6 @@ cancel and supersession, `requires`, starting views),
 `tests/session-share-scope.test.mjs` (every choice, the state-only form, the
 steps-only form), `tests/session-selection-tool-contract.test.mjs` (page
 chrome), `tests/library-file.test.mjs` (the library file's framing),
-`tests/session-docs-current-contract.test.mjs`,
 `tests/browser/history-share.spec.mjs` (Share and Load on a page),
 `tests/browser/history-session-file.spec.mjs` (a saved history loads in
 another page at its active step; a format-3 file is refused naming its

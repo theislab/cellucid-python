@@ -1,11 +1,11 @@
 """What ``cellucid serve`` prints reaches the person at once, whatever its
 standard output is.
 
-Python block-buffers standard output when it is not a terminal: ``cellucid
-serve data.h5ad --no-browser > serve.out`` (a process manager, ``nohup``, an
-IDE's run panel) printed its steps, but its Viewer URL stayed in the buffer
-while the server ran, so the person could not open the viewer
-(``console_print`` now flushes every line it writes).
+Python block-buffers standard output when it is not a terminal: under
+``cellucid serve data.h5ad --no-browser > serve.out`` (a process manager,
+``nohup``, an IDE's run panel) a Viewer URL left in the buffer while the
+server runs is one the person cannot open, so ``console_print`` flushes every
+line it writes.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 
-from _repository_source import repository_source_environment
+from _repository_source import CHILD_PROCESS_FENCE, repository_source_environment
 
 _TOKEN = re.compile(r"viewerToken=[^&\s]+")
 
@@ -69,7 +69,7 @@ def test_cellucid_serve_says_its_viewer_url_into_a_pipe_while_it_runs(tmp_path: 
     said: list[str] = []
     viewer_url = False
     try:
-        deadline = time.monotonic() + 120
+        deadline = time.monotonic() + CHILD_PROCESS_FENCE
         while not viewer_url and time.monotonic() < deadline:
             try:
                 line = lines.get(timeout=1)

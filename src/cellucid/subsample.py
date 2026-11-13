@@ -80,8 +80,7 @@ def _ranks(positions: NDArray[Any], seed: int) -> NDArray[np.uint32]:
 def _rank_argsort(ranks: NDArray[np.uint32]) -> NDArray[np.intp]:
     """The indices that sort ``ranks`` (which never tie: the one order any
     sort gives), by two stable counting passes over their 16-bit halves --
-    linear time, where numpy's stable sort of 32-bit keys compares (10M
-    cells: 0.4 s against 6 s)."""
+    linear time, where numpy's stable sort of 32-bit keys compares."""
     low = np.argsort((ranks & _U32(0xFFFF)).astype(np.uint16), kind="stable")
     high = np.argsort((ranks[low] >> _U32(16)).astype(np.uint16), kind="stable")
     return low[high]

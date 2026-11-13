@@ -217,8 +217,8 @@ def test_the_actions_functions_are_the_same_in_both_packages() -> None:
     methods = {name for name in vars(ViewerActions) if not name.startswith("_")}
     assert {f"cellucid_{name}" for name in methods} == generated
     # Every action of the catalog has its function in each package; the count
-    # is said only by the generated action reference (a hand-kept count on the
-    # R reference page went stale whenever an action was added or replaced).
+    # is said only by the generated action reference (a hand-kept count on a
+    # reference page goes stale whenever an action is added or replaced).
     catalog = json.loads((Path(cellucid.__file__).parent / "action_catalog.json").read_text(encoding="utf-8"))
     assert {f"cellucid_{action['tool']}" for action in catalog["actions"]} == generated
     reference = (
@@ -266,7 +266,7 @@ def test_a_served_file_states_the_same_launch_defaults_from_both_packages() -> N
 
 
 def test_both_packages_say_the_same_words_when_the_web_app_source_is_unreachable() -> None:
-    """Offline start parity (R9X-15): the cached build served, or why not and
+    """Offline start parity: the cached build served, or why not and
     how to get the app, in one text, filled the same way in both packages."""
     import re
 

@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _repository_source import repository_source_environment
+from _repository_source import CHILD_PROCESS_FENCE, repository_source_environment
 
 
 def _run_with_cp1252(script: str, *arguments: str) -> subprocess.CompletedProcess[bytes]:
@@ -14,7 +14,7 @@ def _run_with_cp1252(script: str, *arguments: str) -> subprocess.CompletedProces
         [sys.executable, "-c", script, *arguments],
         env=environment,
         capture_output=True,
-        timeout=30,
+        timeout=CHILD_PROCESS_FENCE,
         check=False,
     )
 

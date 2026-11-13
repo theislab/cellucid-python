@@ -200,3 +200,9 @@ Recommended pattern:
 - and share instructions rather than exposing the port publicly.
 
 If you truly need public hosting, treat it as a separate deployment project with an explicit security review.
+
+## Decisions and why
+
+| Date | Decision | Why | Rules out |
+|---|---|---|---|
+| by 2026-08-02 | The guard of the web cache directory resolves the whole path, and compares both the whole path and its parent (`tests/test_protected_web_cache_directory_contract.py`) | A guard of the root alone let `~` through (its leaf is not empty), and a check of the leaf link alone missed a symbolic link in the parent chain | Checking the root or the leaf alone |

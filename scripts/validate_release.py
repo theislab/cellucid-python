@@ -124,10 +124,8 @@ def validate_recipe(version: str) -> None:
     Its ``source.sha256`` is a fact about the source distribution PyPI holds,
     recorded from that file when the recipe goes to conda-forge
     (``scripts/publishing/PUBLISHING.md``); only its form is checked here. It
-    used to be required, at release, to equal the candidate archive: every
-    source edit made it stale, nothing before the release noticed, and a
-    release failed on it (0.9.6's first PyPI run; 0.9.7's candidate was stale
-    again). The owner dropped that gate from the release run (2026-11-07).
+    is not compared with the candidate archive: every source edit changes
+    that archive, so a digest written before the release is stale by then.
     """
     _validate_recipe_text(_read("scripts/publishing/meta.yaml"), version)
 

@@ -47,8 +47,8 @@ warnings.filterwarnings("ignore")
 
 HERE = Path(__file__).resolve().parent
 WORKSPACE = HERE.parents[4]
-DATASETS = Path(os.environ.get("CELLUCID_DATASETS_REPO", WORKSPACE / "cellucid-datasets"))
-WEB = Path(os.environ.get("CELLUCID_WEB_REPO", WORKSPACE / "cellucid"))
+DATASETS = Path(os.environ.get("CELLUCID_DATASETS_ROOT", WORKSPACE / "cellucid-datasets"))
+WEB = Path(os.environ.get("CELLUCID_WEB_ROOT", WORKSPACE / "cellucid"))
 OBS = ["clusters_coarse", "clusters", "S_score", "G2M_score"]
 
 

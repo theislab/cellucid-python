@@ -59,9 +59,8 @@ can read without your key. The same bar connects to a Cellucid server
 
 Cellucid reads the data **in place**: only the bytes a view needs are
 requested from the host, with HTTP range requests. A 1.6 GB CELLxGENE file
-(Tabula Sapiens thymus) showed its embedding after reading 2.6 MB on
-2026-10-31, and the 21.9 GB Human Lung Cell Atlas all 2,282,447 of its
-cells after 19 MB, in 17 s.
+(Tabula Sapiens thymus) shows its embedding after reading 2.6 MB, and the
+21.9 GB Human Lung Cell Atlas all 2,282,447 of its cells after 19 MB, in 17 s.
 
 The fastest way to see it is to click one of the datasets in
 [Try it](#open-from-link-try-it) below: each opens in Cellucid straight from
@@ -154,9 +153,8 @@ carries the link (`?data=…`), so it is also what you would share.
 
 "Opening reads" is how much of the file Cellucid fetched to show its first
 view: what the **Dataset** box said when the first cells were drawn, in
-Chromium on www.cellucid.com on 2026-10-31 (reads the opening still had on
-their way then are not counted; the OneDrive rows, and the Google Drive rows
-Google's download hold kept from a new run, are of 2026-10-25); the rest is read only when a view needs it (showing a gene,
+Chromium on www.cellucid.com (reads the opening still had on their way are
+not counted); the rest is read only when a view needs it (showing a gene,
 switching an embedding). An R object is read whole, once, and kept in this
 browser; a MatrixMarket sample's cells are drawn from its lists and tables,
 then its matrix is read once for the cells genes are read for: opened again,
@@ -234,7 +232,7 @@ S3.
 
 Files shared on Google Drive with "Anyone with the link" open with no
 sign-in: each is read through Google's Drive API with Cellucid's public key,
-in place, one range at a time. On 2026-10-25 Drive answered each read in
+in place, one range at a time. Drive answers each read in
 about 0.65 s (0.56–0.98 s; a few kilobytes and a few megabytes alike), at about
 4 MB/s a request, and Cellucid opened each file with the same requests and
 bytes as from a host answering ranges after the same 0.65 s. Read with a
@@ -291,13 +289,12 @@ Any of the link forms Drive gives works the same way: the **Share** link
 
 OneDrive and SharePoint send no file without a Microsoft sign-in, not even one
 shared with "Anyone with the link": Microsoft Graph and the OneDrive API
-answer such a request for a share link with HTTP 401 (checked 2026-10-25). A
+answer such a request for a share link with HTTP 401. A
 OneDrive link therefore opens after **Sign in with Microsoft**
 ({doc}`16_private_drive_onedrive`), with any personal Microsoft account, and
 is then read in place from Microsoft's download address, with plain range
 requests that need no sign-in of their own. The same kit, shared from a
-personal OneDrive with "Anyone with the link" (read with a personal account on
-2026-10-25):
+personal OneDrive with "Anyone with the link" (read with a personal account):
 
 | Dataset | Tag | Cells | File | Opening reads |  |
 |---|---|---|---|---|---|

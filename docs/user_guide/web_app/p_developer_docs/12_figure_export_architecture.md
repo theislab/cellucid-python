@@ -1,6 +1,6 @@
 # Figure export architecture
 
-This page documents the Cellucid **Figure export** subsystem: how SVG/PNG export reproduces the current view (WYSIWYG), how large datasets are handled safely, and where to add new export renderers.
+This page documents the Cellucid **Figure export** subsystem: how SVG/PNG export reproduces the current view (WYSIWYG), how large datasets are handled safely, and where to add new export renderers. Why it is built this way (the decisions with their dates and what each replaced) is {doc}`36_decisions_figure_export`.
 
 ## At a glance
 
@@ -77,13 +77,14 @@ Every per-cell pass and every encode runs in the export worker
 - the point passes draw on OffscreenCanvas WebGL2 contexts the worker keeps for
   the page's lifetime (`webgl-point-rasterizer.js`), one per antialiasing
   setting; a pass returns its frame with `transferToImageBitmap()` and the
-  canvas shrinks to one pixel. Creating and losing a context per pass cost a
-  context and a shader compile every time, and made WebKitGTK/WPE abort the
-  page on a GL call made without a current context during the teardown;
+  canvas shrinks to one pixel. A context is never made and lost per pass:
+  that costs a context and a shader compile every time, and WebKitGTK/WPE
+  abort the page on a GL call made without a current context during the
+  teardown;
 - the page copies each frame onto the plot's device pixels, then hands the
   composed canvas's pixels to the worker as an ImageData whose buffer is
   transferred (`pagePixels` in `figure-export-worker-client.js`; never an
-  ImageBitmap of a page canvas, which Linux WebKit encoded without the
+  ImageBitmap of a page canvas, which Linux WebKit encodes without the
   canvas's pixels), where `OffscreenCanvas.convertToBlob` encodes it (the encoder
   `toBlob` uses, so the bytes are the same) and the metadata chunks are added;
 - axis bounds and the vector strategies' circle markup are computed there too;
@@ -127,8 +128,8 @@ run) describes the context of a placement (`describeRasterContext`: the
 renderer and vendor, the attributes the browser granted, the drawing buffer's
 samples). `figure-export.spec.mjs` compares the two descriptions before the
 two rasters, and attaches both with the differing pixels when either
-differs: macOS Firefox once drew 7 of 15,346 pixels up to 3 levels apart on
-antialiased rims (nightly run 41269083996), with nothing recorded to say why.
+differs (the one difference seen so far, on hosted macOS Firefox, is an open
+item of {doc}`28_decisions_rendering_layers`).
 
 The PNG exporter also embeds metadata via UTF-8 PNG `iTXt` chunks:
 - `Software`, `Website`, `Creation Time`, `Dataset`, `Dataset ID`, `Color Field`,
@@ -148,28 +149,22 @@ The module includes shared builders:
 
 Key design constraints:
 - Legends should be sourced from the same model as interactive legends so colors match exactly.
-- **A legend entry is never cut** (owner decision, 2026-11-10). A legend is as
+- **A legend entry is never cut.** A legend is as
   large as its entries need: `planLegend()` (`components/legend-builder.js`)
   plans each entry's whole text, its columns (each as wide as its longest
   entry, `(hidden)` marker included) and the box, with the one text
   measurement of `utils/text-measure.js` (the canvas's `measureText` for the
   figure's font); `utils/layout.js` reserves exactly that box and the figure
   grows around it; the SVG and Canvas builders draw the plan and measure
-  nothing. Before, the box was capped at the plot's size and the builders cut
-  names to their columns with "…" (Suo `cell_type`, 69 categories, at
-  720 × 500; and a grid panel's legend of 69 entries drawn as swatches and
-  "…").
-- **Axes are laid out once, from their text** (F158, 2026-11-11).
+  nothing.
+- **Axes are laid out once, from their text.**
   `planFigureAxes()` (`components/axes-builder.js`) places every axis line,
   tick, tick label and axis label of a plot and gives the margins they need on
   each side, from the measured tick labels and the fonts: the y-axis label past
   the widest y tick label, a corner tick label or an over-long axis label
   reserved where it reaches. The layout plans each plot's axes and reserves
   those margins; `renderSvgAxes()` and `drawCanvasAxes()` draw that plan and
-  measure nothing. Before, the y label stood a fixed distance from the axis
-  and ran into wide tick labels (17 px ticks, 20 px label: "UMAP 2" over
-  "-0.5"), the margins were a fixed 62 px at any text size, and the PNG put
-  the y tick labels 2 px from their ticks where the SVG put them 8 px.
+  measure nothing.
 - **One layout call per export.** `computeFigureLayout(payload)`
   (`utils/layout.js`) reads each panel's axes, legend and the highlight's
   legend entry from the payload and lays the figure out; the PNG and SVG
@@ -186,14 +181,10 @@ Key design constraints:
   its entries in half its cell beside the plot moves below the plot; rows grow
   to the tallest need, so the figure can come out larger than the requested
   size.
-- **The only size limit is the browser's canvas.** A million-category legend
-  once asked for a canvas millions of pixels wide and the PNG never came; the
-  cap that answered it cut every legend. Now the PNG canvas is allocated at the
-  figure's size and checked by drawing a pixel in its far corner and reading
-  it back (`utils/figure-canvas.js`); where the browser cannot draw it, the
-  export is refused before rendering with one sentence naming the size and the
-  remedy (turn the legend off or show fewer categories; or a smaller size or
-  DPI when the figure is too large without its legend).
+- **The only size limit is the browser's canvas.** A figure the browser
+  cannot draw is refused before rendering, with one sentence naming the size
+  and the remedy (`utils/figure-canvas.js`; how it is checked and why there is
+  no other cap: {doc}`36_decisions_figure_export`).
 
 ---
 
@@ -209,12 +200,16 @@ state domain (`figureExport`: `exportSessionSettings()` captures it,
 file hold them with every other setting
 ({doc}`29_action_layer_domains_and_history`).
 
-No action changes the panel's settings, and nothing observes a change made in
-the panel: such a change is not a step of its own. The next step that captures
-the `settings` domain holds it (a person's settings change recorded by
-observation folds it into that step; a dispatched `setting.set` keeps it as
-"Changed outside the history"), and a Save records it as "Changed outside the
-history".
+The record changes through one action, `figure-export.set`
+(`app/actions/definitions/settings.js`: effect `view`, touching `settings`;
+an agent, a notebook or a script sets the options by name, and
+`figure-export.get` reads them back by the same names). A person's change in
+the panel is recorded by observation as one `figure-export.set` step, from
+the event that made it (`figure-export-ui.js`), as the sidebar's settings
+are; a control added to the panel later is recorded with no code of its own.
+Consecutive changes of the same options coalesce into one step (a width
+typed, a frame dragged, a title typed). The events a history restore or the
+action itself causes are not steps.
 
 The figure renderer also draws the read `view.picture` (a PNG of a view,
 returned as data and never downloaded), which the printable history report

@@ -1,14 +1,15 @@
 """``cellucid mcp``: the local MCP server for agent apps on this computer.
 
 - ``src/cellucid/mcp_tools.json`` is the web connector's tool list for this
-  package's own ``action_catalog.json`` (written by the web repository's
-  ``node scripts/generate-action-catalog.mjs``, which pins the same digest
-  in ``tests/mcp-tools-document-contract.test.mjs`` while the catalogs
-  agree; cellucid-r pins it in ``tests/testthat/test-mcp.R``).
+  package's own ``action_catalog.json``, byte for byte the web repository's
+  ``tests/fixtures/mcp-tools.json`` (written by its
+  ``node scripts/generate-action-catalog.mjs``; cellucid-r holds the same
+  copy).
 - ``tests/fixtures/local_agents.json`` is shared with cellucid-r byte for
-  byte: the agents folder, the record, the endpoint, the app names and the
-  sentences an agent reads, so either package's ``cellucid mcp`` drives
-  either package's viewer and says the same things.
+  byte (its home is here; cellucid-r copies it): the agents folder, the
+  record, the endpoint, the app names and the sentences an agent reads, so
+  either package's ``cellucid mcp`` drives either package's viewer and says
+  the same things.
 - The agent commands and events of the viewer channel, a viewer's agent
   port, its publication on this computer, and the MCP server itself over
   stdio (initialize, tools/list, tools/call, errors, cancellation, the
@@ -35,7 +36,7 @@ from typing import Any
 import pytest
 from _serverless_viewer import serverless_viewer
 from _viewer_channel_client import TEXT, FakeViewer, binary_event
-from _web_root import rendered_by_web
+from _web_root import SYNC_SHARED_FILES, assert_shared_file, rendered_by_web
 
 import cellucid._agent_link as agent_link
 import cellucid._mcp_core as core
@@ -44,17 +45,6 @@ from cellucid.anndata_server import AnnDataServer
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = Path(__file__).parent / "fixtures" / "local_agents.json"
-
-#: The digest of ``mcp_tools.json``: the web connector's tools for this package's catalog.
-MCP_TOOLS_SHA256 = "65b1e61533966676c2fb60f5c307cc00b43b0db952f044dc72fa8839297ffaa0"
-
-#: The digest of ``local_agents.json``; cellucid-r pins the same one.
-LOCAL_AGENTS_SHA256 = "f5a5f265380c9566ccfa5f5bb67165fb95261d4da8f4ac792c179b4b4d75ad00"
-
-REGENERATE = (
-    "regenerate it: node scripts/generate-action-catalog.mjs in the web repository writes "
-    "the catalog and mcp_tools.json together; pin the digest it prints"
-)
 
 
 def _fixture() -> dict[str, Any]:
@@ -77,15 +67,23 @@ needs_sdk = pytest.mark.skipif(not _has_sdk(), reason="the MCP SDK (cellucid[mcp
 # =============================================================================
 
 
+@pytest.mark.core
+def test_mcp_tools_json_is_the_web_apps_byte_for_byte() -> None:
+    assert_shared_file("src/cellucid/mcp_tools.json", "tests/fixtures/mcp-tools.json")
+
+
+@pytest.mark.core
 def test_mcp_tools_json_is_the_list_the_web_apps_source_makes_now() -> None:
-    """Against the web app's source (``renderMcpTools``), not only a pinned digest."""
+    """Against the web app's source (``renderMcpTools``), not only its committed file."""
     shipped = (ROOT / "src" / "cellucid" / "mcp_tools.json").read_text(encoding="utf-8")
-    assert rendered_by_web("scripts/generate-action-catalog.mjs", "renderMcpTools") == shipped, REGENERATE
+    assert rendered_by_web("scripts/generate-action-catalog.mjs", "renderMcpTools") == shipped, (
+        f"src/cellucid/mcp_tools.json is not what the web app's source makes: run `{SYNC_SHARED_FILES}` "
+        "in the web repository (cellucid)."
+    )
 
 
+@pytest.mark.core
 def test_mcp_tools_json_is_the_web_connectors_list_for_this_packages_catalogue() -> None:
-    text = (ROOT / "src" / "cellucid" / "mcp_tools.json").read_bytes()
-    assert hashlib.sha256(text).hexdigest() == MCP_TOOLS_SHA256, REGENERATE
     document = core.mcp_tools_document()
     catalog = json.loads((ROOT / "src" / "cellucid" / "action_catalog.json").read_text(encoding="utf-8"))
     assert document["catalogDigest"] == hashlib.sha256((ROOT / "src" / "cellucid" / "action_catalog.json").read_bytes()).hexdigest()
@@ -107,9 +105,10 @@ def test_mcp_tools_json_is_the_web_connectors_list_for_this_packages_catalogue()
         assert name in names, name
 
 
+@pytest.mark.core
 def test_the_local_instructions_name_the_notebook_calls_that_bring_the_agents_work_back() -> None:
-    """A local agent told the person to run ``cellucid.pull()``, which does not exist (live-8
-    L26-6): the instructions name the calls that apply the viewer's session, and they exist."""
+    """The instructions name the calls that apply the viewer's session, and they exist: an
+    agent told of a call that does not exist tells the person to run it."""
     from cellucid.jupyter import AnnDataViewer
 
     text = core.mcp_tools_document()["instructions"]
@@ -124,6 +123,7 @@ def test_the_local_instructions_name_the_notebook_calls_that_bring_the_agents_wo
         assert call in text, call
 
 
+@pytest.mark.core
 def test_a_stale_tools_document_is_refused_by_name(monkeypatch: pytest.MonkeyPatch) -> None:
     core.mcp_tools_document.cache_clear()
     real = core.resources.files
@@ -145,8 +145,15 @@ def test_a_stale_tools_document_is_refused_by_name(monkeypatch: pytest.MonkeyPat
         core.mcp_tools_document.cache_clear()
 
 
+@pytest.mark.core
+def test_cellucid_r_holds_the_same_local_agents_fixture() -> None:
+    assert_shared_file(
+        "tests/fixtures/local_agents.json", "tests/testthat/fixtures/local_agents.json", repository="cellucid-r"
+    )
+
+
+@pytest.mark.core
 def test_the_shared_local_agents_fixture_is_this_packages_behaviour() -> None:
-    assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == LOCAL_AGENTS_SHA256
     fixture = _fixture()
     assert fixture["server"]["name"] == core.SERVER_NAME
     assert fixture["server"]["title"] == core.SERVER_TITLE
@@ -176,6 +183,7 @@ def test_the_shared_local_agents_fixture_is_this_packages_behaviour() -> None:
     assert re.match(fixture["server"]["connectionIdPattern"], session.connection_id)
 
 
+@pytest.mark.core
 def test_the_agents_folder_follows_the_user_cache_and_its_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("CELLUCID_AGENTS_DIR", str(tmp_path))
     assert agent_link.agents_dir() == tmp_path
@@ -201,6 +209,7 @@ def test_the_agents_folder_follows_the_user_cache_and_its_override(monkeypatch: 
 # =============================================================================
 
 
+@pytest.mark.core
 def test_agent_commands_serialize_as_the_viewer_protocol_has_them() -> None:
     protocol = json.loads((Path(__file__).parent / "fixtures" / "viewer_protocol.json").read_text(encoding="utf-8"))
     for name in ("agent_list", "agent_call", "agent_cancel", "agent_answer"):
@@ -228,6 +237,7 @@ def test_agent_commands_serialize_as_the_viewer_protocol_has_them() -> None:
         wire._require_frontend_message({"type": "agent_answer", "requestId": "a", "allowed": "yes"})
 
 
+@pytest.mark.core
 def test_agent_events_are_read_as_the_viewer_protocol_has_them() -> None:
     protocol = json.loads((Path(__file__).parent / "fixtures" / "viewer_protocol.json").read_text(encoding="utf-8"))
     for example in protocol["examples"]["events"]:
@@ -361,6 +371,7 @@ def _page_gone(viewer: Any, monkeypatch: pytest.MonkeyPatch) -> threading.Event:
     return gone
 
 
+@pytest.mark.core
 def test_a_viewer_is_published_and_its_port_carries_calls_both_ways() -> None:
     with _published_viewer() as (viewer, port):
         port_ = viewer._agent_port
@@ -671,7 +682,7 @@ def test_the_server_without_a_viewer_lists_the_generated_tools_and_says_what_is_
 @needs_sdk
 def test_the_tool_list_is_the_same_whatever_the_page_does_and_is_never_said_to_change() -> None:
     """The person's settings are told to the agent after its tool results,
-    never in its tool list (L26-9): a list change makes the app rewrite its
+    never in its tool list: a list change makes the app rewrite its
     cached prompt and drop the earlier reasoning. So the list an agent gets is
     the generated one before a page opens, the same once a page (whatever its
     settings) took the channel, reloaded or was replaced, and no

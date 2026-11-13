@@ -37,17 +37,12 @@ array is compressed with the specification's ``blosc`` codec instead: byte
 shuffle and zlib at the same level (:func:`_blosc_codec`); every other v3
 array is gzip.
 
-Measured on the 561,947-cell, 8,192-gene Suo atlas with the web app's own
-reader (``scripts/benchmark-anndata.mjs`` in the web repository; the numbers
-are in the specification page): shuffling cut the Zarr store from 243.4 MB to
-198 MB -- the gene indices by a third, embeddings and graph weights by 7-9% --
-while shuffled expression values of real data grew 14-45% (raw counts,
-``normalize_total`` + ``log1p``, proportions); Zstandard (with or without
-Blosc) and Blosc-LZ4 were all larger than shuffled deflate and are decoded in
-JavaScript rather than natively; chunks of 2^15 sliced elements doubled the
-requests of a whole-matrix read, 2^17 and 2^18 fetched 1.7 and 3 times the
-bytes of a batch of genes; sharding Zarr v3 cut the requests of a whole-matrix read
-but cost every first gene of a shard one more round trip for its index.
+The codec, the shuffle and the chunk sizes are measured choices, taken with
+the web app's own reader (``scripts/benchmark-anndata.mjs`` in the web
+repository; measured: 09_cellucid_ready_anndata_specification.md). Zstandard
+and Blosc-LZ4 are decoded in JavaScript rather than natively, and a sharded
+Zarr v3 store costs every first gene of a shard one more round trip for its
+index.
 
 The whole output is written beside its target under a temporary name and moved
 into place only once it is complete, so an interrupted or failed call never
@@ -75,12 +70,10 @@ from ._priority import ORIGINAL_POSITION_COLUMN, PREFIX_COUNTS_KEY
 
 #: Elements per chunk of an array the viewer reads by slices: the data and
 #: indices of the expression matrix, read one gene's range at a time (or, in
-#: priority order, its first values). Measured on a 1,000,000-cell file in
-#: priority order over 150 ms and 5 MB/s (`.h5ad`): against 2^16, a 1% subsample's
-#: 99 genes fetched 2.4 instead of 8.9 MB (0.68 instead of 1.94 s), and every
-#: cell's 99 genes 8.7 instead of 14.5 MB (1.90 instead of 3.06 s), each gene
-#: dragging fewer of its neighbors; 2^12 fetched less still (0.8 MB) but its
-#: chunk index, 16 times larger, cost the first gene 0.64 MB and a round trip.
+#: priority order, its first values). A gene's read drags the rest of the
+#: chunks it touches, so a larger chunk fetches more of its neighbors; a much
+#: smaller one grows the chunk index, which the first gene pays for with a
+#: round trip (measured: 09_cellucid_ready_anndata_specification.md).
 SLICED_CHUNK_ELEMENTS = 2**14
 
 #: Elements per chunk of an array the viewer reads whole.
@@ -89,25 +82,23 @@ WHOLE_CHUNK_ELEMENTS = 2**18
 #: Elements per chunk of an array with one row per cell: obs columns, codes and
 #: index, obsm arrays (a chunk of whole rows), MuData's masks and cell maps, the
 #: stored outlier quantiles. A subsample of a file in priority order reads the
-#: first rows of each, the last chunk of them in part: on the 1,000,000-cell
-#: file above, a 1% subsample's embedding fetched 0.21 MB with chunks of 2^16
-#: values against 0.84 MB with 2^18, its obs fields 0.05 against 0.18 MB, its
-#: opening 0.70 against 1.20 MB, and reading every cell cost the same. (Chunks
-#: of 2^14 fetched 0.10 MB of the embedding, a fourth of the files again.)
+#: first rows of each, the last chunk of them in part, so a chunk smaller than
+#: a whole read's keeps a subsample's read near its own cells, and reading
+#: every cell costs the same; a smaller chunk still means more files in a Zarr
+#: folder (measured: 09_cellucid_ready_anndata_specification.md).
 CELL_CHUNK_ELEMENTS = 2**16
 
-#: The deflate level of every compressed chunk, zlib's own default. On the
-#: dataset above, level 9 made the expression values 6% and everything else
-#: under 1% smaller and wrote them twenty times slower; level 4 made the
-#: expression values 6% larger. The browser inflates every level equally fast.
+#: The deflate level of every compressed chunk, zlib's own default: a higher
+#: level writes far slower for little size, a lower one writes larger
+#: expression values, and the browser inflates every level equally fast
+#: (measured: 09_cellucid_ready_anndata_specification.md).
 DEFLATE_LEVEL = 6
 
 #: The block HDF5 gathers an ``.h5ad``'s metadata in (:func:`_write_h5ad`):
 #: the web app's metadata block on a web host (256 KiB,
-#: ``REMOTE_POLICY.blockBytes``). The dataset above has 44 KB of metadata;
-#: the rest of the block holds the chunk indexes written with the values. More
-#: metadata goes on in further blocks; the unused part of the block stays in
-#: the file (the dataset above grew by 58 KB).
+#: ``REMOTE_POLICY.blockBytes``). What the metadata leaves of the block holds
+#: the chunk indexes written with the values. More metadata goes on in further
+#: blocks; the unused part of the block stays in the file.
 H5AD_META_BLOCK_BYTES = 256 * 1024
 
 #: The Zarr format ``prepare()`` writes unless asked for the other one, as
@@ -214,10 +205,10 @@ def _blosc_codec(itemsize: int) -> Any:
     it as a zlib stream (``cname`` zlib, ``clevel`` :data:`DEFLATE_LEVEL`),
     which browsers inflate natively. The block size is Blosc's own choice
     (``blocksize`` 0): the whole chunk, or blocks of 1 MiB in a larger one
-    (a float64 chunk of 2^18 values is two). On the He atlas
-    (71,650 cells) a Zarr v3 store written so came to 29.00 MB, against
-    29.11 MB with ``numcodecs.shuffle`` and gzip, and 37.62 MB with gzip and
-    no shuffle (the gene indices of ``X`` alone 64% larger).
+    (a float64 chunk of 2^18 values is two). A store written so is as small
+    as one written with ``numcodecs.shuffle`` and gzip, and smaller than one
+    with gzip and no shuffle
+    (measured: 09_cellucid_ready_anndata_specification.md).
 
     zarr-python compresses with numcodecs' Blosc, which it sets to compress in
     the calling thread (``numcodecs.blosc.use_threads = False``), so a chunk
@@ -583,11 +574,11 @@ class _Writer:
         """A sparse matrix's ``data`` and ``indices``.
 
         Each array's chunks lie together, in order: a whole-matrix read is a
-        few long ranges. (Alternating the two arrays' chunks put a gene's two
-        ranges side by side, but made reading one array alone fetch the other
-        too: Suo's 1,000 cells over HTTP/1.1 read 113 MB instead of 74 and took
-        6.3 s instead of 4.9.) The values of the expression matrix (``sliced``)
-        are not shuffled (module docstring).
+        few long ranges. (Alternating the two arrays' chunks would put a
+        gene's two ranges side by side, but make reading one array alone
+        fetch the other too; measured:
+        09_cellucid_ready_anndata_specification.md.) The values of the
+        expression matrix (``sliced``) are not shuffled (module docstring).
         """
         chunks = _vector_chunks(matrix.nnz, SLICED_CHUNK_ELEMENTS if sliced else WHOLE_CHUNK_ELEMENTS)
         self.array(group, "data", matrix.data, chunks, encoded=False, shuffle=not sliced)
@@ -677,14 +668,14 @@ def _write_chunks_in_parallel(dataset: Any, values: Any) -> bool:
     """Write a numeric ``.h5ad`` array's chunks, compressed on every core.
 
     HDF5 compresses the chunks of a write one after the other on the calling
-    thread, which made deflating the values most of the time ``prepare()``
-    takes (93% of it on 200,000 cells). Each chunk is compressed here, as
-    HDF5's own filters would (:func:`_chunk_bytes`), by a pool of threads --
+    thread, where deflating the values is most of the time ``prepare()``
+    takes. Each chunk is compressed here, as HDF5's own filters would
+    (:func:`_chunk_bytes`), by a pool of threads --
     zlib releases the interpreter lock while it deflates -- and stored with
     HDF5's direct chunk write, in grid order, so the file's layout is what
     HDF5 writes. Returns False for an array this does not apply to (text, a
     scalar, an unchunked or otherwise filtered array), which the caller
-    writes as before.
+    writes itself.
     """
     from concurrent.futures import ThreadPoolExecutor
     from itertools import product
@@ -770,16 +761,16 @@ def _write_h5ad(path: Path, content: Elements | StoreContent, *, mudata: bool = 
     written (:class:`_Writer`), so the attributes' strings follow the metadata
     block, and then come the values opening reads: ``uns`` (but its outlier
     quantiles), the gene names, the pointers of ``X`` and the labels of every
-    categorical ``obs`` column -- 431 KB in all on the dataset above, which
-    the web app reads with its first request of the file (``HEAD_BYTES``,
-    512 KiB).
+    categorical ``obs`` column -- where the web app's first request of the
+    file (``HEAD_BYTES``, 512 KiB) reaches them
+    (measured: 09_cellucid_ready_anndata_specification.md).
     File format 1.10 (``libver``) stores a single chunk's address in its
     dataset's header and the chunks of a fixed-size array in one fixed array
     index, so no chunk needs an index read of its own; HDF5 1.10 and later
     (h5py, anndata, rhdf5, hdf5r, h5wasm) read it. (HDF5's paged file space
-    gathered the metadata too, but scattered each array's chunks over pages
-    shared with the others: a whole-matrix read over HTTP/1.1 took 224
-    requests instead of 33.)
+    gathers the metadata too, but scatters each array's chunks over pages
+    shared with the others, which multiplies the requests of a whole-matrix
+    read.)
 
     An ``.h5mu`` (``mudata``) is the same HDF5 file after a user block of
     :data:`H5MU_USERBLOCK_BYTES` holding :func:`_h5mu_header`.

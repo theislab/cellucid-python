@@ -26,7 +26,7 @@ behind both the relay client (`relay-client.js`, connection kind
   connection, whatever the person's settings) and tells the agent those
   settings after its connection's first tool result and after any result
   once they changed, as a note appended to the result's text
-  (`agent-calls.js` `withSettingsTold`, words in `settings-told.js`);
+  (`agent-calls.js` calls `settingsTold` of `settings-told.js`, which holds the words);
 - tells the caller when the person is asked about a call, with the card's
   own sentence (`presence.questionFor`), and when they answered.
 
@@ -39,11 +39,10 @@ sentences of `local_agents.json`), is the package's own text: the status
 result's dataset name is not yet marked as data the way the relay's status
 is.
 
-The presence adds two things a local app needs: `answer(signal, allowed)`
-(the person answered the same question in the agent's app, an MCP
-elicitation: the card goes as if clicked, Allow once or Deny) and
-`onPermissionsChanged` (the settings, or a grant for one connection,
-changed: the host tells the app to list its tools again).
+The presence adds what a local app needs: `answer(signal, allowed)` (the
+person answered the same question in the agent's app, an MCP elicitation: the
+card goes as if clicked, Allow once or Deny). The tool list never changes with
+the settings, so nothing tells the app to list its tools again.
 
 ## The tools: one source
 
@@ -61,7 +60,8 @@ bundled list (`tests/mcp-tools-document-contract.test.mjs` checks them equal,
 field for field). The packages use it only while no page is open; an open
 page's own list (the same function, with the person's settings for this
 connection) is used otherwise. Nothing is hand-copied: the packages read the
-document, and three tests pin its digest.
+document, and each package's test compares its copy with the web repository's
+`tests/fixtures/mcp-tools.json`, byte for byte ({ref}`shared-files`).
 
 ## The viewer channel's agent messages
 
@@ -75,8 +75,8 @@ result, an error included), `agent_asking {requestId, message, detail}`,
 changed: it never does.
 `connection` is `{id, client}` (`local-` and 12 hex characters per MCP
 session; the app's `clientInfo.name`). The page reads them in
-`viewer-host-source.js` (`onAgent`, `sendAgentResult`, …) and `main.js`
-wires them to the engine. A host lists them in `/_cellucid/protocol` like
+`viewer-host-source.js` (`onAgent`, `sendAgentResult`, …) and
+`app/viewer-host/host-channel.js` wires them to the engine. A host lists them in `/_cellucid/protocol` like
 every message, so a page sends agent events only to a host that takes them,
 and an older page answers an agent command with a `command_error` that
 reaches the agent ("reload the page"). A package delivers agent events to the
@@ -128,8 +128,8 @@ its standard library (Python's `urllib`, R's `curl`) and either package's
 `cellucid mcp` drives either package's viewer; both endpoints hold an
 `events` request up to `EVENT_WAIT_LIMIT_SECONDS` for an event (R through a
 promise httpuv answers later), and the client asks again at once. The shared fixture
-`local_agents.json` (cellucid-python `tests/fixtures/`, cellucid-r
-`tests/testthat/fixtures/`, byte for byte) pins the folder rule, the record,
+`local_agents.json` (cellucid-python `tests/fixtures/`, its home; cellucid-r
+`tests/testthat/fixtures/`, byte for byte) holds the folder rule, the record,
 the endpoint, the app-name cases and every sentence an agent reads.
 
 **The page going.** When the page holding a viewer's channel closes, is
@@ -188,7 +188,7 @@ stderr; R starts it after the handshake, its prints sunk to stderr).
   settings, a card asked in the app and declined there, a call the app
   cancels withdrawing its card, "This connection"; and `cellucid mcp --open`
   serving a file and stopping its viewer with it.
-- cellucid-python: `tests/test_mcp.py` (pins, the wire, the port, the
+- cellucid-python: `tests/test_mcp.py` (the shared files, the wire, the port, the
   endpoint's refusals, a remote link, the session, the server over stdio
   with a fake page: initialize, lists, calls, errors, cancellation,
   elicitation, list changes, a viewer stopping).

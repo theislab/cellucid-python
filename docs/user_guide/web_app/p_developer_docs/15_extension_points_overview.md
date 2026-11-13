@@ -122,7 +122,8 @@ Go to:
 Key files involved:
 - `cellucid/assets/js/app/actions/definitions/<area>.js` (the definition)
 - the module that owns the state (`getActions().provide(type, handler)`)
-- `cellucid/scripts/generate-action-catalog.mjs`,
+- `cellucid/scripts/sync-shared-files.mjs` (it runs
+  `generate-action-catalog.mjs` and writes the packages' copies),
   `cellucid-python/scripts/generate_actions.py`,
   `cellucid-r/tools/generate-actions.R`,
   `cellucid/scripts/generate-relay-bundle.mjs` (regenerate every surface)

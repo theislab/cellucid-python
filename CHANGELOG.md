@@ -17,6 +17,33 @@ release with the web app of this release. The main changes are:
 
 #### Opening and reading data
 
+- **Offline, the sample list and the file reader say so and come back by
+  themselves.** A sample listing, or the start of the file reader, that fails
+  because this computer is offline now says "This computer is offline" (the
+  reader said to reload the page, which offline loads nothing) and is asked
+  again once the connection returns.
+- **A MuData's per-modality columns load in one round**, and row positions
+  a later share takes over are counted and released with it.
+- **A failed read says what the server said.** When `cellucid serve`,
+  `show_anndata()` or the R viewer refuses a read, the reason it sends is
+  shown under the failure; it was kept for some statuses only and then never
+  read.
+- **The opening line names the dataset as soon as its name is known.** A
+  sample opened with the name its catalog gives it could keep showing "Opening
+  the sample dataset" for up to 200 ms, and on a quick dataset the catalog's
+  name was never shown at all.
+- **Data kept by an earlier version is removed once, on the first visit.**
+  Every directory kept in the browser (converted R and MatrixMarket stores,
+  gene indexes, files downloaded whole, the downloaded parts of files) is
+  now stamped with a fingerprint of the code that decides what it holds; one
+  stamped by other code is removed, never read, and made again on the next
+  opening. A release that changes only readers, decoders or transport keeps
+  every download.
+- **A file written from a page in Safari holds exactly the bytes it was
+  given.** WebKit writes the whole buffer under a typed-array view handed to
+  a file's writable stream, so a download kept from a page could hold more
+  bytes than the file has. Every writable stream is now opened in one place
+  (`utils/file-writable.js`), which hands such a view over as its own bytes.
 - **Every request to a data host goes through the one transport; a network
   failure is one only when no answer came.** A person's "Try again" of a
   dataset catalog, the requests to a Cellucid server (health, info,
@@ -136,12 +163,12 @@ release with the web app of this release. The main changes are:
 - A category with no name is shown as *(empty)* (an empty name) or *(blank)*
   (spaces alone), quietly, and a name with spaces at an end in quotes, by one
   rule everywhere a category is named: legend, hover card, filters, menus,
-  Group categories, figure legends, analysis groups and agent reads (R9D-8).
+  Group categories, figure legends, analysis groups and agent reads.
   Two such rows were indistinguishable blanks. The stored value is unchanged,
   and a step can name the category as shown.
 - The hover card says *Missing* for a cell with no value, as the legend and
   the filters do, for a number too (it said `NaN`, and *missing* in lower
-  case for a category) (R9D-9).
+  case for a category).
 - Every CSV the app writes leaves a missing value as an empty cell: the
   composition and dot plot tables wrote `NA` where every other table writes
   nothing, and one quoting rule now serves every CSV (a carriage return in a
@@ -173,7 +200,7 @@ release with the web app of this release. The main changes are:
   ids, barcodes hashed to integers) is read as the exact text of each value,
   a text column, in every format (AnnData `.h5ad` and Zarr, plain or
   nullable, MuData modalities, Loom); it was rounded to the nearest double
-  without a word (F116). The column is text or numbers by every cell it
+  without a word. The column is text or numbers by every cell it
   stores, whatever cells are open (a subsample scans the stored column once
   when the field is first shown). Listed with the numbers until its first
   load finds such a value, it then moves to the categorical fields, and its legend says
@@ -335,19 +362,19 @@ release with the web app of this release. The main changes are:
   waited up to 20 s more for a back-off meant for a refusing host.
 - A refused file's notice goes when the next opening begins; it stayed
   through every later opening, reading as if the dataset shown had failed.
-- **A file with a sparse `obsm` array can be subsampled** (R9M-8): every
+- **A file with a sparse `obsm` array can be subsampled**: every
   share of such a file (an scvi-tools or converter output with a CSR array
   in `obsm`) failed with "could not be read again with these cells", because
   listing the array as one that cannot be drawn read row pointers of the
   share that were not read yet.
-- **A reading of the cells that fails is a failure** (R9M-9): Subsampling's
+- **A reading of the cells that fails is a failure**: Subsampling's
   Apply, an agent's `cells_open` or a notebook's `open_cells()` whose reading
   failed was recorded in the history as done ("Opened 50% of the cells") and
   answered as such; it now fails, said once, and records no step. The agent
-  or notebook gets the sentence the person read, with its reason (R9M-12),
+  or notebook gets the sentence the person read, with its reason,
   not a generic one.
 - **A subsample the dataset cannot be read with is a refusal, not a
-  connection problem** (R9M-12): a stratified field or spatial embedding the
+  connection problem**: a stratified field or spatial embedding the
   dataset lacks (or one that is not numeric, or a column past its width) said
   "Try again; if it keeps failing, check the address and your connection".
   Each is now a refusal written for the person ("A spatial subsample needs
@@ -355,7 +382,7 @@ release with the web app of this release. The main changes are:
   array."), settled (asking again meets it again), by the same classification
   of read failures every notice uses; whether a failure may pass now lives in
   that one table.
-- **Spatial's Embedding menu offers what Data mapping shows** (R9M-13): it
+- **Spatial's Embedding menu offers what Data mapping shows**: it
   listed every `obsm` array, vector fields (`velocity_umap`) and arrays the
   mapping leaves off included. It now lists the embeddings Data mapping shows
   in 2D or 3D, its 2D default first, and follows the mapping when it changes;
@@ -363,6 +390,14 @@ release with the web app of this release. The main changes are:
   and one naming none thins the 2D default. Opened before any mapping (a link
   naming `sample=spatial`), the reader thins the best-ranked array of two
   columns or more, never a vector field.
+
+- **A load cut off by leaving the page is no failure.** Reloading or
+  navigating away while a part of the app is still loading no longer shows
+  **Cellucid could not load**; the failure is said only if the page stays.
+- **The code cache keeps every startup file.** The page names its startup
+  files once they have arrived and the service worker keeps them all at once,
+  so a second visit finds them in the cache in Firefox too (the worker was
+  ended about a minute after its event, leaving the cache half filled).
 
 #### Sessions and sharing
 
@@ -391,7 +426,7 @@ release with the web app of this release. The main changes are:
   must contain exactly …"). A key added to a part of the state after files
   were written is now read as the value its absence means and written only
   when it differs, so a record of before reads, and is saved again, byte for
-  byte; only a truly wrong record is refused (as F181 did for the settings).
+  byte; only a truly wrong record is refused (as for the settings).
 - **A setting saved by another version never fails the others.** Saved
   settings are read one at a time: a value this version cannot use (a control
   removed since, a choice no longer offered, a Figure Export value no version
@@ -401,7 +436,7 @@ release with the web app of this release. The main changes are:
   left unchosen) lost an hour-old session's settings and a dataset's starting
   view. Figure Export records of the earlier version are read in today's terms
   (record version 2: unchosen is Full vector).
-- **A saved state is restored part by part** (F155): **Continue** on a history
+- **A saved state is restored part by part**: **Continue** on a history
   kept minutes before the Expression values were renamed (`normalise` →
   `normalize`) failed with "a problem inside Cellucid stopped it" and dropped
   everything, the views, the steps and the conversation with the one part it
@@ -425,9 +460,9 @@ release with the web app of this release. The main changes are:
 - **The welcome comes first.** On a start that shows the welcome, "Continue
   where you left off?", a sample view's notices and an opening's question
   (which object of an R file to open) were shown on top of it at once; they
-  now come once it is closed, in that order (R9U-14).
+  now come once it is closed, in that order.
 - **A session file or saved history from another version is restored part by
-  part too** (F164): a file holding a part of the state this version does not
+  part too**: a file holding a part of the state this version does not
   have, or one tracker whose records it cannot read, was refused whole ("This
   history holds state this version of Cellucid does not have … Open it in the
   version of Cellucid it was saved with"). That part is now left out of every
@@ -436,7 +471,7 @@ release with the web app of this release. The main changes are:
   tracker is left out and named, and everything else is restored: Load…,
   **Continue**, a saved state, an agent's `history_saved_open` and a dataset's
   starting view alike.
-- **A load says when it sums the cells' totals** (F167): restoring normalized
+- **A load says when it sums the cells' totals**: restoring normalized
   values (or a mapping, or a replayed step, that needs them) reads every gene
   of the matrix once for each cell's total, with nothing on the load's
   progress line but the file it had read. The line now says "Summing each
@@ -459,7 +494,7 @@ release with the web app of this release. The main changes are:
 #### Data mapping
 
 - **Gene names and highly variable genes are checked on their own matrix's
-  var axis** (R9M-1, R9M-2): a session saved on `X` or a layer with Highly
+  var axis**: a session saved on `X` or a layer with Highly
   variable genes `highly_variable` was refused on the same file ("… which this
   dataset does not have"), because the file opens on `raw.X` (it holds more
   genes) and the column was looked up in `raw.var`; and a change naming only
@@ -469,14 +504,14 @@ release with the web app of this release. The main changes are:
   mapping it belongs to: its matrix's var axis (`var` for `X` and every
   layer, `raw.var` for `raw.X`) and its modality.
 - **The genes groups follow the matrix by one rule, in the panel and in
-  `mapping.set`** (R9M-2, R9M-3): a change of Expression keeps the gene-name
+  `mapping.set`**: a change of Expression keeps the gene-name
   and highly-variable column when the new matrix's var axis has one of that
   name, else takes that axis's default (its var index; `highly_variable`
   when it is true/false there, as opening on that matrix does). Moving from
   `raw.X` to `X` now starts Highly variable genes on `highly_variable`
   instead of leaving it None. A change of Modality takes the modality's
   defaults. A change naming those groups itself keeps what it names.
-- **A MuData opens with its modality's neighbor graph** (R9M-7): a MuData
+- **A MuData opens with its modality's neighbor graph**: a MuData
   whose graph lives in a modality (`mdata.mod['rna'].obsp['connectivities']`,
   where scanpy writes it and where `prepare()` writes each modality's graph)
   opened with Neighbor graph None, so `prepare()`'s own MuData drew no edges
@@ -485,7 +520,7 @@ release with the web app of this release. The main changes are:
   modality it opens on (`rna:connectivities`). The rule (`defaultGraph`,
   `default_graph()`, R's `.default_graph`) is pinned by the shared conformance
   fixture, version 8, in all three repositories.
-- **Every width gets its default by one ranked order** (R9M-11): a file's
+- **Every width gets its default by one ranked order**: a file's
   UMAP named only its own width, while a file without one got a guessed
   default for every width, so `X_umap` beside `X_umap_3d` opened with no 2D
   default and `X_umap` beside a 3-column `X_phate` with no 3D one. Now every
@@ -494,32 +529,33 @@ release with the web app of this release. The main changes are:
   that names no default at all. The rule is pinned in the shared conformance
   fixture (version 9) and now applied by `cellucid.data_mapping.resolve_embedding_slots()`
   and the R package too, each checked against every `embeddingSlots` case.
-- **Default marks what keys 1–3 show first** (R9M-5): a dimension the mapping
+- **Default marks what keys 1–3 show first**: a dimension the mapping
   names no default for (a file with `X_umap` and a 3-column `X_phate` named
-  only the 2D one, before R9M-11; a session or an agent's mapping can still)
+  only the 2D one, before every width got its default; a session or an agent's
+  mapping can still)
   showed no **Default** although key 3 showed its first embedding, and any
   later edit of the checklist wrote a default for it that nobody chose. The checklist now marks that embedding, and Apply names a
   default only when one is pressed or a dimension gets its first embedding.
-- **A MuData modality's embeddings have readable names** (R9M-10): they were
+- **A MuData modality's embeddings have readable names**: they were
   listed by their keys (`rna:X_phate3`, `prot:X_umap`) beside `UMAP` and
   `t-SNE`; they are named as the dataset's own, their modality after them
   (`UMAP (prot)`, `PCA 3,4 (rna)`), and a Seurat key with dots is split at
   them (`X_wnn.umap` is `WNN UMAP`).
-- **Two embeddings are never named alike** (R9U-6): Garcia, He and Kanemaru
+- **Two embeddings are never named alike**: Garcia, He and Kanemaru
   listed `X_umap` and `X_umap_2d` both as "UMAP · 2D". Arrays a menu would
   list the same way (the same short name, namespace and width) are named by
   their keys, "UMAP (X_umap)" and "UMAP (X_umap_2d)", by the one naming
   function every menu, the Data mapping checklist, the Dataset box, the
   agents' reads and a figure's title use (`representationNameOf`); arrays the
   dimension tells apart (`X_umap_1d`, `X_umap_3d`) keep the short name.
-- **A data-mapping change stops on Stop** (F147): an agent's `mapping_set`
+- **A data-mapping change stops on Stop**: an agent's `mapping_set`
   (or an undo or a jump putting a mapping back) ran on until every embedding,
   gene list and cells' total it read was done, minutes on an atlas, holding
   the history. The action's signal now reaches every wait and read of the
   change: stopped, it ends at once, publishes nothing (or puts back what it
   had), and the next change runs.
-- **Every way into the sidebar opens it before its sections** (R9K-2's
-  siblings): Data mapping's **Show** (the best-guess notice) and the "Genes
+- **Every way into the sidebar opens it before its sections**: Data mapping's
+  **Show** (the best-guess notice) and the "Genes
   read for" link opened their Session section in the moment the sidebar's
   own step started, which left a "Changed outside the history" step when the
   sidebar was hidden. They and `?` now take one path (`revealInSidebar`): the
@@ -527,7 +563,7 @@ release with the web app of this release. The main changes are:
 - The Expression values line for a matrix stored as `log1p` names its place
   as every other message does: "raw.X holds log1p values already (Data mapping
   › Genes › Values)." (it said "raw holds … (Data mapping, Genes: Values)").
-- **`raw.X` is named `raw.X` everywhere** (R9M-14): messages, analyses (the
+- **`raw.X` is named `raw.X` everywhere**: messages, analyses (the
   result line, a CSV's `expression_matrix`, Details), the Expression values
   line, the Scanpy reason under Genes and the session messages said `raw`
   where the Expression menu says `raw.X`. One name, the menu's, is now given
@@ -535,6 +571,11 @@ release with the web app of this release. The main changes are:
 
 #### Legend, filters, highlights and the view
 
+- **Smoke looks the same with and without its empty-space leaps.** A leap
+  of the ray march over an empty block restarted at a new sample position,
+  so the cloud differed slightly from the march without leaps (up to 8
+  levels at about ten thousand pixels); every leap now lands on a sample the
+  full march takes.
 - **A double-click names a view in Safari too.** A click on a view's row in
   **Compare views** selects it, and the selection rebuilt every row: the
   second press of a double-click on a row not yet selected could land on a
@@ -628,7 +669,7 @@ release with the web app of this release. The main changes are:
   be of the form `View 3`. An agent reads each view's name in `views.state`
   (`label`) and `view.picture` (`label`). An agent building a multi-panel
   figure of a time course named no panel and put the ages in the caption
-  instead (bug hunt F130).
+  instead.
 - **A redraw of the legend keeps the list where you scrolled it.** Every
   redraw of the field shown (a rename, a vote, a count arriving) built the
   list anew from its top: in a long legend a rename far down threw you back
@@ -766,21 +807,21 @@ release with the web app of this release. The main changes are:
   one chosen before, and choosing that one did nothing. The menu is drawn as
   it opens, and choosing a palette changes only the palette: it no longer
   rebuilt the legend, which turned **Live filtering** back on and dropped
-  bounds moved but not yet filtered (R9F-1).
+  bounds moved but not yet filtered.
 - **Live filtering stays as you set it.** Turned off, it stays off for every
   continuous field, gene, view and palette of the page; it turned itself back
-  on at every field or view change, which the docs warned about (R9F-2).
+  on at every field or view change, which the docs warned about.
 - **Renaming in place keeps what you typed.** A field's, a category's and a
   saved state's name are taken when you leave the box, as Enter does (as a
   view's and a highlight page's already were); leaving it dropped the name.
   A name refused ("A field with this name already exists") is said on the box
-  until you change it; it was only a hover title on a red border (R9F-6).
+  until you change it; it was only a hover title on a red border.
 - **Two deleted fields of one name can each be restored.** Delete a field,
   rename another to its name and delete that too: both rows of **Deleted
   fields** refused Restore and Delete for good ("Two deleted fields are
   named …; restore or purge one from Deleted fields"). The rows read
   `score (1 of 2)` and `score (2 of 2)` and act on their own field; the
-  actions `field.restore` and `field.purge` take `which` for it (R9F-4).
+  actions `field.restore` and `field.purge` take `which` for it.
 - **Delete for good says what it does.** Its confirmation said the field
   "can no longer be restored, in this session or from a saved state", but
   Undo brings it back; it now says so, the history names the step `Deleted
@@ -788,12 +829,22 @@ release with the web app of this release. The main changes are:
   a deleted field's name is no longer cut to `S_s…`.
 - History steps name a palette as the legend does (`Drew Ins1 in Plasma`,
   not `plasma`) and write a range's bounds as the Filters list does
-  (`-0.448703`, not `-0.44870302081108093`) (R9F-5, R9F-11). A view name of
+  (`-0.448703`, not `-0.44870302081108093`). A view name of
   the form "View 3" is refused with "…, or none to number it again" (it said
   "no name (null)").
 
 #### The history
 
+- **A page an analysis drops as pages change records no step.** When a page
+  an analysis had selected went away, the selector's own adjustment was
+  recorded as if the person had chosen it.
+- **Undoing an opening keeps an open analysis.** The page selector of an
+  analysis recorded its own refresh during a reload as a person's choice, so
+  undoing a dataset's opening closed the gene signature analysis and dropped
+  its page; only a person's choice is a step now.
+- **A reload just after a dataset opens no longer reports that the history
+  could not start.** The page's teardown retires the dataset's history before
+  the state it reads goes away.
 - **Work that is not kept is never dropped without a question.** With
   Autosave in this browser off (or a browser that keeps nothing, or no room
   left), opening another dataset threw away every step on the one shown
@@ -828,7 +879,7 @@ release with the web app of this release. The main changes are:
   when its readout is the value, else as a position ("slider at 37 of
   0–100").
 - **Stale results name each input with its own cause, and follow the view
-  they were made in** (F156): a test went "stale since step 4 ("Showed UMAP ·
+  they were made in**: a test went "stale since step 4 ("Showed UMAP ·
   2D in View 1"): Filters changed … Hidden cells changed … Views changed"
   when step 4 only kept a view. Every reason cited the first change of any
   input, and keeping a view changes each per-view value. A step's inputs held
@@ -838,7 +889,7 @@ release with the web app of this release. The main changes are:
   the step that changed that input ("Filters changed at step 7 ("Hid Alpha of
   cell_type in View 1")."), in `history_stale`, `history_step` and the step's
   details.
-- **With several views, a step says which view it changed** (F157): "Colored
+- **With several views, a step says which view it changed**: "Colored
   by gene Sox9" went to the view in focus and named none, in the history and
   in the methods text. A step that changed some views, not all, now names
   them as the Compare views list does, with a view's name ("Colored by gene
@@ -948,7 +999,7 @@ release with the web app of this release. The main changes are:
   while the tour plays (by you or an agent) ends the tour there; its next step
   used to move away from what you just did, and its end jumped back over it. A
   note or bookmark added meanwhile lets it play on.
-- **A field you made has no original name** (R9F-8): renamed, a copy or a
+- **A field you made has no original name**: renamed, a copy or a
   group of yours showed `S score *` with **Put name back**, and lost both
   once the session was saved and opened again. It now shows neither, in the
   page and after a round trip; a dataset's own field keeps both.
@@ -966,13 +1017,13 @@ release with the web app of this release. The main changes are:
   legend switches); the row now reads as its steps do ("Hid T cells of
   cell_type · Showed T cells of cell_type", "Moved the camera of View 1
   ×6"), naming the first two changes and counting the rest.
-- **What you do while an action runs stands when it is stopped** (R9W-5):
+- **What you do while an action runs stands when it is stopped**:
   closing an analysis window with **×** while its run ran stopped the run,
   whose rollback then put the window back, and no "Closed" step was kept.
   A stopped action now puts back only what it changed itself: a change of
   your own made meanwhile (a window closed or moved, a panel docked, a
   setting, the sidebar's width) stays, as its own step.
-- **An agent's replay is priced before it starts** (F166): `history_replay`
+- **An agent's replay is priced before it starts**: `history_replay`
   had no estimate, so a replay of a step that summed the cells' totals for
   normalized values ran that pass without asking, though applying a branch or
   verifying one asked. It is now priced by the time its steps took when
@@ -982,8 +1033,16 @@ release with the web app of this release. The main changes are:
   before it runs (the history would have refused its step after it changed
   the view).
 
+- **Start-up does not wait for the analysis code.** The history starts and
+  records while it loads, reading the analyses as nothing opened until it
+  arrives, and the docked panel makes no mode until one is used and says
+  "Loading the analysis tools…" meanwhile.
+
 #### Analyses
 
+- **An expanded view closed while it opens draws nothing into it.** Closing
+  an analysis's expanded view while it was still opening, or while the
+  plotting library loaded, could draw a plot into the closed view.
 - **Expression values: normalized and log1p, one setting for the whole app.**
   **Session › Data mapping › Expression values** (collapsed, after Genes) has
   two switches, both off by default: **Normalize to library size** (each
@@ -1203,7 +1262,7 @@ release with the web app of this release. The main changes are:
   a legend makes the figure wider than asked. Before, the size was a box in
   CSS pixels the figure was fitted in, and text in pixels: an agent set 1800
   for "180 mm" and got a figure 476 mm wide at 300 dpi, then did
-  pixel-to-point arithmetic wrong twice (live-7 L25-10).
+  pixel-to-point arithmetic wrong twice.
   `figure_export_set` takes `size_preset` and `width` in millimetres and
   `font_sizes` in points (version 3; a version-2 step's pixels are converted,
   as are the settings of a session saved by 0.9.7, except a size that followed
@@ -1332,6 +1391,13 @@ release with the web app of this release. The main changes are:
   both formats now draw one layout of the axes, and the selection badge's
   corners (rounded in SVG only) and the legend swatches' outline match too.
 
+- **Figure export settings saved by another version are refused whole.**
+  The panel keeps its settings and the restore says "Figure export settings:
+  they were saved as version N, and this version of Cellucid reads version 3";
+  the rest of the session is restored. Versions 1 and 2 are no longer
+  upgraded, and the five sample starting views are saved with the current
+  record.
+
 #### Reduced motion
 
 - With reduced motion asked for, nothing transitions. Every element was given
@@ -1369,8 +1435,8 @@ release with the web app of this release. The main changes are:
 
 #### Camera path
 
-- **Captions: a camera path shows its keyframes' names as titles** (owner,
-  F110). While a path plays, the label of the keyframe the film is at
+- **Captions: a camera path shows its keyframes' names as titles**. While a
+  path plays, the label of the keyframe the film is at
   appears as a compact caption low over the plot, from halfway into the move
   to that keyframe until halfway out of it, fading in and out (shown and
   hidden at once under reduced motion). Only names someone gave are captions
@@ -1473,8 +1539,8 @@ release with the web app of this release. The main changes are:
   48 pages and deleted 56 pages (101 calls) to split one cell type.
   `highlight.page.delete` (version 2) deletes several pages in one step
   (`pages`).
-- **The agent tool list no longer changes with your settings** (bug hunt
-  live-8, L26-9): a connector's and a local `cellucid mcp` agent's tool list
+- **The agent tool list no longer changes with your settings**: a connector's
+  and a local `cellucid mcp` agent's tool list
   said per tool what your permissions made of it ("asks", "runs without
   asking", "refused") and what History settings leave out, so every change
   of a setting changed the list: the page sent `agent_tools_changed`, and
@@ -1491,7 +1557,7 @@ release with the web app of this release. The main changes are:
   fixture and endpoint events in all three repositories), and both packages'
   `cellucid mcp` advertise `tools.listChanged: false` and never send a list
   change.
-- **Removing a connection stops its agent's call** (bug hunt live-8, L26-1):
+- **Removing a connection stops its agent's call**:
   **Manage… › Remove** (and **Forget this browser**) while Claude or ChatGPT
   waited on a call left the call running in the tab: the removed agent's
   change was still recorded as its step and what the call read was still
@@ -1500,28 +1566,28 @@ release with the web app of this release. The main changes are:
   closed after a refresh token was used twice, expired): the tab is told to
   stop each, and the agent reads at once that the connection was removed
   during the call.
-- **A tab reloaded during an agent's turn no longer ends the turn** (bug hunt
-  live-8, L26-5): a call in flight when the tab reloads is answered at once
+- **A tab reloaded during an agent's turn no longer ends the turn**: a call in
+  flight when the tab reloads is answered at once
   (whether it was done is not known; read the history), but the agent's next
   call was told "No Cellucid tab is connected" 4 ms later, and Claude ended
   its turn asking the person to reopen Cellucid while the page was 2 s from
   being back. The relay now waits for a reloaded tab (up to 20 s after its
   last tab closed) and runs the call there.
-- **An agent's change names its turn** (bug hunt live-8, L26-3): an agent
+- **An agent's change names its turn**: an agent
   told to end its turn with a note on the turn could not name the turn
   without reading the history first (Claude through the connector guessed
   `{"turn": "current"}`, was refused, read the summary, tried again). Each
   change an agent makes now answers with its step's turn (`step.turn`), the
   id a note on the turn or Undo turn takes.
-- **A ratio of log-scale means is not an "X-fold" change** (F159): two live
+- **A ratio of log-scale means is not an "X-fold" change**: two live
   passes saw an agent call a ratio of means of log1p values "16-fold". The
   agent instructions now say that a difference of log-scale means is a log
   fold change and a ratio of them is none, and to compute a fold change on
   the original scale before saying "X-fold". A differential expression or
   marker result whose fold change is "of the means as stored" says that, on
   log-scale values, the ratio is no fold change of expression.
-- **Claude's notes between its calls show in the chat** (bug hunt
-  agent-loop lane): Claude Opus 5.5 and Sonnet 5.5 (and the Fable models)
+- **Claude's notes between its calls show in the chat**: Claude Opus 5.5 and
+  Sonnet 5.5 (and the Fable models)
   write their short notes between tool calls ("the clusters are read;
   coloring by cell_type next") as `thinking` blocks that come back empty
   unless asked for, so a long turn showed nothing but "Thinking…". The chat
@@ -1538,7 +1604,7 @@ release with the web app of this release. The main changes are:
   turn thinking on for a model that runs without it); a request refused for
   the setting is sent again without it.
 - **An agent's question about heavy work no longer says "about 88 h" for a
-  one-second analysis** (bug hunt live-7 L25-1): after the small live-agents
+  one-second analysis**: after the small live-agents
   fixture (6 genes, 120 cells), Marker genes on Kanemaru (131,636 cells,
   3,691 genes) was asked about as "about 88 h 36 min on this device" and
   Differential expression would have said about 102 h; both took about a
@@ -1548,58 +1614,58 @@ release with the web app of this release. The main changes are:
   measured on fewer cells than are open gives no estimate (two sizes give
   the line). The measurements kept in this browser start afresh.
 - **A field made, renamed or deleted is at once a choice of every
-  analysis** (bug hunt live-7 L25-6): the analysis forms never heard of
+  analysis**: the analysis forms never heard of
   field changes, so a field an agent had just made was "no choice" of
   Differential expression (and missing from a person's Field select) until
   another change redrew the form. Every analysis, in the panel and in each
   window, now reads the fields and their categories again on any field
   change.
-- **Verify reproduces a branch with marker genes** (bug hunt live-7 L25-16):
+- **Verify reproduces a branch with marker genes**:
   a marker genes result records when it was computed, how long it took and
   how this device's reads were tuned (`computedAt`, `computeDuration`,
   `tuning`), so every replay of it differed and Verify said "not reproduced".
   These are now run records, left out of the comparison as durations and the
   cache flag already were.
-- **A parameter of the wrong kind is shown as it was sent** (bug hunt live-7
-  L25-15): an object where text was asked for read "not [object Object];
+- **A parameter of the wrong kind is shown as it was sent**: an object where
+  text was asked for read "not [object Object];
   field is optional: leave it out", so a model that sent a field as
   `{source, key}` where an analysis option takes its name was told to drop
   it. The refusal now shows the object and, for a field, the name to give.
 - **A conversation shared by the agent's own call no longer says that call
-  did not finish** (bug hunt live-7 L25-14): a session file written by the
+  did not finish**: a session file written by the
   agent's `history_share` (or a state saved by `history_save`) holds the
   conversation as it stood while that call ran, and answered the call "still
   running … what it did is not in this save"; the colleague's agent read it
   as "the session-file export didn't finish" of the file it was reading. The
   saving call is now answered as the save the conversation is kept in.
-- **Summarize a field per category over a subset, the view left as it is**
-  (bug hunt live-7 L25-13): `field.summary` (Python `field_summary()`, R
+- **Summarize a field per category over a subset, the view left as it is**:
+  `field.summary` (Python `field_summary()`, R
   `cellucid_field_summary()`) takes `within`: the cells of some categories of
   another categorical field, or in a range of a continuous field or gene.
   Agents hid the person's cells with filters to read donors within one cell
   type or cell types per age range, and put the view back after.
 - **Paired Composition: the mean proportions and log2 ratio are over the
-  pairs** (bug hunt live-7 L25-12): they were over every sample, so on Suo
+  pairs**: they were over every sample, so on Suo
   (fetal liver vs bone marrow, 6 donors with both) one donor with 2 liver
   cells turned LYVE1+ macrophages' ratio toward the liver while the paired
   test found more in the marrow in all six. They are now over the samples in
   both conditions, as the test reads them; each sample's own column still
   shows the rest.
-- **A list of groups keeps one form** (L25-2): groups an agent named in its
+- **A list of groups keeps one form**: groups an agent named in its
   own order were rewritten into the field's order by the form's next
   refresh, which the history recorded as "Changed outside the history".
   Every list of groups (Marker genes, Differential expression, Gene
   signature, Dot plot, Composition) is kept in the picker's order.
-- **Read the history's summary gives the notes in full** (L25-9): the
+- **Read the history's summary gives the notes in full**: the
   tracker's, each branch's, group's and turn's notes, not their counts
   (`history_summary` / Python `history_summary()` / R
   `cellucid_history_summary()`; a turn's `summary` is now the first of its
   `notes`). A colleague's agent opening a shared session could not read the
   branch notes its sender had left.
-- **Exclude genes says its values** (L25-5): gene families (mito, ribo,
+- **Exclude genes says its values**: gene families (mito, ribo,
   hemo); a gene by name goes in Exclude pattern, a regular expression.
-- **The chat's agent says what it is about to do, and keeps you posted**
-  (bug hunt F169): the chat's instructions now carry Anthropic's suggested
+- **The chat's agent says what it is about to do, and keeps you posted**: the
+  chat's instructions now carry Anthropic's suggested
   line for a person watching: a line before the work starts, brief updates
   while it runs, a recap that stands on its own at the end. Measured on the
   four showcase tasks with Claude Opus 5.5 (two passes each way): every turn
@@ -1608,26 +1674,26 @@ release with the web app of this release. The main changes are:
   cost did not change ($0.99 against $1.02 for the four tasks). Connector
   and notebook connections keep their instructions (their clients show
   their own progress).
-- **An agent can name every embedding** (bug hunt agent-loop lane, L21-6):
+- **An agent can name every embedding**:
   **Read the dataset summary** (`dataset.summary`, Python
   `dataset_summary`, R `cellucid_dataset_summary()`) lists every embedding the
   data mapping offers, on or off, with the obsm `key`, the `columns`, the
   array's `width` and whether it is `enabled` (and usable), the names
   **Show an embedding** and **Change the data mapping** take. Asked for a 1D
   embedding, an agent saw only "UMAP, 2" and guessed `X_umap`.
-- **A refused embedding of the data mapping says what is missing** (L21-7):
+- **A refused embedding of the data mapping says what is missing**:
   "This mapping enables obsm['X_gone'] columns [0, 1], which this dataset does
   not have."; it said "X_gone is enabled, but this dataset does not have."
 - **Add steps to a group** (`history.group.extend`) to a step the group
-  holds already says so (L21-8): a turn's later steps join its group by
+  holds already says so: a turn's later steps join its group by
   themselves, and extending the group to one was refused "Steps 2 to 4 are
   not consecutive steps of one branch", which they were.
-- **Pause recording** no longer tells an agent to ask the person itself
-  (L21-3): Cellucid asks, as the person's Permissions say; a chat model asked
+- **Pause recording** no longer tells an agent to ask the person itself:
+  Cellucid asks, as the person's Permissions say; a chat model asked
   in its own words and never called it. The action reference's examples no
-  longer merge a category into itself or rename to the same name (L21-5:
-  `into`, the new `name` and a page's new name have examples of their own).
-- **Where cells are heading, as numbers** (bug hunt live pass 5):
+  longer merge a category into itself or rename to the same name (`into`, the
+  new `name` and a page's new name have examples of their own).
+- **Where cells are heading, as numbers**:
   **Summarize where cells are heading** (`vector-field.summary`, new; Python
   `vector_field_summary`, R `cellucid_vector_field_summary()`) reads a vector
   field (RNA velocity) per category of a field in the embedding a view
@@ -1642,8 +1708,8 @@ release with the web app of this release. The main changes are:
   and every modality as Data mapping › Modality lists them ("prot · 5
   features · 36 of 44 cells"); opening a CITE-seq `.h5mu`, an agent had said
   it had "no tool that lists the modalities" and missed the proteins.
-- **An agent continuing a shared conversation knows whose it was** (bug hunt
-  live pass 6). A conversation received with a session file or a saved state
+- **An agent continuing a shared conversation knows whose it was**. A
+  conversation received with a session file or a saved state
   is sent to the model with each received message marked as another
   person's, answered by their agent in their browser (and so summarized).
   Asked "what did my colleague find?", an agent had answered "all 37 steps
@@ -1651,7 +1717,7 @@ release with the web app of this release. The main changes are:
   session. A received turn's **Sent** says nothing of it left this browser
   and names what the sender's browser sent, where it had said "your message
   … left this browser".
-- **An agent sees the figure it is about to export** (bug hunt live pass 6):
+- **An agent sees the figure it is about to export**:
   **Take a picture of a view** (`view.picture`) takes `source: "export"`, the
   figure exactly as **Export** would download it now with the Figure export
   settings (size, frame, background, fonts, title, panel titles, legends,
@@ -1667,7 +1733,7 @@ release with the web app of this release. The main changes are:
   letters of their own (a figure had read "A. A · Lineage"), and each Figure
   export text size says what it sizes (`base`: the panel titles; `title`: the
   figure's title).
-- **An agent sees the flow it tunes** (bug hunt live pass 5): **Take a
+- **An agent sees the flow it tunes**: **Take a
   picture of a view** (`view.picture`) takes `source: "screen"`, the view as
   the screen shows it now, the vector field overlay and the connectivity
   edges included (a figure picture leaves them out and now says how to see
@@ -1791,8 +1857,8 @@ release with the web app of this release. The main changes are:
   sets its width (drag, or ←/→; a double click resets it), remembered in this
   browser; a narrow window keeps the chat over the plot's foot. The agent's
   calls one after another read as one message, its name said once.
-- **A research answer is no longer buried under its calls** (bug hunt
-  L5-13: 30–90 rows above the answer, every read saying only its action's
+- **A research answer is no longer buried under its calls** (30–90 rows above
+  the answer, every read saying only its action's
   title, "Read the categories of a field" four times). Each row now says what
   it was about: a read by its action's own sentence from its arguments
   ("Read the categories of cell_type", "Looked up 12 gene names: SOX9,
@@ -1854,7 +1920,7 @@ release with the web app of this release. The main changes are:
   cells are still hidden from the earlier step". A branch switch is said as one
   ("the branch shown is now …"; its steps stay on their branch), not as an
   undo. A step you take while its turn runs (coloring mid-turn) is told too,
-  as taken while that turn ran (bug hunt L18-4: it counted as already seen,
+  as taken while that turn ran (it counted as already seen,
   so neither that turn nor the next heard of it).
 - The **Undo turn** question counts the same chat's later turns as such ("9
   from 3 later turns of this chat"); it said "9 from another Claude turn".
@@ -1958,7 +2024,7 @@ release with the web app of this release. The main changes are:
   you pressed Stop is put back and leaves no step, also when the change
   finished regardless (an analysis's display option waiting for its redraw):
   it was kept and recorded. A read stopped ends at once.
-- **Stop ends promptly, and the work stops with it** (bug hunt F147). A
+- **Stop ends promptly, and the work stops with it**. A
   stopped change is put back only once it has ended, so a step that waited
   on work not tied to Stop held every later Undo, jump and action until that
   work finished: an analysis's options, pages, view or new window waiting
@@ -2040,7 +2106,7 @@ release with the web app of this release. The main changes are:
   Anyone could start connecting their own Claude or ChatGPT, send you the
   page's **Open Cellucid to approve** link (or its code), and one **Allow** in
   your tab connected *their* agent to your Cellucid, which could then read
-  your dataset (R9Z-1, the remote phishing of a device code). The relay's
+  your dataset (the remote phishing of a device code). The relay's
   waiting page now leaves a cookie in its browser
   (`__Host-cellucid-approver`: `HttpOnly`, `Secure`, `SameSite=Strict`, ten
   minutes), and the tab claims a code with a request that carries it
@@ -2052,17 +2118,17 @@ release with the web app of this release. The main changes are:
   addresses when the page and the relay share their host name.
 - **An app the relay cannot vouch for is named by its own site.** An app
   that called itself "Claude" from `evil.example` asked as *Connect Claude?*
-  and its steps were Claude's in the history (R9Z-2). Only Claude and ChatGPT
+  and its steps were Claude's in the history. Only Claude and ChatGPT
   are named so, when `claude.ai` or `chatgpt.com` vouches for them; any other
   app is its site (or *an app on this computer*), with the name it gives
   itself in quotes (*evil.example, which calls itself "Claude"*), on the
   waiting page, in the approval, and by one name (**Manage…**'s, *evil.example
   (calls itself "Claude")*) in its activity line, confirm cards and history
-  steps, so two such apps connected at once are told apart (L26-4).
+  steps, so two such apps connected at once are told apart.
 - **An agent asks before opening a link you have not seen in this tab.**
   `dataset_open` with a link, an accession or a server ran as an ordinary
   change, so an agent misled by text it read could make your tab request any
-  address, carrying what it read to any host (R9Z-4). A new permission kind,
+  address, carrying what it read to any host. A new permission kind,
   **Opening links not seen in this tab** (Ask in both presets that let agents
   change anything, refused in Read only), asks before anything of the address
   is requested, unless you typed or pasted it into the address bar or the
@@ -2083,6 +2149,15 @@ release with the web app of this release. The main changes are:
 
 #### Accessibility and keyboard
 
+- **Tab reaches a dialog's controls after a rename in Firefox.** With nothing
+  focused, Firefox starts Tab from the text selection; a caret left behind a
+  dialog (a highlight page renamed just before) kept Tab off the dialog's
+  buttons. Every dialog moves such a selection to its own start when it
+  opens.
+- **Cards and panels a dialog sets aside go back exactly where they were.**
+  The notifications and the agents' dock could come back at the end of the
+  page after a dialog, in an order that depended on timing; each now returns
+  to the place it left.
 - **A dialog under a confirmation is out of reach on every browser.** A
   modal dialog opened over another makes the one below inert; Linux's WebKit
   still let focus into a dialog under a confirmation. The app now marks a
@@ -2190,8 +2265,20 @@ release with the web app of this release. The main changes are:
   closing the dialog. The notification cards stay above every dialog and
   usable there.
 
+- **A dialog closed while it opens settles at once.** A dialog closed by a
+  listener reacting to its first focus used to leave its opener recording a
+  session for a dialog already gone; the five openers now record nothing for
+  it.
+
 #### Controls
 
+- **The benchmark panel describes the dataset that is open.** After a
+  synthetic benchmark run, opening a real dataset left the panel describing
+  the synthetic data.
+- **Teardown ends everything the page started.** Nine helpers' clean-ups and
+  seventeen page listeners, an idle callback and two connectivity timers
+  outlived the application (a Save button still answered, a timer reached a
+  closed viewer).
 - **One wording while no dataset is open**, from one module
   (`app/ui/no-dataset.js`): "No dataset is open." and "Open a dataset to
   keep views." everywhere, where panels said "No dataset selected", "No
@@ -2335,24 +2422,18 @@ release with the web app of this release. The main changes are:
   `organisation` and the like: the page, notices, tips, step names, the action
   catalog, the documentation and the packages' messages and help now use US
   spelling ("neighbor graph", "Gray for zero", "Normalized · log1p").
-  `tests/failure-wording-contract.test.mjs` refuses the British spellings in
-  the page's prose and the action catalog. Names are US too (F149): the
+  Names are US too: the
   parameter `normalize` of `expression.transform.set` (version 2 of its
   parameters; a step recorded with `normalise` replays as `normalize`), the
   expression values `{normalize, log1p}` saved in sessions, histories and
   `uns['cellucid']['history_applied']` (and a result's values key
   `normalized`, `normalized-log1p`), `neighbors` of `vector-field.summary`
   (parameter and result), `center` of `camera.framing`'s groups, and the
-  setting kind `color` of `settings.list`. A contract holds every parameter,
-  result key and value of the catalog and every field of the history model to
-  US spelling.
+  setting kind `color` of `settings.list`.
 - **"Canceled", one l.** Notices, step names and job lines said both
   (`Figure export was cancelled.`, `Pull cancelled`, "Canceled …"): every
   one now says "canceled"/"canceling" ("Move canceled.", "Differential
-  expression canceled", "Canceling the new branch"). The spelling contract
-  now also reads a template's words and a one-word sentence ("Canceled."),
-  which it skipped, and the other British forms it missed (`travelled`,
-  `totalled`, `licence`, `defence`, `judgement`, `metre`, …). The answer key
+  expression canceled", "Canceling the new branch"). The answer key
   `cancelled` of `history.branch.cancel` stays as it is (a name agents and
   scripts hold).
 - **One spelling in the packages and the documentation too.** The US
@@ -2362,20 +2443,8 @@ release with the web app of this release. The main changes are:
   `This session load was cancelled.`), and its documentation said
   `neighbour`, `greyed`, `centred`, `labelled` in prose and in the
   screenshots' alt texts; cellucid-r's code,
-  help and vignettes did the same. One British word list
-  (`tests/fixtures/spelling.json`, shared byte for byte by the web app, this
-  package and cellucid-r at one pinned digest) is now read by
-  `tests/test_spelling_contract.py` over every message, docstring, `#:`
-  attribute doc, the documentation, the notebooks, the screenshot
-  descriptions and this change log's unreleased section; by cellucid-r's
-  `test-spelling.R` over its messages, help pages, vignettes, README and
-  NEWS; and by the web app's contract over the app's strings and multi-line
-  templates, the relay's words, every README and guide of the repository,
-  and the expected text of the node tests as well as the browser specs (a
-  test still expected `your organisation's administrator`). The repr of a
-  waiting request says `canceled`. Words added to the list: `learnt`,
-  `honour`, `tumour`, `acknowledgement`, `lustre`, `foetal`, `spelt` and the
-  `un-`/`re-`/`de-` forms (`unrecognised`, `reorganised`, `deserialise`).
+  help and vignettes did the same. All of them now use US spelling; the repr
+  of a waiting request says `canceled`.
 - **One compact count, one p-value, one first-letter case.** Two compact
   formatters wrote one count "4.0M" and "4M" (Benchmark notices, the
   performance panel, plot labels and the plugin helpers beside the dataset
@@ -2470,13 +2539,55 @@ release with the web app of this release. The main changes are:
 
 #### Development
 
+- **The JavaScript is type-checked.** `npm run check` reads the JSDoc of every
+  module with TypeScript's compiler (nothing emitted, no `.ts` source) and runs
+  inside `npm test`. It fails on what is a defect whatever the typing style: an
+  unknown name, a wrong argument count, a comparison that can never be true, a
+  `@private` member reached from outside, an unused import or local, and a
+  comment that silences the checker. 290 findings were fixed at their cause;
+  ten functions nothing called were deleted.
+- **History moves out of comments and reference pages into decision
+  records.** A comment says what the code does and why it must be so; a CI
+  run, a date, an incident or a number measured on a machine is written in
+  the decision record of its subsystem, and the comment names the page (the
+  rule is in each repository's `CONTRIBUTING.md` and on the contributing
+  page of the docs). The developer docs gain six records beside the eight
+  of the read path and the renderer: actions, state domains and the
+  history; agents; the interface; figure export; analysis; testing and
+  hosted runners. The testing page is now the reference for running and
+  writing tests (its log of what the hosted runners showed is the testing
+  record), the drift guards of the action layer are listed there, and the
+  action-layer page keeps every field and rule while its reasons with a
+  date, its measurements and the decisions behind the history are in its
+  record. The developer docs' index lists every record beside its reference
+  page.
 - **Each package's CI runs the cross-repository tests.** cellucid-python's
   workflow checks out cellucid-r and the web app's code beside it, and
-  cellucid-r's fetches the web app and cellucid-python at the commit it
-  pins, both with Node and `CELLUCID_SIBLINGS_REQUIRED`: a sibling or Node
+  cellucid-r's fetches the web app and cellucid-python, each at `main`, both
+  with Node and `CELLUCID_REQUIRE_SIBLINGS=1`: a sibling or Node
   missing fails those tests instead of skipping them (a parity test that
   read cellucid-r failed every job without it). Every sibling read goes
   through one helper (`tests/_web_root.py`, `helper-repository.R`).
+- **A shared file is compared with its home, byte for byte.** The files
+  the repositories share (the action catalog, the MCP tools, the history
+  model, the input formats, the viewer protocol, the conformance fixtures,
+  the category colors, the golden history, the
+  round-trip fixtures, the older-layout AnnData files) have one home, the
+  web repository; the files only the two packages share (the notebook
+  widget's front end, `local_agents.json`, the transition-drift fixture, the
+  MuData cross-writer harness) have theirs in cellucid-python. Each test
+  compares its copy with the home's file through one helper
+  (`assert_shared_file` in `tests/_web_root.py`, `expect_shared_file()` in
+  cellucid-r's `helper-repository.R`), is skipped with the reason where the
+  sibling is not checked out (an installed package, an sdist, a CRAN check)
+  and fails there under `CELLUCID_REQUIRE_SIBLINGS=1`; a difference names
+  the one command that makes every copy agree
+  (`node scripts/sync-shared-files.mjs` in the web repository). Nobody
+  updates a number: cellucid-r's and cellucid-datasets' CI install
+  cellucid-python's `main`, and a documentation screenshot's record names
+  the image's digest and the Cellucid version it shows (`cellucid_version`),
+  written by `capture.mjs`, whose `--emit` is refused while the web
+  repository has uncommitted changes.
 - **The web contracts pass on Windows.** Seven read a file URL's `pathname`
   as a path or compared `\`-separated names with `/`; the contracts that
   walk the sources use `tests/helpers/source-files.mjs`, and a contract keeps
@@ -2615,8 +2726,8 @@ release with the web app of this release. The main changes are:
   when two deleted fields have one name, which of them, in the order the web
   app's **Deleted fields** lists them (named by the name alone, the request
   was refused with no way to name either).
-- The viewer channel never allocates a body at the length a frame names
-  (R9Z-3): a selection, a result, an action's outcome or an agent's result
+- The viewer channel never allocates a body at the length a frame names: a
+  selection, a result, an action's outcome or an agent's result
   grows as its bytes arrive (a frame header naming 256 MiB, of which a few
   bytes came, zeroed 256 MiB at once). A selection longer than the dataset's
   cells, a cell beyond them (a selection's, a hover's, a click's) or a result
@@ -2655,7 +2766,7 @@ release with the web app of this release. The main changes are:
   `sc.tl.rank_genes_groups`: they failed with "Field elements must be 2- or
   3-tuples" (the served store read a structured Zarr dtype as a type string).
 - An obs column of integers holding identifiers past 2^53 is read as the
-  viewer reads it (F116): `apply_cellucid_session_to_anndata()` takes its
+  viewer reads it: `apply_cellucid_session_to_anndata()` takes its
   categories as their exact decimal texts and writes a renamed label back as
   text, `push` sends it as a categorical of those texts, and a MuData
   modality's such column is placed on the cells as text, never as rounded
@@ -2747,7 +2858,7 @@ release with the web app of this release. The main changes are:
   step was recorded." A read records no step by nature and warns nothing.
   Before, `request.step` was `None` with no reason, whether the change
   happened or not. The viewer protocol fixture (`action_result` header,
-  `action.unrecorded` sentences) is re-pinned in the three repositories;
+  `action.unrecorded` sentences) says so in the three repositories;
   cellucid-r's `request$unrecorded` and `cellucid_action_not_recorded`
   warning are the same.
 - `viewer.view_rename(view="View 2", name="Early")` (new, generated from the
@@ -2908,7 +3019,7 @@ release with the web app of this release. The main changes are:
 - **The local servers hold nothing for a connection that never says who it
   is.** A viewer channel socket that says no `hello` within 60 s is closed
   (1008, "No hello frame was received"), as cellucid-r closes it
-  (`HELLO_SECONDS`); a binary first frame is refused from its header, unread
+  (`.viewer_hello_seconds`); a binary first frame is refused from its header, unread
   (it was read to its end, however long it said it was); and a connection to
   the local agents endpoint that sends nothing for 120 s is closed. Each held
   a server thread of the notebook's process for as long as any program on

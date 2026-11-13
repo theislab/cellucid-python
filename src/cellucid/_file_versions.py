@@ -8,8 +8,8 @@ the same tag.
 Served files are opened with :func:`open_shared`: a file Cellucid reads or
 streams can be replaced or removed meanwhile, on Windows too, where Python's
 ``open`` refuses another process the deletion (a person's ``write_h5ad`` to a
-new file moved over the served one failed with "Access is denied" while a
-response was being sent).
+new file moved over the served one would fail while a response is being
+sent).
 """
 
 from __future__ import annotations

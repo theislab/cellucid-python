@@ -27,7 +27,7 @@ cellucid/index.html
   ├─ loads:   ui/core/*-init.js, code-load-watch.js, file-drop-guard.js, press-guard.js (classic, pre-module)
   └─ runs:    assets/js/app/main.js  (ES module)
 
-main.js (orchestrator)
+main.js (orchestrator: the start-up sequence, in order)
   ├─ createViewer()     → rendering/viewer.js (WebGL2 renderer)
   ├─ createDataState()  → app/state/core/data-state.js (typed arrays + state managers)
   ├─ initUI()           → app/ui/core/ui-coordinator.js (DOM + modules)
@@ -35,6 +35,8 @@ main.js (orchestrator)
   ├─ data loaders       → data/data-loaders.js (AnnData adapters over the reader worker)
   ├─ sessions           → app/session/session-serializer.js (.cellucid-session, format 4)
   ├─ histories          → app/history/dataset-history.js (a history per dataset shown)
+  ├─ dataset shown      → app/dataset/ (publication.js, reload.js, published-state.js)
+  ├─ viewer host        → app/viewer-host/host-view.js, host-channel.js (Python / R viewers)
   ├─ state domains      → app/state/domains/index.js (installStateDomains)
   ├─ analysis           → app/analysis/* (compute backends + plots + UI)
   └─ admits deferred controls once their listeners exist
@@ -57,6 +59,29 @@ DataState (state coordinator)
 ```
 
 Design goal: **keep “hot” work** (per-frame render and per-point math) inside the renderer and state managers, not in `main.js` or UI modules.
+
+`main.js` (about 1,600 lines) keeps what is the sequence itself: the link read
+(`startup-url-intent.js`), the page shell, the viewer and the teardown
+(`destroyApplication`), the state, every awaited start-up step, the session and
+its histories, `initUI`, the analysis panel, the state domains, the shortcuts,
+the render loop, and the startup dataset's load; every `window` hook the tests
+read is set there. An awaited stretch is not moved into an awaited function: it
+would add a microtask turn at its end and change what runs before the interface
+is built. What each part does is the module's, made in `main.js` by a
+synchronous factory that takes what exists and getters for what is made later:
+
+| Module | Owns |
+|---|---|
+| `app/dataset/publication.js` | The runtime the page shows (a dataset, a synthetic scene, or none): staged, committed in one synchronous step, put back when that fails, the interface settled on it; the connectivity owner and the data mapping's runtime are made here |
+| `app/dataset/reload.js` | One change of the dataset shown as a transaction (`reloadActiveDatasetInPlace`, `reloadActiveDatasetShown`, `clearActiveDatasetInPlace`); the startup's dataset is this same change |
+| `app/dataset/published-state.js` | The starting view a dataset's catalog publishes, restored one at a time, and how its outcome is said |
+| `app/viewer-host/host-view.js` | The page of a viewer a host opened: hover and click reach the host, the view's end leaves one still picture with the reason |
+| `app/viewer-host/host-channel.js` | The channel's side of the application: the session bundle, commands, results, history events, a local agent |
+| `app/ui/modules/connectivity-controls.js` | The connectivity controls and the edges owner, the k-NN row reader |
+| `app/ui/modules/benchmark/benchmark-controls.js` | The Benchmark panel, its synthetic dataset change, and Analyze performance |
+| `app/ui/modules/smoke-density.js` | The smoke volume rebuilt from the cells shown |
+
+`app/README.md` and `app/dataset/README.md` hold the same maps.
 
 ---
 

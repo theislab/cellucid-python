@@ -1,8 +1,9 @@
 """The history model Python reads sessions with, generated from the web app's.
 
 ``src/cellucid/history_model.schema.json`` is the web app's
-``historyModelDocument`` (``app/history/model.js``) byte for byte, pinned at
-the digest the web app and cellucid-r pin. ``src/cellucid/_history_model.py``
+``historyModelDocument`` (``app/history/model.js``) byte for byte: its home is
+the web repository's ``tests/fixtures/history-model.schema.json``, and the
+test compares the two files. ``src/cellucid/_history_model.py``
 is written from it by ``scripts/generate_history_model.py`` and must be
 current; the reading model (``cellucid.history``, ``cellucid.CellucidSession``,
 the apply plan) exposes every field of every record the schema names; the
@@ -13,7 +14,6 @@ from __future__ import annotations
 
 import copy
 import dataclasses
-import hashlib
 import importlib.util
 import json
 import re
@@ -23,19 +23,15 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from _web_root import rendered_by_web, sibling_file, web_file
+from _web_root import SYNC_SHARED_FILES, assert_shared_file, rendered_by_web
 
 from cellucid import _history_model as model
 from cellucid import _history_rules as rules
 from cellucid.history import STEP_COLUMNS, Branch, Group, Step, Tracker
 
 ROOT = Path(__file__).resolve().parents[1]
-#: The digest of ``history_model.schema.json``; the web app and cellucid-r pin the same one.
-HISTORY_MODEL_SHA256 = "0896116c1e791e370b7247d61e734bc22f96047f5d1ed49a39738cf4f8a5333c"
-REGENERATE = (
-    "Run node scripts/generate-history-model.mjs in the cellucid repository (it writes the three copies and "
-    "prints the digest), then python scripts/generate_history_model.py here, and pin the digest in the three suites."
-)
+#: What to run once the schema is the web app's again: the model's module is written from it.
+GENERATE_MODEL = ", then `python scripts/generate_history_model.py` here"
 
 
 def _schema_text() -> str:
@@ -50,25 +46,26 @@ def _generator():
     return module
 
 
-def test_the_schema_is_pinned_and_the_web_apps() -> None:
-    data = resources.files("cellucid").joinpath("history_model.schema.json").read_bytes()
-    assert hashlib.sha256(data).hexdigest() == HISTORY_MODEL_SHA256, REGENERATE
-    assert web_file("tests/fixtures/history-model.schema.json").read_bytes() == data, REGENERATE
-    assert sibling_file("cellucid-r", "inst/history_model.schema.json").read_bytes() == data, REGENERATE
+def test_the_schema_is_the_web_apps_byte_for_byte() -> None:
+    assert_shared_file(
+        "src/cellucid/history_model.schema.json", "tests/fixtures/history-model.schema.json", then=GENERATE_MODEL
+    )
 
 
 def test_the_schema_is_the_model_the_web_apps_source_makes_now() -> None:
     """Against ``app/history/model.js`` itself, not only the web app's
-    committed copy: a model changed (a domain added) without regenerating the
-    three copies fails here, as it fails the web suite."""
-    assert rendered_by_web("scripts/generate-history-model.mjs", "renderHistoryModel") == _schema_text(), REGENERATE
+    committed file: a model changed (a domain added) without writing the
+    copies again fails here, as it fails the web suite."""
+    assert rendered_by_web("scripts/generate-history-model.mjs", "renderHistoryModel") == _schema_text(), (
+        f"src/cellucid/history_model.schema.json is not what the web app's model makes: run `{SYNC_SHARED_FILES}` "
+        f"in the web repository (cellucid){GENERATE_MODEL}."
+    )
 
 
 def test_the_generated_model_is_current() -> None:
     assert _generator().render(_schema_text()) == (ROOT / "src" / "cellucid" / "_history_model.py").read_text(encoding="utf-8"), (
         "src/cellucid/_history_model.py is stale: run python scripts/generate_history_model.py"
     )
-    assert model.HISTORY_MODEL_SHA256 == HISTORY_MODEL_SHA256
 
 
 def test_every_record_of_the_schema_has_its_fields() -> None:

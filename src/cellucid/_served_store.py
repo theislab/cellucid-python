@@ -176,21 +176,17 @@ SERVED_PRIORITY_SEED = 0
 
 #: Values one chunk of a served expression matrix's ``indices`` and ``data``
 #: holds (``X``, layers, ``raw/X``; 1 MiB of float32). A request on this
-#: machine costs a fixed time whatever its length, at both ends -- measured on
-#: an Apple M1 Pro over loopback, six connections: Python's ``http.server``
-#: answers at most about 4,700 requests a second (0.21 ms of the interpreter
-#: each), cellucid-r's handlers on R's thread about 1,600 (0.6 ms), and a
-#: browser's ``fetch`` from a worker moves 46-79 MB/s in requests of 64 KiB
-#: (Chromium, Firefox, WebKit), 300-510 MB/s in requests of 1 MiB, and no more
-#: in larger ones (4 MiB: 169-590 MB/s) -- so at ``prepare()``'s 2^14 values a
-#: chunk a pass over a matrix (an analysis, many genes) was bound by requests.
-#: 2^18 values is the least at which every engine's loopback rate has reached
-#: its plateau. A viewer reads a served chunk in
-#: part (its chunks are stored uncompressed: a ``Range`` of one is only those
-#: bytes, made alone, :meth:`_Planned.chunk_bytes`), so a gene, or a
-#: subsample's first entries of a gene, reads no more than with smaller
-#: chunks. A scheduling choice, measured; cellucid-r's served stores use the
-#: same (``.chunk_elements_served``). A file ``prepare()`` writes keeps
+#: machine costs a fixed time whatever its length, at both ends (the server's
+#: handler and the browser's ``fetch``), so at ``prepare()``'s 2^14 values a
+#: chunk a pass over a matrix (an analysis, many genes) is bound by requests.
+#: 2^18 values is the least at which every engine's loopback rate reaches its
+#: plateau (measured: 26_decisions_served_store_and_widgets.md). A viewer
+#: reads a served chunk in part (its chunks are stored uncompressed: a
+#: ``Range`` of one is only those bytes, made alone,
+#: :meth:`_Planned.chunk_bytes`), so a gene, or a subsample's first entries of
+#: a gene, reads no more than with smaller chunks. A scheduling choice;
+#: cellucid-r's served stores use the same (``.chunk_elements_served``). A
+#: file ``prepare()`` writes keeps
 #: :data:`~cellucid.prepare_data._store.SLICED_CHUNK_ELEMENTS`: its chunks are
 #: compressed, and a chunk is the least a reader of it decodes.
 SERVED_ENTRY_CHUNK_ELEMENTS = 2**18
@@ -725,9 +721,10 @@ class _DenseGeneMajor(_Planned):
     chunks of whole rows (or of more genes than a served strip).
 
     Read through the rows, every served strip of a gene would decode every
-    chunk of the matrix (300,000 x 200 in 1,000 x 200 gzip chunks: 1.2 s a
-    gene, each time); laid out once -- one pass over the source by blocks of
-    whole rows, memory one block -- a strip is one slice of the file it wrote.
+    chunk of the matrix, each time (measured:
+    26_decisions_served_store_and_widgets.md); laid out once -- one pass over
+    the source by blocks of whole rows, memory one block -- a strip is one
+    slice of the file it wrote.
     A strip asked for before then is taken from the source's rows at once
     (the snapshot, held read-only while it is laid out; a file's rows,
     decoded once into the scratch folder): the viewer never waits for it.
@@ -1407,8 +1404,8 @@ class PriorityStore:
         values and mask: :func:`_stored_parts`) is cut straight from the
         column, in served order, in the chunks ``prepare()`` cuts it in: no
         copy of the frame in served order, and no second pass to re-cut what
-        anndata chunked otherwise (a 10M-cell ``obs``: seconds before the
-        server's first answer)."""
+        anndata chunked otherwise (which would delay the server's first
+        answer by the size of ``obs``)."""
         rows = len(obs)
         order = None if priority is None else priority.order
         head = obs.iloc[:0]

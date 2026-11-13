@@ -1,9 +1,10 @@
 """Write ``src/cellucid/_history_model.py`` from the history model.
 
 The model (``src/cellucid/history_model.schema.json``) is the web app's
-``historyModelDocument`` byte for byte (written by the web repository's
-``scripts/generate-history-model.mjs``; its digest is pinned in
-``tests/test_history_model.py`` and in the web and R suites): every record a
+``historyModelDocument`` byte for byte (its home is the web repository's
+``tests/fixtures/history-model.schema.json``, written by
+``scripts/generate-history-model.mjs``; ``tests/test_history_model.py``
+compares the two files): every record a
 history, a saved state and a session file hold -- trackers, branches, steps,
 notes, turns, the journal, the apply plan and its report -- with their fields,
 types, enumerations and rules. This writes one frozen dataclass per record
@@ -23,7 +24,6 @@ reading model's ``Tracker.steps`` is the steps as a table
 
 from __future__ import annotations
 
-import hashlib
 import json
 import keyword
 import re
@@ -158,7 +158,6 @@ def docstring(text: str, indent: str) -> str:
 
 def render(schema_text: str) -> str:
     schema = json.loads(schema_text)
-    digest = hashlib.sha256(schema_text.encode("utf-8")).hexdigest()
     hash_pattern = schema["$defs"]["AppStamp"]["properties"]["catalog"]["pattern"]
     records: dict[str, list[tuple[str, str, dict[str, Any], bool, str]]] = {}
     for name, definition in schema["$defs"].items():
@@ -192,8 +191,6 @@ def render(schema_text: str) -> str:
     out.append("from dataclasses import dataclass")
     out.append("from typing import Any, Final")
     out.append("")
-    out.append("#: The SHA-256 of the ``history_model.schema.json`` this module was written from.")
-    out.append(f'HISTORY_MODEL_SHA256: Final = "{digest}"')
     out.append("#: The model's version (``HISTORY_MODEL_VERSION``).")
     out.append(f"HISTORY_MODEL_VERSION: Final = {schema['version']}")
     out.append("")

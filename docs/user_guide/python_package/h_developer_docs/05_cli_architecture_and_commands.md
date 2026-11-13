@@ -89,8 +89,8 @@ Detection rules:
 `_detect_data_format` asks `_anndata_files.classify_anndata_path`, which
 applies the input format registry the web app reads too (the packaged
 `input_formats.json`, byte for byte the web app's
-`tests/fixtures/input-formats.json`; `tests/test_input_formats.py` pins its
-digest). The detected format is the registry's id, which the server states
+`tests/fixtures/input-formats.json`; `tests/test_input_formats.py` compares
+the two files). The detected format is the registry's id, which the server states
 as the store's `kind` and its health `format`:
 
 1) A regular file is taken when its name ends as a format names it (`.h5ad`,

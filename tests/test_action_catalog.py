@@ -1,10 +1,10 @@
 """The action catalog and the viewer methods generated from it.
 
 ``src/cellucid/action_catalog.json`` is the web app's action catalog
-document byte for byte (written by the web repository's
-``node scripts/generate-action-catalog.mjs``, which also writes cellucid-r's
-copy); the web app (``tests/action-catalog-document-contract.test.mjs``) and
-cellucid-r (``tests/testthat/test-actions.R``) pin the same SHA-256.
+document byte for byte (its home is the web repository's
+``tests/fixtures/action-catalog.json``, written by
+``node scripts/generate-action-catalog.mjs``; cellucid-r holds the same
+copy): the test compares the two files.
 ``src/cellucid/jupyter/_actions_generated.py`` is one viewer method per
 action, written from it by ``python scripts/generate_actions.py``; every
 method sends the action through ``AnnDataViewer.act``, which checks and
@@ -13,7 +13,6 @@ converts parameters by the catalog, the same way for every action.
 
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import inspect
 import json
@@ -30,7 +29,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from _serverless_viewer import serverless_viewer
-from _web_root import rendered_by_web
+from _web_root import SYNC_SHARED_FILES, assert_shared_file, rendered_by_web
 
 import cellucid.jupyter as jupyter
 import cellucid.jupyter._actions_generated as generated
@@ -43,15 +42,12 @@ from cellucid.jupyter import (
     action_catalog,
 )
 
+pytestmark = pytest.mark.core
+
 ROOT = Path(__file__).resolve().parents[1]
 
-#: The digest of ``action_catalog.json``; the web app and cellucid-r pin the same one.
-ACTION_CATALOG_SHA256 = "725d32e5357cebbcff332be5a599667cf42ebb63ce55bd73e39ce4a1469556c4"
-
-REGENERATE = (
-    "regenerate it: node scripts/generate-action-catalog.mjs in the web repository (it writes the three "
-    "copies and prints the digest), then python scripts/generate_actions.py here, and pin the digest"
-)
+#: What to run once the catalog is the web app's again: the viewer's methods are written from it.
+GENERATE_METHODS = ", then `python scripts/generate_actions.py` here"
 
 
 def _generator() -> ModuleType:
@@ -66,10 +62,12 @@ def _catalog_text() -> str:
     return resources.files("cellucid").joinpath("action_catalog.json").read_text(encoding="utf-8")
 
 
+def test_the_catalog_is_the_web_apps_byte_for_byte() -> None:
+    assert_shared_file("src/cellucid/action_catalog.json", "tests/fixtures/action-catalog.json", then=GENERATE_METHODS)
+
+
 def test_the_packaged_catalogue_is_the_shared_document() -> None:
-    data = resources.files("cellucid").joinpath("action_catalog.json").read_bytes()
-    assert hashlib.sha256(data).hexdigest() == ACTION_CATALOG_SHA256, REGENERATE
-    document = json.loads(data)
+    document = json.loads(_catalog_text())
     assert document["schema"] == 1
     assert set(action_catalog()) == {entry["type"] for entry in document["actions"]}
 
@@ -396,10 +394,9 @@ def test_cells_by_row_never_read_the_obs_names() -> None:
 
 def test_the_catalog_is_the_one_the_web_apps_definitions_make_now() -> None:
     """Against the action definitions themselves (``renderActionCatalog``),
-    not only a pinned digest: a definition changed without regenerating the
-    copies fails here, as it fails the web suite."""
-    shipped = resources.files("cellucid").joinpath("action_catalog.json").read_text(encoding="utf-8")
-    assert rendered_by_web("scripts/generate-action-catalog.mjs", "renderActionCatalog") == shipped, (
-        "src/cellucid/action_catalog.json is not what the web app's definitions make: run "
-        "node scripts/generate-action-catalog.mjs in the web app, then python scripts/generate_actions.py here."
+    not only the web app's committed file: a definition changed without
+    writing the copies again fails here, as it fails the web suite."""
+    assert rendered_by_web("scripts/generate-action-catalog.mjs", "renderActionCatalog") == _catalog_text(), (
+        f"src/cellucid/action_catalog.json is not what the web app's definitions make: run `{SYNC_SHARED_FILES}` "
+        f"in the web repository (cellucid){GENERATE_METHODS}."
     )

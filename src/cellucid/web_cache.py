@@ -474,9 +474,10 @@ def read_cached_web_asset(
     The inventory is read and checked once per version of its files, and an
     asset's bytes are hashed once per version of the asset's file; a page
     loading hundreds of modules then costs one read each. (Re-reading the
-    inventory and hashing every asset on every request, under one lock, cost
-    30 ms per asset: seconds before a viewer's first frame.) A changed or
-    replaced file has another version, and is checked again.
+    inventory and hashing every asset on every request, under one lock, would
+    put seconds before a viewer's first frame; measured:
+    26_decisions_served_store_and_widgets.md.) A changed or replaced file has
+    another version, and is checked again.
     """
     resolved = _require_cache_dir(cache_dir)
     normalized_path = _require_asset_path(asset_path)
@@ -594,8 +595,9 @@ def _verify_fetched_asset(asset: WebAsset, response: FetchedWebResponse) -> None
 
 #: Downloads in flight at once while a generation is established: the six
 #: connections per host a browser opens to a site, so the source sees no more
-#: than a browser loading the app asks of it. One file at a time took over six
-#: minutes for the 1,209 files of a build from www.cellucid.com (2026-11-11).
+#: than a browser loading the app asks of it. One file at a time, a build of
+#: over a thousand files takes minutes
+#: (measured: 26_decisions_served_store_and_widgets.md).
 _CONCURRENT_DOWNLOADS = 6
 
 

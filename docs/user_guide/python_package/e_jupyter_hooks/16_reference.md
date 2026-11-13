@@ -7,7 +7,7 @@ Primary sources in this repo:
 - Python: `cellucid-python/src/cellucid/_viewer_channel.py` (the viewer channel)
 - Python: `cellucid-python/src/cellucid/_server_base.py`
 - Web app: `cellucid/assets/js/data/viewer-host-source.js`
-- Web app: `cellucid/assets/js/app/main.js`
+- Web app: `cellucid/assets/js/app/viewer-host/host-channel.js` and `host-view.js` (the host's side of the channel and of the view's end), `cellucid/assets/js/app/main.js` (the start-up that makes them)
 
 If you are new, start with:
 - {doc}`02_quickstart_minimal_roundtrip`

@@ -4,7 +4,8 @@ The action catalog, as the viewer API sends actions.
 Everything a person can do in the viewer, and everything an agent or a
 notebook reads from it, is an action of one catalog, defined once in the web
 app (``assets/js/app/actions/``). ``cellucid/action_catalog.json`` is that
-catalog's document byte for byte (pinned in ``tests/test_action_catalog.py``);
+catalog's document byte for byte (``tests/test_action_catalog.py`` compares it
+with the web repository's ``tests/fixtures/action-catalog.json``);
 :class:`cellucid.jupyter.AnnDataViewer` has one generated method per action
 (``_actions_generated.py``) and the generic :meth:`~AnnDataViewer.act`, both of
 which check and convert parameters here, by the catalog, the same way for

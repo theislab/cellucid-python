@@ -79,8 +79,8 @@ state…** writes a new `.zarr.zip` of the open dataset with the state shown
 applied, {ref}`history-save-anndata`), and the three are held to one shared
 expected plan (its rows and its gene-set `var` columns): the golden history
 `history_golden.cellucid-session` and its `history_golden.expected.json`,
-written by the web repository's `scripts/generate-history-golden.mjs` and
-pinned by digest in all three test suites.
+written by the web repository's `scripts/generate-history-golden.mjs`, whose
+files each package's suite compares its copies with, byte for byte.
 
 ---
 

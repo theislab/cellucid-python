@@ -204,3 +204,11 @@ Confirm:
 - the notebook does not rely on execution during build.
 
 If you need “live execution”, that is a separate design choice and should be discussed before enabling it.
+
+## Decisions and why
+
+| Date | Decision | Why | Rules out |
+|---|---|---|---|
+| by 2026-08-02 | The server tutorial's terminal transcripts are generated text compared with the command, not screenshots | Two screenshots had gone stale against the code and printed the capture machine's home directory into a committed image | A picture of a terminal |
+| by 2026-08-02 | Every page that lists the viewer's hooks is tied to the class by a test, and the number of actions is said only by the generated reference | The web app's Jupyter tutorial silently lost `on_command_error`; a hand-kept count on the R reference page went stale whenever an action was added or replaced | A hook list or a count kept by hand |
+| 2026-10-25 | Every published image is a scenario capture with a record, so `capture.mjs check` can verify it; the allowance for unrecorded images is zero | An empty screenshot once shipped | An image nothing can re-verify |

@@ -646,10 +646,6 @@ def _require_text(value: Any, label: str) -> str:
     return value
 
 
-def _require_nullable_text(value: Any, label: str) -> str | None:
-    return None if value is None else _require_text(value, label)
-
-
 def _require_trimmed(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
         raise _damaged(f"{label} must be a nonempty trimmed string.")

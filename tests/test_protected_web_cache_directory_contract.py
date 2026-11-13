@@ -9,11 +9,10 @@ home -- must therefore be refused before any path is inspected, fetched,
 staged, renamed, or removed, whether it is named directly, through ``~``, or
 through a symbolic link anywhere in the path.
 
-The guard sits in ``_require_cache_dir``, the one function every entry point
-that takes a ``cache_dir`` passes through, and it refuses exactly the set
-``prepare()`` refuses as ``out_dir`` (see
-``test_protected_output_directory_contract.py``) -- the two are one rule and
-must not drift apart.
+The guard sits in ``_require_dedicated_cache_dir``, which
+``_require_cache_dir`` -- the one function every entry point that takes a
+``cache_dir`` passes through -- calls first. The refused set comes from
+``_contracts._protected_directories``, where it is defined once.
 """
 
 from __future__ import annotations
@@ -187,7 +186,7 @@ def test_the_home_directory_named_by_tilde_is_refused(
     sink: Sink,
     source: list[str],
 ) -> None:
-    """``~`` has a non-empty leaf, so the old root-only guard let it through."""
+    """``~`` has a non-empty leaf, so a guard of the root alone lets it through."""
     home = _fake_home(tmp_path, monkeypatch)
     _populate(home)
     before = _tree(home)
@@ -325,7 +324,7 @@ def test_a_symbolic_link_in_the_parent_chain_is_refused(
     sink: Sink,
     source: list[str],
 ) -> None:
-    """The abspath-versus-resolve hole: only the leaf link used to be seen.
+    """The abspath-versus-resolve hole: a check of the leaf alone misses a link above it.
 
     ``<alias>/<user>`` has a real directory as its leaf, so the symbolic-link
     guard passes it, and a lexical absolute path never compares equal to the

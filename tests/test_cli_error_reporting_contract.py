@@ -368,9 +368,9 @@ def test_the_tutorial_quotes_the_line_the_cli_actually_prints(
 ) -> None:
     """The transcripts on the server tutorial are generated output, not prose.
 
-    They replaced two screenshots that had gone stale against the code and were
-    printing this machine's home directory into a committed image. A quoted
-    transcript only stays honest while something compares it to the command.
+    A screenshot of a terminal goes stale against the code and can print a
+    home directory into a committed image. A quoted transcript only stays
+    honest while something compares it to the command.
     """
     from cellucid.cli import _operating_system_message
 
@@ -402,7 +402,7 @@ def test_the_tutorial_quotes_the_line_the_cli_actually_prints(
     )
     assert unbindable_host.split(".")[0] in " ".join(tutorial.split())
 
-    # The page must not teach the behavior that was removed.
+    # The page never tells a reader to ignore a traceback.
     assert "ignore the traceback above it" not in tutorial
     assert "Errno 48" not in tutorial
 

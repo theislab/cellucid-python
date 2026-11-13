@@ -10,6 +10,7 @@
 //
 //   --out DIR   write the images under DIR (required unless --emit)
 //   --emit      write into docs/_static/screenshots/<topic>/<name>.<png|webp>
+//               (refused while the web repository has uncommitted changes)
 //   --check     recapture and compare against the recorded digest; write
 //               nothing and exit non-zero on any difference
 //
@@ -59,11 +60,9 @@
 //    full-window shots stay drop-in compatible with the published set.
 //
 //    The floor of that rule matters more than the ceiling. A 246 CSS px sidebar
-//    panel used to be emitted at 246 px and rendered 1:1, which is why the
-//    existing panel captures are unreadable on a high-DPI screen. The same
-//    panel now emits at 492 px and renders at 492 px: twice the size on the
-//    page and sharp. That is a deliberate, visible change to how panel figures
-//    look, and it is the whole point.
+//    panel emitted at 246 px and rendered 1:1 is unreadable on a high-DPI
+//    screen. The same panel emits at 492 px and renders at 492 px: twice the
+//    size on the page and sharp.
 //
 //    `:width:` is not free to choose. `tests/test_docs_current_api_contract.py`
 //    requires every `{figure}` to declare `:width:` equal to the PNG's
@@ -88,16 +87,15 @@
 //
 // 5. PROVENANCE. Every capture appends to `captures.json` beside this file:
 //    scenario, dataset, viewport, device scale factor, theme, emitted size,
-//    SHA-256, the web repository commit the application was served from, the
-//    browser build, and whether the image settled. An image whose provenance is
-//    not recorded cannot be re-verified later, and `check` is what re-verifies
-//    it.
+//    the image's SHA-256, the Cellucid version of the application that was
+//    served (`cellucid_version`: the one its `index.html` names), the browser
+//    build, and whether the image settled. An image whose provenance is not
+//    recorded cannot be re-verified later, and `check` is what re-verifies it.
 //
-//    `web_repository_revision` describes the *served tree*, not `HEAD`. The
-//    server reads files from disk, so a capture taken over uncommitted changes
-//    shows an application no commit contains; that record carries a `-dirty`
-//    suffix and a warning rather than a bare SHA that would read as clean. Only
-//    a suffix-free value identifies a rebuildable application.
+//    The server reads the application's files from disk, so a capture taken
+//    over uncommitted changes shows an application nobody else has. `--emit`
+//    is therefore refused while the web repository's tree has any (see
+//    `uncommittedWebChanges`): a published image shows committed code.
 // ---------------------------------------------------------------------------
 
 import { createHash } from 'node:crypto';
@@ -127,9 +125,9 @@ const PROOF_TOPIC = '_proof';
 // overridable so the tool is not welded to one machine's directory names.
 const WORKSPACE = path.resolve(DOCS_ROOT, '..', '..');
 const WEB_REPO =
-  process.env.CELLUCID_WEB_REPO ?? path.join(WORKSPACE, 'cellucid');
+  process.env.CELLUCID_WEB_ROOT ?? path.join(WORKSPACE, 'cellucid');
 const DATASETS_REPO =
-  process.env.CELLUCID_DATASETS_REPO ??
+  process.env.CELLUCID_DATASETS_ROOT ??
   path.join(WORKSPACE, 'cellucid-datasets');
 
 /**
@@ -150,7 +148,7 @@ async function requireSampleCatalog() {
     throw new Error(
       `No sample catalog at ${root}/datasets.json (${error.code ?? error.message}). ` +
         'The scenarios load the AnnData sample datasets of cellucid-datasets; ' +
-        'set CELLUCID_DATASETS_REPO to a checkout that holds anndata/.'
+        'set CELLUCID_DATASETS_ROOT to a checkout that holds anndata/.'
     );
   }
   if (catalog?.schema !== 2 || !Array.isArray(catalog.datasets)) {
@@ -224,52 +222,71 @@ async function resolvePorts() {
 }
 
 /**
- * Identify the application that was actually served.
+ * The Cellucid version of the application that is served: the one the web
+ * repository's `index.html` names (`<meta name="cellucid-version">`, the
+ * version the app shows and reports). A record carries it so a reader knows
+ * which release an image shows.
  *
- * `HEAD` alone is a lie whenever the working tree carries uncommitted changes:
- * the server reads files from disk, not from the object database, so a capture
- * taken over an edited tree would be stamped with a commit that does not
- * contain what the image shows — and `check` would later re-serve a *different*
- * application while believing it had reproduced the same one. The suffix makes
- * that visible instead. It is deliberately the shape `git describe --dirty`
- * uses, so the value still reads as a revision to a human and still starts with
- * the resolvable SHA.
- *
- * `git status --porcelain` is the whole tree, which is the right question:
- * `index.html`, every module under `assets/`, and the fixtures the scenarios
- * load are all served, so there is no subset that is safely ignorable.
+ * @returns {Promise<string>}
  */
-async function webRepositoryRevision() {
-  let head;
-  try {
-    const { stdout } = await run('git', ['rev-parse', 'HEAD'], {
-      cwd: WEB_REPO,
-    });
-    head = stdout.trim();
-  } catch {
-    return 'unknown';
-  }
-  try {
-    const { stdout } = await run(
-      'git',
-      ['status', '--porcelain', '--untracked-files=normal'],
-      { cwd: WEB_REPO }
+async function servedCellucidVersion() {
+  const index = await readFile(path.join(WEB_REPO, 'index.html'), 'utf8');
+  const match = /<meta name="cellucid-version" content="(\d+\.\d+\.\d+)"/.exec(index);
+  if (match === null) {
+    throw new Error(
+      `${path.join(WEB_REPO, 'index.html')} names no Cellucid version ` +
+        '(<meta name="cellucid-version" content="X.Y.Z">), so a capture of it ' +
+        'cannot say which release it shows.'
     );
-    return stdout.trim() === '' ? head : `${head}-dirty`;
-  } catch {
-    // The revision resolved but its cleanliness did not, so the one thing that
-    // must not be recorded is a bare SHA implying a clean tree.
-    return `${head}-unknown-worktree`;
   }
+  return match[1];
 }
 
 /**
- * True when a revision cannot be trusted to identify the application. A bare
- * commit SHA contains no `-`, so every qualifier this tool appends — and an
- * absent or malformed value in a hand-edited manifest — reads as provisional.
+ * The web repository's uncommitted changes, as `git status --porcelain` lists
+ * them (untracked files included); empty when the tree is clean.
+ *
+ * The whole tree is the right question: `index.html`, every module under
+ * `assets/`, and the fixtures the scenarios load are all served from disk, so
+ * no subset is safely ignorable. A tree git cannot describe (not a checkout,
+ * no git) is an error, never "clean".
+ *
+ * @returns {Promise<string[]>}
  */
-function revisionIsProvisional(revision) {
-  return typeof revision !== 'string' || revision === 'unknown' || revision.includes('-');
+async function uncommittedWebChanges() {
+  let stdout;
+  try {
+    ({ stdout } = await run(
+      'git',
+      ['status', '--porcelain', '--untracked-files=normal'],
+      { cwd: WEB_REPO }
+    ));
+  } catch (error) {
+    throw new Error(
+      `git could not say whether ${WEB_REPO} has uncommitted changes ` +
+        `(${String(error.stderr ?? error.message).trim()}); captures are taken ` +
+        'from a git checkout of the web repository.'
+    );
+  }
+  return stdout.split('\n').filter(line => line.trim() !== '');
+}
+
+/**
+ * Refuse to publish images of an application nobody else has: `--emit` writes
+ * the published images and their records, so it runs only from a web
+ * repository tree without uncommitted changes.
+ */
+async function requireCommittedWebTree() {
+  const changes = await uncommittedWebChanges();
+  if (changes.length === 0) return;
+  const shown = changes.slice(0, 5).map(line => `  ${line}`).join('\n');
+  const more = changes.length > 5 ? `\n  … and ${changes.length - 5} more` : '';
+  throw new Error(
+    `--emit refused: the web repository (${WEB_REPO}) has uncommitted changes, ` +
+      'so the images would show an application no commit contains:\n' +
+      `${shown}${more}\n` +
+      'Commit them first, or iterate with --out DIR, which records nothing.'
+  );
 }
 
 async function startApplicationServer(ports) {
@@ -713,9 +730,8 @@ async function revealSubject(page, selectors) {
  *
  * The padding frames the subject with a few pixels of its background, and
  * where the next control sits closer than that it took the top of that
- * control's words too: `choose-local-data-control` ended on half of the
- * Stored row's "1 connection speed", `correlation-results` on half of the
- * hint under Run (bug hunt F74). Each side of the padding stops where the
+ * control's words too, so `choose-local-data-control` would end on half of the
+ * Stored row's "1 connection speed". Each side of the padding stops where the
  * nearest text or control outside the subject begins (never inside the
  * subject itself), so the frame holds the subject and its own background.
  *
@@ -972,7 +988,7 @@ async function paint(page, scenario, clip) {
  * The pointer is drawn with its tip on a control, and the arrow extends
  * 22x32 CSS px down and to the right of the tip (a press adds a 30 px ring
  * centered on it). A control at the edge of its crop — a button at the bottom
- * of a panel — used to leave half an arrow in the picture. The crop is still
+ * of a panel — would leave half an arrow in the picture. The crop is still
  * named by its selectors; only the pointer can widen it, and never past the
  * viewport.
  *
@@ -1362,6 +1378,8 @@ async function main() {
         'only correct when the {figure} block lands in the same change.'
     );
   }
+  // Before anything is started or captured: a refused run costs nothing.
+  if (flags.emit && !checking) await requireCommittedWebTree();
 
   // What the selected scenarios run besides the browser (`requires`:
   // `python3`, `Rscript`, `cellucid`, and what each must load) is checked
@@ -1513,28 +1531,22 @@ async function assertDecimalPointLocale(browser) {
 
 async function shootAll({ browser, ports, catalogServer, selected, flags, checking }) {
   const manifest = await loadManifest();
-  const revision = await webRepositoryRevision();
+  const cellucidVersion = await servedCellucidVersion();
+  const uncommitted = await uncommittedWebChanges();
   const capturedAt = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
   const failures = [];
 
   {
-    // The qualifier must survive the abbreviation: `slice(0, 12)` on
-    // `<sha>-dirty` would print exactly the string a clean tree prints.
-    const [revisionSha, ...revisionQualifier] = revision.split('-');
-    const shortRevision = [revisionSha.slice(0, 12), ...revisionQualifier].join(
-      '-'
-    );
     process.stdout.write(
       `app ${ports.origin}  catalog ${catalogServer.origin}  ` +
-        `chromium ${browser.version()}  web@${shortRevision}\n\n`
+        `chromium ${browser.version()}  cellucid ${cellucidVersion}\n\n`
     );
-    if (revisionIsProvisional(revision)) {
+    if (uncommitted.length > 0) {
+      // Reached by `--out` and `check` only (`--emit` was refused in `main`).
       process.stdout.write(
-        `  WARNING: the web repository working tree is not clean, so ` +
-          `${checking ? 'this check re-served' : 'these images show'} an ` +
-          'application that no commit contains. Commit or stash the web ' +
-          'repository before a capture whose provenance has to mean ' +
-          'something.\n\n'
+        `  NOTE: the web repository has uncommitted changes ` +
+          `(${uncommitted.length} path${uncommitted.length === 1 ? '' : 's'}), ` +
+          `and ${checking ? 'this check serves' : 'these images show'} them.\n\n`
       );
     }
 
@@ -1560,7 +1572,7 @@ async function shootAll({ browser, ports, catalogServer, selected, flags, checki
         continue;
       }
       const { bytes, record, loggedErrors } = captured;
-      record.web_repository_revision = revision;
+      record.cellucid_version = cellucidVersion;
       record.browser = `chromium ${browser.version()}`;
       record.captured_at = capturedAt;
 
@@ -1574,15 +1586,6 @@ async function shootAll({ browser, ports, catalogServer, selected, flags, checki
           failures.push(
             `${scenario.id}: recaptured bytes differ from the recorded image ` +
               `(${previous.sha256.slice(0, 12)} -> ${record.sha256.slice(0, 12)})`
-          );
-        } else if (revisionIsProvisional(previous.web_repository_revision)) {
-          // Bytes agreeing proves the image is reproducible; it does not
-          // recover which application produced it. Say so rather than letting
-          // a clean run imply provenance the record never had.
-          process.stdout.write(
-            `  ${scenario.id}  NOTE: recorded against ` +
-              `${previous.web_repository_revision}, so its provenance names no ` +
-              'commit. Recapture from a clean tree to fix the record.\n'
           );
         }
       } else if (flags.emit && record.topic === PROOF_TOPIC) {
@@ -1603,10 +1606,8 @@ async function shootAll({ browser, ports, catalogServer, selected, flags, checki
         await writeFile(file, bytes);
         if (flags.emit) {
           // Provenance describes the *published* bytes, so only a run that
-          // writes them may record it. A scratch iteration into `--out` used to
-          // overwrite the record too, leaving `captures.json` describing a file
-          // nobody can see and `check` comparing the published image against a
-          // digest it was never supposed to have.
+          // writes them may record it: a scratch iteration into `--out` would leave
+          // `captures.json` describing a file nobody can see.
           manifest.captures[scenario.id] = record;
         }
         process.stdout.write(`${file}\n`);

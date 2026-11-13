@@ -108,8 +108,8 @@ def test_the_capability_document_carries_only_growable_capability_lists() -> Non
     # key sets, so a later capability has to arrive inside these lists rather
     # than as a new key, which would break the builds this route exists to
     # protect. There is deliberately no version to compare against either.
-    # `binaryCommands` is the one key added since: commands that name cells
-    # became binary frames, a form an older viewer cannot read, so an older
+    # `binaryCommands` is the one key beside them: commands that name cells
+    # are binary frames, a form an older viewer cannot read, so an older
     # viewer refuses this host at once rather than misread its commands.
     assert set(document) == {"channel", "commands", "binaryCommands", "events"}
     assert set(document["binaryCommands"]) <= set(document["commands"])

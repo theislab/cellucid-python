@@ -3,9 +3,9 @@
 Read this before capturing a single image. It assumes you have not seen this
 codebase.
 
-This directory is **not published**. It is excluded from the Sphinx build in
-``docs/conf.py``, because it is working material for whoever is adding figures,
-not documentation for a reader of the app.
+This file sits beside the tool in ``docs/_tooling/``, which ``docs/conf.py``
+leaves out of the Sphinx build: it is for whoever is adding figures, not for a
+reader of the app.
 
 ---
 
@@ -76,12 +76,11 @@ Scenarios load the **real published sample datasets** from the AnnData sample
 catalog ``cellucid-datasets/anndata/`` (``datasets.json`` schema 2 and the
 stores it lists, the folder published at
 ``https://theislab.github.io/cellucid-datasets/anndata/``), served over loopback
-and named to the app with ``?sampleCatalog=``. Set ``CELLUCID_DATASETS_REPO``
+and named to the app with ``?sampleCatalog=``. Set ``CELLUCID_DATASETS_ROOT``
 when the checkout is elsewhere; a run without the folder stops at once and
-names the path it looked for. That is deliberate: a
-reader has to recognize the picture as the app they are using, and a 120-cell
-synthetic fixture does not look like single-cell data. The tree is pinned on
-disk, so it is reproducible in the way that matters.
+names the path it looked for. A reader has to recognize the picture as the app
+they are using, and a 120-cell synthetic fixture does not look like single-cell
+data.
 
 Available ids: ``suo``, ``garcia``, ``he``, ``kanemaru``, ``pancreas``.
 
@@ -241,7 +240,7 @@ element ids and window placement draw from it).
 
 Reduced motion is what makes the moving parts of the viewer capturable: under
 it the app holds every mover drawn by script still (see
-[Accessibility](../o_accessibility_privacy_security/01_accessibility.md)) —
+the web app's Accessibility page (``user_guide/web_app/o_accessibility_privacy_security/``)) —
 the velocity overlay is a still picture of the flow, traced once from fixed
 seeds; the highlight pulse and the smoke hold. A scene with any of them
 therefore settles like any other.
@@ -277,31 +276,32 @@ exit, on Ctrl-C and after a crash (a synchronous ``exit`` handler). On Linux
 number field and compares the pixels: a run where the number field does not
 write "1234.05" stops there, before anything is captured.
 
-### Provenance: capture from a clean web repository
+### Provenance: emit from a committed web repository
 
-``captures.json`` records ``web_repository_revision`` — the application the
-image was served from. The server reads the web repository **from disk**, so
-that value describes the working tree, not ``HEAD``:
+A record in ``captures.json`` names two things about the image it describes:
 
-| Recorded value | Meaning |
+| Field | Meaning |
 | --- | --- |
-| ``<sha>`` | the tree was clean; this commit rebuilds the pictured app |
-| ``<sha>-dirty`` | uncommitted changes were served; **no commit contains what the image shows** |
-| ``<sha>-unknown-worktree`` | the revision resolved but its cleanliness did not |
-| ``unknown`` | no revision at all |
+| ``sha256`` | the published image's bytes; ``check`` recaptures and compares, and the Python suite compares it with the file under ``_static/screenshots/``, so an image edited by hand is noticed |
+| ``cellucid_version`` | the Cellucid version of the application that was served: the one the web repository's ``index.html`` names |
 
-Only the first form is provenance. ``shoot`` and ``check`` both print a warning
-when the tree is dirty, and ``check`` prints a note when a *stored* record
-carries a suffix — bytes agreeing proves an image is reproducible, but it cannot
-recover which application produced it.
+The server reads the web repository **from disk**, so a capture taken over
+uncommitted changes shows an application nobody else has. ``--emit`` is
+therefore **refused while the web repository's tree has uncommitted changes**
+(``git status --porcelain``, untracked files included): it names the changed
+paths and stops before anything starts. ``--out DIR`` and ``check`` run on any
+tree, print a note when it has uncommitted changes, and record nothing.
 
 ``test_screenshot_provenance_records_describe_the_published_images`` in the
-Python suite refuses a published image whose record carries a suffix, and
-every published image must have a record.
+Python suite holds every record to exactly the fields the tool writes, a
+``cellucid_version`` no newer than the package's, and the digest of the
+published file; every published image must have a record.
+``test_the_capture_tool_emits_only_from_a_web_tree_without_uncommitted_changes``
+runs the refusal.
 
-**Commit or stash the web repository before capturing**, and be aware that
-several units may be editing it at once. A capture taken over somebody else's
-half-finished change is stamped ``-dirty`` and has to be taken again.
+**Commit the web repository before emitting**, and be aware that several units
+may be editing it at once: an emit over somebody else's half-finished change
+is refused until that change is committed.
 
 ---
 
@@ -324,14 +324,12 @@ Why those numbers:
   CSS size. Emitting that natively is what makes panel crops sharp.
 - The 1440 cap keeps a full-window shot at 1.55× oversampling in the column
   instead of 3.1×, which would cost megabytes per file for no visible gain — and
-  1440 is the width the eighteen existing full-window captures already use, so
-  full-window shots stay drop-in compatible.
+  1440 is the width of the full-window captures, so full-window shots stay
+  drop-in compatible.
 
-**The visible consequence.** A 246 CSS px sidebar panel used to be emitted at
-246 px and rendered at 246 px. That is why the existing panel figures are soft
-and too small to read. The same panel now emits at 492 px and renders at 492 px:
-twice the size on the page, and sharp. Panel figures will look noticeably
-different after a sweep. That is the fix, not a regression.
+**The visible consequence.** A 246 CSS px sidebar panel emits at 492 px and
+renders at 492 px: twice the size on the page, and sharp. Emitting it at 246 px
+would render it 1:1, soft and too small to read.
 
 ### The contract you cannot violate
 
@@ -398,7 +396,7 @@ and a docs edit can break the build.
 
 ---
 
-## 7. Traps, every one of which cost time to find
+## 7. Traps
 
 **The Python contract suite reads every ``.md`` under ``docs/``.** Not just
 published pages — ``DOCS_ROOT.rglob("*.md")``, with only ``_build``,
@@ -409,8 +407,7 @@ consequences:
 - ``test_doc_cross_reference_contract.py`` fails on a single-backtick span
   shaped like a page name — a bare `NN_page_slug` in single backticks, or a
   `<section>/index` path in single backticks. Write it as a ``{doc}`` role, or as a
-  double-backtick span, or append ``.md``. The files in this directory were
-  mechanically converted to double backticks for exactly this reason.
+  double-backtick span, or append ``.md``.
 - Several tests assert that a phrase is **absent** from the concatenation of all
   documentation markdown. Quoting an obsolete UI string in a note can fail a
   test in a file you have never opened. Run the suite.
@@ -428,7 +425,7 @@ the control comes back holding a different value, so you get an image captioned
 { waitForText: '#stats', text: 'Field: clusters (category)' },
 ```
 
-The tool now asserts the selection stuck and fails loudly if it did not.
+The tool asserts the selection stuck and fails loudly if it did not.
 
 **``#dataset-cells`` is not a ready signal.** It abbreviates to ``4K``. Use
 ``#filter-count`` (``Showing all 3,696 cells``) or ``#stats``
@@ -436,9 +433,7 @@ The tool now asserts the selection stuck and fails loudly if it did not.
 
 **``scrollIntoView`` inside the sidebar changes what a full-window shot shows.**
 It scrolls the sidebar's own scroller, so the panel you wanted at the top is
-gone and the reader sees the app mid-scroll. This is precisely why the existing
-``web_app/app-overview-cell-type.png`` is captioned as showing a legend that is
-not in frame. For a window shot, use ``closeSection`` to collapse what you do
+gone and the reader sees the app mid-scroll. For a window shot, use ``closeSection`` to collapse what you do
 not need rather than scrolling to what you do.
 
 **The welcome overlay must be waited for before Escape is sent.** It paints
@@ -455,8 +450,8 @@ caption.
 **Sidebar accordions are ``<details class="accordion-section">``.** Clicking the
 ``<summary>`` *toggles*, so a scenario that ran twice would leave the panel
 wrong. ``openSection`` / ``closeSection`` set ``.open`` directly and are
-idempotent. Open on first load: session, coloring-filtering,
-highlighted-cells, page-analysis. Closed: visualization, navigation,
+idempotent. Open on first load: session, state, coloring-filtering,
+highlighted-cells, page-analysis. Closed: agents, visualization, navigation,
 compare-views, community-annotation, cinematic-camera, figure-export,
 shortcuts, benchmark. A control in a closed section is invisible, so a step
 that uses one (``#theme-select``, ``#render-mode``, ``#navigation-mode``,
@@ -486,9 +481,8 @@ preference, and it is not satisfied by a neutralized prompt:
 - **An SSH example leaks twice over.** ``ssh -L 8765:localhost:8765
   user@remote-host`` carries a username and a hostname in the command itself.
 - **Rendered text cannot be audited.** ``strings`` over a PNG finds nothing,
-  because the characters are pixels. Two images shipped with a home directory
-  and a pyenv path in them and no scan could see it; they were found only by a
-  person opening every file.
+  because the characters are pixels, so a home directory or a pyenv path in an
+  image is found only by a person opening the file.
 - **Text is better anyway** — greppable, diffable, copy-pasteable, kept honest
   by the contract tests, and a few hundred bytes instead of a few hundred
   kilobytes.

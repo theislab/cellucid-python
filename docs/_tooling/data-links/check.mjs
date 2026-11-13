@@ -29,7 +29,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_ROOT = path.resolve(HERE, '..', '..');
 const WORKSPACE = path.resolve(DOCS_ROOT, '..', '..');
-const WEB_REPO = process.env.CELLUCID_WEB_REPO ?? path.join(WORKSPACE, 'cellucid');
+const WEB_REPO = process.env.CELLUCID_WEB_ROOT ?? path.join(WORKSPACE, 'cellucid');
 const require = createRequire(pathToFileURL(path.join(WEB_REPO, 'package.json')));
 
 const LINK = /https:\/\/www\.cellucid\.com\/\?data=[^\s)"'<>\]]+/g;

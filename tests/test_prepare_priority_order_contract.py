@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import zarr
+from _repository_source import CHILD_PROCESS_FENCE
 from _web_root import node_executable, web_file
 from scipy import sparse
 
@@ -226,8 +227,8 @@ def test_the_record_names_its_cell_count_and_is_verified_before_it_is_used(tmp_p
         order = stored_order(given, n_obs, positions)
         assert order.positions is None, why
         assert order.notice is not None and __import__("re").search(why, order.notice), (why, order.notice)
-    assert stored_order(None, N_CELLS, None) == stored_order(None, N_CELLS, None)
-    assert stored_order(None, N_CELLS, None).notice is None
+    plain = stored_order(None, N_CELLS, None)
+    assert plain.positions is None and plain.notice is None
 
     # Objects changed after they were read: restore leaves them as they are.
     dropped = stored[np.arange(N_CELLS) != 150].copy()
@@ -377,7 +378,7 @@ def test_the_web_app_opens_a_uniform_subsample_as_the_prefix_of_the_rows(
     k = 120
     completed = subprocess.run(
         [node, "--input-type=module", "-e", _WEB_PREFIX, str(web_root), str(path), str(k)],
-        capture_output=True, text=True, check=False, timeout=300,
+        capture_output=True, text=True, check=False, timeout=CHILD_PROCESS_FENCE,
     )
     assert completed.returncode == 0, completed.stderr
     read = json.loads(completed.stdout)
@@ -456,7 +457,7 @@ def test_the_web_app_opens_a_mudata_prefix_with_every_modalitys_first_rows(tmp_p
     k = 90
     completed = subprocess.run(
         [node, "--input-type=module", "-e", _WEB_MUDATA_PREFIX, str(web_root), str(path), str(k)],
-        capture_output=True, text=True, check=False, timeout=300,
+        capture_output=True, text=True, check=False, timeout=CHILD_PROCESS_FENCE,
     )
     assert completed.returncode == 0, completed.stderr
     read = json.loads(completed.stdout)

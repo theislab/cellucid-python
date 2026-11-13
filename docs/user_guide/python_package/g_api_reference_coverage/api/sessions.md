@@ -296,9 +296,8 @@ checks the whole file, as the web app does before it applies anything:
 - the signature and every frame length against the bytes the file holds;
 - every chunk inflated to exactly its declared size (zip-bomb protection);
 - every array against its digest, every value against its hash;
-- every record against the history model (`history_model.schema.json`, the
-  web app's, pinned by digest in the web app, cellucid-python and
-  cellucid-r);
+- every record against the history model (`history_model.schema.json`, byte
+  for byte the web app's and cellucid-r's);
 - every tracker's tree whole: one root, branches that are lines from their
   fork step to their tip, groups that are runs of consecutive steps holding
   whole turns, unique names, the head on the active branch's path;

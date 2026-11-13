@@ -71,6 +71,7 @@ If you’re adding a new feature, start by reading:
 
 - **“Code pointers”** are given as file paths (e.g. `cellucid/assets/js/app/main.js`) so you can jump directly to the source.
 - **“Symptoms”** describe what a user sees; **“Likely causes”** are ordered; **“How to confirm”** is testable; **“Fix”** is step-by-step.
+- **Reference pages and decision records are two kinds of page.** A reference page says what the code does now and the rule it keeps. A decision record (the pages named “Decision record: …”, listed on {doc}`index`) says why: the dated decisions, the numbers measured, what was tried and taken out. An incident, a CI run or a measurement belongs in the record, and the reference links to it.
 - Format and runtime contracts describe only the current exact schema.
 
 Next: {doc}`01_codebase_map_and_entry_points`.

@@ -1,9 +1,10 @@
 """Write ``src/cellucid/jupyter/_actions_generated.py`` from the action catalog.
 
 The catalog (``src/cellucid/action_catalog.json``) is the web app's
-``catalogDocument`` of every action, byte for byte (written by the web
-repository's ``scripts/generate-action-catalog.mjs``; its digest is pinned in
-``tests/test_action_catalog.py``). Every action becomes one method of the
+``catalogDocument`` of every action, byte for byte (its home is the web
+repository's ``tests/fixtures/action-catalog.json``, written by
+``scripts/generate-action-catalog.mjs``; ``tests/test_action_catalog.py``
+compares the two files). Every action becomes one method of the
 viewer (:class:`cellucid.jupyter.AnnDataViewer`, and so of the notebook
 widget): its tool name (``color.by`` -> ``color_by``), its parameters as
 typed keyword arguments, and a docstring made of its title, summary and the
@@ -278,7 +279,7 @@ def method_source(action: dict[str, Any]) -> str:
 HEADER = '''"""The viewer's methods, one per action of the catalog: generated, do not edit.
 
 Written by ``scripts/generate_actions.py`` from ``cellucid/action_catalog.json``
-(the web app's action catalog, digest {digest}). Each method sends one
+(the web app's action catalog). Each method sends one
 ``action`` command through :meth:`AnnDataViewer.act`, which checks and converts
 its parameters by the catalog, and returns its :class:`ActionRequest`.
 """
@@ -304,12 +305,9 @@ class ViewerActions:
 
 def render(catalog_text: str) -> str:
     """The module's text for a catalog document."""
-    import hashlib
-
     document = json.loads(catalog_text)
     if document.get("schema") != 1:
         raise ValueError("The action catalog must be schema 1")
-    digest = hashlib.sha256(catalog_text.encode("utf-8")).hexdigest()
     methods = [method_source(action) for action in sorted(document["actions"], key=lambda entry: entry["tool"])]
     body = "\n\n".join(methods)
 
@@ -323,7 +321,7 @@ def render(catalog_text: str) -> str:
     imports = [f"from {module} import {', '.join(names)}" for module, names in groups if names]
     local = used("OMIT", "CellsLike", "Omit", "ValuesLike")
     text = (
-        HEADER.replace("{digest}", digest[:16]).replace(
+        HEADER.replace(
             "{imports}", "\n".join(imports) + ("\n\nfrom ._actions import " + ", ".join(local) if local else "")
         )
         + "\n"

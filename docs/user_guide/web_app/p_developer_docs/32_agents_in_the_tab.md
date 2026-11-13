@@ -127,16 +127,15 @@ with steps, Undo turn and dismiss. Two agents at once are two lines.
 **Tool lists.** Every way in gets the same list (`mcp-tools.js`
 `mcpToolsOf`, which takes no settings), and it never changes with the
 person's settings: a model's reasoning is bound to the exact tools it was
-given (Anthropic refuses reasoning sent back with other tools, measured
-2026-11-04), and for Claude 5.5 models a changed list rewrites the client's
-cached prompt (a connector's next turn after a permission change cost $0.41
-against about $0.10 cached on Opus 5.5). The settings are told instead, in
+given (Anthropic refuses reasoning sent back with other tools), and for Claude
+5.5 models a changed list rewrites the client's cached prompt
+({doc}`34_decisions_agents`, Measurements). The settings are told instead, in
 one set of words (`settings-told.js` `settingsTold`: the permissions, the
 dataset's switch, what the History settings leave out): to the chat's model
 with the person's message after any of them changed (`chat/index.js`
 `contextFor`), to a connector or local agent after its connection's first
 tool result and after any result once they changed (`agent-calls.js`
-`withSettingsTold`).
+`settingsNow`, `settingsToTell`).
 
 ## The chat bar (`agent/chat/`)
 
@@ -185,52 +184,33 @@ conversation too long.
   `progress` events (`contract.js`), kept as `progress` parts the chat shows
   before the call they introduce (`transcript-view.js`, folded with its row,
   `work.js`) and that no provider sends (the `opaque` block carries the note
-  back to the model that wrote it). No other model is asked: the Models API
-  does not say which models write notes, and the setting comes with adaptive
-  thinking, which would turn thinking on for a model that runs without it
-  by default (Opus 4.8, 4.7, 4.6, Sonnet 4.6). A request refused for the
+  back to the model that wrote it). No other model is asked, and a request refused for the
   setting is sent again without it and that model is not asked again in the
-  tab. The notes are billed in `output_tokens` at full length whatever the
-  display, so showing them changes no cost: measured 2026-11-11 on the same
-  live 10-call annotation turn with the setting off, then on (the order
-  reversed too, since the first run of a prefix pays its cache write), Sonnet
-  5.5 728k → 725k prompt and 1,333 → 1,187 output tokens, Opus 5.5 803k →
-  802k and 1,555 → 1,555. In those turns (and a 4-call one) neither model
-  wrote a note longer than its plain text remarks, so no note showed: the
-  models write them on longer, quieter stretches of work, and the chat now
-  shows them when they come. **Progress updates asked for** (F169): the chat's
+  tab (why: {doc}`34_decisions_agents`). The notes are billed in `output_tokens` at full length whatever the
+  display, so showing them changes no cost, and the chat shows them when a
+  model writes them ({doc}`34_decisions_agents`, Measurements). **Progress
+  updates asked for**: the chat's
   instructions (`instructionsFor('chat')` only; a connector's or a
   notebook's client shows its own) carry Anthropic's suggested line for a
   person in the loop: say in a line what you are about to do, brief updates
-  while you work, a closing recap that stands on its own. Measured
-  2026-11-11 on the four showcase tasks (live-agents fixture, Opus 5.5, two
-  passes each way, the order reversed): the turn opened with a line 8 of 8
-  times (6 of 8 without), the longest run of model calls with nothing to
-  read fell from 4 and 6 to 2 on the longest task (annotation), words
-  between calls 29 parts against 23, and the cost did not move (output
-  8,329 against 8,321 tokens a pass, $0.99 against $1.02 a pass of four
-  tasks).
-- **What a call carries** (measured 2026-11-11 with Anthropic's
-  `count_tokens` on the exact request the chat builds): about 62,000 prompt
-  tokens before the conversation, 96% of it the tool list (178 tools, ~59,600
-  tokens) and 2,300 the instructions; tool results and pictures are small
-  beside it (a 640-pixel picture, results of a few hundred characters). The
-  tools and the instructions are one cached prefix (the breakpoint on the
-  instructions; nothing in them changes during a chat: permissions, the
-  person's instructions and the selection go with the message), so a call
-  pays it as a cache read; a new chat after five minutes, or a changed
-  instruction text, writes it again. Rules that keep it lean: a sentence true
-  of most tools is said once in the instructions, and a description says
-  only its exception (a change that is one undoable step says nothing; a
-  read, a move of the history, opening a dataset, an act outside the state,
-  a detail left out of the history say so), which saved ~1,800 tokens a
-  call. Measured and kept: `examples`, `additionalProperties: false`,
-  `minLength` (each ≤ 4%, and each is what lets a model call exactly).
-  Measured and not adopted: sending the 128 rarely used tools with
-  `defer_loading` beside Anthropic's tool search cuts a call to ~21,000
-  tokens and ~0.4 s, but Claude Haiku 5.5 then missed 4 of 12 tasks that the
-  full list got right, and a task needing a deferred tool took two or three
-  searches (slower, not cheaper).
+  while you work, a closing recap that stands on its own; the line makes a
+  turn open with words and shortens the run of model calls with nothing to
+  read, and costs nothing measurable.
+- **What a call carries**: the tools and the instructions are one cached
+  prefix (the breakpoint on the instructions; nothing in them changes during
+  a chat: permissions, the person's instructions and the selection go with
+  the message), and the tool list is nearly all of it, so a call pays the
+  prefix as a cache read; a new chat after five minutes, or a changed
+  instruction text, writes it again. Tool results and pictures are small
+  beside it. Rules that keep it lean: a sentence true of most tools is said
+  once in the instructions, and a description says only its exception (a
+  change that is one undoable step says nothing; a read, a move of the
+  history, opening a dataset, an act outside the state, a detail left out of
+  the history say so). `examples`, `additionalProperties: false` and
+  `minLength` stay in the tool schemas: each is what lets a model call
+  exactly. All tools are sent with every call, none with `defer_loading`
+  beside Anthropic's tool search. The measured sizes and the options tried:
+  {doc}`34_decisions_agents`, Measurements.
 - **Above the message field** (`#agent-chat-tray`): a question's choices as
   buttons while it waits, and the selection chip. **Choices**
   (`ask.js`): the chat's own tool `ask_person` (2–5 choices, strict for both

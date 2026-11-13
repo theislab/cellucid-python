@@ -1,9 +1,10 @@
 """What opened a viewer, as each entry point names it.
 
 The viewer names its host in every sentence it says from the ``runtime`` of
-``/_cellucid/info`` (the shared protocol's ``runtimes``): ending ``cellucid
-mcp --open`` once froze the page with "The notebook or R session that opened
-this viewer stopped". Each way this package opens a viewer names itself:
+``/_cellucid/info`` (the shared protocol's ``runtimes``): a host that named
+another would have the page say, when ``cellucid mcp --open`` ends, "The
+notebook or R session that opened this viewer stopped". Each way this
+package opens a viewer names itself:
 a notebook kernel ``jupyter``, a script or session ``python``, ``cellucid
 serve`` ``cellucid-serve``, ``cellucid mcp --open`` ``cellucid-mcp``; and
 the agents record it publishes carries the same name.

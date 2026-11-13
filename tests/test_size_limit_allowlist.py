@@ -50,7 +50,7 @@ ALLOWLIST: dict[str, tuple[str, str]] = {
     "src/cellucid/_exact_integers.py:SAFE_INTEGER_MAX": (
         "PLAT",
         "The largest integer a JavaScript number (an IEEE 754 double) holds exactly, 2**53 - 1: "
-        "the viewer reads numbers as doubles, so a column past it is carried as exact text (F116).",
+        "the viewer reads numbers as doubles, so a column past it is carried as exact text.",
     ),
     "src/cellucid/prepare_data/_inputs.py:MAX_ELEMENT_NAME_BYTES": (
         "PLAT",

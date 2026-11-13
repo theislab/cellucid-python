@@ -136,10 +136,11 @@ Paths are under `cellucid/assets/js/`. The user-facing side is
 | 2026-10-30 | Names of more than a batch listed out of the stored order are read once, as one range | Every cell of a 10M-cell priority-ordered file: each 65,536-cell batch read every name chunk again, 15 GB in 400 s (the committed tree read every name once) | Batch-by-batch listed reads of cells spread over the whole file (the 2026-10-28 rule "never every name at once" holds where the cells ascend) |
 | 2026-10-30 | A CSV reads the names of two batches ahead of the one it makes | Every cell of a 10M-cell file took 11–25 s, against 7 s for the committed tree's one read of every name: each batch's names were asked for only once the one before was written | Batches read strictly one after another |
 | 2026-10-30 | Embedding rows of an export are read for its listed cells alone | Runs of open rows merged across 4,096-row gaps (`rowRuns`, removed) covered every open row at a uniform share: one cell type of a 50% share of 10M cells read all 5M rows, 173 MB in 5.1 s, more time than every cell's export (0.8 s now) | Runs of open rows between exported cells |
-| 2026-10-30 | A spool writes a file for each segment of about 32 MB written; on a full storage it frees this page's earlier exports' files, then keeps the rest in memory | An `.h5ad` export of every cell of a 10M-cell file failed with `QuotaExceededError` after a 148 MB CSV export in the same page (a spool's files stayed until the next page); a file for each 1 MB CSV batch cost a file's creation each | An export failed by storage the browser could free, or by bytes a single file write had already swallowed; a file a write |
+| 2026-10-30 | A spool writes a file for each segment of about 32 MB written; on a full storage it frees this page's earlier exports' files, then keeps the rest in memory | An `.h5ad` export of every cell of a 10M-cell file failed with `QuotaExceededError` after a 148 MB CSV export in the same page (a spool's files stayed until the next page); a file for each 1 MB CSV batch cost a file's creation each: 153 files for every cell of a 10M-cell file, seconds of an export the committed tree made in memory in 5 s | An export failed by storage the browser could free, or by bytes a single file write had already swallowed; a file a write |
 | 2026-10-30 | Rows of a gene-major (CSC) matrix are a cell subset of every gene (`readMatrixRows` → `getMatrixCellSubset`), not an index of every stored row | 2,000 cells of a 1% share of a 10M-cell priority-ordered file decoded every chunk of X (244 MB, 10 s, 1.9 GB peak); now each gene's prefix (0.8 s, 0.7 GB) | A transposed index of the whole matrix for an export |
 | 2026-10-29 | Public S3 objects are read over seven addresses (42 connections, not 24) | S3 speaks HTTP/1.1, six connections per host; every connection was busy | (see {doc}`22_decisions_link_model_and_request_planning`) |
 | 2026-10-30 | Bytes only an export reads skip the page's cache of fetched bytes | They were copied and posted to the page (812 MB for an HLCA export) only to evict what other reads use | Caching write-once bytes |
+| by 2026-11-12 | The page's cache of fetched bytes finds a range by binary search over the ranges kept, which are ordered because none holds another (`data/byte-range-cache.js`) | An export of tens of thousands of scattered chunks kept each one in a scan of every range kept: 2.8 s of the page's main thread on a 21,285-cell export of HLCA core | A scan of every kept range per chunk |
 | 2026-10-30 | A running read keeps its gap bytes only within the memory model's budget for fetched bytes, oldest first out | A 10M-cell export held 210 of 216 MB of requests until it ended | Unbounded retention by a long read |
 | 2026-10-30 (owner) | Speed comes before memory, as long as memory is counted and explained | The stream holds two parts in flight for a busier link | Trading time for an unexplained memory saving |
 
@@ -188,6 +189,15 @@ from 310 to 718 MB.
 order went from 1.4 s to 0.24 s, and the 672 MB `Map` is gone. 17M cells
 went from a `RangeError` to an export that works.
 
+**Deflate (Node 26, Apple M1 Pro).** The Zarr v2
+writer's deflate is fflate's, synchronous, with the same bytes in every
+engine and in Node. On chunks of 2^14 shuffled `int32` gene indices, fflate
+runs at 79 MB/s, Node's zlib at 134 and `CompressionStream` at 93; on
+float32 expression values all three run at 23 MB/s, and fflate's output is 5%
+smaller. Deflate is the slow part of writing a store, about 25 MB/s of
+float values on one core, which is why a copy's chunks are encoded on every
+decode worker (`formats/zarr/encode-task.js`).
+
 **Memory traced (Firefox, full HLCA journey).** The renderer footprint grows
 from 2,202 MB to 4,438 MB during the `.h5ad` export. Of that, 233 MB is
 counted (obs fields read for the export, within their budget). The rest is
@@ -227,17 +237,12 @@ peak is 420 MB.
 - **What an `.h5ad` export holds.** Only the expression rows are spooled.
   The cells' obs names (read in one call), their obs columns and their
   embedding rows are held in memory until the file is laid out.
+- **A half share's export holds more than every cell's.** A 10M-cell CSR
+  file at 50% uniform peaked the browser at 5.3 GB (renderer 4.1 GB), against
+  3.8 to 4.6 GB (3.4 GB) for every cell, in the same 13.1 s (Chromium, two
+  runs each, 2026-10-30); not repeated since, cause not found.
 - **The empty Firefox `Error`** has not been reproduced. It is now shown
   with its class and cause.
-
-## Known issues (pre-commit)
-
-Defects, regressions and unverified behavior known when this version was
-committed (2026-10-30), each with where it is recorded above. An item is
-removed in the change that fixes or verifies it.
-
-- **HLCA-core `.h5ad` export, Chromium:** 468 s in one run and 754 s in a later one on 2026-10-30 (see Known limits); the slower run is not yet explained or re-run on the final tree.
-- **A half share's `.h5ad` export holds more than every cell's:** a 10M-cell CSR file at 50% uniform, the browser at 5.3 GB (renderer 4.1 GB) against 3.8–4.6 GB (3.4 GB) for every cell, in the same 13.1 s (Chromium, two runs each).
 
 (browser-anndata-copy)=
 ## A copy of the open dataset (`.zarr.zip`)
@@ -294,7 +299,8 @@ genes. A dataset of several modalities is written as a Cellucid-ready MuData.
 | 2026-11-04 | Encode chunks on the decode workers, in order | Profiling put about 38% of a copy in compression (45% in reading the source) | One encoding thread |
 | 2026-11-04 | Re-encode every chunk, never pass a compressed chunk through | Passing through needs a raw-chunk read on the Zarr and HDF5 readers and helps only a source already in the specification's chunks | Raw chunk passthrough |
 | 2026-11-04 | Deterministic bytes | The same source and changes give the same archive however the work is cut (budget, slab, encoders in flight), so a copy can be pinned and compared | Output that depends on scheduling |
-| 2026-11-04 | One element layer for the transcoders and the copy | No second AnnData writer. Consequence: a change to `format-v2.js` or `element-writer.js` changes kept stores, so it raises `KEPT_STORE_REVISION` (`tests/transcode-cache-contract.test.mjs`) | A copy-only writer |
+| 2026-11-04 | One element layer for the transcoders and the copy | No second AnnData writer. Consequence: a change to `format-v2.js` or `element-writer.js` changes kept stores: the code fingerprint of converted stores covers them, so a change makes browsers convert again (`tests/kept-code-fingerprints-contract.test.mjs`) | A copy-only writer |
+| 2026-11-12 | Every writable stream of a page is opened through `utils/file-writable.js` (`openFileWritable`); no other module calls `createWritable` (`tests/file-writable-contract.test.mjs`) | WebKit writes the whole buffer under a typed-array view handed to `createWritable().write(view)`, not the view (measured: a 1 MB `subarray` of an 8 MB buffer, and a `DataView` of it, each wrote an 8 MB file; Chromium and Firefox wrote 1 MB). A view of part of a buffer is handed over as a Blob of its bytes | A writer that hands a stream a view itself |
 | 2026-11-04 | Names exactly as stored; every name a change makes a path follows the portable rule; a name in two Unicode forms refused | An NFD column read back as its fill value (the reader normalized ZIP entry names, the Zarr metadata did not); the reader now compares keys in NFC too (`formats/zarr/open.js`), and the ZIP and folder stores find a key in either form | Normalizing names on write |
 
 **Normalized, as anndata does:** numbers little-endian; a float16 NaN loses
@@ -334,17 +340,12 @@ not exercised by a test (the private-storage writable is, in
 export still builds its HDF5 tree itself: an HDF5 subclass of
 `AnnDataElementWriter` is the follow-up.
 
-**Kept data removed once.** The shared element layer, an `older-layouts.js`
-fix (a table anndata 0.7 kept in `uns` was not converted, so a copy lost its
-categories) and the later fixes raised `KEPT_STORE_REVISION` (now 11: 9 and
-10 only because the transcoders' code digest covers the input-format
-registry, whose messages now name the State panel's places and Load… › Open
-a session file…, and 11 only because it covers the shared request code, where
-a 403 naming `Retry-After` now counts as a rate limit; nothing a transcoder
-writes changed) and
-`KEPT_INDEX_REVISION` (now 7) in `data/anndata/transcode/space.js`: every
-user's converted R and MatrixMarket stores and kept gene indexes are removed
-once on the first visit of this version.
+**Kept data removed once.** The shared element layer and an
+`older-layouts.js` fix (a table anndata 0.7 kept in `uns` was not converted,
+so a copy lost its categories) changed code the fingerprints of converted
+stores and gene indexes cover: every user's converted R and MatrixMarket
+stores and kept gene indexes are removed once on the first visit of this
+version.
 
 ## Where the code and tests live
 
@@ -353,7 +354,7 @@ once on the first visit of this version.
 | A copy of the open dataset | `cellucid/assets/js/data/anndata/write/` (`copy.js`, `gene-major.js`, `element-writer.js`, `layout.js`, `ready-writer.js`, `changes.js`, `names.js`, `acknowledged-sink.js`, `pool-encoder.js`), `cellucid/assets/js/formats/zarr/writer.js`, `cellucid/assets/js/formats/zip/writer.js` | `cellucid/tests/anndata-copy-contract.test.mjs`, `cellucid/tests/anndata-copy-cross-language.test.mjs`, `cellucid/tests/browser/anndata-copy.spec.mjs` |
 | Writers, order, spools, price | `cellucid/assets/js/app/exports/cell-exports.js`, `cellucid/assets/js/utils/radix-order.js`, `cellucid/assets/js/formats/hdf5/writer.js` | `cellucid/tests/scale-boundaries-contract.test.mjs`, `cellucid/tests/round-trip-contract.test.mjs` |
 | Buttons, card, Cancel | `cellucid/assets/js/app/ui/modules/cell-exports-ui.js`, `cellucid/assets/js/data/open-cells-work.js` | `cellucid/tests/cell-export-reads.test.mjs`, `cellucid/tests/open-cells-lease-contract.test.mjs`, `cellucid/tests/browser/cell-exports.spec.mjs` |
-| Streamed rows, gathered rows, price, listed names | `cellucid/assets/js/data/anndata/reader.js` (`readMatrixRows`, `getMatrixRows`, `matrixRowsCost`, `readObsNames`), `cellucid/assets/js/data/anndata/matrix-access.js` (`pipelined`), `cellucid/assets/js/data/base-anndata-adapter.js` (`readMatrixRowsOf`, `getMatrixRowsCostOf`) | `cellucid/tests/cell-export-reads.test.mjs` |
+| Streamed rows, gathered rows, price, listed names | `cellucid/assets/js/data/anndata/reader/matrix-rows.js` (`readMatrixRows`, `getMatrixRows`, `matrixRowsCost`), `cellucid/assets/js/data/anndata/reader/names.js` (`readObsNames`), `cellucid/assets/js/data/anndata/matrix-access.js` (`pipelined`), `cellucid/assets/js/data/base-anndata-adapter.js` (`readMatrixRowsOf`, `getMatrixRowsCostOf`) | `cellucid/tests/cell-export-reads.test.mjs` |
 | Read-once bytes, range cache | `cellucid/assets/js/formats/io/activity.js`, `cellucid/assets/js/formats/io/byte-reader.js`, `cellucid/assets/js/data/byte-range-cache.js` | `cellucid/tests/cell-export-reads.test.mjs` |
 | Failure words, cancellation | `cellucid/assets/js/utils/errors.js` (`failureText`), `cellucid/assets/js/utils/abort.js` | `cellucid/tests/cell-export-reads.test.mjs`, `cellucid/tests/cancellation-and-errors-contract.test.mjs` |
 | CSV format shared with Python and R | `cellucid/tests/fixtures/obs-columns.csv`, `cellucid-python/src/cellucid/anndata_session/_results.py` (`pull`), `cellucid-r/R/round-trip.R` (`cellucid_pull`) | `cellucid/tests/round-trip-contract.test.mjs`, `cellucid-python/tests/test_round_trip_contract.py`, `cellucid-r/tests/testthat/test-round-trip.R` |
@@ -362,8 +363,8 @@ once on the first visit of this version.
 
 - {doc}`12_figure_export_architecture`: figure export (PNG/SVG), its worker
   and its Cancel.
-- {doc}`09_data_loading_pipeline_and_caching`: the reader's many-row reads,
-  link pricing in long form.
+- {doc}`09_data_loading_pipeline_and_caching`: the reader's many-row reads;
+  {doc}`22_decisions_link_model_and_request_planning`: link pricing in long form.
 - {doc}`22_decisions_link_model_and_request_planning`: request rate and
   latency under load, S3 addresses, request splitting.
 - {doc}`21_decisions_decoders_and_codecs`: the decode pool the churn lives in.

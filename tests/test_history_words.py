@@ -109,8 +109,7 @@ def test_a_squashed_step_that_only_presented_is_counted(tracker) -> None:  # typ
 )
 def test_a_share_of_the_cells_is_written_as_the_web_app_writes_it(tracker, open_cells: int, share: str) -> None:  # type: ignore[no-untyped-def]
     # formatShare (cellucid/assets/js/utils/format-units.js): whole from 10%, never 100% short of
-    # every cell; two significant figures below. Before round 9 this said "6%" for 5.5% and the
-    # web app "5.5%" (R9U-3), and below 1% the web app's own two copies differed.
+    # every cell; two significant figures below, so 5.5% reads "5.5%" here as in the web app.
     dataset = {**DATASET, "cells": 20_000, "open_cells": {"open": open_cells, "of": 20_000, "method": "uniform", "seed": 0}}
     text = methods_paragraph(list(tracker.path_to("s14"))[:1], dataset=dataset, version=None)
     assert f"was opened on {open_cells:,} of its 20,000 cells ({share})" in text

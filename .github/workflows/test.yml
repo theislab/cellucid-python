@@ -47,9 +47,11 @@ jobs:
         working-directory: cellucid-python
 
     env:
-      # A sibling checkout or Node missing fails the cross-repository tests
-      # instead of skipping them.
-      CELLUCID_SIBLINGS_REQUIRED: "1"
+      # Where the siblings are checked out (below), and that one of them or
+      # Node missing fails the cross-repository tests instead of skipping them.
+      CELLUCID_WEB_ROOT: ${{ github.workspace }}/cellucid
+      CELLUCID_R_ROOT: ${{ github.workspace }}/cellucid-r
+      CELLUCID_REQUIRE_SIBLINGS: "1"
 
     steps:
       - name: Check out the exact source
@@ -78,20 +80,25 @@ jobs:
 
       # The siblings' main, checked out after the install so that a day's
       # pushes of the three repositories, made together, have all landed:
-      # cellucid-r's sources and fixtures (R twins, cross-writer stores), and
-      # the web app's modules (with the libraries, codecs and workers they
-      # import), generators and shared fixtures.
+      # cellucid-r's sources and fixtures (R twins, cross-writer stores, its
+      # copies of the files the two packages share), and the web app's modules
+      # (with the libraries, codecs and workers they import), generators and
+      # shared fixtures: the home of every file the three repositories share,
+      # which the tests compare this package's copies with byte for byte (the
+      # AnnData files in older layouts are among its browser fixtures).
       - name: Check out cellucid-r for the R twins and cross-writer stores
         uses: actions/checkout@v7
         with:
           repository: theislab/cellucid-r
           path: cellucid-r
+          ref: main
 
       - name: Check out the web app's modules, generators and shared fixtures
         uses: actions/checkout@v7
         with:
           repository: theislab/cellucid
           path: cellucid
+          ref: main
           filter: blob:none
           sparse-checkout: |
             assets/external/
@@ -99,6 +106,8 @@ jobs:
             assets/wasm/
             assets/workers/
             scripts/
+            tests/browser/fixtures/*.h5ad
+            tests/browser/fixtures/*.zarr.zip
             tests/fixtures/
           sparse-checkout-cone-mode: false
 

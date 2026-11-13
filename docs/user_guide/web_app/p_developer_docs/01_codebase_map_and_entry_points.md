@@ -87,7 +87,11 @@ cellucid/
         │                          #   schema.js declares every event and parameter
         │                          #   (the GA4 event dictionary and admin setup).
         ├── app/                   # App layer (state + actions + history + UI + sessions + analysis)
-        │   ├── main.js            # App entry point (bootstrap + dataset load orchestration)
+        │   ├── main.js            # App entry point: the start-up sequence, in order
+        │   ├── dataset/           # The dataset shown: publication.js (stage, commit,
+        │   │                      #   restore, settle the interface), reload.js (one
+        │   │                      #   dataset change as a transaction), published-state.js
+        │   │                      #   (the catalog's starting view)
         │   ├── actions/           # The action catalog (catalog.js, schema.js,
         │   │                      #   definitions/<area>.js, definitions/params.js),
         │   │                      #   the dispatcher, the state domain list (domains.js),
@@ -107,6 +111,10 @@ cellucid/
         │   │                      #   fields.js, view-list.js, fingerprint.js);
         │   │                      #   state/actions/: the state's own action handlers
         │   ├── ui/                # UI coordinator (ui/core) + sidebar modules (ui/modules;
+        │   │                      #   connectivity-controls.js: the edges and their
+        │   │                      #   controls; benchmark/benchmark-controls.js: the
+        │   │                      #   Benchmark panel; smoke-density.js: the smoke
+        │   │                      #   volume rebuilt;
         │   │                      #   ui/modules/state/: the State panel;
         │   │                      #   ui/modules/my-datasets/: My datasets)
         │   ├── session/           # Session files (.cellucid-session, format 4: the history)
@@ -114,8 +122,11 @@ cellucid/
         │   │                      #   controlDomainOf: which domain holds a control)
         │   ├── library/           # My datasets (my-datasets.js, IndexedDB cellucid-library)
         │   │                      #   and kept file handles (local-file-handles.js)
-        │   ├── viewer-host/       # A Python or R host's actions (command-handler.js),
-        │   │                      #   pointer delivery, results
+        │   ├── viewer-host/       # A Python or R host's side: host-view.js (the view's
+        │   │                      #   end, hover and click), host-channel.js (session
+        │   │                      #   bundles, commands, results, history events),
+        │   │                      #   its actions (command-handler.js), pointer
+        │   │                      #   delivery, results
         │   ├── agent/             # Agents in this tab: what they are told
         │   │                      #   (instructions.js), one tool call and the
         │   │                      #   relay's tab end (bridge/: tool-call.js,
@@ -135,7 +146,11 @@ cellucid/
         │                          #   (data/sources/), AnnData reader worker + views;
         │                          #   data/anndata/write/: the AnnData writers (the
         │                          #   element layer the transcoders share, and a copy
-        │                          #   of the open dataset as a .zarr.zip)
+        │                          #   of the open dataset as a .zarr.zip);
+        │                          #   data/anndata/reader.js: the AnnData reader's state
+        │                          #   and lifecycle, its method groups in
+        │                          #   data/anndata/reader/ and the functions they share
+        │                          #   beside it (uns.js, probe.js, cell-maps.js, ...)
         ├── formats/               # Container readers: hdf5/, zarr/, zip/, rds/,
         │                          #   text/ (MatrixMarket), io/ (byte sources, decode pool);
         │                          #   writers: zarr/writer.js (Zarr v2), zip/writer.js
@@ -164,6 +179,7 @@ and are reached through the sample catalog URL (the
 If you only read one file to understand “what runs when”, start with:
 `cellucid/assets/js/app/main.js`.
 It is the bootstrap orchestrator and intentionally contains *no* per-frame logic.
+Its parts live in their own modules (below).
 :::
 
 ---
@@ -206,12 +222,16 @@ It is the bootstrap orchestrator and intentionally contains *no* per-frame logic
 
 ### 2) `cellucid/assets/js/app/main.js` (bootstrap orchestrator)
 
-`main.js` orchestrates:
+`main.js` runs the start-up sequence, in order. The parts that are not the
+sequence itself are factories it calls (`app/dataset/`, `app/viewer-host/`,
+`ui/modules/connectivity-controls.js`, `ui/modules/benchmark/benchmark-controls.js`,
+`ui/modules/smoke-density.js`; {doc}`05_app_architecture_overview` says what each
+owns). It orchestrates:
 - creation of the WebGL viewer (`createViewer` from `assets/js/rendering/viewer.js`)
 - creation of app state (`createDataState` from `assets/js/app/state/index.js`)
 - UI initialization (`initUI` from `assets/js/app/ui/core/ui-coordinator.js`)
 - data source registration and initial dataset selection (`DataSourceManager`)
-- dataset loading (obs/var/connectivity/embeddings) via `assets/js/data/data-loaders.js`
+- dataset loading (obs/var/connectivity/embeddings) via `assets/js/data/data-loaders.js`, as a dataset change of `app/dataset/reload.js` published by `app/dataset/publication.js`
 - session files (`createSessionSerializer` from `assets/js/app/session/index.js`)
 - each dataset's history (`createDatasetHistories` from
   `assets/js/app/history/dataset-history.js`) and the owners of the state
@@ -264,17 +284,19 @@ Each folder of `cellucid/assets/js/` that is edited often has a short
 layers, the glossary (one word per concept) and the full "where to change X"
 index; {doc}`20_read_path_architecture` follows one read from a source to
 the pixels, naming the module that owns each step; the decision records
-({doc}`21_decisions_decoders_and_codecs` to {doc}`28_decisions_rendering_layers`)
+({doc}`21_decisions_decoders_and_codecs` to {doc}`28_decisions_rendering_layers`
+and {doc}`33_decisions_actions_domains_and_history` to
+{doc}`38_decisions_testing_and_hosted_runners`, listed on {doc}`index`)
 say why each subsystem is built the way it is.
 
 | If you’re looking for… | Start with | Then |
 |---|---|---|
-| “How does the app decide what dataset to load?” | `cellucid/assets/js/data/data-source-manager.js` | `cellucid/assets/js/app/main.js` |
+| “How does the app decide what dataset to load?” | `cellucid/assets/js/data/data-source-manager.js` | `cellucid/assets/js/app/main.js` (the start-up steps), `cellucid/assets/js/app/dataset/reload.js` (the change itself) |
 | “Which files and folders does the app open?” | `cellucid/assets/js/data/input-formats.js` (the format registry) | `cellucid/assets/js/data/anndata/views/` (HDF5/Zarr layouts read in place), `cellucid/assets/js/data/anndata/transcode/` (R objects, MatrixMarket), {doc}`09_data_loading_pipeline_and_caching` |
 | “How are reads turned into requests, and how is the link measured?” | `cellucid/assets/js/formats/io/byte-reader.js` | `formats/io/link.js`, `formats/io/byte-source.js`, `formats/io/hosts.js`, {doc}`20_read_path_architecture` |
 | “Which cells does a dataset open with (subsample, auto-fit, block size)?” | `cellucid/assets/js/data/anndata/subsample-plan.js` | `data/subsample.js`, `data/anndata/views/cell-subset.js`, {doc}`19_subsampling_specification` |
 | “How is a gene read, priced and sampled?” | `cellucid/assets/js/data/anndata/matrix-access.js` | `data/anndata/subsample-plan.js` (`geneSampleOf`), `data/sparse-column-index.js`, `data/anndata/prefix-column-index.js`, `app/state/managers/field/gene-sample.js` |
-| “What is kept in this browser across visits?” | `cellucid/assets/js/data/anndata/transcode/space.js` | `formats/io/kept-parts.js`, `data/anndata/kept-column-index.js`, `app/ui/modules/kept-stores-dialog.js` |
+| “What is kept in this browser across visits?” | `cellucid/assets/js/data/anndata/transcode/space.js` | `data/anndata/transcode/kept-format.js`, `data/anndata/transcode/kept-journal.js`, `formats/io/kept-parts.js`, `data/anndata/kept-column-index.js`, `app/ui/modules/kept-stores-dialog.js` |
 | “How much memory may the app use?” | `cellucid/assets/js/data/memory-budget.js` | `data/memory-census.js`, `app/page-memory.js` |
 | “Where are the codecs and decode workers?” | `cellucid/assets/js/formats/io/decode-pool.js` | `formats/io/decoder-choice.js`, `formats/io/wasm-codecs.js` |
 | “Where is a link provider (Zenodo, GEO, CELLxGENE, …)?” | `cellucid/assets/js/data/sources/providers/` | `data/sources/registry.js` |

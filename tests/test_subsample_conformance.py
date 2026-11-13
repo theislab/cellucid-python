@@ -5,8 +5,8 @@
   lists. The fixture is a byte-identical copy of the web app's
   ``tests/fixtures/subsample-conformance.json``, computed in plain Python by
   its ``scripts/generate-subsample-conformance.py`` independently of every
-  implementation, and pinned here by its SHA-256 as in the web app and in
-  cellucid-r.
+  implementation; the test compares the copy with the web repository's file,
+  as cellucid-r's does.
 - The cell-set digest and the session encoding of a cell set are the
   fixture's, and so is the priority order a subsample's cells are opened in.
 - It takes an AnnData (a categorical obs column, an obsm key) as it takes
@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -24,6 +23,7 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from _web_root import assert_shared_file
 
 import cellucid
 from cellucid.subsample import (
@@ -33,8 +33,9 @@ from cellucid.subsample import (
     encode_cell_set,
 )
 
+pytestmark = pytest.mark.core
+
 FIXTURE = Path(__file__).parent / "fixtures" / "subsample_conformance.json"
-FIXTURE_SHA256 = "ee4b8462f66e6e441c2ab9f0948ca26d04451aa48017c38e577e3f13c8f1f48b"
 DOCUMENT = json.loads(FIXTURE.read_text("utf-8"))
 
 
@@ -60,8 +61,11 @@ def _run(case: dict) -> np.ndarray:
     )
 
 
-def test_the_fixture_is_the_pinned_one() -> None:
-    assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == FIXTURE_SHA256
+def test_the_fixture_is_the_web_apps_byte_for_byte() -> None:
+    assert_shared_file("tests/fixtures/subsample_conformance.json", "tests/fixtures/subsample-conformance.json")
+
+
+def test_the_fixture_is_of_the_version_this_suite_reads() -> None:
     assert DOCUMENT["version"] == 1
 
 
@@ -90,7 +94,7 @@ def test_every_case_keeps_the_fixtures_cells(case: dict) -> None:
 
 
 def test_a_numpy_float_share_is_its_value_and_a_non_number_is_refused_as_such() -> None:
-    # A float32 share is the double it widens to, exactly (audit NS-7).
+    # A float32 share is the double it widens to, exactly.
     assert count_from_fraction(np.float32(0.35), 1_000_000) == count_from_fraction(float(np.float32(0.35)), 1_000_000) == 350_000
     assert count_from_fraction(np.float64(0.1), 123_457) == 12_346
     with pytest.raises(TypeError, match="real number"):
